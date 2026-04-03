@@ -40,7 +40,7 @@ Features:
     <versions>
         <version>
             <num>1.0.0</num>
-            <compatibility>>=10.0.0,<12.0.0</compatibility>
+            <compatibility>&gt;=10.0.0,&lt;12.0.0</compatibility>
         </version>
     </versions>
     <langs>
