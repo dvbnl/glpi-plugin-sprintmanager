@@ -1,0 +1,50 @@
+{% extends "generic_show_form.html.twig" %}
+{% import "components/form/fields_macros.html.twig" as fields %}
+
+{% block more_fields %}
+
+    {{ fields.dropdownField(
+        'GlpiPlugin\\Sprint\\Sprint',
+        'plugin_sprint_sprints_id',
+        item.fields['plugin_sprint_sprints_id'],
+        __('Sprint', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownField(
+        'User',
+        'users_id',
+        item.fields['users_id'],
+        __('User'),
+        field_options|merge({
+            'right': 'all',
+        })
+    ) }}
+
+    {{ fields.dropdownArrayField(
+        'role',
+        item.fields['role'],
+        roles,
+        __('Role', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownNumberField(
+        'capacity_percent',
+        item.fields['capacity_percent'],
+        __('Capacity (%)', 'sprint'),
+        field_options|merge({
+            'min': 0,
+            'max': 100,
+            'step': 10,
+        })
+    ) }}
+
+    {{ fields.textareaField(
+        'comment',
+        item.fields['comment'],
+        __('Comment'),
+        field_options
+    ) }}
+
+{% endblock %}

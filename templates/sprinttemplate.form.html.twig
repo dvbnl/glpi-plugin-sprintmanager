@@ -1,0 +1,46 @@
+{% extends "generic_show_form.html.twig" %}
+{% import "components/form/fields_macros.html.twig" as fields %}
+
+{% block more_fields %}
+
+    {{ fields.dropdownYesNo(
+        'is_active',
+        item.fields['is_active'],
+        __('Active'),
+        field_options
+    ) }}
+
+    {{ fields.textField(
+        'name_pattern',
+        item.fields['name_pattern'],
+        __('Name pattern', 'sprint'),
+        field_options|merge({
+            'helper': __('e.g. Sprint {{number}} - {{project}}', 'sprint'),
+        })
+    ) }}
+
+    {{ fields.dropdownNumberField(
+        'duration_weeks',
+        item.fields['duration_weeks'],
+        __('Duration (weeks)', 'sprint'),
+        field_options|merge({
+            'min': 1,
+            'max': 8,
+        })
+    ) }}
+
+    {{ fields.textareaField(
+        'goal',
+        item.fields['goal'],
+        __('Sprint goal', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.textareaField(
+        'comment',
+        item.fields['comment'],
+        __('Comments'),
+        field_options
+    ) }}
+
+{% endblock %}

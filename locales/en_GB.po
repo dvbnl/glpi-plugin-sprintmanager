@@ -1,0 +1,497 @@
+# SprintManager - English (GB) translations
+# Copyright (C) 2024-2026 SprintManager Plugin Team
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: SprintManager 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-03 12:00+0000\n"
+"PO-Revision-Date: 2026-04-03 12:00+0000\n"
+"Last-Translator: SprintManager Team\n"
+"Language-Team: English\n"
+"Language: en_GB\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "SprintManager - Agile/Scrum Management"
+msgstr "SprintManager - Agile/Scrum Management"
+
+msgid "Sprint"
+msgid_plural "Sprints"
+msgstr[0] "Sprint"
+msgstr[1] "Sprints"
+
+msgid "Sprint Item"
+msgid_plural "Sprint Items"
+msgstr[0] "Sprint Item"
+msgstr[1] "Sprint Items"
+
+msgid "Sprint Member"
+msgid_plural "Sprint Members"
+msgstr[0] "Sprint Member"
+msgstr[1] "Sprint Members"
+
+msgid "Sprint Template"
+msgid_plural "Sprint Templates"
+msgstr[0] "Sprint Template"
+msgstr[1] "Sprint Templates"
+
+msgid "Template Item"
+msgid_plural "Template Items"
+msgstr[0] "Template Item"
+msgstr[1] "Template Items"
+
+msgid "Template Member"
+msgid_plural "Template Members"
+msgstr[0] "Template Member"
+msgstr[1] "Template Members"
+
+msgid "Meeting"
+msgid_plural "Meetings"
+msgstr[0] "Meeting"
+msgstr[1] "Meetings"
+
+msgid "Standup Entry"
+msgid_plural "Standup Entries"
+msgstr[0] "Standup Entry"
+msgstr[1] "Standup Entries"
+
+msgid "Linked Ticket"
+msgid_plural "Linked Tickets"
+msgstr[0] "Linked Ticket"
+msgstr[1] "Linked Tickets"
+
+msgid "Linked Change"
+msgid_plural "Linked Changes"
+msgstr[0] "Linked Change"
+msgstr[1] "Linked Changes"
+
+msgid "Linked Project Task"
+msgid_plural "Linked Project Tasks"
+msgstr[0] "Linked Project Task"
+msgstr[1] "Linked Project Tasks"
+
+msgid "Dashboard"
+msgstr "Dashboard"
+
+msgid "Sprint number"
+msgstr "Sprint number"
+
+msgid "Sprint goal"
+msgstr "Sprint goal"
+
+msgid "Start date"
+msgstr "Start date"
+
+msgid "End date"
+msgstr "End date"
+
+msgid "Duration (weeks)"
+msgstr "Duration (weeks)"
+
+msgid "Scrum Master"
+msgstr "Scrum Master"
+
+msgid "Planned"
+msgstr "Planned"
+
+msgid "Active"
+msgstr "Active"
+
+msgid "Completed"
+msgstr "Completed"
+
+msgid "Cancelled"
+msgstr "Cancelled"
+
+msgid "To Do"
+msgstr "To Do"
+
+msgid "In Progress"
+msgstr "In Progress"
+
+msgid "In Review"
+msgstr "In Review"
+
+msgid "Done"
+msgstr "Done"
+
+msgid "Blocked"
+msgstr "Blocked"
+
+msgid "Story Points"
+msgstr "Story Points"
+
+msgid "Assignee"
+msgstr "Assignee"
+
+msgid "Owner"
+msgstr "Owner"
+
+msgid "Capacity (%)"
+msgstr "Capacity (%)"
+
+msgid "Capacity"
+msgstr "Capacity"
+
+msgid "Manual item"
+msgstr "Manual item"
+
+msgid "Manual"
+msgstr "Manual"
+
+msgid "Linked item"
+msgstr "Linked item"
+
+msgid "Linked item type"
+msgstr "Linked item type"
+
+msgid "Linked Items"
+msgstr "Linked Items"
+
+msgid "Item not found"
+msgstr "Item not found"
+
+msgid "None"
+msgstr "None"
+
+msgid "Type"
+msgstr "Type"
+
+msgid "Role"
+msgstr "Role"
+
+msgid "Members"
+msgstr "Members"
+
+msgid "Items"
+msgstr "Items"
+
+msgid "From template"
+msgstr "From template"
+
+msgid "Name pattern"
+msgstr "Name pattern"
+
+msgid "e.g. Sprint {{number}} - {{project}}"
+msgstr "e.g. Sprint {{number}} - {{project}}"
+
+msgid "Sprint Kickoff"
+msgstr "Sprint Kickoff"
+
+msgid "Standup"
+msgstr "Standup"
+
+msgid "Sprint Review"
+msgstr "Sprint Review"
+
+msgid "Sprint Retrospective"
+msgstr "Sprint Retrospective"
+
+msgid "Facilitator"
+msgstr "Facilitator"
+
+msgid "Duration (min)"
+msgstr "Duration (min)"
+
+msgid "Meeting Notes"
+msgstr "Meeting Notes"
+
+msgid "Schedule a meeting"
+msgstr "Schedule a meeting"
+
+msgid "Sprint Items Review"
+msgstr "Sprint Items Review"
+
+msgid "Treated"
+msgstr "Treated"
+
+msgid "Note"
+msgstr "Note"
+
+msgid "Add note..."
+msgstr "Add note..."
+
+msgid "Done yesterday"
+msgstr "Done yesterday"
+
+msgid "Plan today"
+msgstr "Plan today"
+
+msgid "Blockers"
+msgstr "Blockers"
+
+msgid "On Track"
+msgstr "On Track"
+
+msgid "At Risk"
+msgstr "At Risk"
+
+msgid "Reporter"
+msgstr "Reporter"
+
+msgid "Developer"
+msgstr "Developer"
+
+msgid "Tester"
+msgstr "Tester"
+
+msgid "Designer"
+msgstr "Designer"
+
+msgid "DevOps"
+msgstr "DevOps"
+
+msgid "Analyst"
+msgstr "Analyst"
+
+msgid "Product Owner"
+msgstr "Product Owner"
+
+msgid "Other"
+msgstr "Other"
+
+msgid "Unassigned"
+msgstr "Unassigned"
+
+msgid "Unlink"
+msgstr "Unlink"
+
+msgid "Remove this link?"
+msgstr "Remove this link?"
+
+msgid "Remove this member?"
+msgstr "Remove this member?"
+
+msgid "Link a ticket"
+msgstr "Link a ticket"
+
+msgid "Link a change"
+msgstr "Link a change"
+
+msgid "Link a project task"
+msgstr "Link a project task"
+
+msgid "Link to a sprint"
+msgstr "Link to a sprint"
+
+msgid "No items found"
+msgstr "No items found"
+
+msgid "No items in this sprint"
+msgstr "No items in this sprint"
+
+msgid "No items in this sprint yet"
+msgstr "No items in this sprint yet"
+
+msgid "No tickets linked"
+msgstr "No tickets linked"
+
+msgid "No changes linked"
+msgstr "No changes linked"
+
+msgid "No project tasks linked"
+msgstr "No project tasks linked"
+
+msgid "No meetings scheduled"
+msgstr "No meetings scheduled"
+
+msgid "No standup entries yet"
+msgstr "No standup entries yet"
+
+msgid "No team members added"
+msgstr "No team members added"
+
+msgid "No default members"
+msgstr "No default members"
+
+msgid "No default items"
+msgstr "No default items"
+
+msgid "Not linked to any sprint"
+msgstr "Not linked to any sprint"
+
+msgid "Period"
+msgstr "Period"
+
+msgid "Standups"
+msgstr "Standups"
+
+msgid "Add a sprint item"
+msgstr "Add a sprint item"
+
+msgid "Add a team member"
+msgstr "Add a team member"
+
+msgid "Add a default team member"
+msgstr "Add a default team member"
+
+msgid "Add a default item"
+msgstr "Add a default item"
+
+msgid "Add standup entry"
+msgstr "Add standup entry"
+
+msgid "Assign to member"
+msgstr "Assign to member"
+
+msgid "Sprint plugin rights"
+msgstr "Sprint plugin rights"
+
+msgid "Sprint management"
+msgstr "Sprint management"
+
+msgid "A facilitator is required to create a meeting"
+msgstr "A facilitator is required to create a meeting"
+
+msgid "Team Capacity"
+msgstr "Team Capacity"
+
+msgid "Available"
+msgstr "Available"
+
+msgid "Used"
+msgstr "Used"
+
+msgid "overloaded"
+msgstr "overloaded"
+
+msgid "Member"
+msgstr "Member"
+
+msgid "Total Items"
+msgstr "Total Items"
+
+msgid "Total"
+msgstr "Total"
+
+msgid "General"
+msgstr "General"
+
+msgid "Points"
+msgstr "Points"
+
+msgid "%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%."
+msgstr "%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%."
+
+msgid "Sprint items"
+msgstr "Sprint items"
+
+msgid "Manage own items only"
+msgstr "Manage own items only"
+
+msgid "Save as template"
+msgstr "Save as template"
+
+msgid "Template name"
+msgstr "Template name"
+
+msgid "Saving..."
+msgstr "Saving..."
+
+msgid "Template created successfully!"
+msgstr "Template created successfully!"
+
+msgid "Open template"
+msgstr "Open template"
+
+msgid "An error occurred"
+msgstr "An error occurred"
+
+msgid "Create sprint from template"
+msgstr "Create sprint from template"
+
+msgid "Template"
+msgstr "Template"
+
+msgid "Template details"
+msgstr "Template details"
+
+msgid "Sprint name"
+msgstr "Sprint name"
+
+msgid "Create sprint"
+msgstr "Create sprint"
+
+msgid "Duration"
+msgstr "Duration"
+
+msgid "Goal"
+msgstr "Goal"
+
+msgid "weeks"
+msgstr "weeks"
+
+msgid "Please select a template"
+msgstr "Please select a template"
+
+msgid "Template not found"
+msgstr "Template not found"
+
+msgid "Failed to create sprint"
+msgstr "Failed to create sprint"
+
+msgid "Template Meeting"
+msgid_plural "Template Meetings"
+msgstr[0] "Template Meeting"
+msgstr[1] "Template Meetings"
+
+msgid "First day of sprint"
+msgstr "First day of sprint"
+
+msgid "Last day of sprint"
+msgstr "Last day of sprint"
+
+msgid "Day before end"
+msgstr "Day before end"
+
+msgid "Recurring interval"
+msgstr "Recurring interval"
+
+msgid "Ceremony"
+msgstr "Ceremony"
+
+msgid "Schedule"
+msgstr "Schedule"
+
+msgid "Interval"
+msgstr "Interval"
+
+msgid "Interval (days)"
+msgstr "Interval (days)"
+
+msgid "Every %d days"
+msgstr "Every %d days"
+
+msgid "Optional"
+msgstr "Optional"
+
+msgid "Add a meeting to the schedule"
+msgstr "Add a meeting to the schedule"
+
+msgid "Skip weekends"
+msgstr "Skip weekends"
+
+msgid "SprintManager"
+msgstr "SprintManager"
+
+msgid "Rights saved successfully"
+msgstr "Rights saved successfully"
+
+msgid "Special"
+msgstr "Special"
+
+msgid "No meetings in schedule"
+msgstr "No meetings in schedule"
+
+msgid "Remove this meeting?"
+msgstr "Remove this meeting?"
+
+msgid "A Scrum Master is required to create a sprint"
+msgstr "A Scrum Master is required to create a sprint"
+
+msgid "Description"
+msgstr "Description"
+

@@ -1,0 +1,166 @@
+{% extends "generic_show_form.html.twig" %}
+{% import "components/form/fields_macros.html.twig" as fields %}
+
+{% block more_fields %}
+
+    {{ fields.dropdownField(
+        'GlpiPlugin\\Sprint\\Sprint',
+        'plugin_sprint_sprints_id',
+        item.fields['plugin_sprint_sprints_id'],
+        __('Sprint', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownArrayField(
+        'meeting_type',
+        item.fields['meeting_type'],
+        meeting_types,
+        __('Type', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.datetimeField(
+        'date_meeting',
+        item.fields['date_meeting'],
+        __('Date'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownNumberField(
+        'duration_minutes',
+        item.fields['duration_minutes'],
+        __('Duration (min)', 'sprint'),
+        field_options|merge({
+            'min': 5,
+            'max': 240,
+            'step': 5,
+        })
+    ) }}
+
+    {% set facilitator_name = member_options[item.fields['users_id']] is defined ? member_options[item.fields['users_id']] : '-' %}
+    {{ fields.readOnlyField(
+        'users_id',
+        facilitator_name,
+        __('Facilitator', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.textareaField(
+        'notes',
+        item.fields['notes'],
+        __('Meeting Notes', 'sprint'),
+        field_options|merge({
+            'rows': 6,
+        })
+    ) }}
+
+    {# Sprint Items Review with treated checkbox #}
+    {% if is_existing and sprint_items is defined %}
+    <tr><td colspan="4" style="padding:0;">
+        <div class="card mt-2 mb-2" style="border:none;">
+            <div class="card-header" style="background:#f8f9fa;font-weight:700;">
+                <i class="fas fa-clipboard-list"></i>
+                {{ __('Sprint Items Review', 'sprint') }}
+                <span class="badge bg-secondary ms-1">{{ sprint_items|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                {% if sprint_items|length > 0 %}
+                <table class="table table-striped table-hover mb-0" id="sprint-review-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:40px;">{{ __('Treated', 'sprint') }}</th>
+                            <th>{{ __('Name') }}</th>
+                            <th>{{ __('Linked item', 'sprint') }}</th>
+                            <th>{{ __('Status') }}</th>
+                            <th>{{ __('Owner', 'sprint') }}</th>
+                            <th>{{ __('Note', 'sprint') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set treated = treated_items is defined ? treated_items : [] %}
+                        {% for si in sprint_items %}
+                        {% set is_treated = si.id in treated %}
+                        <tr class="sprint-review-row {{ is_treated ? 'sprint-treated' : '' }}" data-item-id="{{ si.id }}">
+                            <td class="text-center">
+                                <input type="checkbox"
+                                       name="_treated_items[]"
+                                       value="{{ si.id }}"
+                                       class="form-check-input sprint-treated-cb"
+                                       {{ is_treated ? 'checked' : '' }}>
+                            </td>
+                            <td><a href="{{ si.url }}">{{ si.name }}</a></td>
+                            <td>{{ si.linked_display|raw }}</td>
+                            <td>
+                                <select name="_sprintitems[{{ si.id }}][status]" class="form-select form-select-sm sprint-review-field" style="width:auto;min-width:120px;" {{ is_treated ? 'disabled' : '' }}>
+                                    {% for key, label in item_statuses %}
+                                    <option value="{{ key }}" {{ si.status == key ? 'selected' : '' }}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select name="_sprintitems[{{ si.id }}][users_id]" class="form-select form-select-sm sprint-review-field" style="width:auto;min-width:140px;" {{ is_treated ? 'disabled' : '' }}>
+                                    {% for uid, uname in member_options %}
+                                    <option value="{{ uid }}" {{ si.users_id == uid ? 'selected' : '' }}>{{ uname }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text"
+                                       name="_sprintitems[{{ si.id }}][note]"
+                                       value="{{ si.note }}"
+                                       class="form-control form-control-sm sprint-review-field"
+                                       placeholder="{{ __('Add note...', 'sprint') }}"
+                                       style="min-width:180px;"
+                                       {{ is_treated ? 'disabled' : '' }}>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <script>
+                $(function() {
+                    // Toggle treated state: grey out row + disable fields
+                    $(document).on('change', '.sprint-treated-cb', function() {
+                        var row = $(this).closest('tr');
+                        var fields = row.find('.sprint-review-field');
+                        if (this.checked) {
+                            row.addClass('sprint-treated');
+                            fields.prop('disabled', true);
+                        } else {
+                            row.removeClass('sprint-treated');
+                            fields.prop('disabled', false);
+                        }
+                    });
+
+                    // Before form submit: re-enable disabled fields so they get posted
+                    $('form').on('submit', function() {
+                        $(this).find('.sprint-treated .sprint-review-field').prop('disabled', false);
+                        // Mark treated items so backend knows to skip them
+                        $(this).find('.sprint-treated').each(function() {
+                            var id = $(this).data('item-id');
+                            if (!$(this).find('input[name="_sprintitems[' + id + '][_treated]"]').length) {
+                                $(this).append('<input type="hidden" name="_sprintitems[' + id + '][_treated]" value="1">');
+                            }
+                        });
+                    });
+                });
+                </script>
+
+                <style>
+                .sprint-treated td { opacity: 0.45; }
+                .sprint-treated td:first-child { opacity: 1; }
+                </style>
+
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-inbox" style="font-size:1.5em;"></i><br>
+                    {{ __('No items in this sprint', 'sprint') }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </td></tr>
+    {% endif %}
+
+{% endblock %}

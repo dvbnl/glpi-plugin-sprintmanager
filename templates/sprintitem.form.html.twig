@@ -1,0 +1,54 @@
+{% extends "generic_show_form.html.twig" %}
+{% import "components/form/fields_macros.html.twig" as fields %}
+
+{% block more_fields %}
+
+    {{ fields.dropdownField(
+        'GlpiPlugin\\Sprint\\Sprint',
+        'plugin_sprint_sprints_id',
+        item.fields['plugin_sprint_sprints_id'],
+        __('Sprint', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownArrayField(
+        'status',
+        item.fields['status'],
+        statuses,
+        __('Status'),
+        field_options
+    ) }}
+
+    {{ fields.numberField(
+        'story_points',
+        item.fields['story_points'],
+        __('Story Points', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownArrayField(
+        'priority',
+        item.fields['priority'],
+        priorities,
+        __('Priority'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownField(
+        'User',
+        'users_id',
+        item.fields['users_id'],
+        __('Assignee', 'sprint'),
+        field_options|merge({
+            'right': 'all',
+        })
+    ) }}
+
+    {{ fields.textareaField(
+        'description',
+        item.fields['description'],
+        __('Description'),
+        field_options
+    ) }}
+
+{% endblock %}

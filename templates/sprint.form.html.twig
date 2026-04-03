@@ -1,0 +1,92 @@
+{% extends "generic_show_form.html.twig" %}
+{% import "components/form/fields_macros.html.twig" as fields %}
+
+{% set no_header = no_header|default(true) %}
+
+{% block form_fields %}
+
+    {{ fields.textField(
+        'name',
+        item.fields['name'],
+        __('Name'),
+        field_options
+    ) }}
+
+    {% if is_new is defined and is_new %}
+    {{ fields.dropdownField(
+        'GlpiPlugin\\Sprint\\SprintTemplate',
+        'plugin_sprint_sprinttemplates_id',
+        0,
+        __('From template', 'sprint'),
+        field_options|merge({
+            'condition': {'is_active': 1},
+            'on_change': 'sprintLoadTemplate(this.value)',
+        })
+    ) }}
+    {% endif %}
+
+    {{ fields.numberField(
+        'sprint_number',
+        item.fields['sprint_number'],
+        __('Sprint number', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownArrayField(
+        'status',
+        item.fields['status'],
+        statuses,
+        __('Status'),
+        field_options
+    ) }}
+
+    {{ fields.datetimeField(
+        'date_start',
+        item.fields['date_start'],
+        __('Start date', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.datetimeField(
+        'date_end',
+        item.fields['date_end'],
+        __('End date', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownNumberField(
+        'duration_weeks',
+        item.fields['duration_weeks'],
+        __('Duration (weeks)', 'sprint'),
+        field_options|merge({
+            'min': 1,
+            'max': 8,
+        })
+    ) }}
+
+    {{ fields.dropdownField(
+        'User',
+        'users_id',
+        item.fields['users_id'],
+        __('Scrum Master', 'sprint'),
+        field_options|merge({
+            'right': 'all',
+            'required': true,
+        })
+    ) }}
+
+    {{ fields.textareaField(
+        'goal',
+        item.fields['goal'],
+        __('Sprint goal', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.textareaField(
+        'comment',
+        item.fields['comment'],
+        __('Description', 'sprint'),
+        field_options
+    ) }}
+
+{% endblock %}

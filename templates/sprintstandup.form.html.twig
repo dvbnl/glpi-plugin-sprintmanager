@@ -1,0 +1,53 @@
+{% extends "generic_show_form.html.twig" %}
+{% import "components/form/fields_macros.html.twig" as fields %}
+
+{% block more_fields %}
+
+    {{ fields.dropdownArrayField(
+        'plugin_sprint_sprintitems_id',
+        item.fields['plugin_sprint_sprintitems_id'],
+        sprint_items,
+        __('Sprint Item', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.dropdownField(
+        'User',
+        'users_id',
+        item.fields['users_id'],
+        __('Reporter', 'sprint'),
+        field_options|merge({
+            'right': 'all',
+        })
+    ) }}
+
+    {{ fields.dropdownArrayField(
+        'status_update',
+        item.fields['status_update'],
+        standup_statuses,
+        __('Status', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.textareaField(
+        'done_yesterday',
+        item.fields['done_yesterday'],
+        __('Done yesterday', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.textareaField(
+        'plan_today',
+        item.fields['plan_today'],
+        __('Plan today', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.textareaField(
+        'blockers',
+        item.fields['blockers'],
+        __('Blockers', 'sprint'),
+        field_options
+    ) }}
+
+{% endblock %}

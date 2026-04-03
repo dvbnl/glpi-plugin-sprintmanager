@@ -1,0 +1,497 @@
+# SprintManager - French (FR) translations
+# Copyright (C) 2024-2026 SprintManager Plugin Team
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: SprintManager 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-03 12:00+0000\n"
+"PO-Revision-Date: 2026-04-03 12:00+0000\n"
+"Last-Translator: SprintManager Team\n"
+"Language-Team: French\n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "SprintManager - Agile/Scrum Management"
+msgstr "SprintManager - Gestion Agile/Scrum"
+
+msgid "Sprint"
+msgid_plural "Sprints"
+msgstr[0] "Sprint"
+msgstr[1] "Sprints"
+
+msgid "Sprint Item"
+msgid_plural "Sprint Items"
+msgstr[0] "Element de sprint"
+msgstr[1] "Elements de sprint"
+
+msgid "Sprint Member"
+msgid_plural "Sprint Members"
+msgstr[0] "Membre du sprint"
+msgstr[1] "Membres du sprint"
+
+msgid "Sprint Template"
+msgid_plural "Sprint Templates"
+msgstr[0] "Modele de sprint"
+msgstr[1] "Modeles de sprint"
+
+msgid "Template Item"
+msgid_plural "Template Items"
+msgstr[0] "Element du modele"
+msgstr[1] "Elements du modele"
+
+msgid "Template Member"
+msgid_plural "Template Members"
+msgstr[0] "Membre du modele"
+msgstr[1] "Membres du modele"
+
+msgid "Meeting"
+msgid_plural "Meetings"
+msgstr[0] "Reunion"
+msgstr[1] "Reunions"
+
+msgid "Standup Entry"
+msgid_plural "Standup Entries"
+msgstr[0] "Entree standup"
+msgstr[1] "Entrees standup"
+
+msgid "Linked Ticket"
+msgid_plural "Linked Tickets"
+msgstr[0] "Ticket lie"
+msgstr[1] "Tickets lies"
+
+msgid "Linked Change"
+msgid_plural "Linked Changes"
+msgstr[0] "Changement lie"
+msgstr[1] "Changements lies"
+
+msgid "Linked Project Task"
+msgid_plural "Linked Project Tasks"
+msgstr[0] "Tache de projet liee"
+msgstr[1] "Taches de projet liees"
+
+msgid "Dashboard"
+msgstr "Tableau de bord"
+
+msgid "Sprint number"
+msgstr "Numero de sprint"
+
+msgid "Sprint goal"
+msgstr "Objectif du sprint"
+
+msgid "Start date"
+msgstr "Date de debut"
+
+msgid "End date"
+msgstr "Date de fin"
+
+msgid "Duration (weeks)"
+msgstr "Duree (semaines)"
+
+msgid "Scrum Master"
+msgstr "Scrum Master"
+
+msgid "Planned"
+msgstr "Planifie"
+
+msgid "Active"
+msgstr "Actif"
+
+msgid "Completed"
+msgstr "Termine"
+
+msgid "Cancelled"
+msgstr "Annule"
+
+msgid "To Do"
+msgstr "A faire"
+
+msgid "In Progress"
+msgstr "En cours"
+
+msgid "In Review"
+msgstr "En revue"
+
+msgid "Done"
+msgstr "Termine"
+
+msgid "Blocked"
+msgstr "Bloque"
+
+msgid "Story Points"
+msgstr "Story Points"
+
+msgid "Assignee"
+msgstr "Assigne a"
+
+msgid "Owner"
+msgstr "Proprietaire"
+
+msgid "Capacity (%)"
+msgstr "Capacite (%)"
+
+msgid "Capacity"
+msgstr "Capacite"
+
+msgid "Manual item"
+msgstr "Element manuel"
+
+msgid "Manual"
+msgstr "Manuel"
+
+msgid "Linked item"
+msgstr "Element lie"
+
+msgid "Linked item type"
+msgstr "Type d'element lie"
+
+msgid "Linked Items"
+msgstr "Elements lies"
+
+msgid "Item not found"
+msgstr "Element introuvable"
+
+msgid "None"
+msgstr "Aucun"
+
+msgid "Type"
+msgstr "Type"
+
+msgid "Role"
+msgstr "Role"
+
+msgid "Members"
+msgstr "Membres"
+
+msgid "Items"
+msgstr "Elements"
+
+msgid "From template"
+msgstr "Depuis un modele"
+
+msgid "Name pattern"
+msgstr "Modele de nom"
+
+msgid "e.g. Sprint {{number}} - {{project}}"
+msgstr "ex. Sprint {{number}} - {{project}}"
+
+msgid "Sprint Kickoff"
+msgstr "Lancement du sprint"
+
+msgid "Standup"
+msgstr "Standup"
+
+msgid "Sprint Review"
+msgstr "Revue de sprint"
+
+msgid "Sprint Retrospective"
+msgstr "Retrospective de sprint"
+
+msgid "Facilitator"
+msgstr "Animateur"
+
+msgid "Duration (min)"
+msgstr "Duree (min)"
+
+msgid "Meeting Notes"
+msgstr "Compte-rendu"
+
+msgid "Schedule a meeting"
+msgstr "Planifier une reunion"
+
+msgid "Sprint Items Review"
+msgstr "Revue des elements du sprint"
+
+msgid "Treated"
+msgstr "Traite"
+
+msgid "Note"
+msgstr "Note"
+
+msgid "Add note..."
+msgstr "Ajouter une note..."
+
+msgid "Done yesterday"
+msgstr "Fait hier"
+
+msgid "Plan today"
+msgstr "Prevu aujourd'hui"
+
+msgid "Blockers"
+msgstr "Bloquants"
+
+msgid "On Track"
+msgstr "En bonne voie"
+
+msgid "At Risk"
+msgstr "A risque"
+
+msgid "Reporter"
+msgstr "Rapporteur"
+
+msgid "Developer"
+msgstr "Developpeur"
+
+msgid "Tester"
+msgstr "Testeur"
+
+msgid "Designer"
+msgstr "Designer"
+
+msgid "DevOps"
+msgstr "DevOps"
+
+msgid "Analyst"
+msgstr "Analyste"
+
+msgid "Product Owner"
+msgstr "Product Owner"
+
+msgid "Other"
+msgstr "Autre"
+
+msgid "Unassigned"
+msgstr "Non assigne"
+
+msgid "Unlink"
+msgstr "Dissocier"
+
+msgid "Remove this link?"
+msgstr "Supprimer ce lien ?"
+
+msgid "Remove this member?"
+msgstr "Supprimer ce membre ?"
+
+msgid "Link a ticket"
+msgstr "Lier un ticket"
+
+msgid "Link a change"
+msgstr "Lier un changement"
+
+msgid "Link a project task"
+msgstr "Lier une tache de projet"
+
+msgid "Link to a sprint"
+msgstr "Lier a un sprint"
+
+msgid "No items found"
+msgstr "Aucun element trouve"
+
+msgid "No items in this sprint"
+msgstr "Aucun element dans ce sprint"
+
+msgid "No items in this sprint yet"
+msgstr "Pas encore d'elements dans ce sprint"
+
+msgid "No tickets linked"
+msgstr "Aucun ticket lie"
+
+msgid "No changes linked"
+msgstr "Aucun changement lie"
+
+msgid "No project tasks linked"
+msgstr "Aucune tache de projet liee"
+
+msgid "No meetings scheduled"
+msgstr "Aucune reunion planifiee"
+
+msgid "No standup entries yet"
+msgstr "Pas encore d'entrees standup"
+
+msgid "No team members added"
+msgstr "Aucun membre d'equipe ajoute"
+
+msgid "No default members"
+msgstr "Aucun membre par defaut"
+
+msgid "No default items"
+msgstr "Aucun element par defaut"
+
+msgid "Not linked to any sprint"
+msgstr "Non lie a un sprint"
+
+msgid "Period"
+msgstr "Periode"
+
+msgid "Standups"
+msgstr "Standups"
+
+msgid "Add a sprint item"
+msgstr "Ajouter un element de sprint"
+
+msgid "Add a team member"
+msgstr "Ajouter un membre d'equipe"
+
+msgid "Add a default team member"
+msgstr "Ajouter un membre par defaut"
+
+msgid "Add a default item"
+msgstr "Ajouter un element par defaut"
+
+msgid "Add standup entry"
+msgstr "Ajouter une entree standup"
+
+msgid "Assign to member"
+msgstr "Assigner a un membre"
+
+msgid "Sprint plugin rights"
+msgstr "Droits du plugin SprintManager"
+
+msgid "Sprint management"
+msgstr "Gestion des sprints"
+
+msgid "A facilitator is required to create a meeting"
+msgstr "Un animateur est requis pour creer une reunion"
+
+msgid "Team Capacity"
+msgstr "Capacite de l'equipe"
+
+msgid "Available"
+msgstr "Disponible"
+
+msgid "Used"
+msgstr "Utilise"
+
+msgid "overloaded"
+msgstr "surcharge"
+
+msgid "Member"
+msgstr "Membre"
+
+msgid "Total Items"
+msgstr "Total elements"
+
+msgid "Total"
+msgstr "Total"
+
+msgid "General"
+msgstr "General"
+
+msgid "Points"
+msgstr "Points"
+
+msgid "%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%."
+msgstr "%s n'a que %d%% de capacite restante (total: %d%%, utilise: %d%%). Impossible d'attribuer %d%%."
+
+msgid "Sprint items"
+msgstr "Elements de sprint"
+
+msgid "Manage own items only"
+msgstr "Gerer uniquement ses propres elements"
+
+msgid "Save as template"
+msgstr "Enregistrer comme modele"
+
+msgid "Template name"
+msgstr "Nom du modele"
+
+msgid "Saving..."
+msgstr "Enregistrement..."
+
+msgid "Template created successfully!"
+msgstr "Modele cree avec succes !"
+
+msgid "Open template"
+msgstr "Ouvrir le modele"
+
+msgid "An error occurred"
+msgstr "Une erreur est survenue"
+
+msgid "Create sprint from template"
+msgstr "Creer un sprint depuis un modele"
+
+msgid "Template"
+msgstr "Modele"
+
+msgid "Template details"
+msgstr "Details du modele"
+
+msgid "Sprint name"
+msgstr "Nom du sprint"
+
+msgid "Create sprint"
+msgstr "Creer le sprint"
+
+msgid "Duration"
+msgstr "Duree"
+
+msgid "Goal"
+msgstr "Objectif"
+
+msgid "weeks"
+msgstr "semaines"
+
+msgid "Please select a template"
+msgstr "Veuillez selectionner un modele"
+
+msgid "Template not found"
+msgstr "Modele introuvable"
+
+msgid "Failed to create sprint"
+msgstr "Echec de la creation du sprint"
+
+msgid "Template Meeting"
+msgid_plural "Template Meetings"
+msgstr[0] "Reunion du modele"
+msgstr[1] "Reunions du modele"
+
+msgid "First day of sprint"
+msgstr "Premier jour du sprint"
+
+msgid "Last day of sprint"
+msgstr "Dernier jour du sprint"
+
+msgid "Day before end"
+msgstr "Veille de la fin"
+
+msgid "Recurring interval"
+msgstr "Intervalle recurrent"
+
+msgid "Ceremony"
+msgstr "Ceremonie"
+
+msgid "Schedule"
+msgstr "Planification"
+
+msgid "Interval"
+msgstr "Intervalle"
+
+msgid "Interval (days)"
+msgstr "Intervalle (jours)"
+
+msgid "Every %d days"
+msgstr "Tous les %d jours"
+
+msgid "Optional"
+msgstr "Optionnel"
+
+msgid "Add a meeting to the schedule"
+msgstr "Ajouter une reunion a la planification"
+
+msgid "Skip weekends"
+msgstr "Ignorer les week-ends"
+
+msgid "SprintManager"
+msgstr "SprintManager"
+
+msgid "Rights saved successfully"
+msgstr "Droits enregistres avec succes"
+
+msgid "Special"
+msgstr "Special"
+
+msgid "No meetings in schedule"
+msgstr "Aucune reunion dans la planification"
+
+msgid "Remove this meeting?"
+msgstr "Supprimer cette reunion ?"
+
+msgid "A Scrum Master is required to create a sprint"
+msgstr "Un Scrum Master est requis pour creer un sprint"
+
+msgid "Description"
+msgstr "Description"
+

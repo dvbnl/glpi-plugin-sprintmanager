@@ -1,0 +1,375 @@
+# SprintManager - GLPI Plugin translation template
+# Copyright (C) 2024-2026 SprintManager Plugin Team
+# This file is distributed under the same license as the SprintManager plugin.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: SprintManager 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-03 12:00+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "SprintManager - Agile/Scrum Management"
+msgstr ""
+
+msgid "Sprint"
+msgid_plural "Sprints"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Sprint Item"
+msgid_plural "Sprint Items"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Sprint Member"
+msgid_plural "Sprint Members"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Sprint Template"
+msgid_plural "Sprint Templates"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Template Item"
+msgid_plural "Template Items"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Template Member"
+msgid_plural "Template Members"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Meeting"
+msgid_plural "Meetings"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Standup Entry"
+msgid_plural "Standup Entries"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Linked Ticket"
+msgid_plural "Linked Tickets"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Linked Change"
+msgid_plural "Linked Changes"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Linked Project Task"
+msgid_plural "Linked Project Tasks"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Dashboard"
+msgstr ""
+
+msgid "Sprint number"
+msgstr ""
+
+msgid "Sprint goal"
+msgstr ""
+
+msgid "Start date"
+msgstr ""
+
+msgid "End date"
+msgstr ""
+
+msgid "Duration (weeks)"
+msgstr ""
+
+msgid "Scrum Master"
+msgstr ""
+
+msgid "Planned"
+msgstr ""
+
+msgid "Active"
+msgstr ""
+
+msgid "Completed"
+msgstr ""
+
+msgid "Cancelled"
+msgstr ""
+
+msgid "To Do"
+msgstr ""
+
+msgid "In Progress"
+msgstr ""
+
+msgid "In Review"
+msgstr ""
+
+msgid "Done"
+msgstr ""
+
+msgid "Blocked"
+msgstr ""
+
+msgid "Story Points"
+msgstr ""
+
+msgid "Assignee"
+msgstr ""
+
+msgid "Owner"
+msgstr ""
+
+msgid "Capacity (%)"
+msgstr ""
+
+msgid "Capacity"
+msgstr ""
+
+msgid "Manual item"
+msgstr ""
+
+msgid "Manual"
+msgstr ""
+
+msgid "Linked item"
+msgstr ""
+
+msgid "Linked item type"
+msgstr ""
+
+msgid "Linked Items"
+msgstr ""
+
+msgid "Item not found"
+msgstr ""
+
+msgid "None"
+msgstr ""
+
+msgid "Type"
+msgstr ""
+
+msgid "Role"
+msgstr ""
+
+msgid "Members"
+msgstr ""
+
+msgid "Items"
+msgstr ""
+
+msgid "From template"
+msgstr ""
+
+msgid "Name pattern"
+msgstr ""
+
+msgid "e.g. Sprint {{number}} - {{project}}"
+msgstr ""
+
+msgid "Sprint Kickoff"
+msgstr ""
+
+msgid "Daily Standup"
+msgstr ""
+
+msgid "Sprint Review"
+msgstr ""
+
+msgid "Sprint Retrospective"
+msgstr ""
+
+msgid "Facilitator"
+msgstr ""
+
+msgid "Duration (min)"
+msgstr ""
+
+msgid "Meeting Notes"
+msgstr ""
+
+msgid "Schedule a meeting"
+msgstr ""
+
+msgid "Sprint Items Review"
+msgstr ""
+
+msgid "Treated"
+msgstr ""
+
+msgid "Note"
+msgstr ""
+
+msgid "Add note..."
+msgstr ""
+
+msgid "Done yesterday"
+msgstr ""
+
+msgid "Plan today"
+msgstr ""
+
+msgid "Blockers"
+msgstr ""
+
+msgid "On Track"
+msgstr ""
+
+msgid "At Risk"
+msgstr ""
+
+msgid "Reporter"
+msgstr ""
+
+msgid "Developer"
+msgstr ""
+
+msgid "Tester"
+msgstr ""
+
+msgid "Designer"
+msgstr ""
+
+msgid "DevOps"
+msgstr ""
+
+msgid "Analyst"
+msgstr ""
+
+msgid "Product Owner"
+msgstr ""
+
+msgid "Other"
+msgstr ""
+
+msgid "Unassigned"
+msgstr ""
+
+msgid "Unlink"
+msgstr ""
+
+msgid "Remove this link?"
+msgstr ""
+
+msgid "Remove this member?"
+msgstr ""
+
+msgid "Link a ticket"
+msgstr ""
+
+msgid "Link a change"
+msgstr ""
+
+msgid "Link a project task"
+msgstr ""
+
+msgid "Link to a sprint"
+msgstr ""
+
+msgid "No items found"
+msgstr ""
+
+msgid "No items in this sprint"
+msgstr ""
+
+msgid "No items in this sprint yet"
+msgstr ""
+
+msgid "No tickets linked"
+msgstr ""
+
+msgid "No changes linked"
+msgstr ""
+
+msgid "No project tasks linked"
+msgstr ""
+
+msgid "No meetings scheduled"
+msgstr ""
+
+msgid "No standup entries yet"
+msgstr ""
+
+msgid "No team members added"
+msgstr ""
+
+msgid "No default members"
+msgstr ""
+
+msgid "No default items"
+msgstr ""
+
+msgid "Not linked to any sprint"
+msgstr ""
+
+msgid "Period"
+msgstr ""
+
+msgid "Standups"
+msgstr ""
+
+msgid "Add a sprint item"
+msgstr ""
+
+msgid "Add a team member"
+msgstr ""
+
+msgid "Add a default team member"
+msgstr ""
+
+msgid "Add a default item"
+msgstr ""
+
+msgid "Add standup entry"
+msgstr ""
+
+msgid "Assign to member"
+msgstr ""
+
+msgid "Sprint plugin rights"
+msgstr ""
+
+msgid "Sprint management"
+msgstr ""
+
+msgid "A facilitator is required to create a meeting"
+msgstr ""
+
+msgid "Team Capacity"
+msgstr ""
+
+msgid "Available"
+msgstr ""
+
+msgid "Used"
+msgstr ""
+
+msgid "overloaded"
+msgstr ""
+
+msgid "Member"
+msgstr ""
+
+msgid "Total Items"
+msgstr ""
+
+msgid "Points"
+msgstr ""
+
+msgid "Duration"
+msgstr ""
+
+msgid "Status"
+msgstr ""
