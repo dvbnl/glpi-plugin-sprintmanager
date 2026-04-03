@@ -5,14 +5,13 @@
     <state>stable</state>
     <description>
         <short>
-            <en>Agile/Scrum sprint management plugin for GLPI with item linking, capacity tracking, and meeting management</en>
-            <nl>Agile/Scrum sprint management plugin voor GLPI met item koppelingen, capaciteitsbeheer en vergaderingenbeheer</nl>
-            <fr>Plugin de gestion de sprints Agile/Scrum pour GLPI avec liaison d'elements, suivi de capacite et gestion de reunions</fr>
-            <es>Plugin de gestion de sprints Agile/Scrum para GLPI con vinculacion de elementos, seguimiento de capacidad y gestion de reuniones</es>
+            <en><![CDATA[Agile/Scrum sprint management plugin for GLPI with item linking, capacity tracking, and meeting management]]></en>
+            <nl><![CDATA[Agile/Scrum sprint management plugin voor GLPI met item koppelingen, capaciteitsbeheer en vergaderingenbeheer]]></nl>
+            <fr><![CDATA[Plugin de gestion de sprints Agile/Scrum pour GLPI avec liaison d'elements, suivi de capacite et gestion de reunions]]></fr>
+            <es><![CDATA[Plugin de gestion de sprints Agile/Scrum para GLPI con vinculacion de elementos, seguimiento de capacidad y gestion de reuniones]]></es>
         </short>
         <long>
-            <en><![CDATA[
-SprintManager is a comprehensive Agile/Scrum management plugin for GLPI.
+            <en><![CDATA[SprintManager is a comprehensive Agile/Scrum management plugin for GLPI.
 
 Features:
 - Create and manage sprints with configurable duration, goals, and status tracking
@@ -26,21 +25,21 @@ Features:
 - Treated checkbox to mark discussed items during standups
 - Dashboard with progress visualization, stats cards, and team capacity overview
 - Full GLPI rights and entity integration
-- Multi-language support: English, Dutch, French, Spanish
-            ]]></en>
+- Multi-language support: English, Dutch, French, Spanish]]></en>
         </long>
     </description>
     <homepage>https://github.com/dvbnl/glpi-plugin-sprintmanager</homepage>
     <download>https://github.com/dvbnl/glpi-plugin-sprintmanager/releases</download>
     <issues>https://github.com/dvbnl/glpi-plugin-sprintmanager/issues</issues>
-    <readme>https://github.com/dvbnl/glpi-plugin-sprintmanager/blob/main/README.md</readme>
+    <readme>https://raw.githubusercontent.com/dvbnl/glpi-plugin-sprintmanager/main/README.md</readme>
     <authors>
         <author>DVBNL</author>
     </authors>
     <versions>
         <version>
             <num>1.0.0</num>
-            <compatibility>&gt;=10.0.0,&lt;12.0.0</compatibility>
+            <compatibility>~10.0</compatibility>
+            <download_url>https://github.com/dvbnl/glpi-plugin-sprintmanager/releases/download/v1.0.0/sprintmanager-v1.0.0.zip</download_url>
         </version>
     </versions>
     <langs>
@@ -49,7 +48,7 @@ Features:
         <lang>fr_FR</lang>
         <lang>es_ES</lang>
     </langs>
-    <license>GPLv3+</license>
+    <license><![CDATA[GPL v3+]]></license>
     <tags>
         <en>
             <tag>agile</tag>
