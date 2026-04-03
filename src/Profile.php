@@ -4,6 +4,7 @@ namespace GlpiPlugin\Sprint;
 
 use CommonDBTM;
 use CommonGLPI;
+use Plugin;
 use Profile as GlpiProfile;
 use ProfileRight;
 use Html;
@@ -145,52 +146,6 @@ class Profile extends CommonDBTM
         $rights    = self::getAllRights();
         $profileId = $profile->getID();
 
-        // Handle POST - save rights
-        if ($canedit && isset($_POST['update_sprint_rights'])) {
-            Session::checkCSRFToken();
-            foreach ($rights as $right) {
-                $field = $right['field'];
-                $value = 0;
-                if (isset($_POST[$field]) && is_array($_POST[$field])) {
-                    foreach ($_POST[$field] as $v) {
-                        $value |= (int)$v;
-                    }
-                }
-
-                $existing = $DB->request([
-                    'FROM'  => 'glpi_profilerights',
-                    'WHERE' => [
-                        'profiles_id' => $profileId,
-                        'name'        => $field,
-                    ],
-                ]);
-
-                if (count($existing) > 0) {
-                    $DB->update('glpi_profilerights', [
-                        'rights' => $value,
-                    ], [
-                        'profiles_id' => $profileId,
-                        'name'        => $field,
-                    ]);
-                } else {
-                    $DB->insert('glpi_profilerights', [
-                        'profiles_id' => $profileId,
-                        'name'        => $field,
-                        'rights'      => $value,
-                    ]);
-                }
-            }
-
-            // Reload rights in session if editing own profile
-            if ($profileId == $_SESSION['glpiactiveprofile']['id']) {
-                Session::changeProfile($profileId);
-            }
-
-            Session::addMessageAfterRedirect(__('Rights saved successfully', 'sprint'));
-            Html::back();
-            return;
-        }
-
         // Get current rights for this profile
         $currentRights = [];
         foreach ($rights as $right) {
@@ -207,8 +162,9 @@ class Profile extends CommonDBTM
 
         echo "<div class='center'>";
         if ($canedit) {
-            echo "<form method='post' action='" . GlpiProfile::getFormURLWithID($profileId) . "'>";
-            echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
+            $formUrl = Plugin::getWebDir('sprint') . '/front/profile.form.php';
+            echo "<form method='post' action='" . $formUrl . "'>";
+            echo Html::hidden('profiles_id', ['value' => $profileId]);
         }
 
         echo "<table class='tab_cadre_fixe'>";
