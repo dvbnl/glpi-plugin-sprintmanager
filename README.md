@@ -1,0 +1,1 @@
+# glpi-plugin-sprintmanager
