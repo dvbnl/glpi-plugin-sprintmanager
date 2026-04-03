@@ -5,7 +5,7 @@
  * GLPI 11 compatible: no exit()
  */
 
-include('../../../inc/includes.php');
+include(dirname(__DIR__, 3) . '/inc/includes.php');
 
 header('Content-Type: application/json');
 

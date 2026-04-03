@@ -5,9 +5,9 @@
  * (Ticket, Change, or ProjectTask).
  */
 
-include('../../../inc/includes.php');
+include(dirname(__DIR__, 3) . '/inc/includes.php');
 
-Session::checkCSRFToken();
+Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);
 
 $itemtype = $_POST['itemtype'] ?? '';

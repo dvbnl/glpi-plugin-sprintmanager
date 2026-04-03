@@ -5,11 +5,11 @@
  * Returns HTML for a select dropdown
  */
 
-include('../../../inc/includes.php');
+include(dirname(__DIR__, 3) . '/inc/includes.php');
 
 header('Content-Type: application/json');
 
-Session::checkCSRFToken();
+Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_sprint', READ);
 
 $projectId = (int)($_POST['projects_id'] ?? 0);
