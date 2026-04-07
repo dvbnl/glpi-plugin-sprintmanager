@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-04-07
+
+### Fixed
+- Fixed CSRF token failure on Project Task AJAX dropdown by replacing single-use CSRF check with session login check on the read-only `getprojecttasks.php` endpoint
+- Fixed relative include paths to use `dirname(__DIR__, 3)` for Symfony routing compatibility in GLPI 11
+- Fixed `Session::checkCSRFToken()` calls replaced with correct `Session::checkCSRF($_POST)`
+- Fixed profile rights form posting to dedicated plugin handler instead of GLPI's built-in `profile.form.php` which silently ignored custom rights fields
+- Fixed element name for form submit to GLPI
+
 ## [1.0.0] - 2026-04-03
 
 ### Initial Release

@@ -9,7 +9,7 @@ include(dirname(__DIR__, 3) . '/inc/includes.php');
 
 header('Content-Type: application/json');
 
-Session::checkCSRF($_POST);
+Session::checkLoginUser();
 Session::checkRight('plugin_sprint_sprint', READ);
 
 $projectId = (int)($_POST['projects_id'] ?? 0);
