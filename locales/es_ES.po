@@ -495,3 +495,15 @@ msgstr "Se requiere un Scrum Master para crear un sprint"
 msgid "Description"
 msgstr "Descripcion"
 
+msgid "Global View"
+msgstr "Vista global"
+
+msgid "Personal View"
+msgstr "Vista personal"
+
+msgid "No items assigned to you"
+msgstr "No hay elementos asignados a usted"
+
+msgid "Your Capacity"
+msgstr "Su capacidad"
+

@@ -46,10 +46,102 @@ class SprintDashboard extends CommonGLPI
 
     public static function showForSprint(Sprint $sprint): void
     {
-        $ID    = $sprint->getID();
-        $stats = $sprint->getSprintStats();
-        $items = self::getAllLinkedItems($ID);
+        $ID        = $sprint->getID();
+        $currentUserId = (int)Session::getLoginUserID();
 
+        // Collect all items once
+        $allItems      = self::getAllLinkedItems($ID);
+        $personalItems = array_filter($allItems, function ($row) use ($currentUserId) {
+            return (int)$row['users_id'] === $currentUserId;
+        });
+
+        $globalStats   = self::computeStats($allItems);
+        $personalStats = self::computeStats($personalItems);
+
+        // === View toggle buttons ===
+        echo "<div style='display:flex;justify-content:center;gap:8px;padding:12px 0 4px;'>";
+        echo "<button id='sprint_btn_global' class='btn btn-primary' onclick='sprintToggleView(\"global\")'>" .
+            "<i class='fas fa-globe' style='margin-right:5px;'></i>" . __('Global View', 'sprint') . "</button>";
+        echo "<button id='sprint_btn_personal' class='btn btn-outline-secondary' onclick='sprintToggleView(\"personal\")'>" .
+            "<i class='fas fa-user' style='margin-right:5px;'></i>" . __('Personal View', 'sprint') . "</button>";
+        echo "</div>";
+
+        // === Global view ===
+        echo "<div id='sprint_view_global'>";
+        self::renderDashboardContent($globalStats, $allItems, __('No items in this sprint yet', 'sprint'));
+        self::showMemberCapacity($ID);
+        echo "</div>";
+
+        // === Personal view (hidden by default) ===
+        echo "<div id='sprint_view_personal' style='display:none;'>";
+        self::renderDashboardContent($personalStats, $personalItems, __('No items assigned to you', 'sprint'));
+        self::showPersonalCapacity($ID, $currentUserId);
+        echo "</div>";
+
+        // === Toggle script ===
+        echo "<script>
+        function sprintToggleView(view) {
+            var gDiv = document.getElementById('sprint_view_global');
+            var pDiv = document.getElementById('sprint_view_personal');
+            var gBtn = document.getElementById('sprint_btn_global');
+            var pBtn = document.getElementById('sprint_btn_personal');
+            if (view === 'personal') {
+                gDiv.style.display = 'none';
+                pDiv.style.display = '';
+                gBtn.className = 'btn btn-outline-secondary';
+                pBtn.className = 'btn btn-primary';
+            } else {
+                gDiv.style.display = '';
+                pDiv.style.display = 'none';
+                gBtn.className = 'btn btn-primary';
+                pBtn.className = 'btn btn-outline-secondary';
+            }
+        }
+        </script>";
+    }
+
+    /**
+     * Compute stats from an array of item rows
+     */
+    private static function computeStats(array $items): array
+    {
+        $stats = [
+            'total_items'   => count($items),
+            'todo_items'    => 0,
+            'in_progress'   => 0,
+            'done_items'    => 0,
+            'blocked_items' => 0,
+            'total_points'  => 0,
+            'done_points'   => 0,
+        ];
+
+        foreach ($items as $row) {
+            $stats['total_points'] += (int)$row['story_points'];
+            switch ($row['raw_status']) {
+                case SprintItem::STATUS_TODO:
+                    $stats['todo_items']++;
+                    break;
+                case SprintItem::STATUS_IN_PROGRESS:
+                    $stats['in_progress']++;
+                    break;
+                case SprintItem::STATUS_DONE:
+                    $stats['done_items']++;
+                    $stats['done_points'] += (int)$row['story_points'];
+                    break;
+                case SprintItem::STATUS_BLOCKED:
+                    $stats['blocked_items']++;
+                    break;
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Render stats cards, progress bar, and items table
+     */
+    private static function renderDashboardContent(array $stats, array $items, string $emptyMessage): void
+    {
         // === Stats cards ===
         echo "<div style='display:flex;flex-wrap:wrap;gap:14px;padding:16px 0 20px;justify-content:center;'>";
 
@@ -79,14 +171,12 @@ class SprintDashboard extends CommonGLPI
         $reviewPct   = max(100 - $donePct - $progressPct - $blockedPct - $todoPct, 0);
 
         echo "<div style='margin:0 0 24px;'>";
-        // Legend
         echo "<div style='display:flex;gap:18px;justify-content:center;margin-bottom:8px;font-size:0.82em;color:#6c757d;flex-wrap:wrap;'>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#198754;margin-right:4px;vertical-align:middle;'></span>" . __('Done', 'sprint') . " {$donePct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#0d6efd;margin-right:4px;vertical-align:middle;'></span>" . __('In Progress', 'sprint') . " {$progressPct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc3545;margin-right:4px;vertical-align:middle;'></span>" . __('Blocked', 'sprint') . " {$blockedPct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#d5d8dc;margin-right:4px;vertical-align:middle;'></span>" . __('To Do', 'sprint') . " {$todoPct}%</span>";
         echo "</div>";
-        // Bar
         echo "<div style='width:100%;height:20px;background:#e9ecef;border-radius:10px;overflow:hidden;display:flex;'>";
         if ($donePct > 0)     echo "<div style='width:{$donePct}%;height:100%;background:#198754;transition:width 0.4s;' title='" . __('Done', 'sprint') . "'></div>";
         if ($progressPct > 0) echo "<div style='width:{$progressPct}%;height:100%;background:#0d6efd;transition:width 0.4s;' title='" . __('In Progress', 'sprint') . "'></div>";
@@ -110,7 +200,7 @@ class SprintDashboard extends CommonGLPI
         if (count($items) === 0) {
             echo "<tr class='tab_bg_1'><td colspan='6' style='padding:32px;color:#adb5bd;text-align:center;'>" .
                 "<i class='fas fa-inbox' style='font-size:2.2em;display:block;margin-bottom:10px;opacity:0.5;'></i>" .
-                __('No items in this sprint yet', 'sprint') . "</td></tr>";
+                $emptyMessage . "</td></tr>";
         }
 
         foreach ($items as $row) {
@@ -130,9 +220,6 @@ class SprintDashboard extends CommonGLPI
         }
 
         echo "</table>";
-
-        // === Capacity ===
-        self::showMemberCapacity($ID);
     }
 
     /**
@@ -251,21 +338,101 @@ class SprintDashboard extends CommonGLPI
             $statusClass = 'sprint-status-' . str_replace('_', '-', $row['status']);
 
             $items[] = [
-                'type_label'  => $typeInfo[2],
-                'icon'        => $typeInfo[0],
-                'color'       => $typeInfo[1],
-                'name'        => $row['name'],
-                'url'         => SprintItem::getFormURLWithID($row['id']),
-                'linked_name' => $linkedName,
-                'linked_url'  => $linkedUrl,
-                'status'      => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;">' .
-                                 ($statuses[$row['status']] ?? $row['status']) . '</span>',
-                'priority'    => $priorities[$row['priority']] ?? '',
-                'member'      => self::getMemberName((int)$row['users_id']),
+                'type_label'   => $typeInfo[2],
+                'icon'         => $typeInfo[0],
+                'color'        => $typeInfo[1],
+                'name'         => $row['name'],
+                'url'          => SprintItem::getFormURLWithID($row['id']),
+                'linked_name'  => $linkedName,
+                'linked_url'   => $linkedUrl,
+                'raw_status'   => $row['status'],
+                'story_points' => (int)$row['story_points'],
+                'users_id'     => (int)$row['users_id'],
+                'status'       => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;">' .
+                                  ($statuses[$row['status']] ?? $row['status']) . '</span>',
+                'priority'     => $priorities[$row['priority']] ?? '',
+                'member'       => self::getMemberName((int)$row['users_id']),
             ];
         }
 
         return $items;
+    }
+
+    /**
+     * Show capacity overview for the current user only
+     */
+    private static function showPersonalCapacity(int $sprintId, int $userId): void
+    {
+        $member  = new SprintMember();
+        $members = $member->find([
+            'plugin_sprint_sprints_id' => $sprintId,
+            'users_id'                 => $userId,
+        ]);
+
+        if (count($members) === 0) {
+            return;
+        }
+
+        $si = new SprintItem();
+        $allItems = $si->find([
+            'plugin_sprint_sprints_id' => $sprintId,
+            'users_id'                 => $userId,
+        ]);
+        $usedCapacity = 0;
+        foreach ($allItems as $row) {
+            $usedCapacity += (int)($row['capacity'] ?? 0);
+        }
+
+        $roles = SprintMember::getAllRoles();
+        $memberData = reset($members);
+        $total      = (int)$memberData['capacity_percent'];
+        $remaining  = max($total - $usedCapacity, 0);
+        $pctUsed    = ($total > 0) ? round(($usedCapacity / $total) * 100) : 0;
+        $roleName   = $roles[$memberData['role']] ?? $memberData['role'];
+
+        $remainColor = '#198754';
+        if ($remaining <= 0) {
+            $remainColor = '#dc3545';
+        } elseif ($pctUsed >= 80) {
+            $remainColor = '#e67e22';
+        }
+
+        $overload = ($total - $usedCapacity < 0)
+            ? ' <span style="color:#dc3545;font-weight:700;">(' . __('overloaded', 'sprint') . ')</span>'
+            : '';
+
+        $usedWidth = ($total > 0) ? min(round(($usedCapacity / $total) * 100), 100) : 0;
+
+        echo "<div style='margin-top:20px;'>";
+        echo "<table class='tab_cadre_fixe'>";
+        echo "<tr class='tab_bg_2'><th colspan='6'>" .
+            "<i class='fas fa-user' style='margin-right:6px;'></i>" .
+            __('Your Capacity', 'sprint') . "</th></tr>";
+        echo "<tr class='tab_bg_2'>";
+        echo "<th>" . __('Member', 'sprint') . "</th>";
+        echo "<th>" . __('Role', 'sprint') . "</th>";
+        echo "<th>" . __('Total', 'sprint') . "</th>";
+        echo "<th>" . __('Used', 'sprint') . "</th>";
+        echo "<th>" . __('Available', 'sprint') . "</th>";
+        echo "<th>" . __('Capacity', 'sprint') . "</th>";
+        echo "</tr>";
+
+        echo "<tr class='tab_bg_1'>";
+        echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . getUserName($userId) . "</td>";
+        echo "<td>" . $roleName . "</td>";
+        echo "<td class='center'>{$total}%</td>";
+        echo "<td class='center'>{$usedCapacity}%</td>";
+        echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$remaining}%{$overload}</td>";
+        echo "<td style='min-width:180px;'>";
+        echo "<div style='height:16px;background:#198754;border-radius:8px;overflow:hidden;display:flex;justify-content:flex-end;'>";
+        if ($usedWidth > 0) {
+            echo "<div style='width:{$usedWidth}%;height:100%;background:#dc3545;transition:width 0.3s;' title='" . __('Used', 'sprint') . " {$usedCapacity}%'></div>";
+        }
+        echo "</div>";
+        echo "</td>";
+        echo "</tr>";
+
+        echo "</table></div>";
     }
 
     private static function getMemberName(int $usersId): string

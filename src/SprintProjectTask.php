@@ -231,6 +231,36 @@ class SprintProjectTask extends CommonDBRelation
         echo "</table></div>";
     }
 
+    public function post_addItem()
+    {
+        $task = new ProjectTask();
+        if ($task->getFromDB($this->fields['projecttasks_id'])) {
+            $item = new SprintItem();
+            $item->add([
+                'plugin_sprint_sprints_id' => $this->fields['plugin_sprint_sprints_id'],
+                'name'                     => $task->fields['name'],
+                'itemtype'                 => 'ProjectTask',
+                'items_id'                 => $this->fields['projecttasks_id'],
+                'status'                   => SprintItem::STATUS_TODO,
+                'priority'                 => 3,
+                'users_id'                 => (int)($this->fields['users_id'] ?? 0),
+            ]);
+        }
+    }
+
+    public function post_purgeItem()
+    {
+        $item = new SprintItem();
+        $items = $item->find([
+            'plugin_sprint_sprints_id' => $this->fields['plugin_sprint_sprints_id'],
+            'itemtype'                 => 'ProjectTask',
+            'items_id'                 => $this->fields['projecttasks_id'],
+        ]);
+        foreach ($items as $row) {
+            $item->delete(['id' => $row['id']], 1);
+        }
+    }
+
     public static function cleanForItem(\CommonDBTM $item): void
     {
         $temp = new self();

@@ -27,7 +27,7 @@ SprintManager brings Agile/Scrum sprint management to GLPI. Create sprints, buil
 - **Sprint backlog** - Add manual items or link existing GLPI Tickets, Changes, and Project Tasks via searchable AJAX dropdowns
 - **Team members** - Assign members with roles (Scrum Master, Product Owner, Developer, Tester, Designer, DevOps, Analyst) and capacity percentages
 - **Capacity tracking** - Set capacity per sprint item; dashboard shows per-member usage with visual overload detection
-- **Dashboard** - Stats cards (total items, done, in progress, blocked, story points), progress bar, items overview, and team capacity visualization
+- **Dashboard** - Stats cards (total items, done, in progress, blocked, story points), progress bar, items overview, and team capacity visualization with Global and Personal view toggle
 - **Meeting management** - Schedule kickoffs, standups, reviews, and retrospectives with a required facilitator
 - **Interactive standup review** - During a meeting, review all sprint items inline: update status, reassign owners, and add notes — all saved with one click
 - **Treated checkbox** - Mark items as discussed during standups; treated items are greyed out and locked
@@ -140,6 +140,7 @@ The **Dashboard** tab shows:
 - Stats cards for total items, done, in progress, blocked, and story points
 - A progress bar with color-coded segments
 - A **Team Capacity** table showing each member's available vs. used capacity with visual bars
+- Toggle between **Global View** (all items, full team capacity) and **Personal View** (only your items, your capacity)
 
 ---
 

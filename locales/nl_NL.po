@@ -495,3 +495,15 @@ msgstr "Een Scrum Master is vereist om een sprint aan te maken"
 msgid "Description"
 msgstr "Beschrijving"
 
+msgid "Global View"
+msgstr "Globale weergave"
+
+msgid "Personal View"
+msgstr "Persoonlijke weergave"
+
+msgid "No items assigned to you"
+msgstr "Geen items aan u toegewezen"
+
+msgid "Your Capacity"
+msgstr "Uw capaciteit"
+

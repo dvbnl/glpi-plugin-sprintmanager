@@ -373,3 +373,15 @@ msgstr ""
 
 msgid "Status"
 msgstr ""
+
+msgid "Global View"
+msgstr ""
+
+msgid "Personal View"
+msgstr ""
+
+msgid "No items assigned to you"
+msgstr ""
+
+msgid "Your Capacity"
+msgstr ""
