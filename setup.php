@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.0.1');
+define('PLUGIN_SPRINT_VERSION', '1.0.2');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -89,8 +89,13 @@ function plugin_init_sprint(): void
     }
 
     // Menu entry - under Assistance (helpdesk)
+    // Both SprintManager and Backlog appear as clickable items in the
+    // helpdesk menu group.
     $PLUGIN_HOOKS['menu_toadd']['sprint'] = [
-        'helpdesk' => 'GlpiPlugin\Sprint\Sprint',
+        'helpdesk' => [
+            'GlpiPlugin\Sprint\Sprint',
+            'GlpiPlugin\Sprint\Backlog',
+        ],
     ];
 
     // Register profile tab for RBAC

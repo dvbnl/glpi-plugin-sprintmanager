@@ -73,6 +73,9 @@ class Sprint extends CommonDBTM
             ],
         ];
 
+        // Backlog is exposed as its own top-level helpdesk menu entry via
+        // setup.php (menu_toadd), see Backlog::getMenuContent().
+
         return $menu;
     }
 
@@ -484,6 +487,9 @@ class Sprint extends CommonDBTM
                         }
                         if (d.goal) {
                             $('textarea[name=\"goal\"]').val(d.goal);
+                        }
+                        if (d.comment) {
+                            $('textarea[name=\"comment\"]').val(d.comment);
                         }
                         if (d.duration_weeks) {
                             var dw = $('select[name=\"duration_weeks\"]');

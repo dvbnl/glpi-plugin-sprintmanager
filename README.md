@@ -24,7 +24,8 @@ SprintManager brings Agile/Scrum sprint management to GLPI. Create sprints, buil
 ### Features
 
 - **Sprint management** - Create sprints with configurable duration, goals, status, and sprint numbers
-- **Sprint backlog** - Add manual items or link existing GLPI Tickets, Changes, and Project Tasks via searchable AJAX dropdowns
+- **Sprint backlog (per sprint)** - Add manual items or link existing GLPI Tickets, Changes, and Project Tasks via searchable AJAX dropdowns
+- **Global Backlog page** - Dedicated page for items waiting to be assigned to a sprint, with 1-click "Add to backlog" buttons on every Ticket / Change / Project Task, an inline "Assign to sprint" dropdown per row, and a filter bar (search by name, filter by type, sort)
 - **Team members** - Assign members with roles (Scrum Master, Product Owner, Developer, Tester, Designer, DevOps, Analyst) and capacity percentages
 - **Capacity tracking** - Set capacity per sprint item; dashboard shows per-member usage with visual overload detection
 - **Dashboard** - Stats cards (total items, done, in progress, blocked, story points), progress bar, items overview, and team capacity visualization with Global and Personal view toggle
@@ -32,6 +33,7 @@ SprintManager brings Agile/Scrum sprint management to GLPI. Create sprints, buil
 - **Interactive standup review** - During a meeting, review all sprint items inline: update status, reassign owners, and add notes — all saved with one click
 - **Treated checkbox** - Mark items as discussed during standups; treated items are greyed out and locked
 - **Persistent notes** - Notes per sprint item carry over between meetings for continuity
+- **Smart linked-item display** - Linked Project Tasks show the parent project name in parentheses so tasks with identical names across projects can be told apart
 
 #### Sprint Templates
 
@@ -117,13 +119,26 @@ Place the new files over the existing plugin folder and go to **Setup > Plugins*
 
 Alternatively, open an existing sprint and click **Save as Template** to create a template from a sprint that's already configured.
 
-### Managing the backlog
+### Managing the backlog of a sprint
 
 1. Open a sprint and go to the **Sprint Items** tab
 2. Select a type: **Manual item**, **Ticket**, **Change**, or **Project Task**
 3. For Tickets/Changes: a searchable GLPI dropdown appears to select existing items
 4. For Project Tasks: first select a Project, then pick a task from that project
 5. Set owner, status, priority, story points, and capacity percentage
+
+### Working with the global Backlog
+
+The **Backlog** is a holding area for work that should land in *some* sprint, but hasn't been planned into one yet.
+
+1. On any Ticket, Change, or Project Task, open the **Sprints** tab and click **Add to backlog** — the item is added to the global backlog with a single click. Duplicate adds for the same linked item are skipped automatically.
+2. Open **Assistance > Backlog** to see everything in the queue.
+3. Use the filter bar at the top to narrow the list:
+   - **Search by name** — free-text match on the item name
+   - **Type** — Ticket, Change, Project task, Manual, or All
+   - **Sort** — Priority, Name, Newest first, Oldest first
+   - The active filters live in the URL, so the page is shareable and bookmarkable
+4. Per row, pick a Planned or Active sprint from the inline dropdown and click **Assign** — the item moves into that sprint and disappears from the backlog.
 
 ### Running a standup
 
@@ -155,6 +170,7 @@ sprint/
 ├── src/
 │   ├── Sprint.php              # Main sprint entity
 │   ├── SprintItem.php          # Backlog items with GLPI item linking + RBAC
+│   ├── Backlog.php             # Global backlog page (filter + assign-to-sprint)
 │   ├── SprintMember.php        # Team members with roles and capacity
 │   ├── SprintMeeting.php       # Meetings with inline item review
 │   ├── SprintStandup.php       # Standup log entries

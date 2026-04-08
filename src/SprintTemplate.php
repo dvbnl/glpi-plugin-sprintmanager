@@ -188,6 +188,7 @@ class SprintTemplate extends CommonDBTM
             'name_pattern'    => $this->fields['name_pattern'] ?? '',
             'duration_weeks'  => (int)($this->fields['duration_weeks'] ?? 2),
             'goal'            => $this->fields['goal'] ?? '',
+            'comment'         => $this->fields['comment'] ?? '',
             'members_count'   => $membersCount,
             'items_count'     => $itemsCount,
             'meetings_count'  => $meetingsCount,
@@ -203,6 +204,23 @@ class SprintTemplate extends CommonDBTM
         $template = new self();
         if (!$template->getFromDB($templateId)) {
             return;
+        }
+
+        // Backfill goal/comment on the sprint if the user did not override
+        // them (e.g. when JavaScript pre-fill did not run). This is a safety
+        // net for the JS pre-fill in Sprint::showTemplateLoadScript().
+        $sprint = new Sprint();
+        if ($sprint->getFromDB($sprintId)) {
+            $updates = ['id' => $sprintId];
+            if (empty($sprint->fields['goal']) && !empty($template->fields['goal'])) {
+                $updates['goal'] = $template->fields['goal'];
+            }
+            if (empty($sprint->fields['comment']) && !empty($template->fields['comment'])) {
+                $updates['comment'] = $template->fields['comment'];
+            }
+            if (count($updates) > 1) {
+                $sprint->update($updates);
+            }
         }
 
         // Copy template members to sprint members

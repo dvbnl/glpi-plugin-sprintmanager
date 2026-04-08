@@ -178,6 +178,8 @@ class SprintProjectTask extends CommonDBRelation
             echo "</table>";
             Html::closeForm();
             echo "</div>";
+
+            Backlog::showAddToBacklogButton('ProjectTask', $taskID);
         }
 
         $link  = new self();

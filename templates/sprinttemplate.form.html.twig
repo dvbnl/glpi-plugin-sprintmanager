@@ -1,14 +1,11 @@
 {% extends "generic_show_form.html.twig" %}
 {% import "components/form/fields_macros.html.twig" as fields %}
 
+{# The parent template (generic_show_form) auto-renders the standard
+   `is_active` and `comment` fields. We deliberately do NOT redeclare
+   them here, otherwise they show up twice and the duplicate POST input
+   ends up overwriting the user's value with an empty string. #}
 {% block more_fields %}
-
-    {{ fields.dropdownYesNo(
-        'is_active',
-        item.fields['is_active'],
-        __('Active'),
-        field_options
-    ) }}
 
     {{ fields.textField(
         'name_pattern',
@@ -33,13 +30,6 @@
         'goal',
         item.fields['goal'],
         __('Sprint goal', 'sprint'),
-        field_options
-    ) }}
-
-    {{ fields.textareaField(
-        'comment',
-        item.fields['comment'],
-        __('Comments'),
         field_options
     ) }}
 

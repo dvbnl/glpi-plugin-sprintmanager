@@ -16,6 +16,7 @@
 Features:
 - Create and manage sprints with configurable duration, goals, and status tracking
 - Sprint backlog with story points, priority, status, and capacity per item
+- Global Backlog page: a holding area for items not yet assigned to a sprint, with 1-click "Add to backlog" buttons on Tickets/Changes/Project Tasks, an inline "Assign to sprint" dropdown, and a filter bar (search by name, type, sort)
 - Link existing GLPI Tickets, Changes, and Project Tasks directly to sprint items
 - Team member management with roles (Scrum Master, Product Owner, Developer, Tester, etc.)
 - Capacity tracking per member with visual overload detection
@@ -36,6 +37,16 @@ Features:
         <author>DVBNL</author>
     </authors>
     <versions>
+        <version>
+            <num>1.0.2</num>
+            <compatibility>~10.0</compatibility>
+            <download_url>https://github.com/dvbnl/glpi-plugin-sprintmanager/releases/download/v1.0.2/sprintmanager-v1.0.2.zip</download_url>
+        </version>
+        <version>
+            <num>1.0.1</num>
+            <compatibility>~10.0</compatibility>
+            <download_url>https://github.com/dvbnl/glpi-plugin-sprintmanager/releases/download/v1.0.1/sprintmanager-v1.0.1.zip</download_url>
+        </version>
         <version>
             <num>1.0.0</num>
             <compatibility>~10.0</compatibility>

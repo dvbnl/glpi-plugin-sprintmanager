@@ -3,7 +3,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: SprintManager 1.0.0\n"
+"Project-Id-Version: SprintManager 1.0.2\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-03 12:00+0000\n"
 "PO-Revision-Date: 2026-04-03 12:00+0000\n"
@@ -506,4 +506,52 @@ msgstr "Geen items aan u toegewezen"
 
 msgid "Your Capacity"
 msgstr "Uw capaciteit"
+
+# === Backlog feature ===
+msgid "Backlog"
+msgid_plural "Backlog"
+msgstr[0] "Backlog"
+msgstr[1] "Backlog"
+
+msgid "Items waiting to be assigned to a sprint. Use the dropdown to move an item into a sprint."
+msgstr "Items die wachten om aan een sprint te worden toegewezen. Gebruik de keuzelijst om een item naar een sprint te verplaatsen."
+
+msgid "Backlog is empty"
+msgstr "Backlog is leeg"
+
+msgid "Add to backlog"
+msgstr "Aan backlog toevoegen"
+
+msgid "Added to backlog"
+msgstr "Toegevoegd aan de backlog"
+
+msgid "Could not add item to backlog"
+msgstr "Kon item niet aan de backlog toevoegen"
+
+msgid "Item assigned to sprint"
+msgstr "Item toegewezen aan sprint"
+
+msgid "Please select a sprint"
+msgstr "Selecteer een sprint"
+
+msgid "Assign to sprint"
+msgstr "Toewijzen aan sprint"
+
+msgid "Assign"
+msgstr "Toewijzen"
+
+msgid "Search by name"
+msgstr "Zoeken op naam"
+
+msgid "Newest first"
+msgstr "Nieuwste eerst"
+
+msgid "Oldest first"
+msgstr "Oudste eerst"
+
+msgid "Filter"
+msgstr "Filteren"
+
+msgid "Reset"
+msgstr "Wissen"
 

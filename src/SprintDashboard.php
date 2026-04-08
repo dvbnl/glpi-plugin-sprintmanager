@@ -332,10 +332,35 @@ class SprintDashboard extends CommonGLPI
                 if ($linked->getFromDB($itemsId)) {
                     $linkedName = $linked->fields['name'];
                     $linkedUrl  = $itemtype::getFormURLWithID($itemsId);
+
+                    // Append parent project name for ProjectTask so users
+                    // can disambiguate tasks with identical names across
+                    // multiple projects.
+                    if ($itemtype === 'ProjectTask') {
+                        $projectId = (int)($linked->fields['projects_id'] ?? 0);
+                        if ($projectId > 0) {
+                            $project = new \Project();
+                            if ($project->getFromDB($projectId)) {
+                                $linkedName .= ' (' . $project->fields['name'] . ')';
+                            }
+                        }
+                    }
                 }
             }
 
             $statusClass = 'sprint-status-' . str_replace('_', '-', $row['status']);
+
+            // Inline background color so the badge stays readable even if
+            // the plugin's CSS variables (var(--sprint-todo) etc.) are not
+            // resolved in the current rendering context.
+            $statusBgColors = [
+                SprintItem::STATUS_TODO        => '#6c757d',
+                SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
+                SprintItem::STATUS_REVIEW      => '#6f42c1',
+                SprintItem::STATUS_DONE        => '#198754',
+                SprintItem::STATUS_BLOCKED     => '#dc3545',
+            ];
+            $statusBg = $statusBgColors[$row['status']] ?? '#6c757d';
 
             $items[] = [
                 'type_label'   => $typeInfo[2],
@@ -348,7 +373,7 @@ class SprintDashboard extends CommonGLPI
                 'raw_status'   => $row['status'],
                 'story_points' => (int)$row['story_points'],
                 'users_id'     => (int)$row['users_id'],
-                'status'       => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;">' .
+                'status'       => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:' . $statusBg . ';">' .
                                   ($statuses[$row['status']] ?? $row['status']) . '</span>',
                 'priority'     => $priorities[$row['priority']] ?? '',
                 'member'       => self::getMemberName((int)$row['users_id']),

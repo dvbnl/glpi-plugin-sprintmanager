@@ -171,6 +171,8 @@ class SprintChange extends CommonDBRelation
             echo "</table>";
             Html::closeForm();
             echo "</div>";
+
+            Backlog::showAddToBacklogButton('Change', $changeID);
         }
 
         $link  = new self();

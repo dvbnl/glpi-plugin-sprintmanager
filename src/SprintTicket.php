@@ -178,6 +178,8 @@ class SprintTicket extends CommonDBRelation
             echo "</table>";
             Html::closeForm();
             echo "</div>";
+
+            Backlog::showAddToBacklogButton('Ticket', $ticketID);
         }
 
         // List

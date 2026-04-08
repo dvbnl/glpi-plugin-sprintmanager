@@ -135,7 +135,10 @@ class SprintItem extends CommonDBTM
     }
 
     /**
-     * Get the display name for a linked GLPI item
+     * Get the display name for a linked GLPI item.
+     *
+     * For ProjectTask, the parent project name is appended in parentheses
+     * because task names are often duplicated across projects.
      */
     public function getLinkedItemDisplay(): string
     {
@@ -167,7 +170,21 @@ class SprintItem extends CommonDBTM
         $url  = $itemtype::getFormURLWithID($itemsId);
         $name = htmlescape($linkedItem->fields['name'] ?? '');
 
-        return "<a href='{$url}'><i class='{$icon}'></i> {$name}</a>";
+        // For project tasks, append the parent project name so users can
+        // distinguish tasks with identical names across projects.
+        $suffix = '';
+        if ($itemtype === 'ProjectTask') {
+            $projectId = (int)($linkedItem->fields['projects_id'] ?? 0);
+            if ($projectId > 0) {
+                $project = new \Project();
+                if ($project->getFromDB($projectId)) {
+                    $projectName = htmlescape($project->fields['name'] ?? '');
+                    $suffix = " <span style='color:#6c757d;'>({$projectName})</span>";
+                }
+            }
+        }
+
+        return "<a href='{$url}'><i class='{$icon}'></i> {$name}</a>{$suffix}";
     }
 
     /**
