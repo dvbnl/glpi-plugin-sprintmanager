@@ -256,6 +256,7 @@ class Sprint extends CommonDBTM
         $this->addDefaultFormTab($ong);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintMember', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintItem', $ong, $options);
+        $this->addStandardTab('GlpiPlugin\Sprint\SprintFastlane', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintMeeting', $ong, $options);
         $this->addStandardTab('Log', $ong, $options);
 

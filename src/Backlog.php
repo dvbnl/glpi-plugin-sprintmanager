@@ -152,7 +152,12 @@ class Backlog
         }
 
         if ($filterQ !== '') {
-            $criteria['name'] = ['LIKE', '%' . $filterQ . '%'];
+            $escaped = str_replace(
+                ['\\', '%', '_'],
+                ['\\\\', '\\%', '\\_'],
+                $filterQ
+            );
+            $criteria['name'] = ['LIKE', '%' . $escaped . '%'];
         }
 
         // === Sort order ===================================================
@@ -182,6 +187,9 @@ class Backlog
         echo "<th>" . __('Name') . "</th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
         echo "<th>" . __('Type', 'sprint') . "</th>";
+        echo "<th title='" . __('Items flagged as fastlane will be assigned to a sprint via the dedicated Fastlane tab.', 'sprint') . "'>" .
+            "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" .
+            __('Is Fastlane', 'sprint') . "</th>";
         if ($canedit) {
             echo "<th>" . __('Assign to sprint', 'sprint') . "</th>";
             echo "<th>" . __('Actions') . "</th>";
@@ -189,7 +197,7 @@ class Backlog
         echo "</tr>";
 
         if (count($items) === 0) {
-            $cols = $canedit ? 5 : 3;
+            $cols = $canedit ? 6 : 4;
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
                 __('Backlog is empty', 'sprint') . "</td></tr>";
         }
@@ -204,11 +212,34 @@ class Backlog
 
             $typeLabel = $typeLabels[$row['itemtype'] ?? ''] ?? __('Manual', 'sprint');
 
+            $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
+
             echo "<tr class='tab_bg_1'>";
             echo "<td><a href='" . SprintItem::getFormURLWithID($row['id']) . "'>" .
                 htmlescape($row['name']) . "</a></td>";
             echo "<td>" . $linkedDisplay . "</td>";
             echo "<td>" . $typeLabel . "</td>";
+
+            // Fastlane checkbox column — inline toggle form. Posts to
+            // backlog.form.php which routes to the toggle_fastlane action.
+            echo "<td class='center'>";
+            if ($canedit) {
+                echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
+                echo Html::hidden('id', ['value' => $row['id']]);
+                echo Html::hidden('is_fastlane', ['value' => $isFastlane ? 0 : 1]);
+                echo "<button type='submit' name='toggle_fastlane' value='1' "
+                    . "class='btn btn-sm " . ($isFastlane ? 'btn-warning' : 'btn-outline-secondary') . "' "
+                    . "title='" . ($isFastlane ? __('Disable fastlane', 'sprint') : __('Enable fastlane', 'sprint')) . "'>"
+                    . "<i class='fas " . ($isFastlane ? 'fa-bolt' : 'fa-bolt') . "'></i> "
+                    . ($isFastlane ? __('Yes') : __('No'))
+                    . "</button>";
+                Html::closeForm();
+            } else {
+                echo $isFastlane
+                    ? "<i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Yes')
+                    : "<span class='text-muted'>" . __('No') . "</span>";
+            }
+            echo "</td>";
 
             if ($canedit) {
                 // Inline assign-to-sprint form (dropdown + submit)

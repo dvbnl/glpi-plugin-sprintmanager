@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.0.2');
+define('PLUGIN_SPRINT_VERSION', '1.0.3');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -118,6 +118,20 @@ function plugin_init_sprint(): void
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintItem',
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
+    );
+
+    // Fastlane: virtual tab on Sprint listing fastlane items.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintFastlane',
+        ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
+    );
+
+    // Junction linking fastlane SprintItems to multiple sprint members,
+    // each with their own assigned capacity. Renders as a tab on
+    // SprintItem (only when the item is flagged is_fastlane).
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintFastlaneMember',
+        ['addtabon' => ['GlpiPlugin\Sprint\SprintItem']]
     );
 
     Plugin::registerClass(

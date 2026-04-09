@@ -19,6 +19,14 @@ if ($projectId <= 0) {
     return;
 }
 
+$project = new Project();
+if (!$project->getFromDB($projectId)
+    || !Session::haveAccessToEntity($project->fields['entities_id'] ?? 0)
+    || !$project->canViewItem()) {
+    echo json_encode(['success' => false, 'html' => '']);
+    return;
+}
+
 $task  = new ProjectTask();
 $tasks = $task->find(['projects_id' => $projectId], ['name ASC']);
 

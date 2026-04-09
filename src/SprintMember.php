@@ -45,6 +45,37 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
+     * Build the canonical capacity-percent dropdown choices.
+     *
+     * Granular at the bottom (1..5) so very small allocations
+     * (e.g. a 1% Fastlane slot) can still be expressed, then
+     * grouped per 5% from 5..100 to keep the picker manageable.
+     *
+     * @param bool $includeZero If true, prepends a 0% option.
+     * @return array<int,string> [value => label]
+     */
+    public static function getCapacityChoices(bool $includeZero = true): array
+    {
+        $values = [];
+        if ($includeZero) {
+            $values[] = 0;
+        }
+        // 1..5 incremental
+        for ($i = 1; $i <= 5; $i++) {
+            $values[] = $i;
+        }
+        // 10..100 grouped per 5
+        for ($i = 10; $i <= 100; $i += 5) {
+            $values[] = $i;
+        }
+        $out = [];
+        foreach ($values as $v) {
+            $out[$v] = $v . '%';
+        }
+        return $out;
+    }
+
+    /**
      * Get all available roles
      */
     public static function getAllRoles(): array
@@ -128,11 +159,8 @@ class SprintMember extends CommonDBRelation
             echo "</td>";
             echo "<td>" . __('Capacity (%)', 'sprint') . "</td>";
             echo "<td>";
-            Dropdown::showNumber('capacity_percent', [
+            Dropdown::showFromArray('capacity_percent', self::getCapacityChoices(), [
                 'value' => 100,
-                'min'   => 0,
-                'max'   => 100,
-                'step'  => 10,
             ]);
             echo "</td>";
             echo "</tr>";
@@ -287,9 +315,10 @@ class SprintMember extends CommonDBRelation
             \Glpi\Application\View\TemplateRenderer::getInstance()->display(
                 '@sprint/sprintmember.form.html.twig',
                 [
-                    'item'   => $this,
-                    'params' => $options,
-                    'roles'  => self::getAllRoles(),
+                    'item'             => $this,
+                    'params'           => $options,
+                    'roles'            => self::getAllRoles(),
+                    'capacity_choices' => self::getCapacityChoices(),
                 ]
             );
         } else {
@@ -303,8 +332,8 @@ class SprintMember extends CommonDBRelation
             echo "</td></tr>";
 
             echo "<tr class='tab_bg_1'><td>" . __('Capacity (%)', 'sprint') . "</td><td>";
-            Dropdown::showNumber('capacity_percent', [
-                'value' => $this->fields['capacity_percent'] ?? 100, 'min' => 0, 'max' => 100, 'step' => 10,
+            Dropdown::showFromArray('capacity_percent', self::getCapacityChoices(), [
+                'value' => $this->fields['capacity_percent'] ?? 100,
             ]);
             echo "</td><td>" . __('Sprint') . "</td><td>";
             Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $this->fields['plugin_sprint_sprints_id'] ?? 0]);
@@ -315,6 +344,97 @@ class SprintMember extends CommonDBRelation
                 htmlescape($this->fields['comment'] ?? '') . "</textarea></td></tr>";
 
             $this->showFormButtons($options);
+        }
+        return true;
+    }
+
+    /**
+     * Compute the capacity already used by a user in a sprint, summing
+     * both regular SprintItem allocations and Fastlane member allocations.
+     *
+     * @param int $sprintId
+     * @param int $userId
+     * @param int $excludeRegularItemId  SprintItem id to exclude (for updates of a regular item)
+     * @param int $excludeFastlaneMemberId  SprintFastlaneMember id to exclude (for updates of a fastlane allocation)
+     * @return int  Used capacity %
+     */
+    public static function getUsedCapacityForUser(
+        int $sprintId,
+        int $userId,
+        int $excludeRegularItemId = 0,
+        int $excludeFastlaneMemberId = 0
+    ): int {
+        // Regular sprint items: sum capacity for non-fastlane items the
+        // user owns. Fastlane items have multiple owners via the junction
+        // table, so we explicitly exclude them here.
+        $si = new SprintItem();
+        $criteria = [
+            'plugin_sprint_sprints_id' => $sprintId,
+            'users_id'                 => $userId,
+            'is_fastlane'              => 0,
+        ];
+        if ($excludeRegularItemId > 0) {
+            $criteria['NOT'] = ['id' => $excludeRegularItemId];
+        }
+        $regularUsed = 0;
+        foreach ($si->find($criteria) as $row) {
+            $regularUsed += (int)($row['capacity'] ?? 0);
+        }
+
+        // Fastlane allocations from the junction table.
+        $fastlaneUsed = SprintFastlaneMember::getUsedFastlaneCapacityForUser(
+            $sprintId,
+            $userId,
+            $excludeFastlaneMemberId
+        );
+
+        return $regularUsed + $fastlaneUsed;
+    }
+
+    /**
+     * Validate that adding $additional% to the user's allocation in a sprint
+     * does not exceed the member's total capacity. Adds an error message
+     * via Session::addMessageAfterRedirect on failure.
+     */
+    public static function checkCapacityForUser(
+        int $sprintId,
+        int $userId,
+        int $additional,
+        int $excludeRegularItemId = 0,
+        int $excludeFastlaneMemberId = 0
+    ): bool {
+        if ($additional <= 0 || $userId <= 0 || $sprintId <= 0) {
+            return true;
+        }
+
+        $member  = new self();
+        $members = $member->find([
+            'plugin_sprint_sprints_id' => $sprintId,
+            'users_id'                 => $userId,
+        ]);
+        if (count($members) === 0) {
+            return true;
+        }
+        $row           = reset($members);
+        $totalCapacity = (int)$row['capacity_percent'];
+
+        $used      = self::getUsedCapacityForUser($sprintId, $userId, $excludeRegularItemId, $excludeFastlaneMemberId);
+        $remaining = $totalCapacity - $used;
+
+        if ($additional > $remaining) {
+            Session::addMessageAfterRedirect(
+                sprintf(
+                    __('%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%.', 'sprint'),
+                    getUserName($userId),
+                    max($remaining, 0),
+                    $totalCapacity,
+                    $used,
+                    $additional
+                ),
+                false,
+                ERROR
+            );
+            return false;
         }
         return true;
     }

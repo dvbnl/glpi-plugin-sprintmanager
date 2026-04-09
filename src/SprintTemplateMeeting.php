@@ -290,7 +290,17 @@ class SprintTemplateMeeting extends CommonDBTM
             ['sort_order ASC']
         );
 
+        // Two-pass scheduling so recurring standups can be excluded from
+        // days that already host a fixed ceremony (review / retrospective /
+        // kickoff). First pass: collect dates for all non-interval meetings
+        // and remember which calendar days are "reserved" by them.
+        $reservedDays = [];
+        $planned      = []; // [['row' => ..., 'dates' => [...]], ...]
+
         foreach ($meetings as $row) {
+            if ($row['schedule_type'] === self::SCHEDULE_INTERVAL) {
+                continue;
+            }
             $skipWeekends = (bool)($row['skip_weekends'] ?? false);
             $dates = self::calculateMeetingDates(
                 $row['schedule_type'],
@@ -299,8 +309,38 @@ class SprintTemplateMeeting extends CommonDBTM
                 $end,
                 $skipWeekends
             );
+            foreach ($dates as $d) {
+                $reservedDays[$d->format('Y-m-d')] = true;
+            }
+            $planned[] = ['row' => $row, 'dates' => $dates];
+        }
 
-            foreach ($dates as $meetingDate) {
+        // Second pass: interval meetings, dropping any occurrence whose
+        // date collides with a fixed ceremony day.
+        foreach ($meetings as $row) {
+            if ($row['schedule_type'] !== self::SCHEDULE_INTERVAL) {
+                continue;
+            }
+            $skipWeekends = (bool)($row['skip_weekends'] ?? false);
+            $dates = self::calculateMeetingDates(
+                $row['schedule_type'],
+                (int)$row['interval_days'],
+                $start,
+                $end,
+                $skipWeekends
+            );
+            $filtered = [];
+            foreach ($dates as $d) {
+                if (!isset($reservedDays[$d->format('Y-m-d')])) {
+                    $filtered[] = $d;
+                }
+            }
+            $planned[] = ['row' => $row, 'dates' => $filtered];
+        }
+
+        foreach ($planned as $entry) {
+            $row = $entry['row'];
+            foreach ($entry['dates'] as $meetingDate) {
                 $meeting = new SprintMeeting();
                 $meeting->add([
                     'plugin_sprint_sprints_id' => $sprintId,
@@ -337,7 +377,10 @@ class SprintTemplateMeeting extends CommonDBTM
                 if ($end) {
                     $d = clone $end;
                     if ($skipWeekends) {
-                        $d = self::skipToWeekday($d);
+                        // Snap backwards: a Sun-ending sprint must put the
+                        // ceremony on Fri *inside* the sprint, not Mon of
+                        // the next sprint.
+                        $d = self::skipToWeekday($d, 'backward');
                     }
                     $dates[] = $d;
                 }
@@ -348,11 +391,9 @@ class SprintTemplateMeeting extends CommonDBTM
                     $d = clone $end;
                     $d->modify('-1 day');
                     if ($skipWeekends) {
-                        $d = self::skipToWeekday($d);
+                        $d = self::skipToWeekday($d, 'backward');
                     }
-                    if ($d >= $start) {
-                        $dates[] = $d;
-                    }
+                    $dates[] = $d;
                 }
                 break;
 
@@ -373,19 +414,47 @@ class SprintTemplateMeeting extends CommonDBTM
                 break;
         }
 
-        return $dates;
+        // Hard guarantee: every meeting date must fall within the sprint
+        // window [start, end]. Any case above (forward weekend snap, future
+        // schedule types, ...) that drifts outside the window is silently
+        // dropped here so the rule lives in one place.
+        return array_values(array_filter(
+            $dates,
+            static function (\DateTime $d) use ($start, $end): bool {
+                if ($d < $start) {
+                    return false;
+                }
+                if ($end !== null && $d > $end) {
+                    return false;
+                }
+                return true;
+            }
+        ));
     }
 
     /**
-     * If the date falls on a weekend, move it to the next Monday.
+     * If the date falls on a weekend, snap to the nearest weekday.
+     *
+     * Direction matters: end-of-sprint ceremonies (review/retrospective)
+     * must snap *backwards* to Friday so they stay inside the sprint
+     * window — snapping forward would land on Monday of the next sprint.
+     * Recurring standups snap *forwards* to the next working day.
      */
-    private static function skipToWeekday(\DateTime $date): \DateTime
+    private static function skipToWeekday(\DateTime $date, string $direction = 'forward'): \DateTime
     {
         $dow = (int)$date->format('N'); // 1=Mon ... 7=Sun
-        if ($dow === 6) {
-            $date->modify('+2 days');
-        } elseif ($dow === 7) {
-            $date->modify('+1 day');
+        if ($direction === 'backward') {
+            if ($dow === 6) {
+                $date->modify('-1 day');  // Sat → Fri
+            } elseif ($dow === 7) {
+                $date->modify('-2 days'); // Sun → Fri
+            }
+        } else {
+            if ($dow === 6) {
+                $date->modify('+2 days'); // Sat → Mon
+            } elseif ($dow === 7) {
+                $date->modify('+1 day');  // Sun → Mon
+            }
         }
         return $date;
     }

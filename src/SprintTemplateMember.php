@@ -73,8 +73,8 @@ class SprintTemplateMember extends CommonDBRelation
             echo "</td>";
             echo "<td>" . __('Capacity (%)', 'sprint') . "</td>";
             echo "<td>";
-            Dropdown::showNumber('capacity_percent', [
-                'value' => 100, 'min' => 0, 'max' => 100, 'step' => 10,
+            Dropdown::showFromArray('capacity_percent', SprintMember::getCapacityChoices(), [
+                'value' => 100,
             ]);
             echo "</td></tr>";
 

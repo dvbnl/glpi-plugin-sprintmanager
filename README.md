@@ -26,14 +26,16 @@ SprintManager brings Agile/Scrum sprint management to GLPI. Create sprints, buil
 - **Sprint management** - Create sprints with configurable duration, goals, status, and sprint numbers
 - **Sprint backlog (per sprint)** - Add manual items or link existing GLPI Tickets, Changes, and Project Tasks via searchable AJAX dropdowns
 - **Global Backlog page** - Dedicated page for items waiting to be assigned to a sprint, with 1-click "Add to backlog" buttons on every Ticket / Change / Project Task, an inline "Assign to sprint" dropdown per row, and a filter bar (search by name, filter by type, sort)
+- **Fastlane** - Mark backlog items as fastlane via an inline toggle. When assigned to a sprint, fastlane items appear in a dedicated **Fastlane** tab on the sprint where multiple sprint members can be linked to the same item, each with their own assigned capacity. Fastlane allocations are validated against the member's remaining sprint capacity and surfaced as a separate "Fastlane" category on the dashboard, so the team can steer how much sprint effort goes to fastlane work
 - **Team members** - Assign members with roles (Scrum Master, Product Owner, Developer, Tester, Designer, DevOps, Analyst) and capacity percentages
-- **Capacity tracking** - Set capacity per sprint item; dashboard shows per-member usage with visual overload detection
-- **Dashboard** - Stats cards (total items, done, in progress, blocked, story points), progress bar, items overview, and team capacity visualization with Global and Personal view toggle
+- **Capacity tracking** - Set capacity per sprint item with a granular dropdown (1-5% then 5% steps up to 100%); dashboard shows per-member usage with visual overload detection and a Regular vs. Fastlane breakdown
+- **Dashboard** - Stats cards (total items, done, in progress, blocked, story points), progress bar, items overview, dedicated Fastlane items section, and team capacity visualization (Regular + Fastlane stacked) with Global and Personal view toggle
 - **Meeting management** - Schedule kickoffs, standups, reviews, and retrospectives with a required facilitator
 - **Interactive standup review** - During a meeting, review all sprint items inline: update status, reassign owners, and add notes — all saved with one click
 - **Treated checkbox** - Mark items as discussed during standups; treated items are greyed out and locked
 - **Persistent notes** - Notes per sprint item carry over between meetings for continuity
 - **Smart linked-item display** - Linked Project Tasks show the parent project name in parentheses so tasks with identical names across projects can be told apart
+- **Mobile-friendly** - Backlog, dashboard, items and meeting tabs all reflow for phone-sized viewports: tables become horizontally scrollable instead of cropping, the Backlog filter bar collapses cleanly, and stat cards / Kanban columns adapt to the available width
 
 #### Sprint Templates
 
@@ -42,7 +44,7 @@ SprintManager brings Agile/Scrum sprint management to GLPI. Create sprints, buil
   - **First day of sprint** - e.g., Sprint Kickoff (90 min)
   - **Recurring interval** - e.g., Standup every 2 days (15 min)
   - **Day before end / Last day** - e.g., Sprint Review (45 min), Retrospective (45 min)
-- **Skip weekends** - Meetings on Saturday/Sunday automatically move to the next Monday
+- **Skip weekends** - Meetings that fall on a Saturday or Sunday are automatically moved to the nearest weekday: end-of-sprint ceremonies (review, retrospective, day-before-end) snap **backwards** to the Friday inside the sprint, while recurring standups snap forward to the next working day. Recurring standups that would land on the same day as a fixed ceremony are skipped, and every generated meeting is hard-clamped to the sprint window so nothing is ever scheduled before the start or after the end
 - **Optional ceremonies** - Mark meetings as optional (e.g., Retrospective)
 - **Save as Template** - Convert any existing sprint (with members, items, and meetings) into a reusable template
 - **Create from template** - Select a template when creating a new sprint; members, items, and meetings are auto-generated based on sprint dates
@@ -139,6 +141,18 @@ The **Backlog** is a holding area for work that should land in *some* sprint, bu
    - **Sort** — Priority, Name, Newest first, Oldest first
    - The active filters live in the URL, so the page is shareable and bookmarkable
 4. Per row, pick a Planned or Active sprint from the inline dropdown and click **Assign** — the item moves into that sprint and disappears from the backlog.
+5. Use the **Is Fastlane** toggle on a row to flag the item as fastlane. When you then assign it to a sprint, it lands in the sprint's **Fastlane** tab instead of the regular Sprint Items tab.
+
+### Working with Fastlane items
+
+Fastlane items represent unplanned, urgent work that should be tracked alongside the regular sprint backlog without inflating it.
+
+1. In the global **Backlog**, click the **Is Fastlane** toggle on any item to flag it.
+2. Assign the item to a sprint as usual — it now appears in that sprint's **Fastlane** tab (mirroring the Sprint Items tab) instead of being mixed in with regular items.
+3. Open a fastlane item and switch to the **Fastlane Members** tab.
+4. Add one or more sprint members to the item, each with their own capacity %. The capacity picker is granular (1-5% then 5% steps up to 100%) so you can express very small allocations.
+5. Each fastlane allocation counts against the member's total sprint capacity together with their regular item capacity, and is validated so a member cannot be overbooked.
+6. The **Dashboard** lists all fastlane items in their own section between the regular sprint items and the team capacity table, and the Team Capacity table shows a separate **Fastlane** column plus the sprint-level fastlane total — at a glance you can see how much of the sprint is going to fastlane work.
 
 ### Running a standup
 
@@ -154,7 +168,8 @@ The **Backlog** is a holding area for work that should land in *some* sprint, bu
 The **Dashboard** tab shows:
 - Stats cards for total items, done, in progress, blocked, and story points
 - A progress bar with color-coded segments
-- A **Team Capacity** table showing each member's available vs. used capacity with visual bars
+- A dedicated **Fastlane** section listing fastlane items with status, assigned members + capacity, and a sprint-level fastlane total
+- A **Team Capacity** table showing each member's available vs. used capacity with separate **Regular** and **Fastlane** columns and a stacked visual bar (red = regular, orange = fastlane)
 - Toggle between **Global View** (all items, full team capacity) and **Personal View** (only your items, your capacity)
 
 ---
@@ -170,7 +185,9 @@ sprint/
 ├── src/
 │   ├── Sprint.php              # Main sprint entity
 │   ├── SprintItem.php          # Backlog items with GLPI item linking + RBAC
-│   ├── Backlog.php             # Global backlog page (filter + assign-to-sprint)
+│   ├── SprintFastlane.php      # Sprint tab listing fastlane items
+│   ├── SprintFastlaneMember.php # Fastlane item <-> member junction with capacity
+│   ├── Backlog.php             # Global backlog page (filter + assign-to-sprint + fastlane toggle)
 │   ├── SprintMember.php        # Team members with roles and capacity
 │   ├── SprintMeeting.php       # Meetings with inline item review
 │   ├── SprintStandup.php       # Standup log entries

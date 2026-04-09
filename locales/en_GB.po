@@ -555,3 +555,68 @@ msgstr "Filter"
 msgid "Reset"
 msgstr "Reset"
 
+# === Fastlane feature ===
+msgid "Fastlane"
+msgid_plural "Fastlane"
+msgstr[0] "Fastlane"
+msgstr[1] "Fastlane"
+
+msgid "Fastlane Member"
+msgid_plural "Fastlane Members"
+msgstr[0] "Fastlane Member"
+msgstr[1] "Fastlane Members"
+
+msgid "Items flagged as fastlane in the backlog. Open an entry to assign sprint members and capacity."
+msgstr "Items flagged as fastlane in the backlog. Open an entry to assign sprint members and capacity."
+
+msgid "Total Fastlane capacity"
+msgstr "Total Fastlane capacity"
+
+msgid "No fastlane items in this sprint"
+msgstr "No fastlane items in this sprint"
+
+msgid "This is not a fastlane item. Toggle the fastlane flag from the backlog or item edit form first."
+msgstr "This is not a fastlane item. Toggle the fastlane flag from the backlog or item edit form first."
+
+msgid "Assign a sprint member to this fastlane item"
+msgstr "Assign a sprint member to this fastlane item"
+
+msgid "Sprint member"
+msgstr "Sprint member"
+
+msgid "No members assigned yet"
+msgstr "No members assigned yet"
+
+msgid "Items flagged as fastlane will be assigned to a sprint via the dedicated Fastlane tab."
+msgstr "Items flagged as fastlane will be assigned to a sprint via the dedicated Fastlane tab."
+
+msgid "Is Fastlane"
+msgstr "Is Fastlane"
+
+msgid "Disable fastlane"
+msgstr "Disable fastlane"
+
+msgid "Enable fastlane"
+msgstr "Enable fastlane"
+
+msgid "Mark this item as fastlane (managed via the Fastlane tab on the sprint)."
+msgstr "Mark this item as fastlane (managed via the Fastlane tab on the sprint)."
+
+msgid "Fastlane item: assign sprint members and capacity from the Fastlane Members tab."
+msgstr "Fastlane item: assign sprint members and capacity from the Fastlane Members tab."
+
+msgid "Fastlane total: %d%%"
+msgstr "Fastlane total: %d%%"
+
+msgid "Total capacity: %d%%"
+msgstr "Total capacity: %d%%"
+
+msgid "No fastlane items"
+msgstr "No fastlane items"
+
+msgid "Item marked as fastlane"
+msgstr "Item marked as fastlane"
+
+msgid "Fastlane flag removed"
+msgstr "Fastlane flag removed"
+

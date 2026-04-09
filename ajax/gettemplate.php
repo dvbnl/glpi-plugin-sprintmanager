@@ -19,7 +19,11 @@ if (!isset($_POST['id']) || (int)$_POST['id'] <= 0) {
 }
 
 $template = new GlpiPlugin\Sprint\SprintTemplate();
-if (!$template->getFromDB((int)$_POST['id'])) {
+if (!$template->getFromDB((int)$_POST['id'])
+    || !Session::haveAccessToEntity(
+        $template->fields['entities_id'] ?? 0,
+        (bool)($template->fields['is_recursive'] ?? false)
+    )) {
     echo json_encode($response);
     return;
 }

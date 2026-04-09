@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-04-09
+
+### Added
+- **Fastlane**: backlog items can now be flagged as fastlane via a new "Is Fastlane" toggle column in the backlog. When assigned to a sprint, fastlane items appear in a dedicated **Fastlane** tab on the sprint (mirroring the Sprint Items tab) instead of being mixed in with regular sprint items
+- **Multiple member assignment per fastlane item**: opening a fastlane entry shows a "Fastlane Members" tab where multiple sprint members can be linked, each with their own assigned capacity %. Capacity is validated against the member's remaining sprint capacity (regular + fastlane combined)
+- **Dashboard – Fastlane section**: between the regular sprint items table and the team capacity table, the dashboard now lists all fastlane items with status, members and total capacity, so the team can immediately see how much sprint effort is going to fastlane work
+- **Dashboard – Fastlane category**: Team Capacity and Your Capacity tables now break used capacity down into Regular and Fastlane columns and show the sprint-level fastlane total in the section header. The capacity bar is stacked (regular = red, fastlane = orange) for an at-a-glance view
+- **Granular capacity dropdown**: capacity selectors throughout the plugin (sprint members, sprint items, fastlane allocations, sprint template members) now expose values 1, 2, 3, 4, 5 then 10, 15, 20, …, 100 % so very small allocations can be expressed
+- **Mobile responsive layout**: every plugin table is automatically wrapped in a horizontally scrollable container, the Backlog filter bar collapses cleanly on small screens, and stat cards / Kanban columns / inline forms reflow for phone-sized viewports. A targeted CSS override neutralises the GLPI 11 Tabler theme rule that was unstacking table cells vertically on narrow widths, so plugin pages keep their semantic table layout instead of cropping
+- New translations for the Fastlane feature in all supported languages (en, nl, fr, es)
+
+### Changed
+- **Template meeting scheduling — end-of-sprint snap direction**: with `skip_weekends` enabled, ceremonies scheduled as `last_day` or `day_before_end` now snap *backwards* to Friday when the calculated date lands on a weekend. Previously they snapped forward to Monday — which for a Mon→Sun sprint meant the review/retrospective ended up on the kickoff day of the *next* sprint
+- **Template meeting scheduling — standup vs ceremony collision**: recurring (`interval`) meetings are now silently dropped when they would land on the same calendar day as a fixed ceremony (kickoff / review / retrospective / day_before_end). No more redundant standup on the day you're already running the retrospective
+- **Template meeting scheduling — sprint-window guarantee**: `SprintTemplateMeeting::calculateMeetingDates()` now post-filters every produced date against `[date_start, date_end]`. Any schedule strategy (existing or future) that drifts outside the sprint window is dropped centrally, so no generated meeting can ever fall before the sprint starts or after it ends
+
+### Fixed
+- **Backlog menu highlight**: clicking *Backlog* in the helpdesk menu group no longer leaves *SprintManager* visually selected. `front/backlog.php` was passing `GlpiPlugin\Sprint\Sprint` as the active menu key to `Html::header()` instead of `GlpiPlugin\Sprint\Backlog`
+
+### Database
+- Added `is_fastlane` column to `glpi_plugin_sprint_sprintitems`
+- New table `glpi_plugin_sprint_sprintfastlanemembers` (junction linking fastlane sprint items to sprint members with assigned capacity)
+
 ## [1.0.2] - 2026-04-08
 
 ### Added

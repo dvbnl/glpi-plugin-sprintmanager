@@ -37,6 +37,27 @@ if (isset($_POST['add_to_backlog'])) {
     Html::back();
 }
 
+if (isset($_POST['toggle_fastlane'])) {
+    $id          = (int)($_POST['id'] ?? 0);
+    $isFastlane  = (int)(bool)($_POST['is_fastlane'] ?? 0);
+
+    if ($id > 0) {
+        $item = new GlpiPlugin\Sprint\SprintItem();
+        $item->check($id, UPDATE);
+        if ($item->update([
+            'id'          => $id,
+            'is_fastlane' => $isFastlane,
+        ])) {
+            Session::addMessageAfterRedirect(
+                $isFastlane
+                    ? __('Item marked as fastlane', 'sprint')
+                    : __('Fastlane flag removed', 'sprint')
+            );
+        }
+    }
+    Html::back();
+}
+
 if (isset($_POST['assign_to_sprint'])) {
     $id       = (int)($_POST['id'] ?? 0);
     $sprintId = (int)($_POST['plugin_sprint_sprints_id'] ?? 0);

@@ -23,6 +23,15 @@ class SprintItem extends CommonDBTM
     public static $rightname = 'plugin_sprint_item';
     public $dohistory        = true;
 
+    /**
+     * Cascade purge fastlane member rows when this item is deleted.
+     */
+    public function cleanDBonPurge()
+    {
+        $rel = new SprintFastlaneMember();
+        $rel->deleteByCriteria(['plugin_sprint_sprintitems_id' => $this->getID()], 1);
+    }
+
     const STATUS_TODO        = 'todo';
     const STATUS_IN_PROGRESS = 'in_progress';
     const STATUS_REVIEW      = 'review';
@@ -116,9 +125,13 @@ class SprintItem extends CommonDBTM
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0): string
     {
         if ($item instanceof Sprint) {
+            // Fastlane items live in their own tab, so exclude them here.
             $count = countElementsInTable(
                 self::getTable(),
-                ['plugin_sprint_sprints_id' => $item->getID()]
+                [
+                    'plugin_sprint_sprints_id' => $item->getID(),
+                    'is_fastlane'              => 0,
+                ]
             );
             return self::createTabEntry(self::getTypeName(2), $count);
         }
@@ -294,8 +307,8 @@ class SprintItem extends CommonDBTM
             echo "<tr class='tab_bg_1'>";
             echo "<td>" . __('Capacity (%)', 'sprint') . "</td>";
             echo "<td>";
-            Dropdown::showNumber('capacity', [
-                'value' => 0, 'min' => 0, 'max' => 100, 'step' => 5,
+            Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
+                'value' => 0,
             ]);
             echo "</td>";
             echo "<td>" . __('Priority') . "</td>";
@@ -314,10 +327,14 @@ class SprintItem extends CommonDBTM
             echo "</div>";
         }
 
-        // List existing items
+        // List existing items (fastlane items are excluded — they live in
+        // the dedicated Fastlane tab).
         $item  = new self();
         $items = $item->find(
-            ['plugin_sprint_sprints_id' => $ID],
+            [
+                'plugin_sprint_sprints_id' => $ID,
+                'is_fastlane'              => 0,
+            ],
             ['sort_order ASC', 'priority DESC']
         );
 
@@ -445,12 +462,15 @@ class SprintItem extends CommonDBTM
         if (isset($input['capacity']))    $input['capacity']    = max(0, min(100, (int)$input['capacity']));
         if (isset($input['priority']))    $input['priority']    = max(1, min(5, (int)$input['priority']));
         if (isset($input['plugin_sprint_sprints_id'])) $input['plugin_sprint_sprints_id'] = (int)$input['plugin_sprint_sprints_id'];
+        if (isset($input['is_fastlane']))  $input['is_fastlane'] = (int)(bool)$input['is_fastlane'];
 
         return $input;
     }
 
     /**
-     * Check that assigning capacity to an owner does not exceed their available capacity.
+     * Check that assigning capacity to an owner does not exceed their
+     * available capacity. Defers to SprintMember::checkCapacityForUser so
+     * regular items and fastlane allocations are counted together.
      *
      * @param array $input    The input data
      * @param int   $excludeId  Item ID to exclude from calculation (for updates)
@@ -458,63 +478,25 @@ class SprintItem extends CommonDBTM
      */
     private function validateCapacity(array $input, int $excludeId = 0): bool
     {
+        // Fastlane items distribute capacity through the
+        // SprintFastlaneMember junction, so the regular per-row capacity
+        // field is irrelevant for them.
+        $isFastlane = (int)($input['is_fastlane'] ?? $this->fields['is_fastlane'] ?? 0) === 1;
+        if ($isFastlane) {
+            return true;
+        }
+
         $capacity = (int)($input['capacity'] ?? 0);
         $userId   = (int)($input['users_id'] ?? 0);
         $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? $this->fields['plugin_sprint_sprints_id'] ?? 0);
 
-        if ($capacity <= 0 || $userId <= 0 || $sprintId <= 0) {
-            return true;
-        }
-
-        // Get member's total capacity
-        $member = new SprintMember();
-        $members = $member->find([
-            'plugin_sprint_sprints_id' => $sprintId,
-            'users_id'                 => $userId,
-        ]);
-
-        if (count($members) === 0) {
-            return true;
-        }
-
-        $memberData    = reset($members);
-        $totalCapacity = (int)$memberData['capacity_percent'];
-
-        // Sum capacity already used by this member's other items
-        $si = new self();
-        $criteria = [
-            'plugin_sprint_sprints_id' => $sprintId,
-            'users_id'                 => $userId,
-        ];
-        if ($excludeId > 0) {
-            $criteria['NOT'] = ['id' => $excludeId];
-        }
-        $existingItems = $si->find($criteria);
-        $usedCapacity = 0;
-        foreach ($existingItems as $row) {
-            $usedCapacity += (int)($row['capacity'] ?? 0);
-        }
-
-        $remaining = $totalCapacity - $usedCapacity;
-
-        if ($capacity > $remaining) {
-            $userName = getUserName($userId);
-            Session::addMessageAfterRedirect(
-                sprintf(
-                    __('%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%.', 'sprint'),
-                    $userName,
-                    $remaining,
-                    $totalCapacity,
-                    $usedCapacity,
-                    $capacity
-                ),
-                false,
-                ERROR
-            );
-            return false;
-        }
-
-        return true;
+        return SprintMember::checkCapacityForUser(
+            $sprintId,
+            $userId,
+            $capacity,
+            $excludeId,
+            0
+        );
     }
 
     /**
@@ -557,6 +539,7 @@ class SprintItem extends CommonDBTM
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         $memberOptions = SprintMember::getSprintMemberOptions($sprintId);
         $isNew = !$this->getID() || $this->isNewItem();
+        $isFastlane = (int)($this->fields['is_fastlane'] ?? 0) === 1;
 
         $this->showFormHeader($options);
 
@@ -568,6 +551,17 @@ class SprintItem extends CommonDBTM
         Dropdown::showFromArray('status', self::getAllStatuses(), [
             'value' => $this->fields['status'] ?? self::STATUS_TODO,
         ]);
+        echo "</td></tr>";
+
+        // Fastlane flag — paired hidden input ensures unchecking actually
+        // submits 0, since unchecked HTML checkboxes are simply omitted.
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Is Fastlane', 'sprint') . "</td><td colspan='3'>";
+        echo "<input type='hidden' name='is_fastlane' value='0'>";
+        echo "<label style='display:inline-flex;align-items:center;gap:6px;'>";
+        echo "<input type='checkbox' name='is_fastlane' value='1'" . ($isFastlane ? ' checked' : '') . ">";
+        echo "<span class='text-muted'>" . __('Mark this item as fastlane (managed via the Fastlane tab on the sprint).', 'sprint') . "</span>";
+        echo "</label>";
         echo "</td></tr>";
 
         // Linked item
@@ -601,17 +595,29 @@ class SprintItem extends CommonDBTM
         ], ['value' => $this->fields['priority'] ?? 3]);
         echo "</td></tr>";
 
-        // Capacity + Owner
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Capacity (%)', 'sprint') . "</td><td>";
-        Dropdown::showNumber('capacity', [
-            'value' => $this->fields['capacity'] ?? 0, 'min' => 0, 'max' => 100, 'step' => 5,
-        ]);
-        echo "</td><td>" . __('Owner', 'sprint') . "</td><td>";
-        Dropdown::showFromArray('users_id', $memberOptions, [
-            'value' => $this->fields['users_id'] ?? 0,
-        ]);
-        echo "</td></tr>";
+        // Capacity + Owner — irrelevant for Fastlane items, where capacity
+        // is distributed across multiple members via the Fastlane Members
+        // tab. Hidden inputs preserve existing values.
+        if ($isFastlane) {
+            echo Html::hidden('capacity', ['value' => $this->fields['capacity'] ?? 0]);
+            echo Html::hidden('users_id', ['value' => $this->fields['users_id'] ?? 0]);
+            echo "<tr class='tab_bg_1'><td colspan='4'>";
+            echo "<div class='alert alert-info' style='margin:6px 0;'>";
+            echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:6px;'></i>";
+            echo __('Fastlane item: assign sprint members and capacity from the Fastlane Members tab.', 'sprint');
+            echo "</div></td></tr>";
+        } else {
+            echo "<tr class='tab_bg_1'>";
+            echo "<td>" . __('Capacity (%)', 'sprint') . "</td><td>";
+            Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
+                'value' => $this->fields['capacity'] ?? 0,
+            ]);
+            echo "</td><td>" . __('Owner', 'sprint') . "</td><td>";
+            Dropdown::showFromArray('users_id', $memberOptions, [
+                'value' => $this->fields['users_id'] ?? 0,
+            ]);
+            echo "</td></tr>";
+        }
 
         // Sprint
         echo "<tr class='tab_bg_1'>";

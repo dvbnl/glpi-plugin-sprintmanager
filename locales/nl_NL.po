@@ -555,3 +555,68 @@ msgstr "Filteren"
 msgid "Reset"
 msgstr "Wissen"
 
+# === Fastlane feature ===
+msgid "Fastlane"
+msgid_plural "Fastlane"
+msgstr[0] "Fastlane"
+msgstr[1] "Fastlane"
+
+msgid "Fastlane Member"
+msgid_plural "Fastlane Members"
+msgstr[0] "Fastlane Lid"
+msgstr[1] "Fastlane Leden"
+
+msgid "Items flagged as fastlane in the backlog. Open an entry to assign sprint members and capacity."
+msgstr "Items die in de backlog als fastlane zijn gemarkeerd. Open een vermelding om sprintleden en capaciteit toe te wijzen."
+
+msgid "Total Fastlane capacity"
+msgstr "Totale Fastlane capaciteit"
+
+msgid "No fastlane items in this sprint"
+msgstr "Geen fastlane items in deze sprint"
+
+msgid "This is not a fastlane item. Toggle the fastlane flag from the backlog or item edit form first."
+msgstr "Dit is geen fastlane item. Schakel de fastlane vlag eerst in via de backlog of het wijzigformulier van het item."
+
+msgid "Assign a sprint member to this fastlane item"
+msgstr "Wijs een sprintlid toe aan dit fastlane item"
+
+msgid "Sprint member"
+msgstr "Sprintlid"
+
+msgid "No members assigned yet"
+msgstr "Nog geen leden toegewezen"
+
+msgid "Items flagged as fastlane will be assigned to a sprint via the dedicated Fastlane tab."
+msgstr "Items die als fastlane zijn gemarkeerd, worden via het speciale Fastlane-tabblad aan een sprint toegewezen."
+
+msgid "Is Fastlane"
+msgstr "Is Fastlane"
+
+msgid "Disable fastlane"
+msgstr "Fastlane uitschakelen"
+
+msgid "Enable fastlane"
+msgstr "Fastlane inschakelen"
+
+msgid "Mark this item as fastlane (managed via the Fastlane tab on the sprint)."
+msgstr "Markeer dit item als fastlane (beheerd via het Fastlane-tabblad op de sprint)."
+
+msgid "Fastlane item: assign sprint members and capacity from the Fastlane Members tab."
+msgstr "Fastlane item: wijs sprintleden en capaciteit toe via het Fastlane-leden tabblad."
+
+msgid "Fastlane total: %d%%"
+msgstr "Fastlane totaal: %d%%"
+
+msgid "Total capacity: %d%%"
+msgstr "Totale capaciteit: %d%%"
+
+msgid "No fastlane items"
+msgstr "Geen fastlane items"
+
+msgid "Item marked as fastlane"
+msgstr "Item gemarkeerd als fastlane"
+
+msgid "Fastlane flag removed"
+msgstr "Fastlane vlag verwijderd"
+

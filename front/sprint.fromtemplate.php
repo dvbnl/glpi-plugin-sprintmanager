@@ -17,7 +17,11 @@ if (isset($_POST['create_from_template'])) {
     }
 
     $template = new GlpiPlugin\Sprint\SprintTemplate();
-    if (!$template->getFromDB($templateId)) {
+    if (!$template->getFromDB($templateId)
+        || !Session::haveAccessToEntity(
+            $template->fields['entities_id'] ?? 0,
+            (bool)($template->fields['is_recursive'] ?? false)
+        )) {
         Session::addMessageAfterRedirect(__('Template not found', 'sprint'), false, ERROR);
         Html::back();
     }

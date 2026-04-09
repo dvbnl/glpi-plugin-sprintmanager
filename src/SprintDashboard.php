@@ -69,12 +69,17 @@ class SprintDashboard extends CommonGLPI
         // === Global view ===
         echo "<div id='sprint_view_global'>";
         self::renderDashboardContent($globalStats, $allItems, __('No items in this sprint yet', 'sprint'));
+        // Fastlane items sit between sprint items and team capacity so the
+        // sprint-level fastlane workload is visible alongside the regular
+        // backlog and the per-member capacity rows.
+        self::showFastlaneItems($ID);
         self::showMemberCapacity($ID);
         echo "</div>";
 
         // === Personal view (hidden by default) ===
         echo "<div id='sprint_view_personal' style='display:none;'>";
         self::renderDashboardContent($personalStats, $personalItems, __('No items assigned to you', 'sprint'));
+        self::showFastlaneItems($ID, $currentUserId);
         self::showPersonalCapacity($ID, $currentUserId);
         echo "</div>";
 
@@ -223,7 +228,9 @@ class SprintDashboard extends CommonGLPI
     }
 
     /**
-     * Show member capacity overview
+     * Show member capacity overview, broken down by Regular vs Fastlane
+     * categories so the team can see how much sprint capacity is going
+     * to fastlane work.
      */
     private static function showMemberCapacity(int $sprintId): void
     {
@@ -234,27 +241,43 @@ class SprintDashboard extends CommonGLPI
             return;
         }
 
+        // Regular (non-fastlane) per-user usage
         $si = new SprintItem();
-        $allItems = $si->find(['plugin_sprint_sprints_id' => $sprintId]);
-        $usedCapacity = [];
-        foreach ($allItems as $row) {
+        $regularUsed = [];
+        foreach ($si->find([
+            'plugin_sprint_sprints_id' => $sprintId,
+            'is_fastlane'              => 0,
+        ]) as $row) {
             $uid = (int)$row['users_id'];
             if ($uid > 0) {
-                $usedCapacity[$uid] = ($usedCapacity[$uid] ?? 0) + (int)($row['capacity'] ?? 0);
+                $regularUsed[$uid] = ($regularUsed[$uid] ?? 0) + (int)($row['capacity'] ?? 0);
             }
         }
 
+        // Fastlane per-user usage from the junction table
+        $fastlaneUsed = [];
+        foreach ($members as $row) {
+            $uid = (int)$row['users_id'];
+            $fastlaneUsed[$uid] = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $uid);
+        }
+
         $roles = SprintMember::getAllRoles();
+        $sprintFastlaneTotal = SprintFastlaneMember::getTotalFastlaneCapacityForSprint($sprintId);
 
         echo "<div style='margin-top:20px;'>";
         echo "<table class='tab_cadre_fixe'>";
-        echo "<tr class='tab_bg_2'><th colspan='6'>" .
+        echo "<tr class='tab_bg_2'><th colspan='8'>" .
             "<i class='fas fa-users' style='margin-right:6px;'></i>" .
-            __('Team Capacity', 'sprint') . "</th></tr>";
+            __('Team Capacity', 'sprint') .
+            " &mdash; <i class='fas fa-bolt' style='color:#fd7e14;'></i> " .
+            sprintf(__('Fastlane total: %d%%', 'sprint'), $sprintFastlaneTotal) .
+            "</th></tr>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Member', 'sprint') . "</th>";
         echo "<th>" . __('Role', 'sprint') . "</th>";
         echo "<th>" . __('Total', 'sprint') . "</th>";
+        echo "<th>" . __('Regular', 'sprint') . "</th>";
+        echo "<th><i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" . __('Fastlane', 'sprint') . "</th>";
         echo "<th>" . __('Used', 'sprint') . "</th>";
         echo "<th>" . __('Available', 'sprint') . "</th>";
         echo "<th>" . __('Capacity', 'sprint') . "</th>";
@@ -263,7 +286,9 @@ class SprintDashboard extends CommonGLPI
         foreach ($members as $row) {
             $uid       = (int)$row['users_id'];
             $total     = (int)$row['capacity_percent'];
-            $used      = $usedCapacity[$uid] ?? 0;
+            $regular   = $regularUsed[$uid] ?? 0;
+            $fastlane  = $fastlaneUsed[$uid] ?? 0;
+            $used      = $regular + $fastlane;
             $remaining = max($total - $used, 0);
             $pctUsed   = ($total > 0) ? round(($used / $total) * 100) : 0;
             $roleName  = $roles[$row['role']] ?? $row['role'];
@@ -279,22 +304,147 @@ class SprintDashboard extends CommonGLPI
                 ? ' <span style="color:#dc3545;font-weight:700;">(' . __('overloaded', 'sprint') . ')</span>'
                 : '';
 
-            $usedWidth = ($total > 0) ? min(round(($used / $total) * 100), 100) : 0;
+            $regularWidth  = ($total > 0) ? min(round(($regular / $total) * 100), 100) : 0;
+            $fastlaneWidth = ($total > 0) ? min(round(($fastlane / $total) * 100), 100 - $regularWidth) : 0;
 
             echo "<tr class='tab_bg_1'>";
             echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . getUserName($uid) . "</td>";
             echo "<td>" . $roleName . "</td>";
             echo "<td class='center'>{$total}%</td>";
+            echo "<td class='center'>{$regular}%</td>";
+            echo "<td class='center'>" . ($fastlane > 0
+                ? "<strong style='color:#fd7e14;'>{$fastlane}%</strong>"
+                : "{$fastlane}%") . "</td>";
             echo "<td class='center'>{$used}%</td>";
             echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$remaining}%{$overload}</td>";
             echo "<td style='min-width:180px;'>";
-            echo "<div style='height:16px;background:#198754;border-radius:8px;overflow:hidden;display:flex;justify-content:flex-end;'>";
-            if ($usedWidth > 0) {
-                echo "<div style='width:{$usedWidth}%;height:100%;background:#dc3545;transition:width 0.3s;' title='" . __('Used', 'sprint') . " {$used}%'></div>";
+            // Stacked bar: regular = red, fastlane = orange, free = green
+            echo "<div style='display:flex;height:16px;background:#198754;border-radius:8px;overflow:hidden;'>";
+            if ($regularWidth > 0) {
+                echo "<div style='width:{$regularWidth}%;height:100%;background:#dc3545;' title='" . __('Regular', 'sprint') . " {$regular}%'></div>";
+            }
+            if ($fastlaneWidth > 0) {
+                echo "<div style='width:{$fastlaneWidth}%;height:100%;background:#fd7e14;' title='" . __('Fastlane', 'sprint') . " {$fastlane}%'></div>";
             }
             echo "</div>";
             echo "</td>";
             echo "</tr>";
+        }
+
+        echo "</table></div>";
+    }
+
+    /**
+     * Render fastlane items table on the dashboard, between regular sprint
+     * items and the team capacity overview. Optionally restricted to items
+     * the given user is a fastlane member of.
+     */
+    private static function showFastlaneItems(int $sprintId, ?int $forUserId = null): void
+    {
+        $si    = new SprintItem();
+        $items = $si->find(
+            [
+                'plugin_sprint_sprints_id' => $sprintId,
+                'is_fastlane'              => 1,
+            ],
+            ['priority DESC', 'date_creation DESC']
+        );
+
+        if (count($items) === 0) {
+            return;
+        }
+
+        $statuses = SprintItem::getAllStatuses();
+        $statusBgColors = [
+            SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
+            SprintItem::STATUS_REVIEW      => '#6f42c1',
+            SprintItem::STATUS_DONE        => '#198754',
+            SprintItem::STATUS_BLOCKED     => '#dc3545',
+        ];
+
+        // Pre-load all fastlane member rows for this sprint in one query
+        $rel       = new SprintFastlaneMember();
+        $itemIds   = array_map(fn($r) => (int)$r['id'], $items);
+        $relRowsByItem = [];
+        if (count($itemIds) > 0) {
+            $allRels = $rel->find(['plugin_sprint_sprintitems_id' => $itemIds]);
+            foreach ($allRels as $r) {
+                $relRowsByItem[(int)$r['plugin_sprint_sprintitems_id']][] = $r;
+            }
+        }
+
+        $sprintFastlaneTotal = SprintFastlaneMember::getTotalFastlaneCapacityForSprint($sprintId);
+
+        echo "<div style='margin-top:20px;'>";
+        echo "<table class='tab_cadre_fixe'>";
+        echo "<tr class='tab_bg_2'><th colspan='5'>" .
+            "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:6px;'></i>" .
+            __('Fastlane', 'sprint') .
+            " &mdash; " . sprintf(__('Total capacity: %d%%', 'sprint'), $sprintFastlaneTotal) .
+            "</th></tr>";
+        echo "<tr class='tab_bg_2'>";
+        echo "<th>" . __('Name') . "</th>";
+        echo "<th>" . __('Linked item', 'sprint') . "</th>";
+        echo "<th>" . __('Status') . "</th>";
+        echo "<th>" . __('Members', 'sprint') . "</th>";
+        echo "<th>" . __('Total', 'sprint') . "</th>";
+        echo "</tr>";
+
+        $rendered = 0;
+        foreach ($items as $row) {
+            $itemId  = (int)$row['id'];
+            $relRows = $relRowsByItem[$itemId] ?? [];
+
+            // Personal view: only show items the user is allocated on
+            if ($forUserId !== null) {
+                $hasUser = false;
+                foreach ($relRows as $r) {
+                    if ((int)$r['users_id'] === $forUserId) {
+                        $hasUser = true;
+                        break;
+                    }
+                }
+                if (!$hasUser) {
+                    continue;
+                }
+            }
+
+            $totalCap = 0;
+            $memberLines = [];
+            foreach ($relRows as $r) {
+                $cap = (int)$r['capacity'];
+                $totalCap += $cap;
+                $memberLines[] = htmlescape(getUserName((int)$r['users_id'])) . " ({$cap}%)";
+            }
+
+            $linkedDisplay = '<span style="color:#ccc;">-</span>';
+            if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
+                $tmp = new SprintItem();
+                $tmp->fields = $row;
+                $linkedDisplay = $tmp->getLinkedItemDisplay();
+            }
+
+            $statusBg    = $statusBgColors[$row['status']] ?? '#6c757d';
+            $statusLabel = $statuses[$row['status']] ?? $row['status'];
+
+            echo "<tr class='tab_bg_1'>";
+            echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
+                "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" .
+                htmlescape($row['name']) . "</a></td>";
+            echo "<td>{$linkedDisplay}</td>";
+            echo "<td><span class='sprint-badge' style='display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{$statusBg};'>" .
+                $statusLabel . "</span></td>";
+            echo "<td>" . (count($memberLines) > 0 ? implode('<br>', $memberLines) :
+                "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
+            echo "<td class='center'><strong>{$totalCap}%</strong></td>";
+            echo "</tr>";
+            $rendered++;
+        }
+
+        if ($rendered === 0) {
+            echo "<tr class='tab_bg_1'><td colspan='5' class='center'>" .
+                __('No fastlane items', 'sprint') . "</td></tr>";
         }
 
         echo "</table></div>";
@@ -319,7 +469,14 @@ class SprintDashboard extends CommonGLPI
         ];
 
         $si = new SprintItem();
-        foreach ($si->find(['plugin_sprint_sprints_id' => $sprintId], ['sort_order ASC', 'priority DESC']) as $row) {
+        // Fastlane items are surfaced in their own dashboard section.
+        foreach ($si->find(
+            [
+                'plugin_sprint_sprints_id' => $sprintId,
+                'is_fastlane'              => 0,
+            ],
+            ['sort_order ASC', 'priority DESC']
+        ) as $row) {
             $itemtype = $row['itemtype'] ?? '';
             $itemsId  = (int)($row['items_id'] ?? 0);
             $typeInfo = $typeIcons[$itemtype] ?? $typeIcons[''];
@@ -399,14 +556,16 @@ class SprintDashboard extends CommonGLPI
         }
 
         $si = new SprintItem();
-        $allItems = $si->find([
+        $regularUsed = 0;
+        foreach ($si->find([
             'plugin_sprint_sprints_id' => $sprintId,
             'users_id'                 => $userId,
-        ]);
-        $usedCapacity = 0;
-        foreach ($allItems as $row) {
-            $usedCapacity += (int)($row['capacity'] ?? 0);
+            'is_fastlane'              => 0,
+        ]) as $row) {
+            $regularUsed += (int)($row['capacity'] ?? 0);
         }
+        $fastlaneUsed = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
+        $usedCapacity = $regularUsed + $fastlaneUsed;
 
         $roles = SprintMember::getAllRoles();
         $memberData = reset($members);
@@ -426,17 +585,20 @@ class SprintDashboard extends CommonGLPI
             ? ' <span style="color:#dc3545;font-weight:700;">(' . __('overloaded', 'sprint') . ')</span>'
             : '';
 
-        $usedWidth = ($total > 0) ? min(round(($usedCapacity / $total) * 100), 100) : 0;
+        $regularWidth  = ($total > 0) ? min(round(($regularUsed / $total) * 100), 100) : 0;
+        $fastlaneWidth = ($total > 0) ? min(round(($fastlaneUsed / $total) * 100), 100 - $regularWidth) : 0;
 
         echo "<div style='margin-top:20px;'>";
         echo "<table class='tab_cadre_fixe'>";
-        echo "<tr class='tab_bg_2'><th colspan='6'>" .
+        echo "<tr class='tab_bg_2'><th colspan='8'>" .
             "<i class='fas fa-user' style='margin-right:6px;'></i>" .
             __('Your Capacity', 'sprint') . "</th></tr>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Member', 'sprint') . "</th>";
         echo "<th>" . __('Role', 'sprint') . "</th>";
         echo "<th>" . __('Total', 'sprint') . "</th>";
+        echo "<th>" . __('Regular', 'sprint') . "</th>";
+        echo "<th><i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" . __('Fastlane', 'sprint') . "</th>";
         echo "<th>" . __('Used', 'sprint') . "</th>";
         echo "<th>" . __('Available', 'sprint') . "</th>";
         echo "<th>" . __('Capacity', 'sprint') . "</th>";
@@ -446,12 +608,19 @@ class SprintDashboard extends CommonGLPI
         echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . getUserName($userId) . "</td>";
         echo "<td>" . $roleName . "</td>";
         echo "<td class='center'>{$total}%</td>";
+        echo "<td class='center'>{$regularUsed}%</td>";
+        echo "<td class='center'>" . ($fastlaneUsed > 0
+            ? "<strong style='color:#fd7e14;'>{$fastlaneUsed}%</strong>"
+            : "{$fastlaneUsed}%") . "</td>";
         echo "<td class='center'>{$usedCapacity}%</td>";
         echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$remaining}%{$overload}</td>";
         echo "<td style='min-width:180px;'>";
-        echo "<div style='height:16px;background:#198754;border-radius:8px;overflow:hidden;display:flex;justify-content:flex-end;'>";
-        if ($usedWidth > 0) {
-            echo "<div style='width:{$usedWidth}%;height:100%;background:#dc3545;transition:width 0.3s;' title='" . __('Used', 'sprint') . " {$usedCapacity}%'></div>";
+        echo "<div style='display:flex;height:16px;background:#198754;border-radius:8px;overflow:hidden;'>";
+        if ($regularWidth > 0) {
+            echo "<div style='width:{$regularWidth}%;height:100%;background:#dc3545;' title='" . __('Regular', 'sprint') . " {$regularUsed}%'></div>";
+        }
+        if ($fastlaneWidth > 0) {
+            echo "<div style='width:{$fastlaneWidth}%;height:100%;background:#fd7e14;' title='" . __('Fastlane', 'sprint') . " {$fastlaneUsed}%'></div>";
         }
         echo "</div>";
         echo "</td>";

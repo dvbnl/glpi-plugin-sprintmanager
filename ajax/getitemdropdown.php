@@ -10,8 +10,8 @@ include(dirname(__DIR__, 3) . '/inc/includes.php');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);
 
-$itemtype = $_POST['itemtype'] ?? '';
-$rand     = $_POST['rand'] ?? mt_rand();
+$itemtype = (string)($_POST['itemtype'] ?? '');
+$rand     = (int)($_POST['rand'] ?? mt_rand());
 
 $allowed = ['Ticket', 'Change', 'ProjectTask'];
 

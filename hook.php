@@ -109,6 +109,40 @@ function plugin_sprint_install(): bool
             'text',
             ['after' => 'capacity']
         );
+        // Fastlane flag: an item flagged here lives in the Sprint Fastlane
+        // tab instead of the regular Sprint Items tab, and its capacity is
+        // distributed across multiple sprint members via the
+        // glpi_plugin_sprint_sprintfastlanemembers junction table.
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitems',
+            'is_fastlane',
+            'bool',
+            ['value' => 0, 'after' => 'note']
+        );
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_fastlane');
+    }
+
+    // =========================================================================
+    // Table: glpi_plugin_sprint_sprintfastlanemembers
+    // Junction linking a Fastlane SprintItem to multiple sprint members,
+    // each with their own assigned capacity %. Allows the dashboard to
+    // aggregate the "Fastlane" capacity category across the team.
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_sprintfastlanemembers')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_sprintfastlanemembers` (
+            `id`                            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprintitems_id`  INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id`                      INT UNSIGNED NOT NULL DEFAULT 0,
+            `capacity`                      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Capacity allocated to this user for this fastlane item, in %',
+            `comment`                       TEXT,
+            `date_creation`                 TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`                      TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unicity` (`plugin_sprint_sprintitems_id`, `users_id`),
+            KEY `plugin_sprint_sprintitems_id` (`plugin_sprint_sprintitems_id`),
+            KEY `users_id` (`users_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
     }
 
     // =========================================================================
@@ -450,6 +484,7 @@ function plugin_sprint_uninstall(): bool
         'glpi_plugin_sprint_sprinttickets',
         'glpi_plugin_sprint_sprintstandups',
         'glpi_plugin_sprint_sprintmeetings',
+        'glpi_plugin_sprint_sprintfastlanemembers',
         'glpi_plugin_sprint_sprintmembers',
         'glpi_plugin_sprint_sprintitems',
         'glpi_plugin_sprint_sprints',

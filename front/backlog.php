@@ -12,7 +12,7 @@ Html::header(
     GlpiPlugin\Sprint\Backlog::getTypeName(2),
     $_SERVER['PHP_SELF'],
     'helpdesk',
-    'GlpiPlugin\Sprint\Sprint'
+    'GlpiPlugin\Sprint\Backlog'
 );
 
 GlpiPlugin\Sprint\Backlog::showBacklog();

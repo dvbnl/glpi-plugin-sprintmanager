@@ -555,3 +555,68 @@ msgstr "Filtrar"
 msgid "Reset"
 msgstr "Restablecer"
 
+# === Fastlane feature ===
+msgid "Fastlane"
+msgid_plural "Fastlane"
+msgstr[0] "Fastlane"
+msgstr[1] "Fastlane"
+
+msgid "Fastlane Member"
+msgid_plural "Fastlane Members"
+msgstr[0] "Miembro Fastlane"
+msgstr[1] "Miembros Fastlane"
+
+msgid "Items flagged as fastlane in the backlog. Open an entry to assign sprint members and capacity."
+msgstr "Elementos marcados como fastlane en el backlog. Abra una entrada para asignar miembros del sprint y capacidad."
+
+msgid "Total Fastlane capacity"
+msgstr "Capacidad total de Fastlane"
+
+msgid "No fastlane items in this sprint"
+msgstr "No hay elementos fastlane en este sprint"
+
+msgid "This is not a fastlane item. Toggle the fastlane flag from the backlog or item edit form first."
+msgstr "Este no es un elemento fastlane. Active primero la marca fastlane desde el backlog o el formulario de edicion del elemento."
+
+msgid "Assign a sprint member to this fastlane item"
+msgstr "Asignar un miembro del sprint a este elemento fastlane"
+
+msgid "Sprint member"
+msgstr "Miembro del sprint"
+
+msgid "No members assigned yet"
+msgstr "Aun no hay miembros asignados"
+
+msgid "Items flagged as fastlane will be assigned to a sprint via the dedicated Fastlane tab."
+msgstr "Los elementos marcados como fastlane se asignaran a un sprint a traves de la pestana Fastlane dedicada."
+
+msgid "Is Fastlane"
+msgstr "Es Fastlane"
+
+msgid "Disable fastlane"
+msgstr "Desactivar fastlane"
+
+msgid "Enable fastlane"
+msgstr "Activar fastlane"
+
+msgid "Mark this item as fastlane (managed via the Fastlane tab on the sprint)."
+msgstr "Marcar este elemento como fastlane (gestionado a traves de la pestana Fastlane en el sprint)."
+
+msgid "Fastlane item: assign sprint members and capacity from the Fastlane Members tab."
+msgstr "Elemento fastlane: asigne miembros del sprint y capacidad desde la pestana Miembros Fastlane."
+
+msgid "Fastlane total: %d%%"
+msgstr "Total Fastlane: %d%%"
+
+msgid "Total capacity: %d%%"
+msgstr "Capacidad total: %d%%"
+
+msgid "No fastlane items"
+msgstr "No hay elementos fastlane"
+
+msgid "Item marked as fastlane"
+msgstr "Elemento marcado como fastlane"
+
+msgid "Fastlane flag removed"
+msgstr "Marca fastlane eliminada"
+

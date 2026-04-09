@@ -29,15 +29,12 @@
         field_options
     ) }}
 
-    {{ fields.dropdownNumberField(
+    {{ fields.dropdownArrayField(
         'capacity_percent',
         item.fields['capacity_percent'],
+        capacity_choices,
         __('Capacity (%)', 'sprint'),
-        field_options|merge({
-            'min': 0,
-            'max': 100,
-            'step': 10,
-        })
+        field_options
     ) }}
 
     {{ fields.textareaField(

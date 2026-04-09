@@ -312,7 +312,52 @@
     opacity: 0.85;
 }
 
-/* === Responsive === */
+/* === Mobile/responsive support ===
+ *
+ * The plugin's tables (tab_cadre_fixe) are GLPI's classic fixed-width
+ * tables and don't reflow on mobile. A small JS helper in sprint.js
+ * wraps every plugin table in `.sprint-table-scroll` so the table can
+ * scroll horizontally instead of cropping. The media queries below
+ * tighten up the rest (filter bars, stat cards, inline forms, headings).
+ */
+.sprint-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 12px;
+}
+.sprint-table-scroll > .tab_cadre_fixe {
+    /* Some GLPI themes set width:100% on tab_cadre_fixe which would cap
+       the scroll wrapper. Letting the table size to its natural width
+       restores horizontal scrolling on narrow viewports. */
+    width: auto;
+    min-width: 100%;
+}
+
+/* GLPI 11's Tabler theme contains a responsive override that turns
+ * `tab_cadre_fixe` rows into stacked block elements on narrow screens
+ * (one cell per visual row). That makes our plugin pages look like a
+ * vertical list with no header/data alignment. Force the semantic table
+ * layout back inside our scroll wrapper so horizontal scroll wins
+ * instead. !important is required to outrank the theme. */
+.sprint-table-scroll > table.tab_cadre_fixe,
+.sprint-table-scroll > table.tab_cadre_fixe > thead,
+.sprint-table-scroll > table.tab_cadre_fixe > tbody,
+.sprint-table-scroll > table.tab_cadre_fixe > tfoot,
+.sprint-table-scroll > table.tab_cadre_fixe tr,
+.sprint-table-scroll > table.tab_cadre_fixe th,
+.sprint-table-scroll > table.tab_cadre_fixe td {
+    box-sizing: border-box;
+}
+.sprint-table-scroll > table.tab_cadre_fixe       { display: table          !important; }
+.sprint-table-scroll > table.tab_cadre_fixe > thead { display: table-header-group !important; }
+.sprint-table-scroll > table.tab_cadre_fixe > tbody { display: table-row-group    !important; }
+.sprint-table-scroll > table.tab_cadre_fixe > tfoot { display: table-footer-group !important; }
+.sprint-table-scroll > table.tab_cadre_fixe tr    { display: table-row       !important; }
+.sprint-table-scroll > table.tab_cadre_fixe th,
+.sprint-table-scroll > table.tab_cadre_fixe td    { display: table-cell      !important; white-space: normal; }
+
 @media (max-width: 768px) {
     .sprint-stats-row {
         gap: 8px;
@@ -321,8 +366,13 @@
         min-width: 100px;
         padding: 12px 14px;
     }
+    .sprint-stat-card .stat-value { font-size: 1.35em; }
+    .sprint-stat-card .stat-icon  { font-size: 1.1em; }
+
     .sprint-board {
         flex-direction: column;
+        padding: 8px;
+        gap: 10px;
     }
     .sprint-board-column {
         min-width: 100%;
@@ -330,5 +380,66 @@
     .sprint-progress-legend {
         flex-wrap: wrap;
         gap: 8px;
+    }
+
+    /* Backlog filter bar: let the search input shrink so the row wraps
+       cleanly on phones instead of forcing a 220px child. */
+    .sprint-backlog-filter {
+        padding: 8px;
+        gap: 6px;
+    }
+    .sprint-backlog-filter input[name="q"] {
+        min-width: 0 !important;
+        flex: 1 1 140px;
+    }
+    .sprint-backlog-filter > div {
+        flex: 1 1 auto;
+    }
+
+    /* Tighten table cell spacing so 4-6 column tables actually fit
+       within a 360-400px viewport before horizontal scroll kicks in. */
+    .sprint-table-scroll .tab_cadre_fixe th,
+    .sprint-table-scroll .tab_cadre_fixe td {
+        padding: 6px 8px;
+        font-size: 0.88em;
+    }
+
+    /* Inline per-row forms (assign-to-sprint, fastlane toggle, delete):
+       allow them to wrap onto multiple lines instead of stretching the
+       row beyond viewport. */
+    .sprint-table-scroll form[style*="display:flex"],
+    .sprint-table-scroll form[style*="display: flex"] {
+        flex-wrap: wrap;
+    }
+
+    /* Plugin page headings */
+    .sprint-page h2,
+    [class*="sprint-"] h2 {
+        font-size: 1.25rem;
+    }
+}
+
+/* Even tighter rules for the smallest phones */
+@media (max-width: 480px) {
+    .sprint-stats-row {
+        gap: 6px;
+    }
+    .sprint-stat-card {
+        min-width: calc(50% - 6px);
+        flex: 1 1 calc(50% - 6px);
+        padding: 10px;
+    }
+    .sprint-backlog-filter {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+    .sprint-backlog-filter > div,
+    .sprint-backlog-filter > button,
+    .sprint-backlog-filter > a {
+        width: 100%;
+    }
+    .sprint-backlog-filter select,
+    .sprint-backlog-filter input {
+        width: 100%;
     }
 }

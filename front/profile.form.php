@@ -9,6 +9,8 @@ include(dirname(__DIR__, 3) . '/inc/includes.php');
 Session::checkRight('profile', UPDATE);
 
 if (isset($_POST['update_sprint_rights'])) {
+    Session::checkCSRF($_POST);
+
     global $DB;
 
     $profileId = (int)($_POST['profiles_id'] ?? 0);

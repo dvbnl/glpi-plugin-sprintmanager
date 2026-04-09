@@ -6,6 +6,73 @@
     'use strict';
 
     /**
+     * Mobile responsiveness helper.
+     *
+     * GLPI's `tab_cadre_fixe` tables don't reflow on narrow viewports —
+     * they overflow horizontally and the page crops awkwardly. This
+     * helper wraps every plugin table in a `.sprint-table-scroll` div
+     * so the table can scroll independently from the page.
+     *
+     * Runs on initial load AND after AJAX tab loads (so SprintMember,
+     * SprintItem, SprintMeeting, etc. tabs that are loaded via
+     * common.tabs.php also get wrapped).
+     */
+    function isSprintPluginContext() {
+        // Direct sprint pages
+        if (window.location.pathname.indexOf('/plugins/sprint/') !== -1) {
+            return true;
+        }
+        // Sprint tabs rendered into Ticket/Change/ProjectTask pages —
+        // detect by the presence of any plugin-specific marker class.
+        return document.querySelector(
+            '.sprint-dashboard, .sprint-stats-row, .sprint-board, '
+            + '.sprint-backlog-filter, [class^="sprint-status-"]'
+        ) !== null;
+    }
+
+    function wrapSprintTables(root) {
+        if (!isSprintPluginContext()) {
+            return;
+        }
+        var scope = root || document;
+        var tables = scope.querySelectorAll(
+            'table.tab_cadre_fixe:not(.sprint-table-wrapped)'
+        );
+        for (var i = 0; i < tables.length; i++) {
+            var table = tables[i];
+            // Skip tables that are themselves nested inside another
+            // tab_cadre_fixe (some forms re-open/close the table mid-render).
+            if (table.parentElement
+                && table.parentElement.classList
+                && table.parentElement.classList.contains('sprint-table-scroll')) {
+                table.classList.add('sprint-table-wrapped');
+                continue;
+            }
+            var wrapper = document.createElement('div');
+            wrapper.className = 'sprint-table-scroll';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+            table.classList.add('sprint-table-wrapped');
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { wrapSprintTables(); });
+    } else {
+        wrapSprintTables();
+    }
+
+    // Re-scan after every AJAX completion so tab content loaded via
+    // /ajax/common.tabs.php also gets wrapped. jQuery is always present
+    // in GLPI so this is safe.
+    if (typeof $ !== 'undefined' && $.fn) {
+        $(document).ajaxComplete(function() {
+            wrapSprintTables();
+        });
+    }
+
+
+    /**
      * Quick status update for sprint items via AJAX
      *
      * @param {number} itemId  - The sprint item ID
