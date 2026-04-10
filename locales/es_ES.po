@@ -630,3 +630,7 @@ msgstr "Mover este elemento de vuelta al backlog?"
 msgid "Item moved back to backlog"
 msgstr "Elemento movido de vuelta al backlog"
 
+# === Back to sprint navigation ===
+msgid "Back to Sprint"
+msgstr "Volver al Sprint"
+

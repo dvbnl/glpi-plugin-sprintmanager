@@ -311,6 +311,16 @@ class SprintMember extends CommonDBRelation
     {
         $this->initForm($ID, $options);
 
+        // "Back to Sprint" button linking to the parent sprint's Members tab
+        $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        if ($sprintId > 0) {
+            $sprintUrl = Sprint::getFormURLWithID($sprintId) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintMember$1');
+            echo "<div style='margin-bottom:10px;'>";
+            echo "<a href='$sprintUrl' class='btn btn-outline-secondary'>";
+            echo "<i class='fas fa-arrow-left me-1'></i> " . __('Back to Sprint', 'sprint');
+            echo "</a></div>";
+        }
+
         if (class_exists('Glpi\Application\View\TemplateRenderer')) {
             \Glpi\Application\View\TemplateRenderer::getInstance()->display(
                 '@sprint/sprintmember.form.html.twig',

@@ -217,6 +217,15 @@ class SprintMeeting extends CommonDBTM
         $this->initForm($ID, $options);
 
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+
+        // "Back to Sprint" button linking to the parent sprint's Meetings tab
+        if ($sprintId > 0) {
+            $sprintUrl = Sprint::getFormURLWithID($sprintId) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintMeeting$1');
+            echo "<div style='margin-bottom:10px;'>";
+            echo "<a href='$sprintUrl' class='btn btn-outline-secondary'>";
+            echo "<i class='fas fa-arrow-left me-1'></i> " . __('Back to Sprint', 'sprint');
+            echo "</a></div>";
+        }
         $memberOptions = SprintMember::getSprintMemberOptions($sprintId);
         $isExisting = ($ID > 0);
 

@@ -550,6 +550,15 @@ class SprintItem extends CommonDBTM
         $isNew = !$this->getID() || $this->isNewItem();
         $isFastlane = (int)($this->fields['is_fastlane'] ?? 0) === 1;
 
+        // "Back to Sprint" button linking to the parent sprint's Items tab
+        if ($sprintId > 0) {
+            $sprintUrl = Sprint::getFormURLWithID($sprintId) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintItem$1');
+            echo "<div style='margin-bottom:10px;'>";
+            echo "<a href='$sprintUrl' class='btn btn-outline-secondary'>";
+            echo "<i class='fas fa-arrow-left me-1'></i> " . __('Back to Sprint', 'sprint');
+            echo "</a></div>";
+        }
+
         $this->showFormHeader($options);
 
         // Name
