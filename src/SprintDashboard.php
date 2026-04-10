@@ -68,18 +68,17 @@ class SprintDashboard extends CommonGLPI
 
         // === Global view ===
         echo "<div id='sprint_view_global'>";
-        self::renderDashboardContent($globalStats, $allItems, __('No items in this sprint yet', 'sprint'));
-        // Fastlane items sit between sprint items and team capacity so the
-        // sprint-level fastlane workload is visible alongside the regular
-        // backlog and the per-member capacity rows.
+        self::renderStatsAndProgress($globalStats);
         self::showFastlaneItems($ID);
+        self::renderItemsTable($allItems, __('No items in this sprint yet', 'sprint'));
         self::showMemberCapacity($ID);
         echo "</div>";
 
         // === Personal view (hidden by default) ===
         echo "<div id='sprint_view_personal' style='display:none;'>";
-        self::renderDashboardContent($personalStats, $personalItems, __('No items assigned to you', 'sprint'));
+        self::renderStatsAndProgress($personalStats);
         self::showFastlaneItems($ID, $currentUserId);
+        self::renderItemsTable($personalItems, __('No items assigned to you', 'sprint'));
         self::showPersonalCapacity($ID, $currentUserId);
         echo "</div>";
 
@@ -143,9 +142,9 @@ class SprintDashboard extends CommonGLPI
     }
 
     /**
-     * Render stats cards, progress bar, and items table
+     * Render stats cards and progress bar
      */
-    private static function renderDashboardContent(array $stats, array $items, string $emptyMessage): void
+    private static function renderStatsAndProgress(array $stats): void
     {
         // === Stats cards ===
         echo "<div style='display:flex;flex-wrap:wrap;gap:14px;padding:16px 0 20px;justify-content:center;'>";
@@ -190,8 +189,13 @@ class SprintDashboard extends CommonGLPI
         if ($todoPct > 0)     echo "<div style='width:{$todoPct}%;height:100%;background:#d5d8dc;transition:width 0.4s;' title='" . __('To Do', 'sprint') . "'></div>";
         echo "</div>";
         echo "</div>";
+    }
 
-        // === Items table ===
+    /**
+     * Render items table
+     */
+    private static function renderItemsTable(array $items, string $emptyMessage): void
+    {
         echo "<table class='tab_cadre_fixe'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Type') . "</th>";

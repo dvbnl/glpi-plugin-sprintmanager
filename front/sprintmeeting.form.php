@@ -18,7 +18,7 @@ if (isset($_POST['add'])) {
 } elseif (isset($_POST['update'])) {
     $meeting->check($_POST['id'], UPDATE);
     $meeting->update($_POST);
-    Html::back();
+    Html::redirect(GlpiPlugin\Sprint\SprintMeeting::getFormURLWithID($_POST['id']));
 
 } elseif (isset($_POST['purge'])) {
     $meeting->check($_POST['id'], PURGE);

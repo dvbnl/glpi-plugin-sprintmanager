@@ -398,6 +398,15 @@ class SprintItem extends CommonDBTM
                     echo "<a href='" . static::getFormURLWithID($row['id']) .
                         "' class='btn btn-sm btn-outline-primary' title='" . __('Edit') . "'>" .
                         "<i class='fas fa-edit'></i></a> ";
+                    // Back to backlog button
+                    echo "<form method='post' action='" . Backlog::getFormURL() . "' style='display:inline;'>";
+                    echo Html::hidden('id', ['value' => $row['id']]);
+                    echo "<button type='submit' name='back_to_backlog' class='btn btn-sm btn-outline-warning' "
+                        . "title='" . __('Back to backlog', 'sprint') . "' "
+                        . "onclick=\"return confirm('" . __('Move this item back to the backlog?', 'sprint') . "');\">"
+                        . "<i class='fas fa-undo'></i></button>";
+                    Html::closeForm();
+                    echo " ";
                 }
                 if ($canDeleteRow) {
                     echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline;'>";

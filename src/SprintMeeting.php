@@ -227,14 +227,29 @@ class SprintMeeting extends CommonDBTM
             $statuses = SprintItem::getAllStatuses();
             foreach ($si->find(['plugin_sprint_sprints_id' => $sprintId], ['sort_order ASC', 'priority DESC']) as $row) {
                 $linkedDisplay = '';
+                $itemtype = $row['itemtype'] ?? '';
                 $allowedTypes = ['Ticket', 'Change', 'ProjectTask'];
-                if (!empty($row['itemtype']) && (int)$row['items_id'] > 0 && in_array($row['itemtype'], $allowedTypes, true) && class_exists($row['itemtype'])) {
-                    $linked = new $row['itemtype']();
-                    if ($linked->getFromDB((int)$row['items_id'])) {
-                        $url = $row['itemtype']::getFormURLWithID((int)$row['items_id']);
-                        $linkedDisplay = '<a href="' . $url . '">' . htmlescape($linked->fields['name']) . '</a>';
+                if (!empty($itemtype) && (int)$row['items_id'] > 0 && in_array($itemtype, $allowedTypes, true) && class_exists($itemtype)) {
+                    $tmpItem = new SprintItem();
+                    $tmpItem->fields = $row;
+                    $linkedDisplay = $tmpItem->getLinkedItemDisplay();
+                }
+
+                // Resolve parent project name for ProjectTask items
+                $projectName = '';
+                if ($itemtype === 'ProjectTask' && (int)$row['items_id'] > 0) {
+                    $linkedPT = new \ProjectTask();
+                    if ($linkedPT->getFromDB((int)$row['items_id'])) {
+                        $projectId = (int)($linkedPT->fields['projects_id'] ?? 0);
+                        if ($projectId > 0) {
+                            $project = new \Project();
+                            if ($project->getFromDB($projectId)) {
+                                $projectName = $project->fields['name'] ?? '';
+                            }
+                        }
                     }
                 }
+
                 $sprintItemsData[] = [
                     'id'             => (int)$row['id'],
                     'name'           => $row['name'],
@@ -244,6 +259,9 @@ class SprintMeeting extends CommonDBTM
                     'users_id'       => (int)$row['users_id'],
                     'story_points'   => (int)$row['story_points'],
                     'note'           => $row['note'] ?? '',
+                    'itemtype'       => $itemtype,
+                    'project_name'   => $projectName,
+                    'is_fastlane'    => (int)($row['is_fastlane'] ?? 0),
                 ];
             }
         }
@@ -266,6 +284,9 @@ class SprintMeeting extends CommonDBTM
                     'sprint_items'    => $sprintItemsData,
                     'item_statuses'   => SprintItem::getAllStatuses(),
                     'treated_items'   => $treatedItems,
+                    'backlog_url'     => \GlpiPlugin\Sprint\Backlog::getFormURL(),
+                    'meeting_url'     => static::getFormURLWithID($ID),
+                    'sprint_id'       => $sprintId,
                 ]
             );
         } else {
@@ -309,7 +330,7 @@ class SprintMeeting extends CommonDBTM
                 $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
                 if ($sprintId > 0) {
                     echo "</table>"; // close the form table temporarily
-                    self::showSprintItemsReview($sprintId);
+                    self::showSprintItemsReview($sprintId, $ID);
                     echo "<table class='tab_cadre_fixe'>"; // re-open for showFormButtons
                 }
             }
@@ -325,50 +346,48 @@ class SprintMeeting extends CommonDBTM
      * Uses array field names _sprintitems[id][field] so the main
      * meeting save button processes all changes at once.
      */
-    public static function showSprintItemsReview(int $sprintId): void
+    public static function showSprintItemsReview(int $sprintId, int $meetingId = 0): void
     {
         $canedit       = Sprint::canUpdate();
         $memberOptions = SprintMember::getSprintMemberOptions($sprintId);
         $statuses      = SprintItem::getAllStatuses();
 
         $si    = new SprintItem();
-        $items = $si->find(
+        $allItems = $si->find(
             ['plugin_sprint_sprints_id' => $sprintId],
             ['sort_order ASC', 'priority DESC']
         );
 
-        echo "<div class='center' style='margin-top:20px;'>";
-        echo "<table class='tab_cadre_fixe'>";
-        echo "<tr class='tab_bg_2'><th colspan='5'>" .
-            "<i class='fas fa-clipboard-list'></i> " .
-            __('Sprint Items Review', 'sprint') . "</th></tr>";
+        // Split into fastlane and regular items
+        $fastlaneItems = array_filter($allItems, fn($r) => !empty($r['is_fastlane']));
+        $regularItems  = array_filter($allItems, fn($r) => empty($r['is_fastlane']));
 
-        echo "<tr class='tab_bg_2'>";
-        echo "<th>" . __('Name') . "</th>";
-        echo "<th>" . __('Linked item', 'sprint') . "</th>";
-        echo "<th>" . __('Status') . "</th>";
-        echo "<th>" . __('Owner', 'sprint') . "</th>";
-        echo "<th>" . __('Story Points', 'sprint') . "</th>";
-        echo "</tr>";
+        $typeIcons = [
+            ''            => ['fas fa-clipboard-list', '#6c757d', __('Manual', 'sprint')],
+            'Ticket'      => ['fas fa-ticket-alt', '#0d6efd', __('Ticket')],
+            'Change'      => ['fas fa-exchange-alt', '#6f42c1', __('Change')],
+            'ProjectTask' => ['fas fa-tasks', '#fd7e14', __('Project task')],
+        ];
+        $backlogUrl = Backlog::getFormURL();
+        $meetingUrl = ($meetingId > 0) ? static::getFormURLWithID($meetingId) : '';
 
-        if (count($items) === 0) {
-            echo "<tr class='tab_bg_1'><td colspan='5' class='center' style='padding:16px;color:#999;'>" .
-                __('No items in this sprint', 'sprint') . "</td></tr>";
-        }
+        // Helper to render a row
+        $renderRow = function (array $row, bool $isFastlane) use ($canedit, $statuses, $memberOptions, $typeIcons, $backlogUrl, $meetingUrl) {
+            $itemId    = (int)$row['id'];
+            $itemtype  = $row['itemtype'] ?? '';
+            $typeInfo  = $typeIcons[$itemtype] ?? $typeIcons[''];
 
-        foreach ($items as $row) {
-            $itemId = (int)$row['id'];
-
-            // Linked item display
             $linkedDisplay = '<span style="color:#ccc;">-</span>';
-            if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
+            if (!empty($itemtype) && (int)$row['items_id'] > 0) {
                 $tmpItem = new SprintItem();
                 $tmpItem->fields = $row;
                 $linkedDisplay = $tmpItem->getLinkedItemDisplay();
             }
 
             echo "<tr class='tab_bg_1'>";
-            echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
+            echo "<td class='center'><i class='{$typeInfo[0]}' style='color:{$typeInfo[1]};' title='{$typeInfo[2]}'></i></td>";
+            $fastlaneIcon = $isFastlane ? "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" : '';
+            echo "<td>{$fastlaneIcon}<a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
                 htmlescape($row['name']) . "</a></td>";
             echo "<td>" . $linkedDisplay . "</td>";
 
@@ -393,7 +412,65 @@ class SprintMeeting extends CommonDBTM
                     '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
             }
             echo "<td class='center'>" . (int)$row['story_points'] . "</td>";
+
+            echo "<td class='center'>";
+            if ($canedit) {
+                echo "<form method='post' action='{$backlogUrl}' style='display:inline;'>";
+                echo Html::hidden('id', ['value' => $itemId]);
+                if ($meetingUrl) {
+                    echo Html::hidden('_redirect', ['value' => $meetingUrl]);
+                }
+                echo "<button type='submit' name='back_to_backlog' class='btn btn-sm btn-outline-warning' "
+                    . "title='" . __('Back to backlog', 'sprint') . "' "
+                    . "onclick=\"return confirm('" . __('Move this item back to the backlog?', 'sprint') . "');\">"
+                    . "<i class='fas fa-undo'></i></button>";
+                Html::closeForm();
+            }
+            echo "</td>";
             echo "</tr>";
+        };
+
+        $tableHeaders = function () {
+            echo "<tr class='tab_bg_2'>";
+            echo "<th style='width:40px;'>" . __('Type') . "</th>";
+            echo "<th>" . __('Name') . "</th>";
+            echo "<th>" . __('Linked item', 'sprint') . "</th>";
+            echo "<th>" . __('Status') . "</th>";
+            echo "<th>" . __('Owner', 'sprint') . "</th>";
+            echo "<th>" . __('Story Points', 'sprint') . "</th>";
+            echo "<th style='width:40px;'></th>";
+            echo "</tr>";
+        };
+
+        // === Fastlane section ===
+        if (count($fastlaneItems) > 0) {
+            echo "<div class='center' style='margin-top:20px;'>";
+            echo "<table class='tab_cadre_fixe'>";
+            echo "<tr class='tab_bg_2'><th colspan='7' style='background:#fff3cd;border-bottom:2px solid #fd7e14;'>" .
+                "<i class='fas fa-bolt' style='color:#fd7e14;'></i> " .
+                __('Fastlane', 'sprint') . "</th></tr>";
+            $tableHeaders();
+            foreach ($fastlaneItems as $row) {
+                $renderRow($row, true);
+            }
+            echo "</table></div>";
+        }
+
+        // === Regular items section ===
+        echo "<div class='center' style='margin-top:" . (count($fastlaneItems) > 0 ? '8' : '20') . "px;'>";
+        echo "<table class='tab_cadre_fixe'>";
+        echo "<tr class='tab_bg_2'><th colspan='7'>" .
+            "<i class='fas fa-clipboard-list'></i> " .
+            __('Sprint Items Review', 'sprint') . "</th></tr>";
+        $tableHeaders();
+
+        if (count($regularItems) === 0) {
+            echo "<tr class='tab_bg_1'><td colspan='7' class='center' style='padding:16px;color:#999;'>" .
+                __('No items in this sprint', 'sprint') . "</td></tr>";
+        }
+
+        foreach ($regularItems as $row) {
+            $renderRow($row, false);
         }
 
         echo "</table></div>";

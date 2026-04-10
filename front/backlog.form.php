@@ -58,6 +58,28 @@ if (isset($_POST['toggle_fastlane'])) {
     Html::back();
 }
 
+if (isset($_POST['back_to_backlog'])) {
+    $id = (int)($_POST['id'] ?? 0);
+
+    if ($id > 0) {
+        $item = new GlpiPlugin\Sprint\SprintItem();
+        $item->check($id, UPDATE);
+        if ($item->update([
+            'id'                       => $id,
+            'plugin_sprint_sprints_id' => 0,
+            'is_fastlane'              => 0,
+        ])) {
+            Session::addMessageAfterRedirect(__('Item moved back to backlog', 'sprint'));
+        }
+    }
+
+    // Redirect back to the originating page if provided
+    if (!empty($_POST['_redirect'])) {
+        Html::redirect($_POST['_redirect']);
+    }
+    Html::back();
+}
+
 if (isset($_POST['assign_to_sprint'])) {
     $id       = (int)($_POST['id'] ?? 0);
     $sprintId = (int)($_POST['plugin_sprint_sprints_id'] ?? 0);

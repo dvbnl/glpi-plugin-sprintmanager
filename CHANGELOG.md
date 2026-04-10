@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4] - 2026-04-10
+
+### Added
+- **Meeting view — Type column**: sprint items in the meeting review table now show a type icon (Ticket, Change, Project task, Manual) matching the dashboard display
+- **Meeting view — Linked item project name**: linked Project Tasks in the meeting review now include the parent project name in parentheses (via `getLinkedItemDisplay()`), consistent with the dashboard and sprint items tab
+- **Meeting view — Fastlane / Regular split**: the meeting sprint items review is now split into two sections — a dedicated Fastlane block (orange header with bolt icon) above the regular Sprint Items Review — matching the dashboard layout
+- **Back to backlog button**: sprint items in the meeting view and sprint items tab now have a "Back to backlog" button (undo icon) that moves the item back to the backlog with a confirmation dialog, useful during sprint kick-offs when items are reconsidered. Moving back also clears the fastlane flag
+- **Dashboard — Fastlane above regular items**: the Fastlane section on the sprint dashboard is now rendered between the stats/progress bar and the regular items table (previously it was below the regular items)
+- New translations for "Back to backlog", "Move this item back to the backlog?", and "Item moved back to backlog" in all supported languages (en, nl, fr, es)
+
+### Fixed
+- **Meeting save redirect**: clicking "Save" on a meeting no longer redirects to an empty form (`id=0`); it now explicitly redirects back to the meeting detail page
+- **Meeting back-to-backlog nested form**: the backlog button inside the meeting form was rendered as a nested `<form>` (invalid HTML), causing the browser to submit the parent meeting form instead. Replaced with a JavaScript-driven approach that dynamically creates and submits a standalone form outside the parent
+
 ## [1.0.3] - 2026-04-09
 
 ### Added

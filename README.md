@@ -31,7 +31,8 @@ SprintManager brings Agile/Scrum sprint management to GLPI. Create sprints, buil
 - **Capacity tracking** - Set capacity per sprint item with a granular dropdown (1-5% then 5% steps up to 100%); dashboard shows per-member usage with visual overload detection and a Regular vs. Fastlane breakdown
 - **Dashboard** - Stats cards (total items, done, in progress, blocked, story points), progress bar, items overview, dedicated Fastlane items section, and team capacity visualization (Regular + Fastlane stacked) with Global and Personal view toggle
 - **Meeting management** - Schedule kickoffs, standups, reviews, and retrospectives with a required facilitator
-- **Interactive standup review** - During a meeting, review all sprint items inline: update status, reassign owners, and add notes — all saved with one click
+- **Interactive standup review** - During a meeting, review all sprint items inline: update status, reassign owners, and add notes — all saved with one click. The review is split into a **Fastlane** section (orange header) above the regular **Sprint Items Review**, matching the dashboard layout. Each item shows its type icon and linked item with project name
+- **Back to backlog** - During sprint kick-offs, move items back to the backlog with a single click via the undo button on each sprint item (in both meeting and sprint items views). Fastlane flags are automatically cleared
 - **Treated checkbox** - Mark items as discussed during standups; treated items are greyed out and locked
 - **Persistent notes** - Notes per sprint item carry over between meetings for continuity
 - **Smart linked-item display** - Linked Project Tasks show the parent project name in parentheses so tasks with identical names across projects can be told apart
@@ -152,7 +153,7 @@ Fastlane items represent unplanned, urgent work that should be tracked alongside
 3. Open a fastlane item and switch to the **Fastlane Members** tab.
 4. Add one or more sprint members to the item, each with their own capacity %. The capacity picker is granular (1-5% then 5% steps up to 100%) so you can express very small allocations.
 5. Each fastlane allocation counts against the member's total sprint capacity together with their regular item capacity, and is validated so a member cannot be overbooked.
-6. The **Dashboard** lists all fastlane items in their own section between the regular sprint items and the team capacity table, and the Team Capacity table shows a separate **Fastlane** column plus the sprint-level fastlane total — at a glance you can see how much of the sprint is going to fastlane work.
+6. The **Dashboard** lists all fastlane items in their own section above the regular sprint items table (below the stats/progress bar), and the Team Capacity table shows a separate **Fastlane** column plus the sprint-level fastlane total — at a glance you can see how much of the sprint is going to fastlane work.
 
 ### Running a standup
 
@@ -168,7 +169,7 @@ Fastlane items represent unplanned, urgent work that should be tracked alongside
 The **Dashboard** tab shows:
 - Stats cards for total items, done, in progress, blocked, and story points
 - A progress bar with color-coded segments
-- A dedicated **Fastlane** section listing fastlane items with status, assigned members + capacity, and a sprint-level fastlane total
+- A dedicated **Fastlane** section (above the regular items table) listing fastlane items with status, assigned members + capacity, and a sprint-level fastlane total
 - A **Team Capacity** table showing each member's available vs. used capacity with separate **Regular** and **Fastlane** columns and a stacked visual bar (red = regular, orange = fastlane)
 - Toggle between **Global View** (all items, full team capacity) and **Personal View** (only your items, your capacity)
 

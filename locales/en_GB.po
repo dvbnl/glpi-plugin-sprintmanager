@@ -620,3 +620,13 @@ msgstr "Item marked as fastlane"
 msgid "Fastlane flag removed"
 msgstr "Fastlane flag removed"
 
+# === Back to backlog feature ===
+msgid "Back to backlog"
+msgstr "Back to backlog"
+
+msgid "Move this item back to the backlog?"
+msgstr "Move this item back to the backlog?"
+
+msgid "Item moved back to backlog"
+msgstr "Item moved back to backlog"
+
