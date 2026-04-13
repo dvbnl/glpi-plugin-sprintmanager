@@ -113,6 +113,7 @@ class SprintDashboard extends CommonGLPI
             'total_items'   => count($items),
             'todo_items'    => 0,
             'in_progress'   => 0,
+            'review_items'  => 0,
             'done_items'    => 0,
             'blocked_items' => 0,
             'total_points'  => 0,
@@ -127,6 +128,9 @@ class SprintDashboard extends CommonGLPI
                     break;
                 case SprintItem::STATUS_IN_PROGRESS:
                     $stats['in_progress']++;
+                    break;
+                case SprintItem::STATUS_REVIEW:
+                    $stats['review_items']++;
                     break;
                 case SprintItem::STATUS_DONE:
                     $stats['done_items']++;
@@ -153,6 +157,7 @@ class SprintDashboard extends CommonGLPI
             ['label' => __('Total Items', 'sprint'),  'value' => $stats['total_items'],  'icon' => 'fas fa-list-ul',       'color' => '#6c757d', 'bg' => '#f8f9fa', 'accent' => '#6c757d'],
             ['label' => __('Done', 'sprint'),          'value' => $stats['done_items'],   'icon' => 'fas fa-check-circle',   'color' => '#198754', 'bg' => '#d1e7dd', 'accent' => '#198754'],
             ['label' => __('In Progress', 'sprint'),   'value' => $stats['in_progress'],  'icon' => 'fas fa-circle-notch',   'color' => '#0d6efd', 'bg' => '#cfe2ff', 'accent' => '#0d6efd'],
+            ['label' => __('In Review', 'sprint'),     'value' => $stats['review_items'], 'icon' => 'fas fa-search',         'color' => '#6f42c1', 'bg' => '#e9d7f7', 'accent' => '#6f42c1'],
             ['label' => __('Blocked', 'sprint'),       'value' => $stats['blocked_items'],'icon' => 'fas fa-hand-paper',     'color' => '#dc3545', 'bg' => '#f8d7da', 'accent' => '#dc3545'],
             ['label' => __('Story Points', 'sprint'),  'value' => $stats['done_points'] . ' / ' . $stats['total_points'], 'icon' => 'fas fa-star', 'color' => '#d68a00', 'bg' => '#fff3cd', 'accent' => '#d68a00'],
         ];
@@ -170,14 +175,15 @@ class SprintDashboard extends CommonGLPI
         $total = max($stats['total_items'], 1);
         $donePct     = round(($stats['done_items'] / $total) * 100, 1);
         $progressPct = round(($stats['in_progress'] / $total) * 100, 1);
+        $reviewPct   = round(($stats['review_items'] / $total) * 100, 1);
         $blockedPct  = round(($stats['blocked_items'] / $total) * 100, 1);
         $todoPct     = round(($stats['todo_items'] / $total) * 100, 1);
-        $reviewPct   = max(100 - $donePct - $progressPct - $blockedPct - $todoPct, 0);
 
         echo "<div style='margin:0 0 24px;'>";
         echo "<div style='display:flex;gap:18px;justify-content:center;margin-bottom:8px;font-size:0.82em;color:#6c757d;flex-wrap:wrap;'>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#198754;margin-right:4px;vertical-align:middle;'></span>" . __('Done', 'sprint') . " {$donePct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#0d6efd;margin-right:4px;vertical-align:middle;'></span>" . __('In Progress', 'sprint') . " {$progressPct}%</span>";
+        echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#6f42c1;margin-right:4px;vertical-align:middle;'></span>" . __('In Review', 'sprint') . " {$reviewPct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc3545;margin-right:4px;vertical-align:middle;'></span>" . __('Blocked', 'sprint') . " {$blockedPct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#d5d8dc;margin-right:4px;vertical-align:middle;'></span>" . __('To Do', 'sprint') . " {$todoPct}%</span>";
         echo "</div>";

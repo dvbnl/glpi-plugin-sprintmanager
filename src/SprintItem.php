@@ -24,12 +24,41 @@ class SprintItem extends CommonDBTM
     public $dohistory        = true;
 
     /**
-     * Cascade purge fastlane member rows when this item is deleted.
+     * Cascade purge: fastlane member rows, plus any legacy relation rows
+     * in SprintTicket / SprintChange / SprintProjectTask that pointed at
+     * the same (sprint, linked item) pair. SprintItem is the single source
+     * of truth for the reverse "Sprints" tab, but those legacy tables may
+     * still contain rows from earlier add flows and must stay in sync.
      */
     public function cleanDBonPurge()
     {
         $rel = new SprintFastlaneMember();
         $rel->deleteByCriteria(['plugin_sprint_sprintitems_id' => $this->getID()], 1);
+
+        $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        $itemtype = (string)($this->fields['itemtype'] ?? '');
+        $itemsId  = (int)($this->fields['items_id'] ?? 0);
+
+        if ($sprintId <= 0 || $itemsId <= 0) {
+            return;
+        }
+
+        if ($itemtype === 'Ticket') {
+            (new SprintTicket())->deleteByCriteria([
+                'plugin_sprint_sprints_id' => $sprintId,
+                'tickets_id'               => $itemsId,
+            ], 1);
+        } elseif ($itemtype === 'Change') {
+            (new SprintChange())->deleteByCriteria([
+                'plugin_sprint_sprints_id' => $sprintId,
+                'changes_id'               => $itemsId,
+            ], 1);
+        } elseif ($itemtype === 'ProjectTask') {
+            (new SprintProjectTask())->deleteByCriteria([
+                'plugin_sprint_sprints_id' => $sprintId,
+                'projecttasks_id'          => $itemsId,
+            ], 1);
+        }
     }
 
     const STATUS_TODO        = 'todo';
@@ -436,6 +465,9 @@ class SprintItem extends CommonDBTM
         if (!$this->validateCapacity($input)) {
             return false;
         }
+        if (!self::validateNoDuplicateLink($input)) {
+            return false;
+        }
         return parent::prepareInputForAdd($input);
     }
 
@@ -449,7 +481,71 @@ class SprintItem extends CommonDBTM
         if (!$this->validateCapacity($input, (int)($input['id'] ?? 0))) {
             return false;
         }
+        if (!self::validateNoDuplicateLink($input, (int)($input['id'] ?? 0))) {
+            return false;
+        }
         return parent::prepareInputForUpdate($input);
+    }
+
+    /**
+     * Reject creating a second SprintItem row for the same
+     * (sprint, itemtype, items_id) triple. Manual items (empty itemtype
+     * or items_id == 0) and backlog rows (sprint id == 0) are skipped —
+     * Backlog has its own de-duplication and manual items can legitimately
+     * repeat.
+     */
+    private static function validateNoDuplicateLink(array $input, int $excludeId = 0): bool
+    {
+        $itemtype = (string)($input['itemtype'] ?? '');
+        $itemsId  = (int)($input['items_id'] ?? 0);
+        $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? 0);
+
+        if ($itemtype === '' || $itemsId <= 0 || $sprintId <= 0) {
+            return true;
+        }
+
+        if (!self::isLinkedItemInSprint($sprintId, $itemtype, $itemsId, $excludeId)) {
+            return true;
+        }
+
+        $typeLabels = self::getLinkedItemTypes();
+        $typeLabel  = $typeLabels[$itemtype] ?? $itemtype;
+        Session::addMessageAfterRedirect(
+            sprintf(
+                __('This %1$s (#%2$d) is already linked to this sprint.', 'sprint'),
+                $typeLabel,
+                $itemsId
+            ),
+            false,
+            ERROR
+        );
+        return false;
+    }
+
+    /**
+     * Check whether a linked item (Ticket/Change/ProjectTask) is already
+     * attached to a given sprint via a SprintItem row.
+     */
+    public static function isLinkedItemInSprint(
+        int $sprintId,
+        string $itemtype,
+        int $itemsId,
+        int $excludeId = 0
+    ): bool {
+        if ($sprintId <= 0 || $itemtype === '' || $itemsId <= 0) {
+            return false;
+        }
+
+        $criteria = [
+            'plugin_sprint_sprints_id' => $sprintId,
+            'itemtype'                 => $itemtype,
+            'items_id'                 => $itemsId,
+        ];
+        if ($excludeId > 0) {
+            $criteria['NOT'] = ['id' => $excludeId];
+        }
+
+        return countElementsInTable(self::getTable(), $criteria) > 0;
     }
 
     /**

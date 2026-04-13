@@ -187,8 +187,8 @@ class SprintMember extends CommonDBRelation
             ['role ASC']
         );
 
-        // Count linked items per member
-        $memberItemCounts = self::getMemberItemCounts($ID);
+        // Per-member status distribution across sprint items
+        $memberStatusCounts = self::getMemberStatusCounts($ID);
 
         $roleIcons = [
             self::ROLE_SCRUM_MASTER  => 'fas fa-hat-wizard',
@@ -206,15 +206,14 @@ class SprintMember extends CommonDBRelation
         echo "<th>" . __('User') . "</th>";
         echo "<th>" . __('Role', 'sprint') . "</th>";
         echo "<th>" . __('Capacity', 'sprint') . "</th>";
-        echo "<th>" . __('Linked Items', 'sprint') . "</th>";
-        echo "<th>" . __('Comment') . "</th>";
+        echo "<th>" . __('Sprint Items Status', 'sprint') . "</th>";
         if ($canedit) {
             echo "<th>" . __('Actions') . "</th>";
         }
         echo "</tr>";
 
         if (count($members) === 0) {
-            $cols = $canedit ? 6 : 5;
+            $cols = $canedit ? 5 : 4;
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
                 __('No team members added', 'sprint') . "</td></tr>";
         }
@@ -223,7 +222,6 @@ class SprintMember extends CommonDBRelation
             $icon       = $roleIcons[$row['role']] ?? 'fas fa-user';
             $roleName   = $roles[$row['role']] ?? $row['role'];
             $userId     = (int)$row['users_id'];
-            $itemCount  = $memberItemCounts[$userId] ?? 0;
 
             echo "<tr class='tab_bg_1'>";
             echo "<td><i class='fas fa-user'></i> " . getUserName($userId) . "</td>";
@@ -239,8 +237,7 @@ class SprintMember extends CommonDBRelation
             echo "<span>{$pct}%</span>";
             echo "</div>";
             echo "</td>";
-            echo "<td class='center'>{$itemCount}</td>";
-            echo "<td>" . htmlescape($row['comment'] ?? '') . "</td>";
+            echo "<td>" . self::renderStatusDistribution($memberStatusCounts[$userId] ?? []) . "</td>";
 
             if ($canedit) {
                 echo "<td class='center'>";
@@ -265,43 +262,90 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Count how many tickets/changes/project tasks are assigned to each member in this sprint
+     * Count sprint items per member per status, for the mini distribution bar.
      *
-     * @param int $sprintId
-     * @return array [users_id => count]
+     * @return array<int, array<string,int>> [users_id => [status => count]]
      */
-    private static function getMemberItemCounts(int $sprintId): array
+    private static function getMemberStatusCounts(int $sprintId): array
     {
         $counts = [];
-
-        // Tickets
-        $st = new SprintTicket();
-        foreach ($st->find(['plugin_sprint_sprints_id' => $sprintId]) as $row) {
+        $si = new SprintItem();
+        foreach ($si->find(['plugin_sprint_sprints_id' => $sprintId]) as $row) {
             $uid = (int)$row['users_id'];
-            if ($uid > 0) {
-                $counts[$uid] = ($counts[$uid] ?? 0) + 1;
+            if ($uid <= 0) {
+                continue;
             }
-        }
-
-        // Changes
-        $sc = new SprintChange();
-        foreach ($sc->find(['plugin_sprint_sprints_id' => $sprintId]) as $row) {
-            $uid = (int)$row['users_id'];
-            if ($uid > 0) {
-                $counts[$uid] = ($counts[$uid] ?? 0) + 1;
+            $status = $row['status'] ?? SprintItem::STATUS_TODO;
+            if (!isset($counts[$uid])) {
+                $counts[$uid] = [
+                    SprintItem::STATUS_TODO        => 0,
+                    SprintItem::STATUS_IN_PROGRESS => 0,
+                    SprintItem::STATUS_REVIEW      => 0,
+                    SprintItem::STATUS_DONE        => 0,
+                    SprintItem::STATUS_BLOCKED     => 0,
+                    'total'                        => 0,
+                ];
             }
-        }
-
-        // Project Tasks
-        $sp = new SprintProjectTask();
-        foreach ($sp->find(['plugin_sprint_sprints_id' => $sprintId]) as $row) {
-            $uid = (int)$row['users_id'];
-            if ($uid > 0) {
-                $counts[$uid] = ($counts[$uid] ?? 0) + 1;
+            if (isset($counts[$uid][$status])) {
+                $counts[$uid][$status]++;
             }
+            $counts[$uid]['total']++;
         }
-
         return $counts;
+    }
+
+    /**
+     * Render a compact per-member status distribution: count pills + mini progress bar.
+     * Mirrors the look of the main sprint dashboard stats bar.
+     */
+    private static function renderStatusDistribution(array $counts): string
+    {
+        $total = (int)($counts['total'] ?? 0);
+        if ($total <= 0) {
+            return "<span style='color:#adb5bd;font-style:italic;'>" .
+                __('No items assigned', 'sprint') . "</span>";
+        }
+
+        $segments = [
+            [SprintItem::STATUS_DONE,        __('Done', 'sprint'),        '#198754', 'fas fa-check-circle'],
+            [SprintItem::STATUS_IN_PROGRESS, __('In Progress', 'sprint'), '#0d6efd', 'fas fa-circle-notch'],
+            [SprintItem::STATUS_REVIEW,      __('In Review', 'sprint'),   '#6f42c1', 'fas fa-search'],
+            [SprintItem::STATUS_BLOCKED,     __('Blocked', 'sprint'),     '#dc3545', 'fas fa-hand-paper'],
+            [SprintItem::STATUS_TODO,        __('To Do', 'sprint'),       '#d5d8dc', 'fas fa-list-ul'],
+        ];
+
+        $out = "<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;'>";
+
+        // Count pills
+        $out .= "<div style='display:flex;gap:6px;flex-wrap:wrap;'>";
+        foreach ($segments as [$key, $label, $color, $icon]) {
+            $n = (int)($counts[$key] ?? 0);
+            if ($n === 0) {
+                continue;
+            }
+            $out .= "<span title='" . htmlescape($label) . "' "
+                . "style='display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;"
+                . "background:{$color}1a;color:{$color};font-size:0.78em;font-weight:600;'>"
+                . "<i class='{$icon}'></i>{$n}</span>";
+        }
+        $out .= "</div>";
+
+        // Stacked mini progress bar
+        $out .= "<div style='flex:1;min-width:120px;height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;display:flex;'>";
+        foreach ($segments as [$key, $label, $color, $icon]) {
+            $n = (int)($counts[$key] ?? 0);
+            if ($n === 0) {
+                continue;
+            }
+            $pct = round(($n / $total) * 100, 2);
+            $out .= "<div title='" . htmlescape($label) . " {$n}' "
+                . "style='width:{$pct}%;height:100%;background:{$color};'></div>";
+        }
+        $out .= "</div>";
+
+        $out .= "<span style='font-size:0.78em;color:#6c757d;'>{$total}</span>";
+        $out .= "</div>";
+        return $out;
     }
 
     /**

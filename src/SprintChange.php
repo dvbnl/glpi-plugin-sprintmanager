@@ -5,6 +5,7 @@ namespace GlpiPlugin\Sprint;
 use CommonDBRelation;
 use CommonGLPI;
 use Html;
+use Session;
 use Change;
 use Dropdown;
 
@@ -34,8 +35,12 @@ class SprintChange extends CommonDBRelation
     {
         if ($item instanceof Change) {
             $count = countElementsInTable(
-                self::getTable(),
-                ['changes_id' => $item->getID()]
+                SprintItem::getTable(),
+                [
+                    'itemtype'                 => 'Change',
+                    'items_id'                 => $item->getID(),
+                    ['NOT' => ['plugin_sprint_sprints_id' => 0]],
+                ]
             );
             return self::createTabEntry(__('Sprints', 'sprint'), $count);
         }
@@ -175,8 +180,13 @@ class SprintChange extends CommonDBRelation
             Backlog::showAddToBacklogButton('Change', $changeID);
         }
 
-        $link  = new self();
-        $links = $link->find(['changes_id' => $changeID]);
+        // Source of truth is SprintItem — see SprintTicket::showForTicket.
+        $si    = new SprintItem();
+        $links = $si->find([
+            'itemtype' => 'Change',
+            'items_id' => $changeID,
+            ['NOT' => ['plugin_sprint_sprints_id' => 0]],
+        ]);
         $statuses = Sprint::getAllStatuses();
 
         echo "<div class='center'><table class='tab_cadre_fixe'>";
@@ -209,7 +219,7 @@ class SprintChange extends CommonDBRelation
                 " - " . Html::convDateTime($sprint->fields['date_end']) . "</td>";
             if ($canedit) {
                 echo "<td class='center'>";
-                echo "<form method='post' action='" . static::getFormURL() .
+                echo "<form method='post' action='" . SprintItem::getFormURL() .
                     "' style='display:inline;'>";
                 echo Html::hidden('id', ['value' => $row['id']]);
                 echo Html::submit(__('Unlink', 'sprint'), [
@@ -224,6 +234,32 @@ class SprintChange extends CommonDBRelation
         }
 
         echo "</table></div>";
+    }
+
+    public function prepareInputForAdd($input)
+    {
+        $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? 0);
+        $changeId = (int)($input['changes_id'] ?? 0);
+
+        if ($sprintId <= 0 || $changeId <= 0) {
+            Session::addMessageAfterRedirect(
+                __('Please select a sprint and a change.', 'sprint'),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        if (SprintItem::isLinkedItemInSprint($sprintId, 'Change', $changeId)) {
+            Session::addMessageAfterRedirect(
+                sprintf(__('This change (#%d) is already linked to this sprint.', 'sprint'), $changeId),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        return parent::prepareInputForAdd($input);
     }
 
     public function post_addItem()

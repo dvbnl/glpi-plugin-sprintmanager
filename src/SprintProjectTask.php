@@ -5,6 +5,7 @@ namespace GlpiPlugin\Sprint;
 use CommonDBRelation;
 use CommonGLPI;
 use Html;
+use Session;
 use ProjectTask;
 use Dropdown;
 
@@ -34,8 +35,12 @@ class SprintProjectTask extends CommonDBRelation
     {
         if ($item instanceof ProjectTask) {
             $count = countElementsInTable(
-                self::getTable(),
-                ['projecttasks_id' => $item->getID()]
+                SprintItem::getTable(),
+                [
+                    'itemtype'                 => 'ProjectTask',
+                    'items_id'                 => $item->getID(),
+                    ['NOT' => ['plugin_sprint_sprints_id' => 0]],
+                ]
             );
             return self::createTabEntry(__('Sprints', 'sprint'), $count);
         }
@@ -182,8 +187,13 @@ class SprintProjectTask extends CommonDBRelation
             Backlog::showAddToBacklogButton('ProjectTask', $taskID);
         }
 
-        $link  = new self();
-        $links = $link->find(['projecttasks_id' => $taskID]);
+        // Source of truth is SprintItem — see SprintTicket::showForTicket.
+        $si    = new SprintItem();
+        $links = $si->find([
+            'itemtype' => 'ProjectTask',
+            'items_id' => $taskID,
+            ['NOT' => ['plugin_sprint_sprints_id' => 0]],
+        ]);
         $statuses = Sprint::getAllStatuses();
 
         echo "<div class='center'><table class='tab_cadre_fixe'>";
@@ -216,7 +226,7 @@ class SprintProjectTask extends CommonDBRelation
                 " - " . Html::convDateTime($sprint->fields['date_end']) . "</td>";
             if ($canedit) {
                 echo "<td class='center'>";
-                echo "<form method='post' action='" . static::getFormURL() .
+                echo "<form method='post' action='" . SprintItem::getFormURL() .
                     "' style='display:inline;'>";
                 echo Html::hidden('id', ['value' => $row['id']]);
                 echo Html::submit(__('Unlink', 'sprint'), [
@@ -231,6 +241,32 @@ class SprintProjectTask extends CommonDBRelation
         }
 
         echo "</table></div>";
+    }
+
+    public function prepareInputForAdd($input)
+    {
+        $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? 0);
+        $taskId   = (int)($input['projecttasks_id'] ?? 0);
+
+        if ($sprintId <= 0 || $taskId <= 0) {
+            Session::addMessageAfterRedirect(
+                __('Please select a sprint and a project task.', 'sprint'),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        if (SprintItem::isLinkedItemInSprint($sprintId, 'ProjectTask', $taskId)) {
+            Session::addMessageAfterRedirect(
+                sprintf(__('This project task (#%d) is already linked to this sprint.', 'sprint'), $taskId),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        return parent::prepareInputForAdd($input);
     }
 
     public function post_addItem()

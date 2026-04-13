@@ -34,9 +34,15 @@ class SprintTicket extends CommonDBRelation
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0): string
     {
         if ($item instanceof Ticket) {
+            // SprintItem is the source of truth for reverse-tab visibility;
+            // exclude backlog rows (sprint id 0).
             $count = countElementsInTable(
-                self::getTable(),
-                ['tickets_id' => $item->getID()]
+                SprintItem::getTable(),
+                [
+                    'itemtype'                 => 'Ticket',
+                    'items_id'                 => $item->getID(),
+                    ['NOT' => ['plugin_sprint_sprints_id' => 0]],
+                ]
             );
             return self::createTabEntry(__('Sprints', 'sprint'), $count);
         }
@@ -182,9 +188,16 @@ class SprintTicket extends CommonDBRelation
             Backlog::showAddToBacklogButton('Ticket', $ticketID);
         }
 
-        // List
-        $link  = new self();
-        $links = $link->find(['tickets_id' => $ticketID]);
+        // List — read directly from SprintItem (the source of truth).
+        // Covers items added either via the reverse tab (which creates both
+        // a SprintTicket row AND a SprintItem) and via the Sprint's own
+        // Items form (which only creates a SprintItem).
+        $si    = new SprintItem();
+        $links = $si->find([
+            'itemtype' => 'Ticket',
+            'items_id' => $ticketID,
+            ['NOT' => ['plugin_sprint_sprints_id' => 0]],
+        ]);
 
         echo "<div class='center'><table class='tab_cadre_fixe'>";
         echo "<tr class='tab_bg_2'>";
@@ -218,7 +231,7 @@ class SprintTicket extends CommonDBRelation
             echo "<td>" . Html::convDateTime($sprint->fields['date_end']) . "</td>";
             if ($canedit) {
                 echo "<td class='center'>";
-                echo "<form method='post' action='" . static::getFormURL() .
+                echo "<form method='post' action='" . SprintItem::getFormURL() .
                     "' style='display:inline;'>";
                 echo Html::hidden('id', ['value' => $row['id']]);
                 echo Html::submit(__('Unlink', 'sprint'), [
@@ -233,6 +246,32 @@ class SprintTicket extends CommonDBRelation
         }
 
         echo "</table></div>";
+    }
+
+    public function prepareInputForAdd($input)
+    {
+        $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? 0);
+        $ticketId = (int)($input['tickets_id'] ?? 0);
+
+        if ($sprintId <= 0 || $ticketId <= 0) {
+            Session::addMessageAfterRedirect(
+                __('Please select a sprint and a ticket.', 'sprint'),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        if (SprintItem::isLinkedItemInSprint($sprintId, 'Ticket', $ticketId)) {
+            Session::addMessageAfterRedirect(
+                sprintf(__('This ticket (#%d) is already linked to this sprint.', 'sprint'), $ticketId),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        return parent::prepareInputForAdd($input);
     }
 
     public function post_addItem()

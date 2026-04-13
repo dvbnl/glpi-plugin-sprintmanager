@@ -267,6 +267,8 @@ class SprintMeeting extends CommonDBTM
                     'status'         => $row['status'],
                     'users_id'       => (int)$row['users_id'],
                     'story_points'   => (int)$row['story_points'],
+                    'capacity'       => (int)($row['capacity'] ?? 0),
+                    'priority'       => (int)($row['priority'] ?? 3),
                     'note'           => $row['note'] ?? '',
                     'itemtype'       => $itemtype,
                     'project_name'   => $projectName,
@@ -285,17 +287,25 @@ class SprintMeeting extends CommonDBTM
             \Glpi\Application\View\TemplateRenderer::getInstance()->display(
                 '@sprint/sprintmeeting.form.html.twig',
                 [
-                    'item'            => $this,
-                    'params'          => $options,
-                    'meeting_types'   => self::getAllTypes(),
-                    'member_options'  => $memberOptions,
-                    'is_existing'     => $isExisting,
-                    'sprint_items'    => $sprintItemsData,
-                    'item_statuses'   => SprintItem::getAllStatuses(),
-                    'treated_items'   => $treatedItems,
-                    'backlog_url'     => \GlpiPlugin\Sprint\Backlog::getFormURL(),
-                    'meeting_url'     => static::getFormURLWithID($ID),
-                    'sprint_id'       => $sprintId,
+                    'item'              => $this,
+                    'params'            => $options,
+                    'meeting_types'     => self::getAllTypes(),
+                    'member_options'    => $memberOptions,
+                    'is_existing'       => $isExisting,
+                    'sprint_items'      => $sprintItemsData,
+                    'item_statuses'     => SprintItem::getAllStatuses(),
+                    'item_priorities'   => [
+                        1 => __('Very low'),
+                        2 => __('Low'),
+                        3 => __('Medium'),
+                        4 => __('High'),
+                        5 => __('Very high'),
+                    ],
+                    'capacity_choices'  => SprintMember::getCapacityChoices(),
+                    'treated_items'     => $treatedItems,
+                    'backlog_url'       => \GlpiPlugin\Sprint\Backlog::getFormURL(),
+                    'meeting_url'       => static::getFormURLWithID($ID),
+                    'sprint_id'         => $sprintId,
                 ]
             );
         } else {
@@ -498,10 +508,8 @@ class SprintMeeting extends CommonDBTM
                 if ($itemId <= 0) {
                     continue;
                 }
-                // Skip treated items — they are locked
-                if (!empty($fields['_treated'])) {
-                    continue;
-                }
+                // _treated is only a UX lock — still persist any submitted values
+                // so that ticking "treated" and editing fields in the same save works.
                 $update = ['id' => $itemId];
                 if (isset($fields['status'])) {
                     $update['status'] = $fields['status'];

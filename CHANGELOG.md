@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] - 2026-04-13
+
+### Added
+- **Meeting view — full-item Quick edit modal**: each sprint item row now has a pencil button that opens a Bootstrap modal to edit name, status, priority, owner, story points, capacity (%) and note in one place, save via AJAX, and stay on the meeting page. Capacity and right checks run exactly like a normal edit, and any validation errors (e.g. overallocation) are surfaced inline in the modal
+- **Meeting view — sortable columns**: clicking the "Treated", "Status" or "Owner" column headers in the meeting review table sorts the rows asc/desc, independently for the Fastlane and Regular sections
+- **Sprint dashboard — "In Review" stats card**: a new purple card between *In Progress* and *Blocked* shows the number of items currently in review, and the progress bar legend now includes the In Review percentage computed from the actual count
+- **Sprint Members tab — per-member status distribution**: the team members listing replaces the old *Linked Items* and *Comment* columns with a compact version of the dashboard stats bar — count pills per status (Done / In Progress / In Review / Blocked / To Do) plus a stacked mini progress bar — so you can see everyone's current sprint load at a glance
+
+### Changed
+- **Reverse *Sprints* tab on Tickets / Changes / Project Tasks** is now backed by `SprintItem` directly instead of the legacy `SprintTicket` / `SprintChange` / `SprintProjectTask` relation tables. Items added via the Sprint → Sprint Items form are now visible (previously only items added via the reverse tab showed up). Unlinking from the reverse tab purges the `SprintItem` row and cascades to any legacy relation row
+
+### Fixed
+- **Duplicate linked items**: the same Ticket / Change / Project Task can no longer be linked to a sprint twice. A real error message is shown (instead of silently creating a second row) whether the duplicate is attempted via the Sprint side, the reverse tab on the linked item, direct SprintItem edits, or the SprintItem update path. Manual items are unaffected
+- **Meeting save — note loss when ticking Treated**: adding a note and ticking the "Treated" checkbox in the same save previously dropped the note because `prepareInputForUpdate()` skipped any item row flagged as treated. The backend now always persists submitted values; the treated checkbox is purely a UX lock
+- **Quick edit modal — CSRF 403 on save**: GLPI 11 CSRF tokens are single-use, so reusing the meeting form's hidden token produced a 403 once it had already been consumed elsewhere on the page. The modal now fetches a fresh token from a new `ajax/csrftoken.php` helper endpoint before every save
+
 ## [1.0.4] - 2026-04-10
 
 ### Added
