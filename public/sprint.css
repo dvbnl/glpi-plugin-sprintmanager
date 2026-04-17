@@ -58,6 +58,12 @@
     padding: 16px 0;
 }
 
+/* Filtering must override GLPI row helper classes such as `tab_bg_1`,
+   which can otherwise keep table rows visible. */
+.sprint-row-hidden {
+    display: none !important;
+}
+
 /* Stats cards */
 .sprint-stats-row {
     display: flex;

@@ -64,6 +64,7 @@
         })
     ) }}
 
+    {% if can_reassign_scrum_master|default(true) %}
     {{ fields.dropdownField(
         'User',
         'users_id',
@@ -74,6 +75,17 @@
             'required': true,
         })
     ) }}
+    {% else %}
+    {% set scrum_master_name = member_options[item.fields['users_id']] is defined ? member_options[item.fields['users_id']] : item.fields['users_id'] %}
+    {{ fields.readOnlyField(
+        'users_id',
+        scrum_master_name,
+        __('Scrum Master', 'sprint'),
+        field_options|merge({
+            'helper': __('Only the current Scrum Master can reassign this role.', 'sprint'),
+        })
+    ) }}
+    {% endif %}
 
     {{ fields.textareaField(
         'goal',

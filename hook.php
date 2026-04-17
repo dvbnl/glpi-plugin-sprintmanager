@@ -459,6 +459,18 @@ function plugin_sprint_install(): bool
     // Install profile rights (grant Super-Admin full access)
     GlpiPlugin\Sprint\Profile::installRights();
 
+    // Register the nightly audit-log cleanup cron. Purges sprint-related
+    // glpi_logs rows older than SprintAudit::RETENTION_DAYS (14 days).
+    CronTask::Register(
+        'GlpiPlugin\Sprint\SprintAudit',
+        'AuditCleanup',
+        DAY_TIMESTAMP,
+        [
+            'comment' => 'Purge SprintManager audit log entries older than the retention window',
+            'mode'    => CronTask::MODE_INTERNAL,
+        ]
+    );
+
     $migration->executeMigration();
 
     return true;
@@ -495,6 +507,9 @@ function plugin_sprint_uninstall(): bool
             $DB->doQueryOrDie("DROP TABLE `{$table}`", $DB->error());
         }
     }
+
+    // Unregister cron task
+    CronTask::unregister('sprint');
 
     // Remove display preferences
     $pref = new DisplayPreference();

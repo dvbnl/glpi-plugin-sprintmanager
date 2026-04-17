@@ -58,7 +58,15 @@
     {% if is_existing and sprint_items is defined %}
     {% set fastlane_items = sprint_items|filter(si => si.is_fastlane) %}
     {% set regular_items  = sprint_items|filter(si => not si.is_fastlane) %}
-    {% set treated = treated_items is defined ? treated_items : [] %}
+
+    {% set status_bg = {
+        'todo':        '#6c757d',
+        'in_progress': '#0d6efd',
+        'review':      '#6f42c1',
+        'done':        '#198754',
+        'blocked':     '#dc3545',
+    } %}
+
     <tr><td colspan="4" style="padding:0;">
 
         {# === Fastlane section === #}
@@ -69,36 +77,63 @@
                 <span class="ms-2">{{ __('Fastlane', 'sprint') }}</span>
                 <span class="badge bg-warning text-dark ms-2">{{ fastlane_items|length }}</span>
             </div>
+            <div id="sprint-filter-fastlane" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
+                 data-target="sprint-review-fastlane" style="background:#f1f3f5;border-radius:6px;">
+                <div class="d-flex align-items-center gap-1 text-muted small">
+                    <i class="fas fa-filter"></i><span>{{ __('Filter', 'sprint') }}</span>
+                </div>
+                <input type="search" class="form-control form-control-sm sf-text" style="max-width:220px;"
+                       placeholder="{{ __('Search name...', 'sprint') }}"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();sprintFilterApply(this);}">
+                <select class="form-select form-select-sm sf-status" style="max-width:180px;">
+                    <option value="">{{ __('All statuses', 'sprint') }}</option>
+                    {% for key, label in item_statuses %}
+                    <option value="{{ key }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <select class="form-select form-select-sm sf-owner" style="max-width:200px;">
+                    <option value="">{{ __('All owners', 'sprint') }}</option>
+                    {% for uid, uname in member_options %}
+                    {% if uid > 0 %}
+                    <option value="{{ uid }}">{{ uname }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-secondary sf-reset"
+                        onclick="sprintFilterReset(this)">
+                    <i class="fas fa-times me-1"></i>{{ __('Reset', 'sprint') }}
+                </button>
+            </div>
             <div>
-                <table class="table table-striped table-hover mb-0 sprint-review-table">
+                <table class="table table-striped table-hover mb-0 sprint-review-table sprint-review-fastlane">
                     <thead class="table-light">
                         <tr>
-                            <th class="sprint-sortable" data-sort-type="treated" style="width:40px;cursor:pointer;">{{ __('Treated', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
                             <th style="width:40px;">{{ __('Type') }}</th>
-                            <th>{{ __('Name') }}</th>
+                            <th class="sprint-sortable" data-sort-type="name" style="cursor:pointer;" onclick="sprintSortClick(this)">{{ __('Name') }} <i class="fas fa-sort text-muted"></i></th>
                             <th>{{ __('Linked item', 'sprint') }}</th>
-                            <th class="sprint-sortable" data-sort-type="status" style="cursor:pointer;">{{ __('Status') }} <i class="fas fa-sort text-muted"></i></th>
-                            <th class="sprint-sortable" data-sort-type="owner" style="cursor:pointer;">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
-                            <th>{{ __('Note', 'sprint') }}</th>
+                            <th class="sprint-sortable" data-sort-type="status" style="cursor:pointer;" onclick="sprintSortClick(this)">{{ __('Status') }} <i class="fas fa-sort text-muted"></i></th>
+                            <th class="sprint-sortable" data-sort-type="owner" style="cursor:pointer;" onclick="sprintSortClick(this)">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
+                            <th style="min-width:220px;">{{ __('Note', 'sprint') }}</th>
                             <th style="width:80px;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for si in fastlane_items %}
-                        {% set is_treated = si.id in treated %}
-                        <tr class="sprint-review-row {{ is_treated ? 'sprint-treated' : '' }}"
+                        {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
+                        {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
+                        {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
+                        <tr class="sprint-review-row sprint-filterable-row"
                             data-item-id="{{ si.id }}"
                             data-item-name="{{ si.name }}"
                             data-item-status="{{ si.status }}"
+                            data-item-status-label="{{ status_label }}"
                             data-item-priority="{{ si.priority }}"
                             data-users-id="{{ si.users_id }}"
+                            data-owner-name="{{ owner_name }}"
                             data-story-points="{{ si.story_points }}"
                             data-capacity="{{ si.capacity }}"
+                            data-is-fastlane="1"
                             data-note="{{ si.note }}">
-                            <td class="text-center">
-                                <input type="checkbox" name="_treated_items[]" value="{{ si.id }}"
-                                       class="form-check-input sprint-treated-cb" {{ is_treated ? 'checked' : '' }}>
-                            </td>
                             <td class="text-center" style="white-space:nowrap;">
                                 {% if si.itemtype == 'Ticket' %}
                                     <i class="fas fa-ticket-alt" style="color:#0d6efd;" title="{{ __('Ticket') }}"></i>
@@ -116,24 +151,19 @@
                             </td>
                             <td>{{ si.linked_display|raw }}</td>
                             <td>
-                                <select name="_sprintitems[{{ si.id }}][status]" class="form-select form-select-sm sprint-review-field" style="width:auto;min-width:120px;" {{ is_treated ? 'disabled' : '' }}>
-                                    {% for key, label in item_statuses %}
-                                    <option value="{{ key }}" {{ si.status == key ? 'selected' : '' }}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
+                                <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
+                                    {{ status_label }}
+                                </span>
                             </td>
-                            <td>
-                                <select name="_sprintitems[{{ si.id }}][users_id]" class="form-select form-select-sm sprint-review-field" style="width:auto;min-width:140px;" {{ is_treated ? 'disabled' : '' }}>
-                                    {% for uid, uname in member_options %}
-                                    <option value="{{ uid }}" {{ si.users_id == uid ? 'selected' : '' }}>{{ uname }}</option>
-                                    {% endfor %}
-                                </select>
+                            <td class="sprint-review-owner">
+                                {% if owner_name != '' %}
+                                    <i class="fas fa-user text-muted me-1"></i>{{ owner_name }}
+                                {% else %}
+                                    <span class="text-muted fst-italic">{{ __('Unassigned', 'sprint') }}</span>
+                                {% endif %}
                             </td>
-                            <td>
-                                <input type="text" name="_sprintitems[{{ si.id }}][note]" value="{{ si.note }}"
-                                       class="form-control form-control-sm sprint-review-field"
-                                       placeholder="{{ __('Add note...', 'sprint') }}" style="min-width:180px;"
-                                       {{ is_treated ? 'disabled' : '' }}>
+                            <td class="sprint-review-note" style="max-width:360px;">
+                                <div class="sprint-note-display" style="white-space:pre-wrap;word-break:break-word;min-height:38px;max-height:120px;overflow:auto;padding:6px 8px;background:#f8f9fa;border:1px solid #e9ecef;border-radius:4px;font-size:0.88em;color:#495057;">{{ si.note }}</div>
                             </td>
                             <td class="text-center" style="white-space:nowrap;">
                                 <button type="button"
@@ -145,8 +175,7 @@
                                 <button type="button"
                                         class="btn btn-sm btn-outline-warning sprint-backlog-btn"
                                         title="{{ __('Back to backlog', 'sprint') }}"
-                                        data-backlog-id="{{ si.id }}"
-                                        {{ is_treated ? 'disabled' : '' }}>
+                                        data-backlog-id="{{ si.id }}">
                                     <i class="fas fa-undo"></i>
                                 </button>
                             </td>
@@ -165,37 +194,64 @@
                 <span class="ms-2">{{ __('Sprint Items Review', 'sprint') }}</span>
                 <span class="badge bg-secondary ms-2">{{ regular_items|length }}</span>
             </div>
+            {% if regular_items|length > 0 %}
+            <div id="sprint-filter-regular" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
+                 data-target="sprint-review-regular" style="background:#f1f3f5;border-radius:6px;">
+                <div class="d-flex align-items-center gap-1 text-muted small">
+                    <i class="fas fa-filter"></i><span>{{ __('Filter', 'sprint') }}</span>
+                </div>
+                <input type="search" class="form-control form-control-sm sf-text" style="max-width:220px;"
+                       placeholder="{{ __('Search name...', 'sprint') }}"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();sprintFilterApply('sprint-filter-regular','sprint-review-regular');}">
+                <select class="form-select form-select-sm sf-status" style="max-width:180px;">
+                    <option value="">{{ __('All statuses', 'sprint') }}</option>
+                    {% for key, label in item_statuses %}
+                    <option value="{{ key }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <select class="form-select form-select-sm sf-owner" style="max-width:200px;">
+                    <option value="">{{ __('All owners', 'sprint') }}</option>
+                    {% for uid, uname in member_options %}
+                    {% if uid > 0 %}
+                    <option value="{{ uid }}">{{ uname }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-secondary sf-reset"
+                        onclick="sprintFilterReset(this)">
+                    <i class="fas fa-times me-1"></i>{{ __('Reset', 'sprint') }}
+                </button>
+            </div>
             <div>
-                {% if regular_items|length > 0 %}
-                <table class="table table-striped table-hover mb-0 sprint-review-table">
+                <table class="table table-striped table-hover mb-0 sprint-review-table sprint-review-regular">
                     <thead class="table-light">
                         <tr>
-                            <th class="sprint-sortable" data-sort-type="treated" style="width:40px;cursor:pointer;">{{ __('Treated', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
                             <th style="width:40px;">{{ __('Type') }}</th>
-                            <th>{{ __('Name') }}</th>
+                            <th class="sprint-sortable" data-sort-type="name" style="cursor:pointer;" onclick="sprintSortClick(this)">{{ __('Name') }} <i class="fas fa-sort text-muted"></i></th>
                             <th>{{ __('Linked item', 'sprint') }}</th>
-                            <th class="sprint-sortable" data-sort-type="status" style="cursor:pointer;">{{ __('Status') }} <i class="fas fa-sort text-muted"></i></th>
-                            <th class="sprint-sortable" data-sort-type="owner" style="cursor:pointer;">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
-                            <th>{{ __('Note', 'sprint') }}</th>
+                            <th class="sprint-sortable" data-sort-type="status" style="cursor:pointer;" onclick="sprintSortClick(this)">{{ __('Status') }} <i class="fas fa-sort text-muted"></i></th>
+                            <th class="sprint-sortable" data-sort-type="owner" style="cursor:pointer;" onclick="sprintSortClick(this)">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
+                            <th style="min-width:220px;">{{ __('Note', 'sprint') }}</th>
                             <th style="width:80px;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for si in regular_items %}
-                        {% set is_treated = si.id in treated %}
-                        <tr class="sprint-review-row {{ is_treated ? 'sprint-treated' : '' }}"
+                        {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
+                        {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
+                        {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
+                        <tr class="sprint-review-row sprint-filterable-row"
                             data-item-id="{{ si.id }}"
                             data-item-name="{{ si.name }}"
                             data-item-status="{{ si.status }}"
+                            data-item-status-label="{{ status_label }}"
                             data-item-priority="{{ si.priority }}"
                             data-users-id="{{ si.users_id }}"
+                            data-owner-name="{{ owner_name }}"
                             data-story-points="{{ si.story_points }}"
                             data-capacity="{{ si.capacity }}"
+                            data-is-fastlane="0"
                             data-note="{{ si.note }}">
-                            <td class="text-center">
-                                <input type="checkbox" name="_treated_items[]" value="{{ si.id }}"
-                                       class="form-check-input sprint-treated-cb" {{ is_treated ? 'checked' : '' }}>
-                            </td>
                             <td class="text-center" style="white-space:nowrap;">
                                 {% if si.itemtype == 'Ticket' %}
                                     <i class="fas fa-ticket-alt" style="color:#0d6efd;" title="{{ __('Ticket') }}"></i>
@@ -210,24 +266,19 @@
                             <td><a href="{{ si.url }}">{{ si.name }}</a></td>
                             <td>{{ si.linked_display|raw }}</td>
                             <td>
-                                <select name="_sprintitems[{{ si.id }}][status]" class="form-select form-select-sm sprint-review-field" style="width:auto;min-width:120px;" {{ is_treated ? 'disabled' : '' }}>
-                                    {% for key, label in item_statuses %}
-                                    <option value="{{ key }}" {{ si.status == key ? 'selected' : '' }}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
+                                <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
+                                    {{ status_label }}
+                                </span>
                             </td>
-                            <td>
-                                <select name="_sprintitems[{{ si.id }}][users_id]" class="form-select form-select-sm sprint-review-field" style="width:auto;min-width:140px;" {{ is_treated ? 'disabled' : '' }}>
-                                    {% for uid, uname in member_options %}
-                                    <option value="{{ uid }}" {{ si.users_id == uid ? 'selected' : '' }}>{{ uname }}</option>
-                                    {% endfor %}
-                                </select>
+                            <td class="sprint-review-owner">
+                                {% if owner_name != '' %}
+                                    <i class="fas fa-user text-muted me-1"></i>{{ owner_name }}
+                                {% else %}
+                                    <span class="text-muted fst-italic">{{ __('Unassigned', 'sprint') }}</span>
+                                {% endif %}
                             </td>
-                            <td>
-                                <input type="text" name="_sprintitems[{{ si.id }}][note]" value="{{ si.note }}"
-                                       class="form-control form-control-sm sprint-review-field"
-                                       placeholder="{{ __('Add note...', 'sprint') }}" style="min-width:180px;"
-                                       {{ is_treated ? 'disabled' : '' }}>
+                            <td class="sprint-review-note" style="max-width:360px;">
+                                <div class="sprint-note-display" style="white-space:pre-wrap;word-break:break-word;min-height:38px;max-height:120px;overflow:auto;padding:6px 8px;background:#f8f9fa;border:1px solid #e9ecef;border-radius:4px;font-size:0.88em;color:#495057;">{{ si.note }}</div>
                             </td>
                             <td class="text-center" style="white-space:nowrap;">
                                 <button type="button"
@@ -239,8 +290,7 @@
                                 <button type="button"
                                         class="btn btn-sm btn-outline-warning sprint-backlog-btn"
                                         title="{{ __('Back to backlog', 'sprint') }}"
-                                        data-backlog-id="{{ si.id }}"
-                                        {{ is_treated ? 'disabled' : '' }}>
+                                        data-backlog-id="{{ si.id }}">
                                     <i class="fas fa-undo"></i>
                                 </button>
                             </td>
@@ -248,33 +298,24 @@
                         {% endfor %}
                     </tbody>
                 </table>
-
-                {% else %}
-                <div class="text-center text-muted py-3">
-                    <i class="fas fa-inbox" style="font-size:1.5em;"></i><br>
-                    {{ __('No items in this sprint', 'sprint') }}
-                </div>
-                {% endif %}
             </div>
+            {% else %}
+            <div class="text-center text-muted py-3">
+                <i class="fas fa-inbox" style="font-size:1.5em;"></i><br>
+                {{ __('No items in this sprint', 'sprint') }}
+            </div>
+            {% endif %}
         </div>
 
         <script>
         $(function() {
-            // Toggle treated state: grey out row + disable fields
-            $(document).on('change', '.sprint-treated-cb', function() {
-                var row = $(this).closest('tr');
-                var fields = row.find('.sprint-review-field');
-                var backlogBtn = row.find('.sprint-backlog-btn');
-                if (this.checked) {
-                    row.addClass('sprint-treated');
-                    fields.prop('disabled', true);
-                    backlogBtn.prop('disabled', true);
-                } else {
-                    row.removeClass('sprint-treated');
-                    fields.prop('disabled', false);
-                    backlogBtn.prop('disabled', false);
-                }
-            });
+            var statusColors = {
+                'todo':        '#6c757d',
+                'in_progress': '#0d6efd',
+                'review':      '#6f42c1',
+                'done':        '#198754',
+                'blocked':     '#dc3545'
+            };
 
             // Back to backlog: create a standalone form outside the parent meeting form and submit it
             $(document).on('click', '.sprint-backlog-btn', function() {
@@ -291,31 +332,20 @@
                 f.submit();
             });
 
-            // Before form submit: re-enable disabled fields so they get posted
-            $('form').on('submit', function() {
-                $(this).find('.sprint-treated .sprint-review-field').prop('disabled', false);
-                $(this).find('.sprint-treated').each(function() {
-                    var id = $(this).data('item-id');
-                    if (!$(this).find('input[name="_sprintitems[' + id + '][_treated]"]').length) {
-                        $(this).append('<input type="hidden" name="_sprintitems[' + id + '][_treated]" value="1">');
-                    }
-                });
-            });
-
             // === Quick-edit modal ===
-            // Move the modal out of the meeting <form> so nested forms don't break validation.
             var $modal = $('#sprint-quickedit-modal').detach().appendTo('body');
 
             $(document).on('click', '.sprint-quick-edit-btn', function() {
-                var $row     = $(this).closest('tr');
-                var itemId   = $row.data('item-id');
-                var itemName = $row.data('item-name') || '';
-                var status   = $row.data('item-status') || '';
-                var priority = $row.data('item-priority') || 3;
-                var usersId  = $row.data('users-id') || 0;
-                var points   = $row.data('story-points') || 0;
-                var capacity = $row.data('capacity') || 0;
-                var note     = $row.data('note') || '';
+                var $row       = $(this).closest('tr');
+                var itemId     = $row.data('item-id');
+                var itemName   = $row.data('item-name') || '';
+                var status     = $row.data('item-status') || '';
+                var priority   = $row.data('item-priority') || 3;
+                var usersId    = $row.data('users-id') || 0;
+                var points     = $row.data('story-points') || 0;
+                var capacity   = $row.data('capacity') || 0;
+                var note       = $row.data('note') || '';
+                var isFastlane = parseInt($row.data('is-fastlane'), 10) === 1;
 
                 $modal.find('.sprint-qe-title').text(itemName);
                 $modal.find('input[name=id]').val(itemId);
@@ -327,6 +357,10 @@
                 $modal.find('select[name=capacity]').val(String(capacity));
                 $modal.find('textarea[name=note]').val(note);
                 $modal.find('.sprint-qe-error').hide().text('');
+                $modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
+
+                var capacityLocked = {{ capacity_locked ? 'true' : 'false' }};
+                $modal.find('select[name=capacity]').prop('disabled', capacityLocked && !isFastlane);
 
                 var m = new bootstrap.Modal($modal[0]);
                 m.show();
@@ -340,17 +374,13 @@
                 $btn.prop('disabled', true);
                 $modal.find('.sprint-qe-error').hide().text('');
 
-                // GLPI 11 CSRF tokens are single-use — fetch a fresh one per save.
                 $.ajax({
                     url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
-                    type: 'GET',
-                    dataType: 'json',
-                    cache: false
+                    type: 'GET', dataType: 'json', cache: false
                 }).then(function(tokResp) {
                     return $.ajax({
                         url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/updateitemquick.php',
-                        type: 'POST',
-                        dataType: 'json',
+                        type: 'POST', dataType: 'json',
                         data: {
                             id:           id,
                             name:         $modal.find('input[name=name]').val(),
@@ -366,22 +396,39 @@
                 }).done(function(resp) {
                     if (resp && resp.success) {
                         var $row = $('tr.sprint-review-row[data-item-id="' + id + '"]');
-                        // Sync row data attributes so subsequent edits start from fresh values
+                        var statusSelect = $modal.find('select[name=status]');
+                        var statusLabel  = statusSelect.find('option:selected').text() || '';
+                        var ownerSelect  = $modal.find('select[name=users_id]');
+                        var ownerLabel   = ownerSelect.find('option:selected').text() || '';
+                        var statusColor  = statusColors[resp.status] || '#6c757d';
+
                         $row.attr('data-item-name', resp.name).data('item-name', resp.name);
                         $row.attr('data-item-status', resp.status).data('item-status', resp.status);
+                        $row.attr('data-item-status-label', statusLabel).data('item-status-label', statusLabel);
                         $row.attr('data-item-priority', resp.priority).data('item-priority', resp.priority);
                         $row.attr('data-users-id', resp.users_id).data('users-id', resp.users_id);
+                        $row.attr('data-owner-name', ownerLabel).data('owner-name', ownerLabel);
                         $row.attr('data-story-points', resp.story_points).data('story-points', resp.story_points);
                         $row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
                         $row.attr('data-note', resp.note).data('note', resp.note);
-                        // Sync inline controls so the meeting form posts the same values
-                        $row.find('select[name="_sprintitems[' + id + '][status]"]').val(String(resp.status));
-                        $row.find('select[name="_sprintitems[' + id + '][users_id]"]').val(String(resp.users_id));
-                        $row.find('input[name="_sprintitems[' + id + '][note]"]').val(resp.note);
-                        // Update the visible item name link if present
+
+                        $row.find('.sprint-review-status')
+                            .text(statusLabel)
+                            .css('background-color', statusColor);
+                        var $ownerCell = $row.find('.sprint-review-owner');
+                        if (parseInt(resp.users_id, 10) > 0 && ownerLabel) {
+                            $ownerCell.html('<i class="fas fa-user text-muted me-1"></i>' + $('<div>').text(ownerLabel).html());
+                        } else {
+                            $ownerCell.html('<span class="text-muted fst-italic">{{ __('Unassigned', 'sprint') }}</span>');
+                        }
+                        $row.find('.sprint-note-display').text(resp.note || '');
+
                         $row.find('td a').filter(function() {
                             return $(this).attr('href') && $(this).attr('href').indexOf('sprintitem.form.php') !== -1;
                         }).text(resp.name);
+
+                        if (window.SprintFilter) { window.SprintFilter.applyAll(); }
+
                         var m = $modal.data('bs-instance');
                         if (m) { m.hide(); }
                     } else {
@@ -392,51 +439,6 @@
                 }).always(function() {
                     $btn.prop('disabled', false);
                 });
-            });
-
-            // === Column sorting ===
-            var sortState = {}; // key: table+type → 'asc'|'desc'
-
-            function rowSortValue($row, type) {
-                if (type === 'treated') {
-                    return $row.find('.sprint-treated-cb').is(':checked') ? 1 : 0;
-                }
-                if (type === 'status') {
-                    var $sel = $row.find('select[name$="[status]"]');
-                    var opt = $sel.find('option:selected');
-                    return (opt.text() || $sel.val() || '').toLowerCase();
-                }
-                if (type === 'owner') {
-                    var $osel = $row.find('select[name$="[users_id]"]');
-                    var oopt = $osel.find('option:selected');
-                    return (oopt.text() || '').toLowerCase();
-                }
-                return '';
-            }
-
-            $(document).on('click', '.sprint-sortable', function() {
-                var $th = $(this);
-                var type = $th.data('sort-type');
-                var $table = $th.closest('table');
-                var $tbody = $table.find('tbody');
-                var tableId = $table.index('.sprint-review-table');
-                var key = tableId + ':' + type;
-                var dir = sortState[key] === 'asc' ? 'desc' : 'asc';
-                sortState[key] = dir;
-
-                // Reset icons in this table
-                $table.find('.sprint-sortable i').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort').addClass('text-muted');
-                $th.find('i').removeClass('fa-sort text-muted').addClass(dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
-
-                var rows = $tbody.find('tr.sprint-review-row').get();
-                rows.sort(function(a, b) {
-                    var av = rowSortValue($(a), type);
-                    var bv = rowSortValue($(b), type);
-                    if (av < bv) { return dir === 'asc' ? -1 : 1; }
-                    if (av > bv) { return dir === 'asc' ? 1 : -1; }
-                    return 0;
-                });
-                $.each(rows, function(i, row) { $tbody.append(row); });
             });
         });
         </script>
@@ -489,11 +491,11 @@
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="col-md-3 mb-3">
+                            <div class="col-md-3 mb-3 sprint-qe-story-points">
                                 <label class="form-label">{{ __('Story Points', 'sprint') }}</label>
                                 <input type="number" name="story_points" class="form-control" min="0" step="1" value="0">
                             </div>
-                            <div class="col-md-3 mb-3">
+                            <div class="col-md-3 mb-3 sprint-qe-capacity">
                                 <label class="form-label">{{ __('Capacity (%)', 'sprint') }}</label>
                                 <select name="capacity" class="form-select">
                                     {% for val, label in capacity_choices %}
@@ -505,7 +507,7 @@
 
                         <div class="mb-3">
                             <label class="form-label">{{ __('Note', 'sprint') }}</label>
-                            <textarea name="note" class="form-control" rows="3"></textarea>
+                            <textarea name="note" class="form-control" rows="8" style="min-height:180px;"></textarea>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -517,11 +519,6 @@
                 </div>
             </div>
         </div>
-
-        <style>
-        .sprint-treated td { opacity: 0.45; }
-        .sprint-treated td:first-child { opacity: 1; }
-        </style>
 
     </td></tr>
     {% endif %}

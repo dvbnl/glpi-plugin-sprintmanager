@@ -39,6 +39,22 @@ if (!$hasFullUpdate && !($hasOwnOnly && $isOwner)) {
 $update = ['id' => (int)$_POST['id']];
 
 $allowed = ['name', 'status', 'priority', 'users_id', 'story_points', 'capacity', 'note'];
+
+// If the plugin is configured to restrict capacity edits to the sprint's
+// Scrum Master, drop the capacity field for everyone else. Fastlane items
+// are exempt — their capacity is allocated via SprintFastlaneMember and
+// must remain editable by every team member.
+$isFastlane = (int)($item->fields['is_fastlane'] ?? 0) === 1;
+if (
+    !$isFastlane
+    && GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
+) {
+    $sprintId = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
+    if (!GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId)) {
+        $allowed = array_values(array_diff($allowed, ['capacity']));
+    }
+}
+
 foreach ($allowed as $field) {
     if (array_key_exists($field, $_POST)) {
         $update[$field] = $_POST[$field];

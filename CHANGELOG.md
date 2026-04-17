@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.6] - 2026-04-17
+
+### Added
+- **Plugin settings page**: Setup > General > SprintManager, the wrench icon in the Plugins list, or the SprintManager menu → **Settings** — toggle "Only Scrum Master can edit capacity on sprint items". When enabled, only the sprint's Scrum Master may change the capacity % on regular sprint items; **fastlane capacity stays editable for every sprint member** (allocated via the Fastlane Members junction). Enforced server-side in `SprintItem::prepareInputForUpdate`, `ajax/updateitemquick.php`, and surfaced in the quick-edit modal (capacity select disabled for non-SMs)
+- **Scrum Master reassignment lock**: once a sprint has an assigned Scrum Master, only that user can reassign the role. Attempted changes by other members are reverted with an error message, and the sprint form renders the field read-only for non-SMs
+- **Quick-edit button everywhere**: Dashboard (global + personal), Sprint Items tab, and Meeting tab (fastlane + regular) all expose the same pencil button. Opens a modal to edit name, status, priority, owner, story points, capacity (%) and note in one place; saves via AJAX; row cells refresh in place without a page reload (every changed cell updates: name, status badge, priority, owner, story points, capacity)
+- **Shared filter + sort bar** on Dashboard (global + personal), Sprint Items tab, Meeting tab (fastlane + regular) and Audit log: text search + Status dropdown + Owner dropdown + Reset. Selecting a value auto-applies the filter — no separate Apply click needed. Clickable column headers toggle asc/desc sort
+- **Sprint Members tab — team dashboard**: per-member cards on top showing sprint progress % (done / total items, including fastlane items the member is allocated on), stacked capacity usage bar (regular + fastlane segments), fastlane-item count badge, and status distribution pills. A simplified table below handles role / capacity / actions edits
+- **Audit log tab** on each sprint: chronological view aggregating every change to the sprint, its items, members, meetings, and fastlane allocations. Shows timestamp, color-coded area badge, affected item with link, action verb ("Modified: Capacity (%)", "Created", "Purged", …), old → new diff, and the acting GLPI user. Uses GLPI's native `glpi_logs` table — no new tables written. SprintItem gains a full `rawSearchOptions()` map so every tracked field (status, priority, story_points, capacity, users_id, note, is_fastlane, itemtype) resolves to a proper field label in the log
+- **14-day audit retention**: entries older than 14 days are hidden from the audit view and purged by a nightly GLPI cron (`SprintAudit::AuditCleanup`, registered at install), plus an opportunistic prune on every audit-tab open. Prevents unbounded growth of `glpi_logs`
+- **"Configure" wrench icon** in the Plugins list via `$PLUGIN_HOOKS['config_page']` — clicks jump straight to the settings page
+
+### Changed
+- **Meeting tab — Status / Owner / Note are now read-only** in the review tables. All edits go through Quick Edit. Note renders as a wider, scrollable text block; the quick-edit modal's note textarea is now 8 rows / 180 px min-height
+- **Meeting tab — Treated column removed**: the "treated" checkbox and row-greying behavior are gone. Back-to-backlog stays available at all times
+- **Sprint Items list — full-edit link removed**: the pen-to-square button has been retired. Use Quick Edit for small changes; click the item name to open the full form
+- **Fastlane tab — Quick edit removed**: fastlane items edit via the full form (the Fastlane Members tab controls allocation)
+- **Fastlane items — no story points field**: story points on fastlane items don't count toward sprint velocity, so the input is hidden on the full form and in the quick-edit modal. `Sprint::getSprintStats()` no longer counts fastlane points toward total / done
+- **Plugin menu** exposes a "Settings" option so the config page is reachable without hunting through Setup > General
+- **Filter rendering** toggles a dedicated `.sprint-row-hidden` class (CSS `display: none !important`) and also sets inline `display: none`, overriding GLPI row-helper classes like `tab_bg_1` that otherwise force the row visible. Target-table lookup always walks the DOM from the filter bar's own subtree — immune to GLPI leaving stale duplicate tab HTML in the DOM after tab switches
+- **Filter event wiring** uses three redundant layers (capture-phase document listeners + jQuery bubbling delegation + per-bar `addEventListener` via a `MutationObserver`), so the filter responds regardless of how a given tab is rendered or when content is injected via AJAX
+- **Live refresh after Quick Edit** now updates every changed cell in place (name, status badge + color, priority, owner, story points, capacity). No browser reload needed; data attributes stay in sync for subsequent filter / sort operations
+- **Audit DB access** uses GLPI's DB criteria array (`SELECT`/`FROM`/`WHERE`/`ORDER`/`LIMIT`) instead of a raw SQL string, as required by GLPI 11. Acting user is parsed from `glpi_logs.user_name` (format `"name (id)"`) and resolved through `getUserName()` so renames reflect automatically
+
 ## [1.0.5] - 2026-04-13
 
 ### Added

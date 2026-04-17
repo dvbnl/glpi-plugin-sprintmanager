@@ -73,6 +73,16 @@ class Sprint extends CommonDBTM
             ],
         ];
 
+        // Plugin settings — also registered as a tab on GLPI's Config page,
+        // but exposed here so it's discoverable straight from the Sprint menu.
+        if (Session::haveRight('config', READ)) {
+            $menu['options']['config'] = [
+                'title' => __('Settings', 'sprint'),
+                'page'  => '/plugins/sprint/front/config.php',
+                'icon'  => 'fas fa-cog',
+            ];
+        }
+
         // Backlog is exposed as its own top-level helpdesk menu entry via
         // setup.php (menu_toadd), see Backlog::getMenuContent().
 
@@ -258,6 +268,7 @@ class Sprint extends CommonDBTM
         $this->addStandardTab('GlpiPlugin\Sprint\SprintItem', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintFastlane', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintMeeting', $ong, $options);
+        $this->addStandardTab('GlpiPlugin\Sprint\SprintAudit', $ong, $options);
         $this->addStandardTab('Log', $ong, $options);
 
         // Rename the default form tab from "Sprint" to "General"
@@ -291,14 +302,28 @@ class Sprint extends CommonDBTM
             if (!$isNew && $this->getID()) {
                 $memberOptions = SprintMember::getSprintMemberOptions($this->getID());
             }
+
+            // Once a sprint has a Scrum Master, only that user can reassign
+            // the role. Render the field read-only for everyone else.
+            $currentMaster        = (int)($this->fields['users_id'] ?? 0);
+            $canReassignScrumMaster = $isNew
+                || $currentMaster === 0
+                || $currentMaster === (int)Session::getLoginUserID();
+
+            // Pre-populate options so the read-only label has a user name.
+            if ($currentMaster > 0 && !isset($memberOptions[$currentMaster])) {
+                $memberOptions[$currentMaster] = getUserName($currentMaster);
+            }
+
             \Glpi\Application\View\TemplateRenderer::getInstance()->display(
                 '@sprint/sprint.form.html.twig',
                 [
-                    'item'           => $this,
-                    'params'         => $options,
-                    'statuses'       => self::getAllStatuses(),
-                    'is_new'         => $isNew,
-                    'member_options' => $memberOptions,
+                    'item'                     => $this,
+                    'params'                   => $options,
+                    'statuses'                 => self::getAllStatuses(),
+                    'is_new'                   => $isNew,
+                    'member_options'           => $memberOptions,
+                    'can_reassign_scrum_master' => $canReassignScrumMaster,
                 ]
             );
         } else {
@@ -522,6 +547,38 @@ class Sprint extends CommonDBTM
     }
 
     /**
+     * Validate input before updating
+     *
+     * Once a sprint has a Scrum Master assigned, only that person may
+     * reassign the role. This prevents other members from silently
+     * transferring the role during normal sprint edits.
+     */
+    public function prepareInputForUpdate($input)
+    {
+        if (array_key_exists('users_id', $input)) {
+            $currentMaster = (int)($this->fields['users_id'] ?? 0);
+            $newMaster     = (int)$input['users_id'];
+            $actor         = (int)Session::getLoginUserID();
+
+            if (
+                $currentMaster > 0
+                && $newMaster !== $currentMaster
+                && $actor !== $currentMaster
+            ) {
+                Session::addMessageAfterRedirect(
+                    __('Only the current Scrum Master can reassign this role.', 'sprint'),
+                    false,
+                    ERROR
+                );
+                // Preserve the existing value instead of rejecting the whole
+                // update — other fields in the submission still go through.
+                $input['users_id'] = $currentMaster;
+            }
+        }
+        return parent::prepareInputForUpdate($input);
+    }
+
+    /**
      * Actions done after adding an item
      */
     public function post_addItem(): void
@@ -579,7 +636,12 @@ class Sprint extends CommonDBTM
 
         $stats['total_items'] = count($items);
         foreach ($items as $row) {
-            $stats['total_points'] += (int)$row['story_points'];
+            // Fastlane items don't contribute to sprint velocity — their
+            // story points are ignored in total/done counts.
+            $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
+            if (!$isFastlane) {
+                $stats['total_points'] += (int)$row['story_points'];
+            }
             switch ($row['status']) {
                 case SprintItem::STATUS_TODO:
                     $stats['todo_items']++;
@@ -589,7 +651,9 @@ class Sprint extends CommonDBTM
                     break;
                 case SprintItem::STATUS_DONE:
                     $stats['done_items']++;
-                    $stats['done_points'] += (int)$row['story_points'];
+                    if (!$isFastlane) {
+                        $stats['done_points'] += (int)$row['story_points'];
+                    }
                     break;
                 case SprintItem::STATUS_BLOCKED:
                     $stats['blocked_items']++;

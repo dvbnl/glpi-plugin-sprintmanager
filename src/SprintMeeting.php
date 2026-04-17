@@ -306,6 +306,8 @@ class SprintMeeting extends CommonDBTM
                     'backlog_url'       => \GlpiPlugin\Sprint\Backlog::getFormURL(),
                     'meeting_url'       => static::getFormURLWithID($ID),
                     'sprint_id'         => $sprintId,
+                    'capacity_locked'   => \GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
+                        && !\GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId),
                 ]
             );
         } else {

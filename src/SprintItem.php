@@ -122,6 +122,79 @@ class SprintItem extends CommonDBTM
         return _n('Sprint Item', 'Sprint Items', $nb, 'sprint');
     }
 
+    /**
+     * Declare search options for every field we want the history tracker
+     * to label. GLPI's `CommonDBTM::post_updateItem()` writes one log
+     * row per changed field, and looks up the field label via search
+     * option id — fields without an entry here end up with `id_search_option = 0`
+     * and no label, which is why capacity / story_points / status changes
+     * weren't visible on the audit tab.
+     */
+    public function rawSearchOptions(): array
+    {
+        $tab = parent::rawSearchOptions();
+
+        $tab[] = [
+            'id'       => 3,
+            'table'    => $this->getTable(),
+            'field'    => 'status',
+            'name'     => __('Status'),
+            'datatype' => 'string',
+        ];
+        $tab[] = [
+            'id'       => 4,
+            'table'    => $this->getTable(),
+            'field'    => 'priority',
+            'name'     => __('Priority'),
+            'datatype' => 'integer',
+        ];
+        $tab[] = [
+            'id'       => 5,
+            'table'    => $this->getTable(),
+            'field'    => 'story_points',
+            'name'     => __('Story Points', 'sprint'),
+            'datatype' => 'integer',
+        ];
+        $tab[] = [
+            'id'       => 6,
+            'table'    => $this->getTable(),
+            'field'    => 'capacity',
+            'name'     => __('Capacity (%)', 'sprint'),
+            'datatype' => 'integer',
+        ];
+        $tab[] = [
+            'id'       => 7,
+            'table'    => 'glpi_users',
+            'field'    => 'name',
+            'linkfield' => 'users_id',
+            'name'     => __('Owner', 'sprint'),
+            'datatype' => 'dropdown',
+        ];
+        $tab[] = [
+            'id'       => 8,
+            'table'    => $this->getTable(),
+            'field'    => 'note',
+            'name'     => __('Note', 'sprint'),
+            'datatype' => 'text',
+        ];
+        $tab[] = [
+            'id'       => 9,
+            'table'    => $this->getTable(),
+            'field'    => 'is_fastlane',
+            'name'     => __('Is Fastlane', 'sprint'),
+            'datatype' => 'bool',
+        ];
+        $tab[] = [
+            'id'       => 10,
+            'table'    => $this->getTable(),
+            'field'    => 'itemtype',
+            'name'     => __('Linked item type', 'sprint'),
+            'datatype' => 'string',
+        ];
+
+        return $tab;
+    }
+
     public static function getIcon(): string
     {
         return 'fas fa-clipboard-list';
@@ -374,15 +447,23 @@ class SprintItem extends CommonDBTM
         ];
 
         echo "<div class='center'>";
-        echo "<table class='tab_cadre_fixe'>";
+
+        // Filter bar for the items list (handled by window.SprintFilter).
+        self::renderFilterBar('sprint-items-list-table', [
+            'statuses' => $statuses,
+            'owners'   => SprintMember::getSprintMemberOptions($ID),
+        ]);
+
+        echo "<table class='tab_cadre_fixe sprint-items-list-table'>";
         echo "<tr class='tab_bg_2'>";
-        echo "<th>" . __('Name') . "</th>";
+        $sc = self::sortClickAttr('sprint-items-list-table');
+        echo "<th class='sprint-sortable' data-sort-type='name' style='cursor:pointer;' {$sc}>" . __('Name') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
-        echo "<th>" . __('Status') . "</th>";
-        echo "<th>" . __('Priority') . "</th>";
-        echo "<th>" . __('Story Points', 'sprint') . "</th>";
-        echo "<th>" . __('Capacity (%)', 'sprint') . "</th>";
-        echo "<th>" . __('Owner', 'sprint') . "</th>";
+        echo "<th class='sprint-sortable' data-sort-type='status' style='cursor:pointer;' {$sc}>" . __('Status') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='priority' style='cursor:pointer;' {$sc}>" . __('Priority') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='story_points' style='cursor:pointer;' {$sc}>" . __('Story Points', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='capacity' style='cursor:pointer;' {$sc}>" . __('Capacity (%)', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='owner' style='cursor:pointer;' {$sc}>" . __('Owner', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
         if ($canedit) {
             echo "<th>" . __('Actions') . "</th>";
         }
@@ -396,6 +477,8 @@ class SprintItem extends CommonDBTM
 
         foreach ($items as $row) {
             $statusClass = 'sprint-status-' . str_replace('_', '-', $row['status']);
+            $statusLabel = $statuses[$row['status']] ?? $row['status'];
+            $ownerName   = ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : '';
 
             // Build linked item display
             $linkedDisplay = '<span style="color:#ccc;">-</span>';
@@ -405,16 +488,18 @@ class SprintItem extends CommonDBTM
                 $linkedDisplay = $tmpItem->getLinkedItemDisplay();
             }
 
-            echo "<tr class='tab_bg_1'>";
-            echo "<td><a href='" . static::getFormURLWithID($row['id']) . "'>" .
+            $dataAttrs = self::buildRowDataAttrs($row, $statusLabel, $ownerName);
+
+            echo "<tr class='tab_bg_1 sprint-row sprint-filterable-row' {$dataAttrs}>";
+            echo "<td class='sprint-cell-name'><a href='" . static::getFormURLWithID($row['id']) . "'>" .
                 htmlescape($row['name']) . "</a></td>";
             echo "<td>" . $linkedDisplay . "</td>";
-            echo "<td><span class='sprint-badge {$statusClass}'>" .
-                ($statuses[$row['status']] ?? $row['status']) . "</span></td>";
-            echo "<td>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
-            echo "<td class='center'>" . (int)$row['story_points'] . "</td>";
-            echo "<td class='center'>" . (int)($row['capacity'] ?? 0) . "%</td>";
-            echo "<td>" . (((int)$row['users_id'] > 0) ? getUserName($row['users_id']) :
+            echo "<td class='sprint-cell-status'><span class='sprint-badge {$statusClass}'>" .
+                $statusLabel . "</span></td>";
+            echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
+            echo "<td class='center sprint-cell-story-points'>" . (int)$row['story_points'] . "</td>";
+            echo "<td class='center sprint-cell-capacity'>" . (int)($row['capacity'] ?? 0) . "%</td>";
+            echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? getUserName($row['users_id']) :
                 '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
             if ($canedit) {
                 $isOwn = (int)$row['users_id'] === (int)Session::getLoginUserID();
@@ -424,9 +509,12 @@ class SprintItem extends CommonDBTM
 
                 echo "<td class='center' style='white-space:nowrap;'>";
                 if ($canEditRow) {
-                    echo "<a href='" . static::getFormURLWithID($row['id']) .
-                        "' class='btn btn-sm btn-outline-primary' title='" . __('Edit') . "'>" .
-                        "<i class='fas fa-edit'></i></a> ";
+                    // Quick-edit covers everything that used to live on the
+                    // full item form — the explicit "Edit" link was redundant
+                    // and has been removed.
+                    echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-quick-edit-btn me-1' "
+                        . "title='" . __('Quick edit', 'sprint') . "' data-item-id='" . (int)$row['id'] . "'>"
+                        . "<i class='fas fa-pen'></i></button> ";
                     // Back to backlog button
                     echo "<form method='post' action='" . Backlog::getFormURL() . "' style='display:inline;'>";
                     echo Html::hidden('id', ['value' => $row['id']]);
@@ -453,6 +541,357 @@ class SprintItem extends CommonDBTM
         }
 
         echo "</table></div>";
+
+        if ($canedit) {
+            self::renderQuickEditUI($ID);
+        }
+    }
+
+    /**
+     * Build a set of data-* attributes describing a sprint item row. Used
+     * by the quick-edit JS to pre-populate the modal without an extra
+     * round-trip.
+     */
+    private static function buildRowDataAttrs(array $row, string $statusLabel, string $ownerName): string
+    {
+        $attrs = [
+            'data-item-id'           => (int)$row['id'],
+            'data-item-name'         => (string)$row['name'],
+            'data-item-status'       => (string)$row['status'],
+            'data-item-status-label' => $statusLabel,
+            'data-item-priority'     => (int)($row['priority'] ?? 3),
+            'data-users-id'          => (int)($row['users_id'] ?? 0),
+            'data-owner-name'        => $ownerName,
+            'data-story-points'      => (int)($row['story_points'] ?? 0),
+            'data-capacity'          => (int)($row['capacity'] ?? 0),
+            'data-is-fastlane'       => (int)($row['is_fastlane'] ?? 0),
+            'data-note'              => (string)($row['note'] ?? ''),
+        ];
+
+        $parts = [];
+        foreach ($attrs as $k => $v) {
+            $parts[] = $k . '="' . htmlescape((string)$v) . '"';
+        }
+        return implode(' ', $parts);
+    }
+
+    /**
+     * Render a shared filter bar for any sprint item table: text search
+     * + single-select status + single-select owner + reset. Emits an
+     * inline <script> right after the markup so the wiring happens
+     * immediately, regardless of tab-load timing or jQuery delegation.
+     *
+     * @param string $tableClass  CSS class on the target <table>.
+     * @param array<string,mixed> $options {
+     *     statuses: [key=>label] for the status dropdown,
+     *     owners:   [uid=>name]  for the owner dropdown,
+     * }
+     */
+    public static function renderFilterBar(string $tableClass, array $options): void
+    {
+        $statuses = $options['statuses'] ?? [];
+        $owners   = $options['owners']   ?? [];
+        $barId    = 'sprint-filter-' . mt_rand();
+        $tc       = htmlescape($tableClass);
+
+        echo "<div id='{$barId}' class='sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2' "
+            . "data-target='{$tc}' style='background:#f1f3f5;border-radius:6px;'>";
+        echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
+            . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
+
+        // Handlers pass `this` so the JS walks up to the enclosing
+        // `.sprint-filter-bar` and reads `data-target`. Robust against
+        // id regeneration, duplicates, and any kind of DOM reshuffling.
+        echo "<input type='search' class='form-control form-control-sm sf-text' "
+            . "style='max-width:220px;' placeholder='" . __('Search name...', 'sprint') . "' "
+            . "oninput=\"sprintFilterApply(this)\" "
+            . "onkeydown=\"if(event.key==='Enter'){event.preventDefault();sprintFilterApply(this);}\">";
+
+        if (!empty($statuses)) {
+            echo "<select class='form-select form-select-sm sf-status' style='max-width:180px;' "
+                . "onchange=\"sprintFilterApply(this)\">";
+            echo "<option value=''>" . __('All statuses', 'sprint') . "</option>";
+            foreach ($statuses as $key => $label) {
+                echo "<option value='" . htmlescape((string)$key) . "'>" . htmlescape((string)$label) . "</option>";
+            }
+            echo "</select>";
+        }
+
+        if (!empty($owners)) {
+            echo "<select class='form-select form-select-sm sf-owner' style='max-width:200px;' "
+                . "onchange=\"sprintFilterApply(this)\">";
+            echo "<option value=''>" . __('All owners', 'sprint') . "</option>";
+            foreach ($owners as $uidOpt => $name) {
+                if ((int)$uidOpt === 0) continue;
+                echo "<option value='" . (int)$uidOpt . "'>" . htmlescape((string)$name) . "</option>";
+            }
+            echo "</select>";
+        }
+
+        echo "<button type='button' class='btn btn-sm btn-outline-secondary sf-reset' "
+            . "onclick=\"sprintFilterReset(this)\">"
+            . "<i class='fas fa-times me-1'></i>" . __('Reset', 'sprint') . "</button>";
+        echo "</div>";
+    }
+
+    /**
+     * Build an `onclick` attribute fragment for a sortable <th>.
+     * The JS walks from the <th> to the enclosing <table>, so no table
+     * class argument is needed.
+     */
+    public static function sortClickAttr(string $tableClass = ''): string
+    {
+        return 'onclick="sprintSortClick(this)"';
+    }
+
+    /**
+     * Render the shared quick-edit modal + JS bindings for sprint item
+     * rows. Designed to be called on any page that lists sprint items
+     * with the `.sprint-quick-edit-btn` button and rows carrying the data
+     * attributes produced by {@see buildRowDataAttrs()}.
+     */
+    public static function renderQuickEditUI(int $sprintId = 0): void
+    {
+        $statuses       = self::getAllStatuses();
+        $priorities     = [
+            1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
+            4 => __('High'), 5 => __('Very high'),
+        ];
+        $capacityChoices = SprintMember::getCapacityChoices();
+        $memberOptions  = $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [];
+
+        // Capacity lock: if the plugin is configured to restrict capacity
+        // edits to the Scrum Master, disable the capacity control in the
+        // modal for other users (regular items only — fastlane always free).
+        $capacityLocked = Config::isScrumMasterOnlyCapacity()
+            && $sprintId > 0
+            && !Config::isCurrentUserScrumMaster($sprintId);
+        $capacityLockedJs = $capacityLocked ? 'true' : 'false';
+
+        $cfgRoot = 'CFG_GLPI.root_doc';
+
+        echo "<div class='modal fade' id='sprint-quickedit-modal' tabindex='-1' aria-hidden='true'>";
+        echo "<div class='modal-dialog modal-dialog-centered modal-lg'>";
+        echo "<div class='modal-content'>";
+        echo "<div class='modal-header'>";
+        echo "<h5 class='modal-title'><i class='fas fa-pen me-1'></i>" .
+            __('Quick edit', 'sprint') . ": <span class='sprint-qe-title'></span></h5>";
+        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
+        echo "</div>";
+        echo "<div class='modal-body'>";
+        echo "<div class='alert alert-danger sprint-qe-error' style='display:none;white-space:pre-line;'></div>";
+        echo "<input type='hidden' name='id' value=''>";
+
+        echo "<div class='mb-3'><label class='form-label'>" . __('Name') . "</label>";
+        echo "<input type='text' name='name' class='form-control' value=''></div>";
+
+        echo "<div class='row g-3'>";
+        echo "<div class='col-md-6 mb-3'><label class='form-label'>" . __('Status') . "</label>";
+        echo "<select name='status' class='form-select'>";
+        foreach ($statuses as $k => $v) {
+            echo "<option value='" . htmlescape($k) . "'>" . htmlescape($v) . "</option>";
+        }
+        echo "</select></div>";
+        echo "<div class='col-md-6 mb-3'><label class='form-label'>" . __('Priority') . "</label>";
+        echo "<select name='priority' class='form-select'>";
+        foreach ($priorities as $k => $v) {
+            echo "<option value='{$k}'>" . htmlescape($v) . "</option>";
+        }
+        echo "</select></div>";
+        echo "</div>";
+
+        echo "<div class='row g-3'>";
+        echo "<div class='col-md-6 mb-3'><label class='form-label'>" . __('Owner', 'sprint') . "</label>";
+        echo "<select name='users_id' class='form-select'>";
+        foreach ($memberOptions as $uid => $uname) {
+            echo "<option value='" . (int)$uid . "'>" . htmlescape((string)$uname) . "</option>";
+        }
+        echo "</select></div>";
+        echo "<div class='col-md-3 mb-3 sprint-qe-story-points'><label class='form-label'>" . __('Story Points', 'sprint') . "</label>";
+        echo "<input type='number' name='story_points' class='form-control' min='0' step='1' value='0'></div>";
+        echo "<div class='col-md-3 mb-3 sprint-qe-capacity'><label class='form-label'>" . __('Capacity (%)', 'sprint') . "</label>";
+        echo "<select name='capacity' class='form-select'>";
+        foreach ($capacityChoices as $val => $label) {
+            echo "<option value='" . (int)$val . "'>" . htmlescape((string)$label) . "</option>";
+        }
+        echo "</select></div>";
+        echo "</div>";
+
+        echo "<div class='mb-3'><label class='form-label'>" . __('Note', 'sprint') . "</label>";
+        echo "<textarea name='note' class='form-control' rows='8' style='min-height:180px;'></textarea></div>";
+
+        echo "</div>";
+        echo "<div class='modal-footer'>";
+        echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __('Cancel') . "</button>";
+        echo "<button type='button' class='btn btn-primary sprint-qe-save'><i class='fas fa-save me-1'></i> " .
+            __('Save') . "</button>";
+        echo "</div>";
+        echo "</div></div></div>";
+
+        $labelUnassigned = addslashes(__('Unassigned', 'sprint'));
+
+        echo <<<JS
+<script>
+$(function() {
+    if (window.__sprintQuickEditBound) { return; }
+    window.__sprintQuickEditBound = true;
+
+    var statusColors = {
+        'todo': '#6c757d',
+        'in_progress': '#0d6efd',
+        'review': '#6f42c1',
+        'done': '#198754',
+        'blocked': '#dc3545'
+    };
+
+    var \$modal = \$('#sprint-quickedit-modal');
+
+    \$(document).on('click', '.sprint-quick-edit-btn', function() {
+        var \$row       = \$(this).closest('tr');
+        var itemId     = \$row.data('item-id');
+        var itemName   = \$row.data('item-name') || '';
+        var status     = \$row.data('item-status') || '';
+        var priority   = \$row.data('item-priority') || 3;
+        var usersId    = \$row.data('users-id') || 0;
+        var points     = \$row.data('story-points') || 0;
+        var capacity   = \$row.data('capacity') || 0;
+        var note       = \$row.data('note') || '';
+        var isFastlane = parseInt(\$row.data('is-fastlane'), 10) === 1;
+
+        \$modal.find('.sprint-qe-title').text(itemName);
+        \$modal.find('input[name=id]').val(itemId);
+        \$modal.find('input[name=name]').val(itemName);
+        \$modal.find('select[name=status]').val(String(status));
+        \$modal.find('select[name=priority]').val(String(priority));
+        \$modal.find('select[name=users_id]').val(String(usersId));
+        \$modal.find('input[name=story_points]').val(points);
+        \$modal.find('select[name=capacity]').val(String(capacity));
+        \$modal.find('textarea[name=note]').val(note);
+        \$modal.find('.sprint-qe-error').hide().text('');
+        \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
+
+        // Lock capacity for non-scrum-master users when the plugin setting
+        // requires it — fastlane items stay editable.
+        var capacityLocked = {$capacityLockedJs};
+        \$modal.find('select[name=capacity]').prop('disabled', capacityLocked && !isFastlane);
+
+        var m = new bootstrap.Modal(\$modal[0]);
+        m.show();
+        \$modal.data('bs-instance', m);
+    });
+
+    \$(document).on('click', '.sprint-qe-save', function() {
+        var \$btn = \$(this);
+        var id = \$modal.find('input[name=id]').val();
+        \$btn.prop('disabled', true);
+        \$modal.find('.sprint-qe-error').hide().text('');
+
+        \$.ajax({
+            url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
+            type: 'GET', dataType: 'json', cache: false
+        }).then(function(tokResp) {
+            return \$.ajax({
+                url: {$cfgRoot} + '/plugins/sprint/ajax/updateitemquick.php',
+                type: 'POST', dataType: 'json',
+                data: {
+                    id: id,
+                    name: \$modal.find('input[name=name]').val(),
+                    status: \$modal.find('select[name=status]').val(),
+                    priority: \$modal.find('select[name=priority]').val(),
+                    users_id: \$modal.find('select[name=users_id]').val(),
+                    story_points: \$modal.find('input[name=story_points]').val(),
+                    capacity: \$modal.find('select[name=capacity]').val(),
+                    note: \$modal.find('textarea[name=note]').val(),
+                    _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                var \$row = \$('tr.sprint-row[data-item-id="' + id + '"], tr.sprint-review-row[data-item-id="' + id + '"]');
+                var statusSelect   = \$modal.find('select[name=status]');
+                var statusLabel    = statusSelect.find('option:selected').text() || '';
+                var ownerSelect    = \$modal.find('select[name=users_id]');
+                var ownerLabel     = ownerSelect.find('option:selected').text() || '';
+                var prioritySelect = \$modal.find('select[name=priority]');
+                var priorityLabel  = prioritySelect.find('option:selected').text() || '';
+                var capacitySelect = \$modal.find('select[name=capacity]');
+                var capacityLabel  = capacitySelect.find('option:selected').text() || (resp.capacity + '%');
+                var statusColor    = statusColors[resp.status] || '#6c757d';
+                var ownerId        = parseInt(resp.users_id, 10) || 0;
+
+                // Sync row data attributes so filters/sorts and subsequent
+                // edits all start from fresh values.
+                \$row.attr('data-item-name', resp.name).data('item-name', resp.name);
+                \$row.attr('data-item-status', resp.status).data('item-status', resp.status);
+                \$row.attr('data-item-status-label', statusLabel).data('item-status-label', statusLabel);
+                \$row.attr('data-item-priority', resp.priority).data('item-priority', resp.priority);
+                \$row.attr('data-users-id', resp.users_id).data('users-id', resp.users_id);
+                \$row.attr('data-owner-name', ownerLabel).data('owner-name', ownerLabel);
+                \$row.attr('data-story-points', resp.story_points).data('story-points', resp.story_points);
+                \$row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
+                \$row.attr('data-note', resp.note).data('note', resp.note);
+
+                // === Refresh visible cells on PHP-rendered list/dashboard rows ===
+                var \$listRow = \$row.filter('.sprint-row');
+                if (\$listRow.length) {
+                    // Name link text
+                    \$listRow.find('.sprint-cell-name a').text(resp.name);
+                    // Status badge
+                    \$listRow.find('.sprint-cell-status .sprint-badge')
+                        .removeClass(function(i,c){ return (c.match(/sprint-status-\\S+/g) || []).join(' '); })
+                        .addClass('sprint-status-' + String(resp.status).replace(/_/g, '-'))
+                        .text(statusLabel)
+                        .css('background-color', statusColor);
+                    // Priority label
+                    \$listRow.find('.sprint-cell-priority').text(priorityLabel);
+                    // Owner name (or "Unassigned" placeholder)
+                    var \$ownerListCell = \$listRow.find('.sprint-cell-owner');
+                    if (\$ownerListCell.length) {
+                        if (ownerId > 0 && ownerLabel) {
+                            \$ownerListCell.text(ownerLabel);
+                        } else {
+                            \$ownerListCell.html('<span style="color:#999;">{$labelUnassigned}</span>');
+                        }
+                    }
+                    // Story points
+                    \$listRow.find('.sprint-cell-story-points').text(resp.story_points);
+                    // Capacity — retain "%" suffix
+                    \$listRow.find('.sprint-cell-capacity').text(resp.capacity + '%');
+                }
+
+                // === Refresh meeting-review read-only cells ===
+                \$row.find('.sprint-review-status')
+                    .text(statusLabel)
+                    .css('background-color', statusColor);
+                var \$ownerCell = \$row.find('.sprint-review-owner');
+                if (\$ownerCell.length) {
+                    if (ownerId > 0 && ownerLabel) {
+                        \$ownerCell.html('<i class="fas fa-user text-muted me-1"></i>' + \$('<div>').text(ownerLabel).html());
+                    } else {
+                        \$ownerCell.html('<span class="text-muted fst-italic">{$labelUnassigned}</span>');
+                    }
+                }
+                \$row.find('.sprint-note-display').text(resp.note || '');
+
+                // Keep the meeting name cell's link text in sync too.
+                \$row.find('td a').filter(function() {
+                    return \$(this).attr('href') && \$(this).attr('href').indexOf('sprintitem.form.php') !== -1;
+                }).text(resp.name);
+
+                var m = \$modal.data('bs-instance');
+                if (m) { m.hide(); }
+            } else {
+                \$modal.find('.sprint-qe-error').text(resp && resp.message ? resp.message : 'Save failed').show();
+            }
+        }).fail(function() {
+            \$modal.find('.sprint-qe-error').text('Network error').show();
+        }).always(function() {
+            \$btn.prop('disabled', false);
+        });
+    });
+});
+</script>
+JS;
     }
 
     /**
@@ -478,6 +917,23 @@ class SprintItem extends CommonDBTM
     {
         $input = self::sanitizeInput($input);
         $input = $this->resolveLinkedItem($input);
+
+        // Enforce plugin setting: only the sprint's Scrum Master may edit
+        // capacity on regular (non-fastlane) sprint items when the guard is
+        // enabled. Silently drop the field for others so validation of the
+        // rest of the update still goes through.
+        $isFastlane = (int)($this->fields['is_fastlane'] ?? 0) === 1;
+        if (
+            !$isFastlane
+            && array_key_exists('capacity', $input)
+            && Config::isScrumMasterOnlyCapacity()
+        ) {
+            $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? $input['plugin_sprint_sprints_id'] ?? 0);
+            if (!Config::isCurrentUserScrumMaster($sprintId)) {
+                unset($input['capacity']);
+            }
+        }
+
         if (!$this->validateCapacity($input, (int)($input['id'] ?? 0))) {
             return false;
         }
@@ -696,18 +1152,30 @@ class SprintItem extends CommonDBTM
         }
         echo "</td></tr>";
 
-        // Points + Priority
+        // Priority (+ Story Points for non-fastlane items only: story points
+        // on fastlane items don't count towards sprint velocity).
         echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Story Points', 'sprint') . "</td><td>";
-        Dropdown::showNumber('story_points', [
-            'value' => $this->fields['story_points'] ?? 0, 'min' => 0, 'max' => 100,
-        ]);
-        echo "</td><td>" . __('Priority') . "</td><td>";
-        Dropdown::showFromArray('priority', [
-            1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
-            4 => __('High'), 5 => __('Very high'),
-        ], ['value' => $this->fields['priority'] ?? 3]);
-        echo "</td></tr>";
+        if ($isFastlane) {
+            echo Html::hidden('story_points', ['value' => $this->fields['story_points'] ?? 0]);
+            echo "<td>" . __('Priority') . "</td><td colspan='3'>";
+            Dropdown::showFromArray('priority', [
+                1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
+                4 => __('High'), 5 => __('Very high'),
+            ], ['value' => $this->fields['priority'] ?? 3]);
+            echo "</td>";
+        } else {
+            echo "<td>" . __('Story Points', 'sprint') . "</td><td>";
+            Dropdown::showNumber('story_points', [
+                'value' => $this->fields['story_points'] ?? 0, 'min' => 0, 'max' => 100,
+            ]);
+            echo "</td><td>" . __('Priority') . "</td><td>";
+            Dropdown::showFromArray('priority', [
+                1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
+                4 => __('High'), 5 => __('Very high'),
+            ], ['value' => $this->fields['priority'] ?? 3]);
+            echo "</td>";
+        }
+        echo "</tr>";
 
         // Capacity + Owner — irrelevant for Fastlane items, where capacity
         // is distributed across multiple members via the Fastlane Members

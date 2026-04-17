@@ -190,6 +190,12 @@ class SprintMember extends CommonDBRelation
         // Per-member status distribution across sprint items
         $memberStatusCounts = self::getMemberStatusCounts($ID);
 
+        // === Dashboard section on top: per-member cards with sprint items
+        // status distribution (incl. fastlane), fastlane capacity indicator,
+        // and overall progress vs. allocated capacity.
+        self::renderMembersDashboard($ID, $members, $memberStatusCounts);
+
+        // === Simplified table below: role, capacity and actions only ===
         $roleIcons = [
             self::ROLE_SCRUM_MASTER  => 'fas fa-hat-wizard',
             self::ROLE_PRODUCT_OWNER => 'fas fa-briefcase',
@@ -201,19 +207,21 @@ class SprintMember extends CommonDBRelation
             self::ROLE_OTHER         => 'fas fa-user',
         ];
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center' style='margin-top:16px;'><table class='tab_cadre_fixe'>";
+        echo "<tr class='tab_bg_2'><th colspan='" . ($canedit ? 4 : 3) . "'>" .
+            "<i class='fas fa-user-cog' style='margin-right:6px;'></i>" .
+            __('Member settings', 'sprint') . "</th></tr>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('User') . "</th>";
         echo "<th>" . __('Role', 'sprint') . "</th>";
         echo "<th>" . __('Capacity', 'sprint') . "</th>";
-        echo "<th>" . __('Sprint Items Status', 'sprint') . "</th>";
         if ($canedit) {
             echo "<th>" . __('Actions') . "</th>";
         }
         echo "</tr>";
 
         if (count($members) === 0) {
-            $cols = $canedit ? 5 : 4;
+            $cols = $canedit ? 4 : 3;
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
                 __('No team members added', 'sprint') . "</td></tr>";
         }
@@ -227,7 +235,6 @@ class SprintMember extends CommonDBRelation
             echo "<td><i class='fas fa-user'></i> " . getUserName($userId) . "</td>";
             echo "<td><i class='{$icon}'></i> {$roleName}</td>";
             echo "<td class='center'>";
-            // Visual capacity bar
             $pct = (int)$row['capacity_percent'];
             $barColor = $pct >= 80 ? '#198754' : ($pct >= 50 ? '#ffc107' : '#dc3545');
             echo "<div style='display:flex;align-items:center;gap:8px;'>";
@@ -237,7 +244,6 @@ class SprintMember extends CommonDBRelation
             echo "<span>{$pct}%</span>";
             echo "</div>";
             echo "</td>";
-            echo "<td>" . self::renderStatusDistribution($memberStatusCounts[$userId] ?? []) . "</td>";
 
             if ($canedit) {
                 echo "<td class='center'>";
@@ -262,20 +268,139 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
+     * Render the top-of-tab dashboard view: one card per member showing
+     * their sprint items status distribution (regular + fastlane), their
+     * fastlane capacity usage, and overall progress as done-items % of
+     * their sprint workload.
+     *
+     * @param array<int,array<string,int>> $memberStatusCounts
+     */
+    private static function renderMembersDashboard(int $sprintId, array $members, array $memberStatusCounts): void
+    {
+        if (count($members) === 0) {
+            return;
+        }
+
+        $roles = self::getAllRoles();
+        $roleIcons = [
+            self::ROLE_SCRUM_MASTER  => 'fas fa-hat-wizard',
+            self::ROLE_PRODUCT_OWNER => 'fas fa-briefcase',
+            self::ROLE_DEVELOPER     => 'fas fa-code',
+            self::ROLE_TESTER        => 'fas fa-bug',
+            self::ROLE_DESIGNER      => 'fas fa-palette',
+            self::ROLE_DEVOPS        => 'fas fa-server',
+            self::ROLE_ANALYST       => 'fas fa-chart-bar',
+            self::ROLE_OTHER         => 'fas fa-user',
+        ];
+
+        echo "<div style='margin-bottom:16px;'>";
+        echo "<h4 style='margin:10px 0 12px;'><i class='fas fa-tachometer-alt me-2'></i>" .
+            __('Team dashboard', 'sprint') . "</h4>";
+        echo "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;'>";
+
+        $si = new SprintItem();
+        foreach ($members as $row) {
+            $userId   = (int)$row['users_id'];
+            $totalCap = (int)$row['capacity_percent'];
+            $roleName = $roles[$row['role']] ?? $row['role'];
+            $roleIcon = $roleIcons[$row['role']] ?? 'fas fa-user';
+
+            // Capacity usage (regular + fastlane)
+            $regularUsed = 0;
+            foreach ($si->find([
+                'plugin_sprint_sprints_id' => $sprintId,
+                'users_id'                 => $userId,
+                'is_fastlane'              => 0,
+            ]) as $r) {
+                $regularUsed += (int)($r['capacity'] ?? 0);
+            }
+            $fastlaneUsed = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
+            $usedCap      = $regularUsed + $fastlaneUsed;
+            $remaining    = max($totalCap - $usedCap, 0);
+            $capUsedPct   = $totalCap > 0 ? round(($usedCap / $totalCap) * 100) : 0;
+
+            // Status counts — include fastlane items the user is a member of
+            $counts = $memberStatusCounts[$userId] ?? [];
+            $total  = (int)($counts['total'] ?? 0);
+            $done   = (int)($counts[SprintItem::STATUS_DONE] ?? 0);
+            $progressPct = $total > 0 ? round(($done / $total) * 100) : 0;
+
+            // Fastlane item count for this user
+            $fastlaneItemCount = (int)($counts['fastlane_total'] ?? 0);
+
+            // Color strategy: progress green once done >= 80%, amber if 50+, red otherwise
+            $progressColor = $progressPct >= 80 ? '#198754' : ($progressPct >= 50 ? '#ffc107' : ($progressPct > 0 ? '#0d6efd' : '#adb5bd'));
+            $capBarColor   = $capUsedPct >= 100 ? '#dc3545' : ($capUsedPct >= 80 ? '#e67e22' : '#198754');
+
+            echo "<div style='border:1px solid #e9ecef;border-radius:10px;padding:14px 16px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.03);'>";
+
+            // Header
+            echo "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>";
+            echo "<i class='fas fa-user-circle' style='font-size:1.6em;color:#6c757d;'></i>";
+            echo "<div style='flex:1;'>";
+            echo "<div style='font-weight:700;'>" . htmlescape(getUserName($userId)) . "</div>";
+            echo "<div style='font-size:0.82em;color:#6c757d;'><i class='{$roleIcon}'></i> " . htmlescape($roleName) . "</div>";
+            echo "</div>";
+            if ($fastlaneItemCount > 0) {
+                echo "<span title='" . __('Fastlane items assigned', 'sprint') . "' "
+                    . "style='background:#fff3cd;color:#fd7e14;padding:2px 8px;border-radius:10px;font-size:0.78em;font-weight:700;'>"
+                    . "<i class='fas fa-bolt'></i> {$fastlaneItemCount}</span>";
+            }
+            echo "</div>";
+
+            // Sprint progress (done / total items)
+            echo "<div style='margin-bottom:8px;'>";
+            echo "<div style='display:flex;justify-content:space-between;font-size:0.78em;color:#6c757d;margin-bottom:3px;'>";
+            echo "<span>" . __('Sprint progress', 'sprint') . "</span>";
+            echo "<span><strong>{$done}</strong> / {$total} " . __('items done', 'sprint') . " ({$progressPct}%)</span>";
+            echo "</div>";
+            echo "<div style='height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;'>";
+            echo "<div style='width:{$progressPct}%;height:100%;background:{$progressColor};transition:width 0.3s;'></div>";
+            echo "</div>";
+            echo "</div>";
+
+            // Capacity utilization (used vs total)
+            echo "<div style='margin-bottom:10px;'>";
+            echo "<div style='display:flex;justify-content:space-between;font-size:0.78em;color:#6c757d;margin-bottom:3px;'>";
+            echo "<span>" . __('Capacity used', 'sprint') . "</span>";
+            echo "<span><strong>{$usedCap}%</strong> / {$totalCap}% &mdash; "
+                . sprintf(__('%d%% free', 'sprint'), $remaining) . "</span>";
+            echo "</div>";
+            $regularWidth  = $totalCap > 0 ? min(round(($regularUsed / $totalCap) * 100), 100) : 0;
+            $fastlaneWidth = $totalCap > 0 ? min(round(($fastlaneUsed / $totalCap) * 100), 100 - $regularWidth) : 0;
+            echo "<div style='display:flex;height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;'>";
+            if ($regularWidth > 0) {
+                echo "<div style='width:{$regularWidth}%;height:100%;background:{$capBarColor};' title='" . __('Regular', 'sprint') . " {$regularUsed}%'></div>";
+            }
+            if ($fastlaneWidth > 0) {
+                echo "<div style='width:{$fastlaneWidth}%;height:100%;background:#fd7e14;' title='" . __('Fastlane', 'sprint') . " {$fastlaneUsed}%'></div>";
+            }
+            echo "</div>";
+            echo "</div>";
+
+            // Status distribution — reuse existing renderer (now includes fastlane)
+            echo self::renderStatusDistribution($counts);
+
+            echo "</div>";
+        }
+
+        echo "</div></div>";
+    }
+
+    /**
      * Count sprint items per member per status, for the mini distribution bar.
+     *
+     * Includes both regular items (owned via users_id) and Fastlane items
+     * the member is allocated on via the SprintFastlaneMember junction, so
+     * the Sprintleden dashboard reflects the user's full sprint workload.
      *
      * @return array<int, array<string,int>> [users_id => [status => count]]
      */
     private static function getMemberStatusCounts(int $sprintId): array
     {
         $counts = [];
-        $si = new SprintItem();
-        foreach ($si->find(['plugin_sprint_sprints_id' => $sprintId]) as $row) {
-            $uid = (int)$row['users_id'];
-            if ($uid <= 0) {
-                continue;
-            }
-            $status = $row['status'] ?? SprintItem::STATUS_TODO;
+
+        $ensureUser = function (int $uid) use (&$counts): void {
             if (!isset($counts[$uid])) {
                 $counts[$uid] = [
                     SprintItem::STATUS_TODO        => 0,
@@ -284,13 +409,63 @@ class SprintMember extends CommonDBRelation
                     SprintItem::STATUS_DONE        => 0,
                     SprintItem::STATUS_BLOCKED     => 0,
                     'total'                        => 0,
+                    'fastlane_total'               => 0,
                 ];
             }
+        };
+
+        $si = new SprintItem();
+
+        // Regular (non-fastlane) items — owned by the row's users_id.
+        foreach ($si->find([
+            'plugin_sprint_sprints_id' => $sprintId,
+            'is_fastlane'              => 0,
+        ]) as $row) {
+            $uid = (int)$row['users_id'];
+            if ($uid <= 0) {
+                continue;
+            }
+            $ensureUser($uid);
+            $status = $row['status'] ?? SprintItem::STATUS_TODO;
             if (isset($counts[$uid][$status])) {
                 $counts[$uid][$status]++;
             }
             $counts[$uid]['total']++;
         }
+
+        // Fastlane items — attribute each item to every user assigned via
+        // the junction table so fastlane shows up on the owner's card.
+        $fastlaneItems = $si->find([
+            'plugin_sprint_sprints_id' => $sprintId,
+            'is_fastlane'              => 1,
+        ]);
+        if (count($fastlaneItems) > 0) {
+            $rel = new SprintFastlaneMember();
+            $itemIds = array_map(fn($r) => (int)$r['id'], $fastlaneItems);
+            $itemsById = [];
+            foreach ($fastlaneItems as $r) {
+                $itemsById[(int)$r['id']] = $r;
+            }
+            foreach ($rel->find(['plugin_sprint_sprintitems_id' => $itemIds]) as $r) {
+                $uid = (int)$r['users_id'];
+                if ($uid <= 0) {
+                    continue;
+                }
+                $itemId = (int)$r['plugin_sprint_sprintitems_id'];
+                $item   = $itemsById[$itemId] ?? null;
+                if ($item === null) {
+                    continue;
+                }
+                $ensureUser($uid);
+                $status = $item['status'] ?? SprintItem::STATUS_TODO;
+                if (isset($counts[$uid][$status])) {
+                    $counts[$uid][$status]++;
+                }
+                $counts[$uid]['total']++;
+                $counts[$uid]['fastlane_total']++;
+            }
+        }
+
         return $counts;
     }
 

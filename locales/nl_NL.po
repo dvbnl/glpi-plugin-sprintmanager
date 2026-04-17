@@ -634,3 +634,203 @@ msgstr "Item terug verplaatst naar backlog"
 msgid "Back to Sprint"
 msgstr "Terug naar Sprint"
 
+
+# === v1.0.6: filter bar, plugin settings, audit log, team dashboard ===
+
+# --- Filter bar (Dashboard / Sprint items / Meeting tab / Audit) ---
+msgid "Search name..."
+msgstr "Zoek naam..."
+
+msgid "All statuses"
+msgstr "Alle statussen"
+
+msgid "All owners"
+msgstr "Alle eigenaren"
+
+msgid "Apply"
+msgstr "Toepassen"
+
+# --- Plugin settings (Setup > General > SprintManager, and plugin menu) ---
+msgid "Settings"
+msgstr "Instellingen"
+
+msgid "SprintManager settings"
+msgstr "SprintManager instellingen"
+
+msgid "SprintManager settings saved"
+msgstr "SprintManager instellingen opgeslagen"
+
+msgid "Only Scrum Master can edit capacity on sprint items"
+msgstr "Alleen de Scrum Master mag capaciteit op sprint items wijzigen"
+
+msgid ""
+"When enabled, only the sprint's Scrum Master may change the capacity % on "
+"regular sprint items. Fastlane item capacity remains editable by every "
+"sprint member."
+msgstr ""
+"Indien aan, mag alleen de Scrum Master van de sprint het capaciteits-% op "
+"reguliere sprint items wijzigen. Fastlane capaciteit blijft bewerkbaar voor "
+"alle sprintleden."
+
+msgid "Enable"
+msgstr "Inschakelen"
+
+msgid "Only the current Scrum Master can reassign this role."
+msgstr "Alleen de huidige Scrum Master kan deze rol opnieuw toewijzen."
+
+# --- Audit log tab ---
+msgid "Audit log"
+msgstr "Audit log"
+
+msgid "When"
+msgstr "Wanneer"
+
+msgid "Area"
+msgstr "Gebied"
+
+msgid "Action"
+msgstr "Actie"
+
+msgid "Change"
+msgstr "Wijziging"
+
+msgid "Search action or user..."
+msgstr "Zoek actie of gebruiker..."
+
+msgid "All areas"
+msgstr "Alle gebieden"
+
+msgid "entries"
+msgstr "regels"
+
+msgid "System"
+msgstr "Systeem"
+
+msgid "Sprint item"
+msgstr "Sprint item"
+
+msgid "Fastlane allocation"
+msgstr "Fastlane toewijzing"
+
+msgid "No audit entries yet"
+msgstr "Nog geen audit regels"
+
+msgid "Modified"
+msgstr "Gewijzigd"
+
+msgid "Relation added"
+msgstr "Relatie toegevoegd"
+
+msgid "Relation updated"
+msgstr "Relatie gewijzigd"
+
+msgid "Relation removed"
+msgstr "Relatie verwijderd"
+
+msgid "Document added"
+msgstr "Document toegevoegd"
+
+msgid "Document removed"
+msgstr "Document verwijderd"
+
+msgid "Problem added"
+msgstr "Probleem toegevoegd"
+
+msgid "Problem removed"
+msgstr "Probleem verwijderd"
+
+msgid "Linked to item"
+msgstr "Gekoppeld aan item"
+
+msgid "Unlinked from item"
+msgstr "Ontkoppeld van item"
+
+msgid "User added"
+msgstr "Gebruiker toegevoegd"
+
+msgid "User removed"
+msgstr "Gebruiker verwijderd"
+
+msgid "Group added"
+msgstr "Groep toegevoegd"
+
+msgid "Group removed"
+msgstr "Groep verwijderd"
+
+msgid "Created"
+msgstr "Aangemaakt"
+
+msgid "Deleted (soft)"
+msgstr "Verwijderd (reversibel)"
+
+msgid "Restored"
+msgstr "Hersteld"
+
+msgid "Purged"
+msgstr "Definitief verwijderd"
+
+msgid "Purge sprint audit log entries older than the retention window"
+msgstr "Verwijder sprint audit regels ouder dan de bewaartermijn"
+
+# --- Sprintleden tab dashboard ---
+msgid "Team dashboard"
+msgstr "Team dashboard"
+
+msgid "Sprint progress"
+msgstr "Sprint voortgang"
+
+msgid "items done"
+msgstr "items gereed"
+
+msgid "Capacity used"
+msgstr "Gebruikte capaciteit"
+
+msgid "%d%% free"
+msgstr "%d%% vrij"
+
+msgid "Fastlane items assigned"
+msgstr "Fastlane items toegewezen"
+
+msgid "Member settings"
+msgstr "Lid instellingen"
+
+msgid "Quick edit"
+msgstr "Snelle bewerking"
+
+# === Strings previously missed ===
+
+msgid "Meetings"
+msgstr "Meetings"
+
+msgid "No items assigned"
+msgstr "Geen items toegewezen"
+
+msgid "Please select a sprint and a change."
+msgstr "Selecteer een sprint en een wijziging."
+
+msgid "Please select a sprint and a project task."
+msgstr "Selecteer een sprint en een projecttaak."
+
+msgid "Please select a sprint and a ticket."
+msgstr "Selecteer een sprint en een ticket."
+
+msgid "Regular"
+msgstr "Regulier"
+
+msgid "Remove"
+msgstr "Verwijderen"
+
+msgid "Sprints"
+msgstr "Sprints"
+
+msgid "This %1$s (#%2$d) is already linked to this sprint."
+msgstr "Deze %1$s (#%2$d) is al gekoppeld aan deze sprint."
+
+msgid "This change (#%d) is already linked to this sprint."
+msgstr "Deze wijziging (#%d) is al gekoppeld aan deze sprint."
+
+msgid "This project task (#%d) is already linked to this sprint."
+msgstr "Deze projecttaak (#%d) is al gekoppeld aan deze sprint."
+
+msgid "This ticket (#%d) is already linked to this sprint."
+msgstr "Deze ticket (#%d) is al gekoppeld aan deze sprint."

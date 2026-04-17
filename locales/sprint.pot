@@ -508,3 +508,119 @@ msgstr ""
 
 msgid "Item moved back to backlog"
 msgstr ""
+
+# === v1.0.6: filter bar, plugin settings, audit log, team dashboard ===
+
+msgid "Search name..."
+msgstr ""
+
+msgid "All statuses"
+msgstr ""
+
+msgid "All owners"
+msgstr ""
+
+msgid "Apply"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "SprintManager settings"
+msgstr ""
+
+msgid "SprintManager settings saved"
+msgstr ""
+
+msgid "Only Scrum Master can edit capacity on sprint items"
+msgstr ""
+
+msgid ""
+"When enabled, only the sprint's Scrum Master may change the capacity % on "
+"regular sprint items. Fastlane item capacity remains editable by every "
+"sprint member."
+msgstr ""
+
+msgid "Enable"
+msgstr ""
+
+msgid "Only the current Scrum Master can reassign this role."
+msgstr ""
+
+msgid "Audit log"
+msgstr ""
+
+msgid "When"
+msgstr ""
+
+msgid "Area"
+msgstr ""
+
+msgid "Action"
+msgstr ""
+
+msgid "Change"
+msgstr ""
+
+msgid "Search action or user..."
+msgstr ""
+
+msgid "All areas"
+msgstr ""
+
+msgid "entries"
+msgstr ""
+
+msgid "System"
+msgstr ""
+
+msgid "Sprint item"
+msgstr ""
+
+msgid "Fastlane allocation"
+msgstr ""
+
+msgid "No audit entries yet"
+msgstr ""
+
+msgid "Modified"
+msgstr ""
+
+msgid "Created"
+msgstr ""
+
+msgid "Deleted (soft)"
+msgstr ""
+
+msgid "Restored"
+msgstr ""
+
+msgid "Purged"
+msgstr ""
+
+msgid "Purge sprint audit log entries older than the retention window"
+msgstr ""
+
+msgid "Team dashboard"
+msgstr ""
+
+msgid "Sprint progress"
+msgstr ""
+
+msgid "items done"
+msgstr ""
+
+msgid "Capacity used"
+msgstr ""
+
+msgid "%d%% free"
+msgstr ""
+
+msgid "Fastlane items assigned"
+msgstr ""
+
+msgid "Member settings"
+msgstr ""
+
+msgid "Quick edit"
+msgstr ""

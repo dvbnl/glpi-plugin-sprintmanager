@@ -70,7 +70,7 @@ class SprintDashboard extends CommonGLPI
         echo "<div id='sprint_view_global'>";
         self::renderStatsAndProgress($globalStats);
         self::showFastlaneItems($ID);
-        self::renderItemsTable($allItems, __('No items in this sprint yet', 'sprint'));
+        self::renderItemsTable($allItems, __('No items in this sprint yet', 'sprint'), 'sprint-dashboard-items-global', $ID);
         self::showMemberCapacity($ID);
         echo "</div>";
 
@@ -78,7 +78,7 @@ class SprintDashboard extends CommonGLPI
         echo "<div id='sprint_view_personal' style='display:none;'>";
         self::renderStatsAndProgress($personalStats);
         self::showFastlaneItems($ID, $currentUserId);
-        self::renderItemsTable($personalItems, __('No items assigned to you', 'sprint'));
+        self::renderItemsTable($personalItems, __('No items assigned to you', 'sprint'), 'sprint-dashboard-items-personal', $ID);
         self::showPersonalCapacity($ID, $currentUserId);
         echo "</div>";
 
@@ -102,6 +102,8 @@ class SprintDashboard extends CommonGLPI
             }
         }
         </script>";
+
+        SprintItem::renderQuickEditUI($ID);
     }
 
     /**
@@ -199,21 +201,41 @@ class SprintDashboard extends CommonGLPI
 
     /**
      * Render items table
+     *
+     * @param array  $items
+     * @param string $emptyMessage
+     * @param string $tableSelector  CSS class used to scope filter/sort JS to
+     *                               this specific table (so global & personal
+     *                               views operate independently).
      */
-    private static function renderItemsTable(array $items, string $emptyMessage): void
+    private static function renderItemsTable(array $items, string $emptyMessage, string $tableSelector = 'sprint-dashboard-items', int $sprintId = 0): void
     {
-        echo "<table class='tab_cadre_fixe'>";
+        $statuses   = SprintItem::getAllStatuses();
+        $priorities = [
+            1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
+            4 => __('High'), 5 => __('Very high'),
+        ];
+
+        // Shared filter bar (window.SprintFilter wires the JS).
+        SprintItem::renderFilterBar($tableSelector, [
+            'statuses' => $statuses,
+            'owners'   => $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [],
+        ]);
+
+        echo "<table class='tab_cadre_fixe {$tableSelector} sprint-dashboard-table'>";
         echo "<tr class='tab_bg_2'>";
-        echo "<th>" . __('Type') . "</th>";
-        echo "<th>" . __('Name') . "</th>";
+        $sc = SprintItem::sortClickAttr($tableSelector);
+        echo "<th class='sprint-sortable' data-sort-type='type' style='cursor:pointer;' {$sc}>" . __('Type') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='name' style='cursor:pointer;' {$sc}>" . __('Name') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
-        echo "<th>" . __('Status') . "</th>";
-        echo "<th>" . __('Priority') . "</th>";
-        echo "<th>" . __('Owner', 'sprint') . "</th>";
+        echo "<th class='sprint-sortable' data-sort-type='status' style='cursor:pointer;' {$sc}>" . __('Status') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='priority' style='cursor:pointer;' {$sc}>" . __('Priority') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='owner' style='cursor:pointer;' {$sc}>" . __('Owner', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th style='width:60px;'></th>";
         echo "</tr>";
 
         if (count($items) === 0) {
-            echo "<tr class='tab_bg_1'><td colspan='6' style='padding:32px;color:#adb5bd;text-align:center;'>" .
+            echo "<tr class='tab_bg_1'><td colspan='7' style='padding:32px;color:#adb5bd;text-align:center;'>" .
                 "<i class='fas fa-inbox' style='font-size:2.2em;display:block;margin-bottom:10px;opacity:0.5;'></i>" .
                 $emptyMessage . "</td></tr>";
         }
@@ -224,13 +246,41 @@ class SprintDashboard extends CommonGLPI
                   htmlescape($row['linked_name']) . "</a>"
                 : "<span style='color:#ccc;'>-</span>";
 
-            echo "<tr class='tab_bg_1'>";
+            $itemtypeCode = $row['itemtype_code'] ?? '';
+            $typeFilter   = $itemtypeCode === '' ? 'Manual' : $itemtypeCode;
+            $ownerNameRaw = $row['member_name'] ?? '';
+
+            // Lay down every data-* attr the quick-edit modal and client-side
+            // filter/sort logic need on the row itself, so JS can read them
+            // without traversing into cells.
+            $dataAttrs = 'class="tab_bg_1 sprint-row sprint-dashboard-row sprint-filterable-row"'
+                . ' data-item-id="' . (int)$row['item_id'] . '"'
+                . ' data-item-name="' . htmlescape((string)$row['name']) . '"'
+                . ' data-item-status="' . htmlescape((string)$row['raw_status']) . '"'
+                . ' data-item-status-label="' . htmlescape((string)($statuses[$row['raw_status']] ?? $row['raw_status'])) . '"'
+                . ' data-item-priority="' . (int)($row['raw_priority'] ?? 3) . '"'
+                . ' data-item-priority-label="' . htmlescape((string)($priorities[$row['raw_priority']] ?? '')) . '"'
+                . ' data-item-type="' . htmlescape($typeFilter) . '"'
+                . ' data-item-type-label="' . htmlescape((string)$row['type_label']) . '"'
+                . ' data-users-id="' . (int)$row['users_id'] . '"'
+                . ' data-owner-name="' . htmlescape($ownerNameRaw) . '"'
+                . ' data-story-points="' . (int)$row['story_points'] . '"'
+                . ' data-capacity="' . (int)($row['capacity'] ?? 0) . '"'
+                . ' data-is-fastlane="0"'
+                . ' data-note="' . htmlescape((string)($row['note'] ?? '')) . '"';
+
+            echo "<tr {$dataAttrs}>";
             echo "<td style='white-space:nowrap;'><i class='{$row['icon']}' style='color:{$row['color']};margin-right:5px;opacity:0.85;'></i>{$row['type_label']}</td>";
-            echo "<td><a href='{$row['url']}'>" . htmlescape($row['name']) . "</a></td>";
+            echo "<td class='sprint-cell-name'><a href='{$row['url']}'>" . htmlescape($row['name']) . "</a></td>";
             echo "<td>{$linkedDisplay}</td>";
-            echo "<td>{$row['status']}</td>";
-            echo "<td>{$row['priority']}</td>";
-            echo "<td>{$row['member']}</td>";
+            echo "<td class='sprint-cell-status'>{$row['status']}</td>";
+            echo "<td class='sprint-cell-priority'>{$row['priority']}</td>";
+            echo "<td class='sprint-cell-owner'>{$row['member']}</td>";
+            echo "<td class='text-center'>";
+            echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-quick-edit-btn' "
+                . "title='" . __('Quick edit', 'sprint') . "' data-item-id='" . (int)$row['item_id'] . "'>"
+                . "<i class='fas fa-pen'></i></button>";
+            echo "</td>";
             echo "</tr>";
         }
 
@@ -530,20 +580,26 @@ class SprintDashboard extends CommonGLPI
             $statusBg = $statusBgColors[$row['status']] ?? '#6c757d';
 
             $items[] = [
-                'type_label'   => $typeInfo[2],
-                'icon'         => $typeInfo[0],
-                'color'        => $typeInfo[1],
-                'name'         => $row['name'],
-                'url'          => SprintItem::getFormURLWithID($row['id']),
-                'linked_name'  => $linkedName,
-                'linked_url'   => $linkedUrl,
-                'raw_status'   => $row['status'],
-                'story_points' => (int)$row['story_points'],
-                'users_id'     => (int)$row['users_id'],
-                'status'       => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:' . $statusBg . ';">' .
-                                  ($statuses[$row['status']] ?? $row['status']) . '</span>',
-                'priority'     => $priorities[$row['priority']] ?? '',
-                'member'       => self::getMemberName((int)$row['users_id']),
+                'item_id'       => (int)$row['id'],
+                'itemtype_code' => $itemtype,
+                'type_label'    => $typeInfo[2],
+                'icon'          => $typeInfo[0],
+                'color'         => $typeInfo[1],
+                'name'          => $row['name'],
+                'url'           => SprintItem::getFormURLWithID($row['id']),
+                'linked_name'   => $linkedName,
+                'linked_url'    => $linkedUrl,
+                'raw_status'    => $row['status'],
+                'raw_priority'  => (int)($row['priority'] ?? 3),
+                'story_points'  => (int)$row['story_points'],
+                'capacity'      => (int)($row['capacity'] ?? 0),
+                'users_id'      => (int)$row['users_id'],
+                'note'          => (string)($row['note'] ?? ''),
+                'member_name'   => ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : '',
+                'status'        => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:' . $statusBg . ';">' .
+                                   ($statuses[$row['status']] ?? $row['status']) . '</span>',
+                'priority'      => $priorities[$row['priority']] ?? '',
+                'member'        => self::getMemberName((int)$row['users_id']),
             ];
         }
 

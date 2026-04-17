@@ -22,8 +22,13 @@ Features:
 - Capacity tracking per member with visual overload detection
 - Sprint templates with pre-defined members and backlog items
 - Meeting management: kickoff, daily standup, review, retrospective
-- Interactive standup review: update item status, owner, and notes during meetings
-- Treated checkbox to mark discussed items during standups
+- Interactive standup review: update item status, owner, and notes via quick-edit
+- Quick-edit modal across Dashboard, Sprint Items and Meeting tabs
+- Shared filter bar (search, status, owner) with Apply button + sortable columns
+- Plugin settings (Setup > General or plugin menu) to restrict capacity editing to the Scrum Master
+- Scrum Master reassignment lock: only the current Scrum Master can hand off the role
+- Sprint Members dashboard with per-member progress, fastlane usage, and capacity bars
+- Audit log tab aggregating every sprint/item/member/meeting/fastlane change (14-day retention)
 - Dashboard with progress visualization, stats cards, and team capacity overview
 - Full GLPI rights and entity integration
 - Multi-language support: English, Dutch, French, Spanish]]></en>
@@ -37,6 +42,11 @@ Features:
         <author>DVBNL</author>
     </authors>
     <versions>
+        <version>
+            <num>1.0.6</num>
+            <compatibility>~10.0</compatibility>
+            <download_url>https://github.com/dvbnl/glpi-plugin-sprintmanager/releases/download/v1.0.6/sprintmanager-v1.0.6.zip</download_url>
+        </version>
         <version>
             <num>1.0.5</num>
             <compatibility>~10.0</compatibility>

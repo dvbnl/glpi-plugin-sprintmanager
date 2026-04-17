@@ -285,3 +285,271 @@
 
 })();
 
+/**
+ * ================================================================
+ * Sprint filter + sort
+ * ================================================================
+ *
+ * Markup contract:
+ *
+ *     <div class="sprint-filter-bar" data-target="<table-class>">
+ *       <input class="sf-text">
+ *       <select class="sf-status">
+ *       <select class="sf-owner">
+ *       <button class="sf-apply" onclick="sprintFilterApply(this)">Toepassen</button>
+ *       <button class="sf-reset" onclick="sprintFilterReset(this)">Wissen</button>
+ *     </div>
+ *     <table class="... <table-class>">
+ *       <tr class="sprint-filterable-row" data-item-name data-item-status data-users-id ...>
+ *     </table>
+ *
+ *     <th class="sprint-sortable" data-sort-type="name" onclick="sprintSortClick(this)">...</th>
+ *
+ * Filter fires on:
+ *   - select change (auto-apply, via jQuery delegation on document)
+ *   - Apply button click (via inline onclick)
+ *   - Enter key in text input (via inline onkeydown)
+ *   - Reset button click (via inline onclick)
+ *
+ * The target table is located by walking the DOM forward from the bar
+ * until a <table> containing `tr.sprint-filterable-row` is found. That
+ * makes the filter robust against class-name mismatches and any outer
+ * wrapping GLPI may add.
+ */
+(function() {
+    'use strict';
+
+    // ----- Helpers ---------------------------------------------------
+
+    function resolveBar(arg) {
+        if (!arg) { return null; }
+        if (typeof arg === 'string') { return document.getElementById(arg); }
+        if (arg.nodeType === 1) {
+            if (arg.classList && arg.classList.contains('sprint-filter-bar')) { return arg; }
+            if (arg.closest) { return arg.closest('.sprint-filter-bar'); }
+        }
+        return null;
+    }
+
+    function findTableForBar(bar) {
+        if (!bar) { return null; }
+        // Walk the DOM tree from the bar forward/up looking for the first
+        // <table> that actually contains `tr.sprint-filterable-row`.
+        //
+        // Global class lookup via `document.querySelector('table.<class>')`
+        // is NOT reliable here: GLPI's tab machinery can leave stale copies
+        // of tab HTML in the DOM when switching tabs, leaving two tables
+        // with identical class lists where only one holds the live rows.
+        // Walking from the bar's own subtree is deterministic.
+        var walker = bar;
+        while (walker) {
+            var sib = walker.nextElementSibling;
+            while (sib) {
+                if (sib.tagName === 'TABLE' && sib.querySelector('tr.sprint-filterable-row')) {
+                    return sib;
+                }
+                var nested = sib.querySelector && sib.querySelector('table tr.sprint-filterable-row');
+                if (nested) { return nested.closest('table'); }
+                sib = sib.nextElementSibling;
+            }
+            walker = walker.parentElement;
+        }
+        return null;
+    }
+
+    function applyFilter(bar) {
+        bar = resolveBar(bar);
+        if (!bar) { return; }
+        var table = findTableForBar(bar);
+        if (!table) { return; }
+
+        var textEl   = bar.querySelector('.sf-text');
+        var statusEl = bar.querySelector('.sf-status');
+        var ownerEl  = bar.querySelector('.sf-owner');
+        var text   = textEl   ? (textEl.value   || '').toLowerCase().trim() : '';
+        var status = statusEl ? (statusEl.value || '').toString()           : '';
+        var owner  = ownerEl  ? (ownerEl.value  || '').toString()           : '';
+
+        var rows = table.querySelectorAll('tr.sprint-filterable-row');
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var show = true;
+            if (text) {
+                var name = (row.getAttribute('data-item-name') || '').toLowerCase();
+                if (name.indexOf(text) === -1) { show = false; }
+            }
+            if (show && status) {
+                if (String(row.getAttribute('data-item-status') || '') !== status) { show = false; }
+            }
+            if (show && owner) {
+                if (String(row.getAttribute('data-users-id') || '') !== owner) { show = false; }
+            }
+            // Some GLPI table row utility classes force `display: table-row`
+            // with higher CSS priority than a plain inline style update.
+            // Toggle a dedicated hidden class instead so filtering works on
+            // dashboard/items tables and the meeting review alike.
+            row.classList.toggle('sprint-row-hidden', !show);
+            row.setAttribute('aria-hidden', show ? 'false' : 'true');
+            if (show) {
+                row.style.removeProperty('display');
+            } else {
+                row.style.setProperty('display', 'none', 'important');
+            }
+        }
+    }
+
+    function resetFilter(bar) {
+        bar = resolveBar(bar);
+        if (!bar) { return; }
+        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner');
+        for (var i = 0; i < inputs.length; i++) { inputs[i].value = ''; }
+        applyFilter(bar);
+    }
+
+    // ----- Global functions (inline onclick/onkeydown) ---------------
+
+    window.sprintFilterApply = function(arg) { applyFilter(arg); };
+    window.sprintFilterReset = function(arg) { resetFilter(arg); };
+
+    // ----- Sort ------------------------------------------------------
+
+    var sortState = {};
+
+    function rowSortValue(row, type) {
+        switch (type) {
+            case 'name':         return (row.getAttribute('data-item-name')         || '').toLowerCase();
+            case 'status':       return (row.getAttribute('data-item-status-label') || '').toLowerCase();
+            case 'owner':        return (row.getAttribute('data-owner-name')        || '').toLowerCase();
+            case 'type':         return (row.getAttribute('data-item-type-label')   || '').toLowerCase();
+            case 'priority':     return parseInt(row.getAttribute('data-item-priority'),  10) || 0;
+            case 'capacity':     return parseInt(row.getAttribute('data-capacity'),      10) || 0;
+            case 'story_points': return parseInt(row.getAttribute('data-story-points'),  10) || 0;
+            default: return '';
+        }
+    }
+
+    window.sprintSortClick = function(th) {
+        if (!th || !th.closest) { return; }
+        var table = th.closest('table');
+        if (!table) { return; }
+        var type = th.getAttribute('data-sort-type');
+        var key = (table.className || '') + ':' + type;
+        var dir = sortState[key] === 'asc' ? 'desc' : 'asc';
+        sortState[key] = dir;
+
+        var icons = table.querySelectorAll('.sprint-sortable i');
+        for (var j = 0; j < icons.length; j++) { icons[j].className = 'fas fa-sort text-muted'; }
+        var icon = th.querySelector('i');
+        if (icon) { icon.className = dir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'; }
+
+        var rows = Array.prototype.slice.call(table.querySelectorAll('tr.sprint-filterable-row'));
+        rows.sort(function(a, b) {
+            var av = rowSortValue(a, type);
+            var bv = rowSortValue(b, type);
+            if (av < bv) { return dir === 'asc' ? -1 : 1; }
+            if (av > bv) { return dir === 'asc' ? 1 : -1; }
+            return 0;
+        });
+        var parent = rows[0] ? rows[0].parentNode : null;
+        if (!parent) { return; }
+        for (var k = 0; k < rows.length; k++) { parent.appendChild(rows[k]); }
+    };
+
+    // ----- Three redundant wiring layers -----------------------------
+    //
+    // 1. Capture-phase document listeners — always installed. Capture
+    //    phase fires before any descendant handler can stopPropagation,
+    //    and works on any element added later to the DOM.
+    // 2. jQuery bubbling-phase delegation — covers any case where we
+    //    got installed before jQuery or where some intermediate element
+    //    reroutes the event. Harmless if layer 1 already fired (the
+    //    filter is idempotent).
+    // 3. Direct binding via MutationObserver — for every new filter
+    //    bar found in the DOM, attach `change`/`input` listeners
+    //    straight to its select/input elements. Marked with a
+    //    data-attr so we don't double-bind.
+    //
+    // Any of the three is enough. All three combined guarantees the
+    // filter responds regardless of how a particular tab or page is
+    // rendered.
+
+    function onSelectChange(el) {
+        applyFilter(el);
+    }
+
+    // --- Layer 1: capture-phase document listeners ---
+    document.addEventListener('change', function(ev) {
+        var t = ev.target;
+        if (!t || !t.classList) { return; }
+        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner')) {
+            onSelectChange(t);
+        }
+    }, true);
+    document.addEventListener('input', function(ev) {
+        var t = ev.target;
+        if (t && t.classList && t.classList.contains('sf-text')) {
+            applyFilter(t);
+        }
+    }, true);
+    document.addEventListener('keydown', function(ev) {
+        var t = ev.target;
+        if (t && t.classList && t.classList.contains('sf-text') && (ev.key === 'Enter' || ev.keyCode === 13)) {
+            ev.preventDefault();
+            applyFilter(t);
+        }
+    }, true);
+
+    // --- Layer 2: jQuery bubbling delegation ---
+    if (typeof window.jQuery === 'function') {
+        window.jQuery(function($) {
+            $(document).off('.sprintFilter')
+                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner', function() {
+                    applyFilter(this);
+                })
+                .on('input.sprintFilter', '.sprint-filter-bar .sf-text', function() {
+                    applyFilter(this);
+                });
+        });
+    }
+
+    // --- Layer 3: per-bar direct binding via MutationObserver ---
+    function wireBarDirect(bar) {
+        if (!bar || bar.dataset.sprintFilterWired === '1') { return; }
+        bar.dataset.sprintFilterWired = '1';
+
+        var selects = bar.querySelectorAll('.sf-status, .sf-owner');
+        for (var i = 0; i < selects.length; i++) {
+            selects[i].addEventListener('change', function() { applyFilter(this); });
+        }
+        var textEl = bar.querySelector('.sf-text');
+        if (textEl) {
+            textEl.addEventListener('input', function() { applyFilter(this); });
+        }
+    }
+
+    function scanAndWire() {
+        var bars = document.querySelectorAll('.sprint-filter-bar');
+        for (var i = 0; i < bars.length; i++) { wireBarDirect(bars[i]); }
+    }
+
+    function bootBarWiring() {
+        scanAndWire();
+        if (typeof MutationObserver === 'function') {
+            var pending = null;
+            var obs = new MutationObserver(function() {
+                if (pending) { return; }
+                pending = setTimeout(function() {
+                    pending = null;
+                    scanAndWire();
+                }, 30);
+            });
+            obs.observe(document.body, { childList: true, subtree: true });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootBarWiring);
+    } else {
+        bootBarWiring();
+    }
+})();

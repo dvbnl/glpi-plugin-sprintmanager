@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.0.5');
+define('PLUGIN_SPRINT_VERSION', '1.0.6');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -79,6 +79,9 @@ function plugin_init_sprint(): void
 
     $PLUGIN_HOOKS['csrf_compliant']['sprint'] = true;
 
+    // "Configure" wrench icon in the Plugins list → opens the settings page.
+    $PLUGIN_HOOKS['config_page']['sprint'] = 'front/config.php';
+
     // Add CSS and JS (public/ for GLPI 11, css//js/ for GLPI 10)
     if (is_dir(GLPI_ROOT . '/plugins/sprint/public/')) {
         $PLUGIN_HOOKS['add_css']['sprint'] = 'public/sprint.css';
@@ -102,6 +105,12 @@ function plugin_init_sprint(): void
     Plugin::registerClass(
         'GlpiPlugin\Sprint\Profile',
         ['addtabon' => ['Profile']]
+    );
+
+    // Register plugin settings tab on Config (Setup > General)
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\Config',
+        ['addtabon' => ['Config']]
     );
 
     // Register classes
@@ -157,6 +166,11 @@ function plugin_init_sprint(): void
 
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintDashboard',
+        ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
+    );
+
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintAudit',
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
     );
 
