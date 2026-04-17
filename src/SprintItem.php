@@ -599,17 +599,15 @@ class SprintItem extends CommonDBTM
         echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
             . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
 
-        // Handlers pass `this` so the JS walks up to the enclosing
-        // `.sprint-filter-bar` and reads `data-target`. Robust against
-        // id regeneration, duplicates, and any kind of DOM reshuffling.
+        // Events are handled by sprint.js via capture-phase delegation on
+        // document. No inline handlers — that way a CSP that forbids
+        // inline script (`script-src` without `'unsafe-inline'`) still
+        // leaves filter + reset fully functional.
         echo "<input type='search' class='form-control form-control-sm sf-text' "
-            . "style='max-width:220px;' placeholder='" . __('Search name...', 'sprint') . "' "
-            . "oninput=\"sprintFilterApply(this)\" "
-            . "onkeydown=\"if(event.key==='Enter'){event.preventDefault();sprintFilterApply(this);}\">";
+            . "style='max-width:220px;' placeholder='" . __('Search name...', 'sprint') . "'>";
 
         if (!empty($statuses)) {
-            echo "<select class='form-select form-select-sm sf-status' style='max-width:180px;' "
-                . "onchange=\"sprintFilterApply(this)\">";
+            echo "<select class='form-select form-select-sm sf-status' style='max-width:180px;'>";
             echo "<option value=''>" . __('All statuses', 'sprint') . "</option>";
             foreach ($statuses as $key => $label) {
                 echo "<option value='" . htmlescape((string)$key) . "'>" . htmlescape((string)$label) . "</option>";
@@ -618,8 +616,7 @@ class SprintItem extends CommonDBTM
         }
 
         if (!empty($owners)) {
-            echo "<select class='form-select form-select-sm sf-owner' style='max-width:200px;' "
-                . "onchange=\"sprintFilterApply(this)\">";
+            echo "<select class='form-select form-select-sm sf-owner' style='max-width:200px;'>";
             echo "<option value=''>" . __('All owners', 'sprint') . "</option>";
             foreach ($owners as $uidOpt => $name) {
                 if ((int)$uidOpt === 0) continue;
@@ -629,19 +626,19 @@ class SprintItem extends CommonDBTM
         }
 
         echo "<button type='button' class='btn btn-sm btn-outline-secondary sf-reset' "
-            . "onclick=\"sprintFilterReset(this)\">"
+            . "data-sprint-action='filter-reset'>"
             . "<i class='fas fa-times me-1'></i>" . __('Reset', 'sprint') . "</button>";
         echo "</div>";
     }
 
     /**
-     * Build an `onclick` attribute fragment for a sortable <th>.
-     * The JS walks from the <th> to the enclosing <table>, so no table
-     * class argument is needed.
+     * Attribute fragment for a sortable <th>. Uses data-sprint-action so
+     * the click is handled by sprint.js via delegated capture-phase
+     * listeners — CSP-safe, no inline `onclick` needed.
      */
     public static function sortClickAttr(string $tableClass = ''): string
     {
-        return 'onclick="sprintSortClick(this)"';
+        return 'data-sprint-action="sort"';
     }
 
     /**

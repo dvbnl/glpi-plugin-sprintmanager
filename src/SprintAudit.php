@@ -79,11 +79,12 @@ class SprintAudit extends CommonGLPI
             . "style='background:#f1f3f5;border-radius:6px;max-width:1200px;margin-left:auto;margin-right:auto;'>";
         echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
             . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
+        // No inline handlers — sprint.js detects audit mode by the
+        // presence of `.sprint-audit-kind` inside the bar and then
+        // filters `tr.sprint-audit-row` on `data-search` + `data-area`.
         echo "<input type='search' class='form-control form-control-sm sf-text' "
-            . "style='max-width:240px;' placeholder='" . __('Search action or user...', 'sprint') . "' "
-            . "oninput=\"sprintAuditFilter('{$barId}')\">";
-        echo "<select class='form-select form-select-sm sprint-audit-kind' style='max-width:180px;' "
-            . "onchange=\"sprintAuditFilter('{$barId}')\">";
+            . "style='max-width:240px;' placeholder='" . __('Search action or user...', 'sprint') . "'>";
+        echo "<select class='form-select form-select-sm sprint-audit-kind' style='max-width:180px;'>";
         echo "<option value=''>" . __('All areas', 'sprint') . "</option>";
         $areas = self::getAreaLabels();
         foreach ($areas as $key => $label) {
@@ -91,7 +92,7 @@ class SprintAudit extends CommonGLPI
         }
         echo "</select>";
         echo "<button type='button' class='btn btn-sm btn-outline-secondary sf-reset' "
-            . "onclick=\"sprintAuditFilter('{$barId}', true)\">"
+            . "data-sprint-action='filter-reset'>"
             . "<i class='fas fa-times me-1'></i>" . __('Reset', 'sprint') . "</button>";
         echo "<span class='ms-auto text-muted small'>" . count($entries) . " " . __('entries', 'sprint') . "</span>";
         echo "</div>";
@@ -137,45 +138,12 @@ class SprintAudit extends CommonGLPI
         echo "</table>";
         echo "</div>";
 
-        self::renderFilterJs();
-    }
-
-    /**
-     * Emit the audit-tab filter JS once per render. Uses inline attribute
-     * wiring driven by `sprintAuditFilter(barId, reset)`.
-     */
-    private static function renderFilterJs(): void
-    {
-        echo <<<'JS'
-<script>
-window.sprintAuditFilter = window.sprintAuditFilter || function(barId, reset) {
-    var bar = document.getElementById(barId);
-    if (!bar) { return; }
-    if (reset) {
-        var inputs = bar.querySelectorAll('.sf-text, .sprint-audit-kind');
-        for (var j = 0; j < inputs.length; j++) { inputs[j].value = ''; }
-    }
-    var textEl = bar.querySelector('.sf-text');
-    var kindEl = bar.querySelector('.sprint-audit-kind');
-    var text = (textEl && textEl.value || '').toLowerCase().trim();
-    var kind = (kindEl && kindEl.value || '').toString();
-
-    var rows = document.querySelectorAll('tr.sprint-audit-row');
-    for (var i = 0; i < rows.length; i++) {
-        var row = rows[i];
-        var show = true;
-        if (text) {
-            var hay = (row.getAttribute('data-search') || '');
-            if (hay.indexOf(text) === -1) { show = false; }
-        }
-        if (show && kind) {
-            if (String(row.getAttribute('data-area') || '') !== kind) { show = false; }
-        }
-        row.style.display = show ? '' : 'none';
-    }
-};
-</script>
-JS;
+        // The audit filter is wired by sprint.js (CSP-safe delegation on
+        // data-sprint-action="audit-reset" + input/change on
+        // .sprint-audit-kind / .sf-text inside a .sprint-filter-bar that
+        // contains rows with class .sprint-audit-row). No inline <script>
+        // is emitted here so a strict Content-Security-Policy (no
+        // `'unsafe-inline'`) won't block it.
     }
 
     /**

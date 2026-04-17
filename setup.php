@@ -82,8 +82,19 @@ function plugin_init_sprint(): void
     // "Configure" wrench icon in the Plugins list → opens the settings page.
     $PLUGIN_HOOKS['config_page']['sprint'] = 'front/config.php';
 
-    // Add CSS and JS (public/ for GLPI 11, css//js/ for GLPI 10)
-    if (is_dir(GLPI_ROOT . '/plugins/sprint/public/')) {
+    // Add CSS and JS (public/ for GLPI 11, css/js/ for GLPI 10). Use
+    // `__DIR__` instead of `GLPI_ROOT . '/plugins/sprint/'` because the
+    // plugin may be installed under `marketplace/` rather than
+    // `plugins/` — a hardcoded path then misses the public/ dir and
+    // falls back to js/, which also doesn't exist under marketplace/,
+    // producing a 404 on the asset URL. `__DIR__` is the directory of
+    // setup.php and resolves correctly in both layouts.
+    //
+    // Do NOT append `?v=...` to the hook value: GLPI's asset resolver
+    // treats the value as a literal filename on disk, so
+    // `sprint.js?v=1.0.6` would 404. GLPI already appends its own
+    // fingerprint when rendering the <script> tag.
+    if (is_dir(__DIR__ . '/public/')) {
         $PLUGIN_HOOKS['add_css']['sprint'] = 'public/sprint.css';
         $PLUGIN_HOOKS['add_javascript']['sprint'] = 'public/sprint.js';
     } else {

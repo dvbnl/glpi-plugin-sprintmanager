@@ -287,7 +287,7 @@
 
 /**
  * ================================================================
- * Sprint filter + sort
+ * Sprint filter + sort (v1.0.7+ — CSP-compliant)
  * ================================================================
  *
  * Markup contract:
@@ -296,20 +296,22 @@
  *       <input class="sf-text">
  *       <select class="sf-status">
  *       <select class="sf-owner">
- *       <button class="sf-apply" onclick="sprintFilterApply(this)">Toepassen</button>
- *       <button class="sf-reset" onclick="sprintFilterReset(this)">Wissen</button>
+ *       <button class="sf-reset" data-sprint-action="filter-reset">Wissen</button>
  *     </div>
  *     <table class="... <table-class>">
  *       <tr class="sprint-filterable-row" data-item-name data-item-status data-users-id ...>
  *     </table>
  *
- *     <th class="sprint-sortable" data-sort-type="name" onclick="sprintSortClick(this)">...</th>
+ *     <th class="sprint-sortable" data-sort-type="name" data-sprint-action="sort">...</th>
  *
- * Filter fires on:
- *   - select change (auto-apply, via jQuery delegation on document)
- *   - Apply button click (via inline onclick)
- *   - Enter key in text input (via inline onkeydown)
- *   - Reset button click (via inline onclick)
+ * For the audit tab: same bar class, but contains `.sprint-audit-kind`
+ * instead of `.sf-status/.sf-owner`, and filters `tr.sprint-audit-row`
+ * on `data-search` + `data-area`.
+ *
+ * All wiring is done via capture-phase delegated listeners on `document`
+ * — there are NO inline `onclick`/`oninput` attributes. That keeps
+ * filter + sort functional under a Content-Security-Policy that
+ * forbids inline script (`script-src 'self'`, no `'unsafe-inline'`).
  *
  * The target table is located by walking the DOM forward from the bar
  * until a <table> containing `tr.sprint-filterable-row` is found. That
@@ -360,6 +362,12 @@
     function applyFilter(bar) {
         bar = resolveBar(bar);
         if (!bar) { return; }
+        // Audit-tab bars carry a `.sprint-audit-kind` dropdown and filter
+        // rows with class `.sprint-audit-row` on different attributes.
+        if (bar.querySelector('.sprint-audit-kind')) {
+            applyAuditFilter(bar);
+            return;
+        }
         var table = findTableForBar(bar);
         if (!table) { return; }
 
@@ -398,10 +406,31 @@
         }
     }
 
+    function applyAuditFilter(bar) {
+        var textEl = bar.querySelector('.sf-text');
+        var kindEl = bar.querySelector('.sprint-audit-kind');
+        var text = textEl ? (textEl.value || '').toLowerCase().trim() : '';
+        var kind = kindEl ? (kindEl.value || '').toString()           : '';
+
+        var rows = document.querySelectorAll('tr.sprint-audit-row');
+        for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            var show = true;
+            if (text) {
+                var hay = (r.getAttribute('data-search') || '');
+                if (hay.indexOf(text) === -1) { show = false; }
+            }
+            if (show && kind) {
+                if (String(r.getAttribute('data-area') || '') !== kind) { show = false; }
+            }
+            r.style.display = show ? '' : 'none';
+        }
+    }
+
     function resetFilter(bar) {
         bar = resolveBar(bar);
         if (!bar) { return; }
-        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner');
+        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sprint-audit-kind');
         for (var i = 0; i < inputs.length; i++) { inputs[i].value = ''; }
         applyFilter(bar);
     }
@@ -478,10 +507,40 @@
     }
 
     // --- Layer 1: capture-phase document listeners ---
+    //
+    // Pure CSP-compliant delegation — no dependency on inline `onclick`
+    // attributes. GLPI installations running a `script-src` policy
+    // without `'unsafe-inline'` will block inline handlers; this layer
+    // keeps filtering + sorting working there.
+    //
+    // All markup emitted by this plugin (v1.0.7+) uses data-sprint-action
+    // attributes instead of inline handlers. Class-based matching stays
+    // as a fallback for any legacy tab HTML still lingering in the DOM.
+
+    function matchAction(el, action) {
+        if (!el || !el.closest) { return null; }
+        var byAttr = el.closest('[data-sprint-action="' + action + '"]');
+        if (byAttr) { return byAttr; }
+        if (action === 'sort')         { return el.closest('.sprint-sortable'); }
+        if (action === 'filter-reset') { return el.closest('.sf-reset'); }
+        if (action === 'filter-apply') { return el.closest('.sf-apply'); }
+        return null;
+    }
+
+    // Sort is NOT idempotent (each call toggles direction). We mark the
+    // event so that if both this listener and a legacy inline onclick
+    // somehow fire, only the first toggles. Filter apply/reset ARE
+    // idempotent, so they don't need the mark.
+    function claimEvent(ev) {
+        if (ev.__sprintHandled) { return false; }
+        try { ev.__sprintHandled = true; } catch (_) {}
+        return true;
+    }
+
     document.addEventListener('change', function(ev) {
         var t = ev.target;
         if (!t || !t.classList) { return; }
-        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner')) {
+        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sprint-audit-kind')) {
             onSelectChange(t);
         }
     }, true);
@@ -497,6 +556,20 @@
             ev.preventDefault();
             applyFilter(t);
         }
+    }, true);
+    document.addEventListener('click', function(ev) {
+        var t = ev.target;
+        if (!t) { return; }
+
+        var sortEl = matchAction(t, 'sort');
+        if (sortEl) {
+            if (claimEvent(ev)) { window.sprintSortClick(sortEl); }
+            return;
+        }
+        var resetEl = matchAction(t, 'filter-reset');
+        if (resetEl) { resetFilter(resetEl); return; }
+        var applyEl = matchAction(t, 'filter-apply');
+        if (applyEl) { applyFilter(applyEl); return; }
     }, true);
 
     // --- Layer 2: jQuery bubbling delegation ---
@@ -517,7 +590,7 @@
         if (!bar || bar.dataset.sprintFilterWired === '1') { return; }
         bar.dataset.sprintFilterWired = '1';
 
-        var selects = bar.querySelectorAll('.sf-status, .sf-owner');
+        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sprint-audit-kind');
         for (var i = 0; i < selects.length; i++) {
             selects[i].addEventListener('change', function() { applyFilter(this); });
         }
