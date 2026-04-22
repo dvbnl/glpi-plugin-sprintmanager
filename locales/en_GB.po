@@ -643,6 +643,9 @@ msgstr "Search name..."
 msgid "All statuses"
 msgstr "All statuses"
 
+msgid "Not done"
+msgstr "Not done"
+
 msgid "All owners"
 msgstr "All owners"
 
@@ -792,6 +795,21 @@ msgstr "Member settings"
 
 msgid "Quick edit"
 msgstr "Quick edit"
+
+msgid "Quick edit linked item"
+msgstr "Quick edit linked item"
+
+msgid "Percent done"
+msgstr "Percent done"
+
+msgid "Project task"
+msgstr "Project task"
+
+msgid "Team activity"
+msgstr "Team activity"
+
+msgid "Audit-log events per member per day — spot uneven workloads."
+msgstr "Audit-log events per member per day — spot uneven workloads."
 
 # === Strings previously missed ===
 

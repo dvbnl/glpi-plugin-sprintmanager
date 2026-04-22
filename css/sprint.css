@@ -449,3 +449,41 @@
         width: 100%;
     }
 }
+
+/* === Collapsible dashboard sections ======================================
+   Wrapper used by the dashboard's fastlane + regular-items blocks so users
+   can hide sections they don't want to look at. State persists per-key in
+   localStorage. Default: expanded. */
+.sprint-collapsible {
+    margin: 16px 0;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.sprint-collapsible-header {
+    cursor: pointer;
+    padding: 10px 14px;
+    background: #f8f9fa;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+}
+.sprint-collapsible-header:hover {
+    background: #e9ecef;
+}
+.sprint-collapsible-chevron {
+    transition: transform 0.2s ease;
+    width: 14px;
+    text-align: center;
+}
+.sprint-collapsible.sprint-collapsed .sprint-collapsible-chevron {
+    transform: rotate(-90deg);
+}
+.sprint-collapsible.sprint-collapsed .sprint-collapsible-body {
+    display: none;
+}
+.sprint-collapsible-body {
+    padding: 10px 12px;
+}

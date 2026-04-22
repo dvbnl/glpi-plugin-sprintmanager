@@ -517,6 +517,9 @@ msgstr ""
 msgid "All statuses"
 msgstr ""
 
+msgid "Not done"
+msgstr ""
+
 msgid "All owners"
 msgstr ""
 
@@ -623,4 +626,22 @@ msgid "Member settings"
 msgstr ""
 
 msgid "Quick edit"
+msgstr ""
+
+msgid "Quick edit linked item"
+msgstr ""
+
+msgid "Percent done"
+msgstr ""
+
+msgid "Project task"
+msgstr ""
+
+msgid "Sprint items"
+msgstr ""
+
+msgid "Team activity"
+msgstr ""
+
+msgid "Audit-log events per member per day — spot uneven workloads."
 msgstr ""

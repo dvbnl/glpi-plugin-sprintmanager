@@ -299,7 +299,31 @@ class SprintItem extends CommonDBTM
             }
         }
 
-        return "<a href='{$url}'><i class='{$icon}'></i> {$name}</a>{$suffix}";
+        // Quick-edit button — only when the user is allowed to update the
+        // source item. Rights are delegated to GLPI's own ACL via canUpdate()
+        // so entity / technician / assignee-only restrictions are honored.
+        $quickEditBtn = '';
+        if ($linkedItem->canUpdateItem()) {
+            $currentStatus = 0;
+            $currentPercent = 0;
+            if ($itemtype === 'ProjectTask') {
+                $currentStatus  = (int)($linkedItem->fields['projectstates_id'] ?? 0);
+                $currentPercent = (int)($linkedItem->fields['percent_done'] ?? 0);
+            } else {
+                $currentStatus = (int)($linkedItem->fields['status'] ?? 0);
+            }
+            $quickEditBtn = " <button type='button' class='btn btn-sm btn-link p-0 ms-1 sprint-linked-quick-edit-btn' "
+                . "title='" . htmlescape(__('Quick edit linked item', 'sprint')) . "' "
+                . "data-linked-itemtype='" . htmlescape($itemtype) . "' "
+                . "data-linked-id='" . $itemsId . "' "
+                . "data-linked-name='" . htmlescape($linkedItem->fields['name'] ?? '') . "' "
+                . "data-linked-status='" . $currentStatus . "' "
+                . "data-linked-percent='" . $currentPercent . "' "
+                . "style='color:#6c757d;vertical-align:baseline;'>"
+                . "<i class='fas fa-pen' style='font-size:0.8em;'></i></button>";
+        }
+
+        return "<a href='{$url}'><i class='{$icon}'></i> {$name}</a>{$suffix}{$quickEditBtn}";
     }
 
     /**
@@ -545,6 +569,7 @@ class SprintItem extends CommonDBTM
         if ($canedit) {
             self::renderQuickEditUI($ID);
         }
+        self::renderLinkedQuickEditUI();
     }
 
     /**
@@ -609,6 +634,7 @@ class SprintItem extends CommonDBTM
         if (!empty($statuses)) {
             echo "<select class='form-select form-select-sm sf-status' style='max-width:180px;'>";
             echo "<option value=''>" . __('All statuses', 'sprint') . "</option>";
+            echo "<option value='__not_done__'>" . __('Not done', 'sprint') . "</option>";
             foreach ($statuses as $key => $label) {
                 echo "<option value='" . htmlescape((string)$key) . "'>" . htmlescape((string)$label) . "</option>";
             }
@@ -882,6 +908,207 @@ $(function() {
             }
         }).fail(function() {
             \$modal.find('.sprint-qe-error').text('Network error').show();
+        }).always(function() {
+            \$btn.prop('disabled', false);
+        });
+    });
+});
+</script>
+JS;
+    }
+
+    /**
+     * Render the "quick edit linked item" modal + JS once per page. Handles
+     * quick status (and ProjectTask percent-done) updates of the Ticket /
+     * Change / ProjectTask that a SprintItem is linked to, so users can
+     * tweak the source item without navigating away from the sprint view.
+     */
+    public static function renderLinkedQuickEditUI(): void
+    {
+        // One instance per page is enough — the modal attaches to document
+        // level and is re-used for every click.
+        static $rendered = false;
+        if ($rendered) {
+            return;
+        }
+        $rendered = true;
+
+        $ticketStatuses = \Ticket::getAllStatusArray(true);
+        $changeStatuses = \Change::getAllStatusArray(true);
+
+        $projectStates = [];
+        $ps = new \ProjectState();
+        foreach ($ps->find([], ['name ASC']) as $r) {
+            $projectStates[(int)$r['id']] = (string)$r['name'];
+        }
+        // Provide an explicit "none" option for ProjectTask (0 = no state)
+        $projectStates = [0 => '-----'] + $projectStates;
+
+        echo "<div class='modal fade' id='sprint-linked-quickedit-modal' tabindex='-1' aria-hidden='true'>";
+        echo "<div class='modal-dialog modal-dialog-centered'>";
+        echo "<div class='modal-content'>";
+        echo "<div class='modal-header'>";
+        echo "<h5 class='modal-title'>"
+            . "<i class='sprint-lqe-icon fas fa-pen me-1'></i>"
+            . "<span class='sprint-lqe-type-label'></span>"
+            . ": <span class='sprint-lqe-title'></span></h5>";
+        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
+        echo "</div>";
+        echo "<div class='modal-body'>";
+        echo "<div class='alert alert-danger sprint-lqe-error' style='display:none;white-space:pre-line;'></div>";
+        echo "<input type='hidden' name='itemtype'>";
+        echo "<input type='hidden' name='id'>";
+
+        // Ticket status
+        echo "<div class='mb-3 sprint-lqe-ticket-status' style='display:none;'>";
+        echo "<label class='form-label'>" . __('Status') . "</label>";
+        echo "<select class='form-select' name='ticket_status'>";
+        foreach ($ticketStatuses as $k => $label) {
+            echo "<option value='" . (int)$k . "'>" . htmlescape((string)$label) . "</option>";
+        }
+        echo "</select></div>";
+
+        // Change status
+        echo "<div class='mb-3 sprint-lqe-change-status' style='display:none;'>";
+        echo "<label class='form-label'>" . __('Status') . "</label>";
+        echo "<select class='form-select' name='change_status'>";
+        foreach ($changeStatuses as $k => $label) {
+            echo "<option value='" . (int)$k . "'>" . htmlescape((string)$label) . "</option>";
+        }
+        echo "</select></div>";
+
+        // ProjectTask status + percent done
+        echo "<div class='mb-3 sprint-lqe-ptask-status' style='display:none;'>";
+        echo "<label class='form-label'>" . __('Status') . "</label>";
+        echo "<select class='form-select' name='projectstates_id'>";
+        foreach ($projectStates as $k => $label) {
+            echo "<option value='" . (int)$k . "'>" . htmlescape((string)$label) . "</option>";
+        }
+        echo "</select></div>";
+
+        echo "<div class='mb-3 sprint-lqe-ptask-percent' style='display:none;'>";
+        echo "<label class='form-label'>" . __('Percent done') . "</label>";
+        echo "<input type='number' class='form-control' name='percent_done' min='0' max='100' step='1' value='0'>";
+        echo "</div>";
+
+        echo "</div>"; // modal-body
+        echo "<div class='modal-footer'>";
+        echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __('Cancel') . "</button>";
+        echo "<button type='button' class='btn btn-primary sprint-lqe-save'>"
+            . "<i class='fas fa-save me-1'></i> " . __('Save') . "</button>";
+        echo "</div></div></div></div>";
+
+        $labelTicket = addslashes(__('Ticket'));
+        $labelChange = addslashes(__('Change'));
+        $labelPTask  = addslashes(__('Project task'));
+
+        echo <<<JS
+<script>
+\$(function() {
+    if (window.__sprintLinkedQuickEditBound) { return; }
+    window.__sprintLinkedQuickEditBound = true;
+
+    var typeMeta = {
+        'Ticket':      { icon: 'fas fa-ticket-alt',  label: '{$labelTicket}' },
+        'Change':      { icon: 'fas fa-exchange-alt', label: '{$labelChange}' },
+        'ProjectTask': { icon: 'fas fa-tasks',        label: '{$labelPTask}' }
+    };
+
+    \$(document).on('click', '.sprint-linked-quick-edit-btn', function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        var \$btn    = \$(this);
+        var itemtype = String(\$btn.data('linked-itemtype') || '');
+        var id       = parseInt(\$btn.data('linked-id'), 10) || 0;
+        var name     = \$btn.data('linked-name') || '';
+        var status   = \$btn.data('linked-status');
+        var percent  = parseInt(\$btn.data('linked-percent'), 10) || 0;
+
+        var meta = typeMeta[itemtype];
+        if (!meta || id <= 0) { return; }
+
+        var \$m = \$('#sprint-linked-quickedit-modal');
+        \$m.find('input[name=itemtype]').val(itemtype);
+        \$m.find('input[name=id]').val(id);
+        \$m.find('.sprint-lqe-title').text(name);
+        \$m.find('.sprint-lqe-type-label').text(meta.label);
+        \$m.find('.sprint-lqe-icon').attr('class', 'sprint-lqe-icon ' + meta.icon + ' me-1');
+        \$m.find('.sprint-lqe-error').hide().text('');
+
+        \$m.find('.sprint-lqe-ticket-status, .sprint-lqe-change-status, .sprint-lqe-ptask-status, .sprint-lqe-ptask-percent').hide();
+
+        if (itemtype === 'Ticket') {
+            \$m.find('.sprint-lqe-ticket-status').show();
+            \$m.find('select[name=ticket_status]').val(String(status));
+        } else if (itemtype === 'Change') {
+            \$m.find('.sprint-lqe-change-status').show();
+            \$m.find('select[name=change_status]').val(String(status));
+        } else if (itemtype === 'ProjectTask') {
+            \$m.find('.sprint-lqe-ptask-status').show();
+            \$m.find('.sprint-lqe-ptask-percent').show();
+            \$m.find('select[name=projectstates_id]').val(String(status));
+            \$m.find('input[name=percent_done]').val(percent);
+        }
+
+        var bsm = bootstrap.Modal.getOrCreateInstance(\$m[0]);
+        bsm.show();
+        \$m.data('bs-instance', bsm);
+        \$m.data('trigger-btn', \$btn);
+    });
+
+    \$(document).on('click', '.sprint-lqe-save', function() {
+        var \$btn = \$(this);
+        var \$m   = \$('#sprint-linked-quickedit-modal');
+        var itemtype = \$m.find('input[name=itemtype]').val();
+        var id       = \$m.find('input[name=id]').val();
+
+        var payload = { itemtype: itemtype, id: id };
+        if (itemtype === 'Ticket') {
+            payload.status = \$m.find('select[name=ticket_status]').val();
+        } else if (itemtype === 'Change') {
+            payload.status = \$m.find('select[name=change_status]').val();
+        } else if (itemtype === 'ProjectTask') {
+            payload.projectstates_id = \$m.find('select[name=projectstates_id]').val();
+            payload.percent_done     = \$m.find('input[name=percent_done]').val();
+        }
+
+        \$btn.prop('disabled', true);
+        \$m.find('.sprint-lqe-error').hide().text('');
+
+        \$.ajax({
+            url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
+            type: 'GET', dataType: 'json', cache: false
+        }).then(function(tokResp) {
+            payload._glpi_csrf_token = tokResp && tokResp.token ? tokResp.token : '';
+            return \$.ajax({
+                url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/updatelinkedquick.php',
+                type: 'POST', dataType: 'json', data: payload
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                // Push the new state back onto the triggering button so a
+                // second click without a page reload picks up fresh data.
+                var \$trigger = \$m.data('trigger-btn');
+                if (\$trigger && \$trigger.length) {
+                    if (itemtype === 'ProjectTask') {
+                        \$trigger.attr('data-linked-status', resp.projectstates_id)
+                            .data('linked-status', resp.projectstates_id);
+                        \$trigger.attr('data-linked-percent', resp.percent_done)
+                            .data('linked-percent', resp.percent_done);
+                    } else {
+                        \$trigger.attr('data-linked-status', resp.status)
+                            .data('linked-status', resp.status);
+                    }
+                }
+                var bsm = \$m.data('bs-instance');
+                if (bsm) { bsm.hide(); }
+            } else {
+                \$m.find('.sprint-lqe-error')
+                    .text(resp && resp.message ? resp.message : 'Save failed').show();
+            }
+        }).fail(function() {
+            \$m.find('.sprint-lqe-error').text('Network error').show();
         }).always(function() {
             \$btn.prop('disabled', false);
         });

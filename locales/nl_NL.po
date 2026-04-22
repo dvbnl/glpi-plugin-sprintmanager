@@ -644,6 +644,9 @@ msgstr "Zoek naam..."
 msgid "All statuses"
 msgstr "Alle statussen"
 
+msgid "Not done"
+msgstr "Niet gereed"
+
 msgid "All owners"
 msgstr "Alle eigenaren"
 
@@ -796,6 +799,21 @@ msgstr "Lid instellingen"
 
 msgid "Quick edit"
 msgstr "Snelle bewerking"
+
+msgid "Quick edit linked item"
+msgstr "Snel gekoppeld item bewerken"
+
+msgid "Percent done"
+msgstr "Percentage voltooid"
+
+msgid "Project task"
+msgstr "Projecttaak"
+
+msgid "Team activity"
+msgstr "Teamactiviteit"
+
+msgid "Audit-log events per member per day — spot uneven workloads."
+msgstr "Audit-log events per lid per dag — signaleer ongelijke werklasten."
 
 # === Strings previously missed ===
 

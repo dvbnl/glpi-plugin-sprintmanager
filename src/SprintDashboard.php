@@ -69,16 +69,17 @@ class SprintDashboard extends CommonGLPI
         // === Global view ===
         echo "<div id='sprint_view_global'>";
         self::renderStatsAndProgress($globalStats);
-        self::showFastlaneItems($ID);
-        self::renderItemsTable($allItems, __('No items in this sprint yet', 'sprint'), 'sprint-dashboard-items-global', $ID);
+        self::showMemberActivityChart($ID);
+        self::showFastlaneItems($ID, null, 'global');
+        self::renderItemsTable($allItems, __('No items in this sprint yet', 'sprint'), 'sprint-dashboard-items-global', $ID, 'global');
         self::showMemberCapacity($ID);
         echo "</div>";
 
         // === Personal view (hidden by default) ===
         echo "<div id='sprint_view_personal' style='display:none;'>";
         self::renderStatsAndProgress($personalStats);
-        self::showFastlaneItems($ID, $currentUserId);
-        self::renderItemsTable($personalItems, __('No items assigned to you', 'sprint'), 'sprint-dashboard-items-personal', $ID);
+        self::showFastlaneItems($ID, $currentUserId, 'personal');
+        self::renderItemsTable($personalItems, __('No items assigned to you', 'sprint'), 'sprint-dashboard-items-personal', $ID, 'personal');
         self::showPersonalCapacity($ID, $currentUserId);
         echo "</div>";
 
@@ -104,6 +105,7 @@ class SprintDashboard extends CommonGLPI
         </script>";
 
         SprintItem::renderQuickEditUI($ID);
+        SprintItem::renderLinkedQuickEditUI();
     }
 
     /**
@@ -208,13 +210,24 @@ class SprintDashboard extends CommonGLPI
      *                               this specific table (so global & personal
      *                               views operate independently).
      */
-    private static function renderItemsTable(array $items, string $emptyMessage, string $tableSelector = 'sprint-dashboard-items', int $sprintId = 0): void
+    private static function renderItemsTable(array $items, string $emptyMessage, string $tableSelector = 'sprint-dashboard-items', int $sprintId = 0, string $viewKey = 'global'): void
     {
         $statuses   = SprintItem::getAllStatuses();
         $priorities = [
             1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
             4 => __('High'), 5 => __('Very high'),
         ];
+
+        // Collapsible wrapper — remembered per sprint + view so global and
+        // personal views keep independent expand/collapse state.
+        $collapseKey = 'dash-items-' . (int)$sprintId . '-' . $viewKey;
+        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
+        echo "<div class='sprint-collapsible-header'>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-list-ul' style='margin-left:2px;'></i>";
+        echo "<span>" . __('Sprint items', 'sprint') . " <span class='text-muted' style='font-weight:400;'>(" . count($items) . ")</span></span>";
+        echo "</div>";
+        echo "<div class='sprint-collapsible-body'>";
 
         // Shared filter bar (window.SprintFilter wires the JS).
         SprintItem::renderFilterBar($tableSelector, [
@@ -241,9 +254,8 @@ class SprintDashboard extends CommonGLPI
         }
 
         foreach ($items as $row) {
-            $linkedDisplay = !empty($row['linked_url'])
-                ? "<a href='{$row['linked_url']}'><i class='{$row['icon']}' style='color:{$row['color']};margin-right:5px;'></i>" .
-                  htmlescape($row['linked_name']) . "</a>"
+            $linkedDisplay = !empty($row['linked_display'])
+                ? $row['linked_display']
                 : "<span style='color:#ccc;'>-</span>";
 
             $itemtypeCode = $row['itemtype_code'] ?? '';
@@ -285,6 +297,8 @@ class SprintDashboard extends CommonGLPI
         }
 
         echo "</table>";
+        echo "</div>"; // .sprint-collapsible-body
+        echo "</div>"; // .sprint-collapsible
     }
 
     /**
@@ -399,7 +413,7 @@ class SprintDashboard extends CommonGLPI
      * items and the team capacity overview. Optionally restricted to items
      * the given user is a fastlane member of.
      */
-    private static function showFastlaneItems(int $sprintId, ?int $forUserId = null): void
+    private static function showFastlaneItems(int $sprintId, ?int $forUserId = null, string $viewKey = 'global'): void
     {
         $si    = new SprintItem();
         $items = $si->find(
@@ -436,13 +450,34 @@ class SprintDashboard extends CommonGLPI
 
         $sprintFastlaneTotal = SprintFastlaneMember::getTotalFastlaneCapacityForSprint($sprintId);
 
-        echo "<div style='margin-top:20px;'>";
-        echo "<table class='tab_cadre_fixe'>";
-        echo "<tr class='tab_bg_2'><th colspan='5'>" .
-            "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:6px;'></i>" .
-            __('Fastlane', 'sprint') .
+        // Count how many items will be shown (personal view filters by user)
+        $visibleCount = 0;
+        foreach ($items as $row) {
+            if ($forUserId !== null) {
+                $relRows = $relRowsByItem[(int)$row['id']] ?? [];
+                $hasUser = false;
+                foreach ($relRows as $r) {
+                    if ((int)$r['users_id'] === $forUserId) { $hasUser = true; break; }
+                }
+                if (!$hasUser) { continue; }
+            }
+            $visibleCount++;
+        }
+
+        // Collapsible wrapper — persisted per sprint + view.
+        $collapseKey = 'dash-fastlane-' . (int)$sprintId . '-' . $viewKey;
+        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
+        echo "<div class='sprint-collapsible-header'>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-left:2px;'></i>";
+        echo "<span>" . __('Fastlane', 'sprint') .
+            " <span class='text-muted' style='font-weight:400;'>(" . $visibleCount . ")</span>" .
             " &mdash; " . sprintf(__('Total capacity: %d%%', 'sprint'), $sprintFastlaneTotal) .
-            "</th></tr>";
+            "</span>";
+        echo "</div>";
+        echo "<div class='sprint-collapsible-body'>";
+
+        echo "<table class='tab_cadre_fixe'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Name') . "</th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
@@ -507,7 +542,9 @@ class SprintDashboard extends CommonGLPI
                 __('No fastlane items', 'sprint') . "</td></tr>";
         }
 
-        echo "</table></div>";
+        echo "</table>";
+        echo "</div>"; // .sprint-collapsible-body
+        echo "</div>"; // .sprint-collapsible
     }
 
     /**
@@ -543,25 +580,20 @@ class SprintDashboard extends CommonGLPI
 
             $linkedName = '';
             $linkedUrl  = '';
+            // Delegate the linked-item rendering (name, icon, parent project
+            // suffix for ProjectTask, and the inline quick-edit ✎ button) to
+            // SprintItem::getLinkedItemDisplay() so the dashboard table stays
+            // consistent with the sprint items tab and meeting review.
+            $tmp = new SprintItem();
+            $tmp->fields = $row;
+            $linkedDisplayHtml = $tmp->getLinkedItemDisplay();
+
             $allowedTypes = ['Ticket', 'Change', 'ProjectTask'];
             if (!empty($itemtype) && $itemsId > 0 && in_array($itemtype, $allowedTypes, true) && class_exists($itemtype)) {
                 $linked = new $itemtype();
                 if ($linked->getFromDB($itemsId)) {
                     $linkedName = $linked->fields['name'];
                     $linkedUrl  = $itemtype::getFormURLWithID($itemsId);
-
-                    // Append parent project name for ProjectTask so users
-                    // can disambiguate tasks with identical names across
-                    // multiple projects.
-                    if ($itemtype === 'ProjectTask') {
-                        $projectId = (int)($linked->fields['projects_id'] ?? 0);
-                        if ($projectId > 0) {
-                            $project = new \Project();
-                            if ($project->getFromDB($projectId)) {
-                                $linkedName .= ' (' . $project->fields['name'] . ')';
-                            }
-                        }
-                    }
                 }
             }
 
@@ -580,15 +612,16 @@ class SprintDashboard extends CommonGLPI
             $statusBg = $statusBgColors[$row['status']] ?? '#6c757d';
 
             $items[] = [
-                'item_id'       => (int)$row['id'],
-                'itemtype_code' => $itemtype,
-                'type_label'    => $typeInfo[2],
-                'icon'          => $typeInfo[0],
-                'color'         => $typeInfo[1],
-                'name'          => $row['name'],
-                'url'           => SprintItem::getFormURLWithID($row['id']),
-                'linked_name'   => $linkedName,
-                'linked_url'    => $linkedUrl,
+                'item_id'        => (int)$row['id'],
+                'itemtype_code'  => $itemtype,
+                'type_label'     => $typeInfo[2],
+                'icon'           => $typeInfo[0],
+                'color'          => $typeInfo[1],
+                'name'           => $row['name'],
+                'url'            => SprintItem::getFormURLWithID($row['id']),
+                'linked_name'    => $linkedName,
+                'linked_url'     => $linkedUrl,
+                'linked_display' => $linkedDisplayHtml,
                 'raw_status'    => $row['status'],
                 'raw_priority'  => (int)($row['priority'] ?? 3),
                 'story_points'  => (int)$row['story_points'],
@@ -701,5 +734,137 @@ class SprintDashboard extends CommonGLPI
             return getUserName($usersId);
         }
         return '<span style="color:#adb5bd;font-style:italic;">' . __('Unassigned', 'sprint') . '</span>';
+    }
+
+    /**
+     * Render a per-member activity line chart driven by audit-log data.
+     * Gives scrum masters a quick visual for spotting spikes (one-day
+     * blitz followed by silence) without opening the full audit tab.
+     *
+     * Pure inline SVG — no Chart.js dependency, no external assets.
+     */
+    private static function showMemberActivityChart(int $sprintId): void
+    {
+        $data = SprintAudit::getMemberActivity($sprintId);
+        $dates   = $data['dates'];
+        $members = $data['members'];
+
+        if (count($dates) < 2 || count($members) === 0) {
+            return;
+        }
+
+        // Chart dimensions
+        $width  = 820;
+        $height = 220;
+        $padL   = 40;   // left padding for y-axis labels
+        $padR   = 20;
+        $padT   = 16;
+        $padB   = 36;   // bottom padding for x-axis labels
+        $plotW  = $width  - $padL - $padR;
+        $plotH  = $height - $padT - $padB;
+
+        // Y scale: max value across all members, with a small headroom
+        $max = 1;
+        foreach ($members as $m) {
+            foreach ($m['counts'] as $c) {
+                if ($c > $max) { $max = $c; }
+            }
+        }
+        $yMax = max(1, $max);
+        // Round up to a "nice" integer tick so labels aren't fractional.
+        $yTickStep = (int)max(1, ceil($yMax / 4));
+        $yMax      = $yTickStep * 4;
+
+        $nDates = count($dates);
+        $xStep = ($nDates > 1) ? $plotW / ($nDates - 1) : 0;
+
+        $xAt = fn(int $i) => $padL + ($xStep * $i);
+        $yAt = fn(int $v) => $padT + $plotH - ($plotH * ($v / $yMax));
+
+        $collapseKey = 'dash-activity-' . (int)$sprintId;
+        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
+        echo "<div class='sprint-collapsible-header'>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-chart-line' style='margin-left:2px;'></i>";
+        echo "<span>" . __('Team activity', 'sprint') . "</span>";
+        echo "</div>";
+        echo "<div class='sprint-collapsible-body'>";
+
+        echo "<div style='font-size:0.85em;color:#6c757d;margin-bottom:6px;'>" .
+            __('Audit-log events per member per day — spot uneven workloads.', 'sprint') .
+            "</div>";
+
+        echo "<div style='overflow-x:auto;'>";
+        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "style='width:100%;height:auto;max-width:{$width}px;font-family:sans-serif;font-size:11px;'>";
+
+        // Horizontal grid + y-axis tick labels
+        for ($t = 0; $t <= 4; $t++) {
+            $yv = (int)round($yMax * $t / 4);
+            $y  = $yAt($yv);
+            $yStr = number_format($y, 2, '.', '');
+            echo "<line x1='{$padL}' y1='{$yStr}' x2='" . ($padL + $plotW) . "' y2='{$yStr}' "
+                . "stroke='#e9ecef' stroke-width='1' />";
+            echo "<text x='" . ($padL - 6) . "' y='" . number_format($y + 3, 2, '.', '') . "' "
+                . "text-anchor='end' fill='#6c757d'>{$yv}</text>";
+        }
+
+        // X-axis labels — thin them out so they don't overlap on long ranges
+        $labelEvery = max(1, (int)ceil($nDates / 10));
+        for ($i = 0; $i < $nDates; $i++) {
+            if ($i % $labelEvery !== 0 && $i !== $nDates - 1) {
+                continue;
+            }
+            $x = $xAt($i);
+            $xStr = number_format($x, 2, '.', '');
+            // Shorten to "d/m" to fit.
+            $ts = strtotime($dates[$i]);
+            $label = $ts ? date('d/m', $ts) : $dates[$i];
+            echo "<text x='{$xStr}' y='" . ($padT + $plotH + 16) . "' "
+                . "text-anchor='middle' fill='#6c757d'>" . htmlescape($label) . "</text>";
+        }
+
+        // Axes
+        echo "<line x1='{$padL}' y1='{$padT}' x2='{$padL}' y2='" . ($padT + $plotH) . "' "
+            . "stroke='#adb5bd' stroke-width='1' />";
+        echo "<line x1='{$padL}' y1='" . ($padT + $plotH) . "' x2='" . ($padL + $plotW) . "' y2='" . ($padT + $plotH) . "' "
+            . "stroke='#adb5bd' stroke-width='1' />";
+
+        // One polyline per member
+        foreach ($members as $m) {
+            $points = [];
+            foreach ($m['counts'] as $i => $c) {
+                $points[] = number_format($xAt($i), 2, '.', '') . ',' . number_format($yAt((int)$c), 2, '.', '');
+            }
+            $pts = implode(' ', $points);
+            $color = htmlescape($m['color']);
+            echo "<polyline points='{$pts}' fill='none' stroke='{$color}' stroke-width='2' "
+                . "stroke-linejoin='round' stroke-linecap='round' />";
+            // Data-point dots (subtle)
+            foreach ($m['counts'] as $i => $c) {
+                if ($c <= 0) { continue; }
+                $cx = number_format($xAt($i), 2, '.', '');
+                $cy = number_format($yAt((int)$c), 2, '.', '');
+                $title = htmlescape($m['name'] . ' — ' . $dates[$i] . ': ' . $c);
+                echo "<circle cx='{$cx}' cy='{$cy}' r='2.5' fill='{$color}'>"
+                    . "<title>{$title}</title></circle>";
+            }
+        }
+
+        echo "</svg>";
+        echo "</div>"; // overflow-x scroll wrapper
+
+        // Legend
+        echo "<div style='display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.9em;'>";
+        foreach ($members as $m) {
+            echo "<div style='display:flex;align-items:center;gap:6px;'>"
+                . "<span style='display:inline-block;width:14px;height:3px;background:" . htmlescape($m['color']) . ";border-radius:2px;'></span>"
+                . "<span>" . htmlescape($m['name']) . " <span class='text-muted'>(" . (int)$m['total'] . ")</span></span>"
+                . "</div>";
+        }
+        echo "</div>";
+
+        echo "</div>"; // .sprint-collapsible-body
+        echo "</div>"; // .sprint-collapsible
     }
 }

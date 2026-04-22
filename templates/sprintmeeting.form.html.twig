@@ -86,6 +86,7 @@
                        placeholder="{{ __('Search name...', 'sprint') }}">
                 <select class="form-select form-select-sm sf-status" style="max-width:180px;">
                     <option value="">{{ __('All statuses', 'sprint') }}</option>
+                    <option value="__not_done__">{{ __('Not done', 'sprint') }}</option>
                     {% for key, label in item_statuses %}
                     <option value="{{ key }}">{{ label }}</option>
                     {% endfor %}
@@ -202,6 +203,7 @@
                        placeholder="{{ __('Search name...', 'sprint') }}">
                 <select class="form-select form-select-sm sf-status" style="max-width:180px;">
                     <option value="">{{ __('All statuses', 'sprint') }}</option>
+                    <option value="__not_done__">{{ __('Not done', 'sprint') }}</option>
                     {% for key, label in item_statuses %}
                     <option value="{{ key }}">{{ label }}</option>
                     {% endfor %}

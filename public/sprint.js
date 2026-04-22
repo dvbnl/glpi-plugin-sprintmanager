@@ -387,7 +387,12 @@
                 if (name.indexOf(text) === -1) { show = false; }
             }
             if (show && status) {
-                if (String(row.getAttribute('data-item-status') || '') !== status) { show = false; }
+                var rowStatus = String(row.getAttribute('data-item-status') || '');
+                if (status === '__not_done__') {
+                    if (rowStatus === 'done') { show = false; }
+                } else if (rowStatus !== status) {
+                    show = false;
+                }
             }
             if (show && owner) {
                 if (String(row.getAttribute('data-users-id') || '') !== owner) { show = false; }
@@ -614,15 +619,57 @@
                 pending = setTimeout(function() {
                     pending = null;
                     scanAndWire();
+                    initCollapsibles();
                 }, 30);
             });
             obs.observe(document.body, { childList: true, subtree: true });
         }
     }
 
+    // === Collapsible sections ========================================
+    // Toggle handler + initial state restore for .sprint-collapsible
+    // wrappers (dashboard fastlane + regular items blocks). State is
+    // stored per data-sprint-collapse-key in localStorage so the user's
+    // preference survives a page reload.
+    function initCollapsibles(root) {
+        var wraps = (root || document).querySelectorAll(
+            '.sprint-collapsible[data-sprint-collapse-key]:not([data-sprint-collapse-wired])'
+        );
+        for (var i = 0; i < wraps.length; i++) {
+            var w = wraps[i];
+            w.setAttribute('data-sprint-collapse-wired', '1');
+            var key = w.getAttribute('data-sprint-collapse-key');
+            try {
+                if (localStorage.getItem('sprint-collapse-' + key) === '1') {
+                    w.classList.add('sprint-collapsed');
+                }
+            } catch (e) { /* localStorage unavailable — ignore */ }
+        }
+    }
+
+    document.addEventListener('click', function(ev) {
+        var t = ev.target;
+        if (!t || !t.closest) { return; }
+        var header = t.closest('.sprint-collapsible-header');
+        if (!header) { return; }
+        var wrap = header.closest('.sprint-collapsible');
+        if (!wrap) { return; }
+        var collapsed = wrap.classList.toggle('sprint-collapsed');
+        var key = wrap.getAttribute('data-sprint-collapse-key');
+        if (key) {
+            try {
+                localStorage.setItem('sprint-collapse-' + key, collapsed ? '1' : '0');
+            } catch (e) { /* ignore */ }
+        }
+    }, false);
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', bootBarWiring);
+        document.addEventListener('DOMContentLoaded', function() {
+            bootBarWiring();
+            initCollapsibles();
+        });
     } else {
         bootBarWiring();
+        initCollapsibles();
     }
 })();

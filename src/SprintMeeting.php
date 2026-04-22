@@ -310,6 +310,7 @@ class SprintMeeting extends CommonDBTM
                         && !\GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId),
                 ]
             );
+            SprintItem::renderLinkedQuickEditUI();
         } else {
             $this->showFormHeader($options);
             $types = self::getAllTypes();

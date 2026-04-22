@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.7] - 2026-04-22
+
+### Added
+- **"Not done" status filter**: shared filter bar on Dashboard (global + personal), Sprint Items tab and Meeting tab (fastlane + regular) gains a "Not done" option in the Status dropdown — shows everything *except* items with status `done`, so reviewers can focus on outstanding work in one click
+- **Collapsible dashboard sections**: the Fastlane block and the Sprint Items block on the sprint dashboard can now be collapsed or expanded individually via a clickable header (chevron + icon + title + item count). Default state is expanded; collapsed/expanded state is persisted per sprint + view (global vs personal) in `localStorage`, so reopening the dashboard respects your preference
+- **Quick-edit linked item**: a small ✎ button now appears next to the linked Ticket / Change / Project Task name on every sprint view (Dashboard global + personal, Sprint Items tab, Meeting fastlane + regular). Opens a modal to update the source item without leaving SprintManager:
+  - **Ticket**: status
+  - **Change**: status
+  - **Project Task**: status (ProjectState) + percent done
+  Rights are delegated to GLPI's own ACL via `$item->canUpdateItem()` — the button is hidden when the current user isn't allowed to update the source item. Writes go through `$item->update()` so GLPI's history, notifications, and business rules fire normally. New AJAX endpoint: `ajax/updatelinkedquick.php` (CSRF-protected, itemtype whitelist)
+- **Team activity chart**: new section on the global dashboard (placed directly under the stats tiles) showing an inline SVG line chart with one line per sprint member. X-axis = days (sprint window, clamped to the 14-day audit-log retention), Y-axis = count of audit-log events per member per day. Data comes exclusively from real field / relation mutations in `glpi_logs` — view events aren't logged and therefore don't count. Members with zero activity are omitted; most-active legend-first; hover dots show `name — date: count`. Collapsible, state persisted in `localStorage`
+
+### Changed
+- **Dashboard "Linked item" column now renders via `SprintItem::getLinkedItemDisplay()`** for the regular items table as well (previously built inline). This ensures the ✎ quick-edit button and the ProjectTask parent-project suffix appear consistently on the dashboard, sprint items tab, meeting review and fastlane blocks
+
 ## [1.0.6] - 2026-04-17
 
 ### Added

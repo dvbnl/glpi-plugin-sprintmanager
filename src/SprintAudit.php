@@ -495,6 +495,165 @@ class SprintAudit extends CommonGLPI
         return (int)$DB->affectedRows();
     }
 
+    /**
+     * Aggregate audit-log events per sprint member per day, for the
+     * global-dashboard activity chart. Only counts rows from glpi_logs
+     * (actual field/relation changes — GLPI does not log views) and only
+     * attributes events to users who are registered members of this
+     * sprint.
+     *
+     * @return array {
+     *   dates:   string[]   list of YYYY-MM-DD day buckets (ascending),
+     *   members: array<array{user_id:int,name:string,color:string,counts:int[],total:int}>
+     * }
+     */
+    public static function getMemberActivity(int $sprintId): array
+    {
+        global $DB;
+
+        $empty = ['dates' => [], 'members' => []];
+
+        if ($sprintId <= 0 || !$DB->tableExists('glpi_logs')) {
+            return $empty;
+        }
+
+        // Determine the date range: clamped to the retention window so we
+        // never advertise days that have already been purged.
+        $today      = new \DateTimeImmutable('today');
+        $retentionStart = $today->modify('-' . (self::RETENTION_DAYS - 1) . ' days');
+
+        $sprint = new Sprint();
+        $rangeStart = $retentionStart;
+        $rangeEnd   = $today;
+        if ($sprint->getFromDB($sprintId)) {
+            if (!empty($sprint->fields['date_start'])) {
+                try {
+                    $ds = new \DateTimeImmutable(substr((string)$sprint->fields['date_start'], 0, 10));
+                    if ($ds > $rangeStart) { $rangeStart = $ds; }
+                } catch (\Exception $e) { /* ignore */ }
+            }
+            if (!empty($sprint->fields['date_end'])) {
+                try {
+                    $de = new \DateTimeImmutable(substr((string)$sprint->fields['date_end'], 0, 10));
+                    if ($de < $rangeEnd) { $rangeEnd = $de; }
+                } catch (\Exception $e) { /* ignore */ }
+            }
+        }
+        if ($rangeEnd < $rangeStart) {
+            return $empty;
+        }
+
+        // Build the ordered list of day buckets.
+        $dates = [];
+        $cursor = $rangeStart;
+        while ($cursor <= $rangeEnd) {
+            $dates[] = $cursor->format('Y-m-d');
+            $cursor = $cursor->modify('+1 day');
+        }
+        $dateIndex = array_flip($dates);
+
+        // Sprint members define which users count as "team activity".
+        // Events from people outside the team are ignored.
+        $memberIds = [];
+        foreach ((new SprintMember())->find(['plugin_sprint_sprints_id' => $sprintId]) as $r) {
+            $uid = (int)$r['users_id'];
+            if ($uid > 0) {
+                $memberIds[$uid] = true;
+            }
+        }
+        if (empty($memberIds)) {
+            return $empty;
+        }
+
+        // Same target set as the audit tab — sprint itself, items, members,
+        // meetings, fastlane allocations.
+        $targets = self::resolveTargetIds($sprintId);
+        $orClauses = [];
+        foreach ($targets as $t) {
+            if (empty($t['ids'])) {
+                continue;
+            }
+            $orClauses[] = [
+                'itemtype' => $t['itemtype'],
+                'items_id' => array_map('intval', $t['ids']),
+            ];
+        }
+        if (empty($orClauses)) {
+            return $empty;
+        }
+
+        $startSql = $rangeStart->format('Y-m-d') . ' 00:00:00';
+        $endSql   = $rangeEnd->format('Y-m-d')   . ' 23:59:59';
+
+        $criteria = [
+            'SELECT' => ['user_name', 'date_mod'],
+            'FROM'   => 'glpi_logs',
+            'WHERE'  => [
+                'date_mod' => ['>=', $startSql],
+                ['date_mod' => ['<=', $endSql]],
+                'OR'       => $orClauses,
+            ],
+        ];
+
+        // { user_id => { date_str => count } }
+        $counts = [];
+        foreach ($DB->request($criteria) as $row) {
+            $raw = (string)($row['user_name'] ?? '');
+            $uid = 0;
+            if (preg_match('/\((\d+)\)\s*$/', $raw, $m)) {
+                $uid = (int)$m[1];
+            }
+            if ($uid <= 0 || !isset($memberIds[$uid])) {
+                continue;
+            }
+
+            $day = substr((string)$row['date_mod'], 0, 10);
+            if (!isset($dateIndex[$day])) {
+                continue;
+            }
+
+            if (!isset($counts[$uid])) {
+                $counts[$uid] = array_fill_keys($dates, 0);
+            }
+            $counts[$uid][$day]++;
+        }
+
+        // Stable palette — cycle through a handful of distinct hues. Keeps
+        // labels legible without pulling in a palette library.
+        $palette = [
+            '#0d6efd', '#198754', '#fd7e14', '#6f42c1', '#dc3545',
+            '#20c997', '#d63384', '#0dcaf0', '#ffc107', '#6c757d',
+        ];
+
+        $members = [];
+        $paletteIdx = 0;
+        foreach ($counts as $uid => $byDay) {
+            $seq = [];
+            $total = 0;
+            foreach ($dates as $d) {
+                $c = (int)($byDay[$d] ?? 0);
+                $seq[] = $c;
+                $total += $c;
+            }
+            if ($total === 0) {
+                continue;
+            }
+            $members[] = [
+                'user_id' => $uid,
+                'name'    => getUserName($uid) ?: ('#' . $uid),
+                'color'   => $palette[$paletteIdx % count($palette)],
+                'counts'  => $seq,
+                'total'   => $total,
+            ];
+            $paletteIdx++;
+        }
+
+        // Most-active first in the legend.
+        usort($members, fn($a, $b) => $b['total'] <=> $a['total']);
+
+        return ['dates' => $dates, 'members' => $members];
+    }
+
     // === GLPI cron task integration ===
     //
     // Registered via plugin_sprint_install() so a nightly task prunes

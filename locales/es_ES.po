@@ -634,3 +634,22 @@ msgstr "Elemento movido de vuelta al backlog"
 msgid "Back to Sprint"
 msgstr "Volver al Sprint"
 
+# === v1.0.7: filter "Not done", linked-item quick edit ===
+msgid "Not done"
+msgstr "No terminado"
+
+msgid "Quick edit linked item"
+msgstr "Edicion rapida del elemento vinculado"
+
+msgid "Percent done"
+msgstr "Porcentaje completado"
+
+msgid "Project task"
+msgstr "Tarea de proyecto"
+
+msgid "Team activity"
+msgstr "Actividad del equipo"
+
+msgid "Audit-log events per member per day — spot uneven workloads."
+msgstr "Eventos de registro por miembro por dia - detecte cargas de trabajo desiguales."
+
