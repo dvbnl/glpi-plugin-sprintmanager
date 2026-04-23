@@ -794,6 +794,7 @@ class SprintDashboard extends CommonGLPI
             __('Audit-log events per member per day — spot uneven workloads.', 'sprint') .
             "</div>";
 
+        echo "<div class='sprint-member-activity'>";
         echo "<div style='overflow-x:auto;'>";
         echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
             . "style='width:100%;height:auto;max-width:{$width}px;font-family:sans-serif;font-size:11px;'>";
@@ -831,14 +832,15 @@ class SprintDashboard extends CommonGLPI
             . "stroke='#adb5bd' stroke-width='1' />";
 
         // One polyline per member
-        foreach ($members as $m) {
+        foreach ($members as $idx => $m) {
             $points = [];
             foreach ($m['counts'] as $i => $c) {
                 $points[] = number_format($xAt($i), 2, '.', '') . ',' . number_format($yAt((int)$c), 2, '.', '');
             }
             $pts = implode(' ', $points);
             $color = htmlescape($m['color']);
-            echo "<polyline points='{$pts}' fill='none' stroke='{$color}' stroke-width='2' "
+            echo "<polyline class='sprint-activity-line' data-member-idx='" . (int)$idx . "' "
+                . "points='{$pts}' fill='none' stroke='{$color}' stroke-width='2' "
                 . "stroke-linejoin='round' stroke-linecap='round' />";
             // Data-point dots (subtle)
             foreach ($m['counts'] as $i => $c) {
@@ -846,7 +848,8 @@ class SprintDashboard extends CommonGLPI
                 $cx = number_format($xAt($i), 2, '.', '');
                 $cy = number_format($yAt((int)$c), 2, '.', '');
                 $title = htmlescape($m['name'] . ' — ' . $dates[$i] . ': ' . $c);
-                echo "<circle cx='{$cx}' cy='{$cy}' r='2.5' fill='{$color}'>"
+                echo "<circle class='sprint-activity-dot' data-member-idx='" . (int)$idx . "' "
+                    . "cx='{$cx}' cy='{$cy}' r='2.5' fill='{$color}'>"
                     . "<title>{$title}</title></circle>";
             }
         }
@@ -854,16 +857,19 @@ class SprintDashboard extends CommonGLPI
         echo "</svg>";
         echo "</div>"; // overflow-x scroll wrapper
 
-        // Legend
-        echo "<div style='display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.9em;'>";
-        foreach ($members as $m) {
-            echo "<div style='display:flex;align-items:center;gap:6px;'>"
+        // Legend — click to isolate a member, hover to preview. Wired by sprint.js.
+        echo "<div class='sprint-activity-legend-wrap' style='display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.9em;'>";
+        foreach ($members as $idx => $m) {
+            echo "<div class='sprint-activity-legend' data-member-idx='" . (int)$idx . "' "
+                . "title='" . htmlescape(__('Click to isolate — hover to preview', 'sprint')) . "' "
+                . "style='display:flex;align-items:center;gap:6px;cursor:pointer;'>"
                 . "<span style='display:inline-block;width:14px;height:3px;background:" . htmlescape($m['color']) . ";border-radius:2px;'></span>"
                 . "<span>" . htmlescape($m['name']) . " <span class='text-muted'>(" . (int)$m['total'] . ")</span></span>"
                 . "</div>";
         }
         echo "</div>";
 
+        echo "</div>"; // .sprint-member-activity
         echo "</div>"; // .sprint-collapsible-body
         echo "</div>"; // .sprint-collapsible
     }

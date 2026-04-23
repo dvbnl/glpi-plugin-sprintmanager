@@ -650,6 +650,29 @@
     document.addEventListener('click', function(ev) {
         var t = ev.target;
         if (!t || !t.closest) { return; }
+
+        // Member-activity legend — click to isolate that member's line.
+        // Clicking the already-isolated member clears the selection.
+        var legend = t.closest('.sprint-activity-legend');
+        if (legend) {
+            var chart = legend.closest('.sprint-member-activity');
+            if (chart) {
+                var idx = legend.getAttribute('data-member-idx');
+                var current = chart.getAttribute('data-active-idx');
+                if (current === idx) {
+                    chart.removeAttribute('data-active-idx');
+                    applyActivityFocus(chart, null);
+                } else {
+                    chart.setAttribute('data-active-idx', idx);
+                    // Clear any hover-state so the click wins cleanly.
+                    chart.removeAttribute('data-hover-idx');
+                    applyActivityFocus(chart, idx);
+                }
+                ev.stopPropagation(); // don't bubble into collapsible-header
+                return;
+            }
+        }
+
         var header = t.closest('.sprint-collapsible-header');
         if (!header) { return; }
         var wrap = header.closest('.sprint-collapsible');
@@ -662,6 +685,45 @@
             } catch (e) { /* ignore */ }
         }
     }, false);
+
+    // Hover preview on member-activity legend entries. Skipped when a
+    // member is already click-isolated so the pinned selection stays
+    // visible while the mouse wanders.
+    function onActivityLegendEnter(ev) {
+        var legend = ev.target.closest ? ev.target.closest('.sprint-activity-legend') : null;
+        if (!legend) { return; }
+        var chart = legend.closest('.sprint-member-activity');
+        if (!chart) { return; }
+        if (chart.hasAttribute('data-active-idx')) { return; }
+        var idx = legend.getAttribute('data-member-idx');
+        chart.setAttribute('data-hover-idx', idx);
+        applyActivityFocus(chart, idx);
+    }
+    function onActivityLegendLeave(ev) {
+        var legend = ev.target.closest ? ev.target.closest('.sprint-activity-legend') : null;
+        if (!legend) { return; }
+        var chart = legend.closest('.sprint-member-activity');
+        if (!chart) { return; }
+        if (chart.hasAttribute('data-active-idx')) { return; }
+        chart.removeAttribute('data-hover-idx');
+        applyActivityFocus(chart, null);
+    }
+    // Toggle .is-focus on the polyline, dots, and legend entry whose
+    // data-member-idx matches. CSS handles the fade of the rest via the
+    // parent's data-active-idx / data-hover-idx attribute.
+    function applyActivityFocus(chart, idx) {
+        var nodes = chart.querySelectorAll('.sprint-activity-line, .sprint-activity-dot, .sprint-activity-legend');
+        for (var i = 0; i < nodes.length; i++) {
+            var n = nodes[i];
+            if (idx !== null && n.getAttribute('data-member-idx') === idx) {
+                n.classList.add('is-focus');
+            } else {
+                n.classList.remove('is-focus');
+            }
+        }
+    }
+    document.addEventListener('mouseover', onActivityLegendEnter, false);
+    document.addEventListener('mouseout', onActivityLegendLeave, false);
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {

@@ -487,3 +487,43 @@
 .sprint-collapsible-body {
     padding: 10px 12px;
 }
+
+/* Member-activity chart: click/hover a legend entry to isolate that
+   member's line. JS sets data-active-idx on the wrapper (click) and/or
+   data-hover-idx (hover). We fade everything that doesn't match.
+   Hover preview is suppressed while a member is actively isolated so the
+   click selection wins. */
+.sprint-member-activity .sprint-activity-line,
+.sprint-member-activity .sprint-activity-dot,
+.sprint-member-activity .sprint-activity-legend {
+    transition: opacity 0.15s ease, stroke-width 0.15s ease;
+}
+.sprint-member-activity .sprint-activity-legend span:last-child {
+    transition: font-weight 0.15s ease;
+}
+.sprint-member-activity[data-hover-idx] .sprint-activity-line,
+.sprint-member-activity[data-active-idx] .sprint-activity-line {
+    opacity: 0.18;
+}
+.sprint-member-activity[data-hover-idx] .sprint-activity-dot,
+.sprint-member-activity[data-active-idx] .sprint-activity-dot {
+    opacity: 0.18;
+}
+.sprint-member-activity[data-hover-idx] .sprint-activity-legend,
+.sprint-member-activity[data-active-idx] .sprint-activity-legend {
+    opacity: 0.45;
+}
+.sprint-member-activity .sprint-activity-line.is-focus {
+    opacity: 1;
+    stroke-width: 3.5;
+}
+.sprint-member-activity .sprint-activity-dot.is-focus {
+    opacity: 1;
+    r: 3.5;
+}
+.sprint-member-activity .sprint-activity-legend.is-focus {
+    opacity: 1;
+}
+.sprint-member-activity .sprint-activity-legend.is-focus span:last-child {
+    font-weight: 700;
+}
