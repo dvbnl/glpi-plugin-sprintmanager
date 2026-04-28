@@ -374,9 +374,11 @@
         var textEl   = bar.querySelector('.sf-text');
         var statusEl = bar.querySelector('.sf-status');
         var ownerEl  = bar.querySelector('.sf-owner');
+        var typeEl   = bar.querySelector('.sf-type');
         var text   = textEl   ? (textEl.value   || '').toLowerCase().trim() : '';
         var status = statusEl ? (statusEl.value || '').toString()           : '';
         var owner  = ownerEl  ? (ownerEl.value  || '').toString()           : '';
+        var type   = typeEl   ? (typeEl.value   || '').toString()           : '';
 
         var rows = table.querySelectorAll('tr.sprint-filterable-row');
         for (var i = 0; i < rows.length; i++) {
@@ -396,6 +398,9 @@
             }
             if (show && owner) {
                 if (String(row.getAttribute('data-users-id') || '') !== owner) { show = false; }
+            }
+            if (show && type) {
+                if (String(row.getAttribute('data-item-type') || '') !== type) { show = false; }
             }
             // Some GLPI table row utility classes force `display: table-row`
             // with higher CSS priority than a plain inline style update.
@@ -435,7 +440,7 @@
     function resetFilter(bar) {
         bar = resolveBar(bar);
         if (!bar) { return; }
-        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sprint-audit-kind');
+        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sf-type, .sprint-audit-kind');
         for (var i = 0; i < inputs.length; i++) { inputs[i].value = ''; }
         applyFilter(bar);
     }
@@ -545,7 +550,7 @@
     document.addEventListener('change', function(ev) {
         var t = ev.target;
         if (!t || !t.classList) { return; }
-        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sprint-audit-kind')) {
+        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sf-type') || t.classList.contains('sprint-audit-kind')) {
             onSelectChange(t);
         }
     }, true);
@@ -581,7 +586,7 @@
     if (typeof window.jQuery === 'function') {
         window.jQuery(function($) {
             $(document).off('.sprintFilter')
-                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner', function() {
+                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner, .sprint-filter-bar .sf-type', function() {
                     applyFilter(this);
                 })
                 .on('input.sprintFilter', '.sprint-filter-bar .sf-text', function() {
@@ -595,7 +600,7 @@
         if (!bar || bar.dataset.sprintFilterWired === '1') { return; }
         bar.dataset.sprintFilterWired = '1';
 
-        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sprint-audit-kind');
+        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sf-type, .sprint-audit-kind');
         for (var i = 0; i < selects.length; i++) {
             selects[i].addEventListener('change', function() { applyFilter(this); });
         }

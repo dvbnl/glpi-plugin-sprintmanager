@@ -645,3 +645,80 @@ msgstr ""
 
 msgid "Audit-log events per member per day — spot uneven workloads."
 msgstr ""
+
+# ===== 1.0.8 — Is Blocked, backlog visibility on ticket, move-to-sprint =====
+
+msgid "Is Blocked"
+msgstr ""
+
+msgid "Mark this item as blocked (surfaces in the dedicated Blocked section on the backlog for Scrum Master review)."
+msgstr ""
+
+msgid "Items flagged as blocked are surfaced in the Blocked section above for Scrum Master review."
+msgstr ""
+
+msgid "Blocked items"
+msgstr ""
+
+msgid "Review periodically and unblock when ready."
+msgstr ""
+
+msgid "No blocked items."
+msgstr ""
+
+msgid "Unblock"
+msgstr ""
+
+msgid "Mark as blocked"
+msgstr ""
+
+msgid "Item marked as blocked"
+msgstr ""
+
+msgid "Blocked flag removed"
+msgstr ""
+
+msgid "All (blocked in section above)"
+msgstr ""
+
+msgid "Only blocked"
+msgstr ""
+
+msgid "Hide blocked"
+msgstr ""
+
+msgid "Backlog items"
+msgstr ""
+
+msgid "Blocked items only"
+msgstr ""
+
+msgid "On backlog"
+msgstr ""
+
+msgid "Backlog item"
+msgstr ""
+
+msgid "Open backlog"
+msgstr ""
+
+msgid "Carry over to another sprint"
+msgstr ""
+
+msgid "Carry over to sprint"
+msgstr ""
+
+msgid "Carry this item over to: %s ? The original stays in the current sprint."
+msgstr ""
+
+msgid "Do not carry over"
+msgstr ""
+
+msgid "A fresh copy is created in the target sprint. The original stays in this sprint."
+msgstr ""
+
+msgid "Carried over to %s"
+msgstr ""
+
+msgid "Could not carry the item over to the target sprint"
+msgstr ""

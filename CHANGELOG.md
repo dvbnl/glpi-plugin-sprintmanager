@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.8] - 2026-04-28
+
+### Added
+- **Backlog — "Is Blocked" flag**: backlog items can now be flagged as blocked via a new "Is Blocked" toggle column in the backlog (mirroring the existing "Is Fastlane" column). Database column `is_blocked` (TINYINT, indexed) added to `glpi_plugin_sprint_sprintitems` via migration. Toggleable inline from the backlog list and from the SprintItem full form. Surfaced in `rawSearchOptions()` so changes appear in the audit log
+- **Backlog — dedicated Blocked section**: a separate collapsible section is rendered above the main backlog list showing every blocked item, so the Scrum Master can review and unblock them periodically. Default state is **expanded** for visibility; collapsed/expanded state is persisted per user in `localStorage`. Section is hidden from the main list to avoid duplication
+- **Backlog — Blocked filter**: the filter bar gains a "Blocked" dropdown (All / Only blocked / Hide blocked) so the main list can be scoped at-a-glance for review
+- **Ticket / sprint reverse tab — backlog visibility**: tickets that live on the backlog (sprint id 0) now show a dedicated "On backlog" section on the Sprints tab with the backlog item name, fastlane / blocked flags, and a shortcut to open the backlog page. The tab counter now also includes backlog rows, so backlog presence is visible without opening the tab
+- **Sprint review — carry-over dropdown**: each item row in the sprint review (meeting form, both fastlane and regular sections) gets a green "carry over" dropdown that lists every other planned/active sprint (sorted by start date, with date range and status). Picking one creates a fresh copy of the item in the target sprint while leaving the source row in the current sprint, so items that didn't finish remain visible in the review and continue in the next sprint as a new planning entry. Status of the new copy resets to "todo", capacity to 0, blocked flag and note are cleared; name, description, linked GLPI item, owner, priority, story points and fastlane flag are mirrored. Existing duplicate rows in the target sprint are detected and reused instead of cloned. Wired through a new `carry_over_to_sprint` POST action in `backlog.form.php` and a new `SprintItem::carryOverTo()` helper
+- **Quick-edit modal — carry-over dropdown everywhere**: the same carry-over picker is rendered inside every quick-edit modal (Dashboard, Sprint Items tab, Meeting fastlane + regular) so reviewers don't have to hunt for the per-row dropdown. Default is "Do not carry over", so a normal save only updates the editable fields. When a target sprint is picked, the AJAX endpoint (`ajax/updateitemquick.php`) updates the source's editable fields and creates the carry-over copy in one round-trip; a toast confirms the carry-over without a page reload
+
 ## [1.0.7] - 2026-04-22
 
 ### Added

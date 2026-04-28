@@ -852,3 +852,80 @@ msgstr "Deze projecttaak (#%d) is al gekoppeld aan deze sprint."
 
 msgid "This ticket (#%d) is already linked to this sprint."
 msgstr "Deze ticket (#%d) is al gekoppeld aan deze sprint."
+
+# ===== 1.0.8 — Is Blocked, backlog visibility on ticket, move-to-sprint =====
+
+msgid "Is Blocked"
+msgstr "Geblokkeerd"
+
+msgid "Mark this item as blocked (surfaces in the dedicated Blocked section on the backlog for Scrum Master review)."
+msgstr "Markeer dit item als geblokkeerd (verschijnt in de aparte Geblokkeerd-sectie op de backlog voor review door de Scrum Master)."
+
+msgid "Items flagged as blocked are surfaced in the Blocked section above for Scrum Master review."
+msgstr "Items met de markering Geblokkeerd verschijnen in de Geblokkeerd-sectie hierboven voor review door de Scrum Master."
+
+msgid "Blocked items"
+msgstr "Geblokkeerde items"
+
+msgid "Review periodically and unblock when ready."
+msgstr "Periodiek reviewen en deblokkeren zodra mogelijk."
+
+msgid "No blocked items."
+msgstr "Geen geblokkeerde items."
+
+msgid "Unblock"
+msgstr "Deblokkeren"
+
+msgid "Mark as blocked"
+msgstr "Markeer als geblokkeerd"
+
+msgid "Item marked as blocked"
+msgstr "Item gemarkeerd als geblokkeerd"
+
+msgid "Blocked flag removed"
+msgstr "Geblokkeerd-markering verwijderd"
+
+msgid "All (blocked in section above)"
+msgstr "Alle (geblokkeerd in sectie hierboven)"
+
+msgid "Only blocked"
+msgstr "Alleen geblokkeerd"
+
+msgid "Hide blocked"
+msgstr "Geblokkeerd verbergen"
+
+msgid "Backlog items"
+msgstr "Backlog items"
+
+msgid "Blocked items only"
+msgstr "Alleen geblokkeerde items"
+
+msgid "On backlog"
+msgstr "Op backlog"
+
+msgid "Backlog item"
+msgstr "Backlog item"
+
+msgid "Open backlog"
+msgstr "Backlog openen"
+
+msgid "Carry over to another sprint"
+msgstr "Doortrekken naar andere sprint"
+
+msgid "Carry over to sprint"
+msgstr "Doortrekken naar sprint"
+
+msgid "Carry this item over to: %s ? The original stays in the current sprint."
+msgstr "Dit item doortrekken naar: %s? Het origineel blijft in de huidige sprint."
+
+msgid "Do not carry over"
+msgstr "Niet doortrekken"
+
+msgid "A fresh copy is created in the target sprint. The original stays in this sprint."
+msgstr "Er wordt een nieuwe kopie aangemaakt in de doelsprint. Het origineel blijft in deze sprint."
+
+msgid "Carried over to %s"
+msgstr "Doorgetrokken naar %s"
+
+msgid "Could not carry the item over to the target sprint"
+msgstr "Kon het item niet doortrekken naar de doelsprint"

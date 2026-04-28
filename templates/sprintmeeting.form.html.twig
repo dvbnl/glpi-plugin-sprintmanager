@@ -171,6 +171,30 @@
                                         data-item-id="{{ si.id }}">
                                     <i class="fas fa-pen"></i>
                                 </button>
+                                {% if move_target_sprints is defined and move_target_sprints|length > 0 %}
+                                <div class="dropdown d-inline-block me-1">
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-success dropdown-toggle"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false"
+                                            title="{{ __('Carry over to another sprint', 'sprint') }}">
+                                        <i class="fas fa-forward"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><h6 class="dropdown-header">{{ __('Carry over to sprint', 'sprint') }}</h6></li>
+                                        {% for target_id, target_label in move_target_sprints %}
+                                        <li>
+                                            <a href="#" class="dropdown-item sprint-carry-over-btn"
+                                               data-item-id="{{ si.id }}"
+                                               data-sprint-id="{{ target_id }}"
+                                               data-sprint-label="{{ target_label }}">
+                                                <i class="fas fa-forward text-muted me-1"></i>{{ target_label }}
+                                            </a>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
                                 <button type="button"
                                         class="btn btn-sm btn-outline-warning sprint-backlog-btn"
                                         title="{{ __('Back to backlog', 'sprint') }}"
@@ -285,6 +309,30 @@
                                         data-item-id="{{ si.id }}">
                                     <i class="fas fa-pen"></i>
                                 </button>
+                                {% if move_target_sprints is defined and move_target_sprints|length > 0 %}
+                                <div class="dropdown d-inline-block me-1">
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-success dropdown-toggle"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false"
+                                            title="{{ __('Carry over to another sprint', 'sprint') }}">
+                                        <i class="fas fa-forward"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><h6 class="dropdown-header">{{ __('Carry over to sprint', 'sprint') }}</h6></li>
+                                        {% for target_id, target_label in move_target_sprints %}
+                                        <li>
+                                            <a href="#" class="dropdown-item sprint-carry-over-btn"
+                                               data-item-id="{{ si.id }}"
+                                               data-sprint-id="{{ target_id }}"
+                                               data-sprint-label="{{ target_label }}">
+                                                <i class="fas fa-forward text-muted me-1"></i>{{ target_label }}
+                                            </a>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
                                 <button type="button"
                                         class="btn btn-sm btn-outline-warning sprint-backlog-btn"
                                         title="{{ __('Back to backlog', 'sprint') }}"
@@ -330,6 +378,26 @@
                 f.submit();
             });
 
+            $(document).on('click', '.sprint-carry-over-btn', function(e) {
+                e.preventDefault();
+                var $btn = $(this);
+                var itemId    = $btn.data('item-id');
+                var sprintId  = $btn.data('sprint-id');
+                var sprintLbl = $btn.data('sprint-label') || '';
+                var msg = '{{ __('Carry this item over to: %s ? The original stays in the current sprint.', 'sprint') }}'.replace('%s', sprintLbl);
+                if (!confirm(msg)) {
+                    return;
+                }
+                var f = $('<form method="post" action="{{ backlog_url }}" style="display:none;"></form>');
+                f.append('<input type="hidden" name="id" value="' + itemId + '">');
+                f.append('<input type="hidden" name="plugin_sprint_sprints_id" value="' + sprintId + '">');
+                f.append('<input type="hidden" name="carry_over_to_sprint" value="1">');
+                f.append('<input type="hidden" name="_redirect" value="{{ meeting_url }}">');
+                f.append('<input type="hidden" name="_glpi_csrf_token" value="' + $('input[name=_glpi_csrf_token]').first().val() + '">');
+                $('body').append(f);
+                f.submit();
+            });
+
             // === Quick-edit modal ===
             var $modal = $('#sprint-quickedit-modal').detach().appendTo('body');
 
@@ -354,6 +422,7 @@
                 $modal.find('input[name=story_points]').val(points);
                 $modal.find('select[name=capacity]').val(String(capacity));
                 $modal.find('textarea[name=note]').val(note);
+                $modal.find('select[name=carry_over_to_sprint_id]').val('0');
                 $modal.find('.sprint-qe-error').hide().text('');
                 $modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
 
@@ -388,11 +457,15 @@
                             story_points: $modal.find('input[name=story_points]').val(),
                             capacity:     $modal.find('select[name=capacity]').val(),
                             note:         $modal.find('textarea[name=note]').val(),
+                            carry_over_to_sprint_id: $modal.find('select[name=carry_over_to_sprint_id]').val(),
                             _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                         }
                     });
                 }).done(function(resp) {
                     if (resp && resp.success) {
+                        if (resp.carried_over && resp.carry_over_message) {
+                            try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.carry_over_message); } } catch (e) {}
+                        }
                         var $row = $('tr.sprint-review-row[data-item-id="' + id + '"]');
                         var statusSelect = $modal.find('select[name=status]');
                         var statusLabel  = statusSelect.find('option:selected').text() || '';
@@ -506,6 +579,21 @@
                         <div class="mb-3">
                             <label class="form-label">{{ __('Note', 'sprint') }}</label>
                             <textarea name="note" class="form-control" rows="8" style="min-height:180px;"></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-forward text-success me-1"></i>{{ __('Carry over to sprint', 'sprint') }}
+                            </label>
+                            <select name="carry_over_to_sprint_id" class="form-select">
+                                <option value="0">— {{ __('Do not carry over', 'sprint') }} —</option>
+                                {% for target_id, target_label in move_target_sprints %}
+                                <option value="{{ target_id }}">{{ target_label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text small text-muted">
+                                {{ __('A fresh copy is created in the target sprint. The original stays in this sprint.', 'sprint') }}
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">

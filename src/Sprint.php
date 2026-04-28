@@ -206,6 +206,39 @@ class Sprint extends CommonDBTM
     }
 
     /**
+     * Planned/active sprints as [id => label] for the carry-over picker.
+     */
+    public static function getMoveTargetOptions(int $excludeSprintId = 0): array
+    {
+        $criteria = [
+            'status' => [self::STATUS_PLANNED, self::STATUS_ACTIVE],
+        ];
+        if ($excludeSprintId > 0) {
+            $criteria[] = ['NOT' => ['id' => $excludeSprintId]];
+        }
+
+        $sprintModel = new self();
+        $rows = $sprintModel->find($criteria, ['date_start ASC']);
+
+        $statuses = self::getAllStatuses();
+        $options  = [];
+        foreach ($rows as $row) {
+            $label = $row['name'];
+            if (!empty($row['date_start'])) {
+                $label .= ' (' . \Html::convDate($row['date_start']);
+                if (!empty($row['date_end'])) {
+                    $label .= ' → ' . \Html::convDate($row['date_end']);
+                }
+                $label .= ')';
+            }
+            $statusLabel = $statuses[$row['status']] ?? $row['status'];
+            $label .= ' — ' . $statusLabel;
+            $options[(int)$row['id']] = $label;
+        }
+        return $options;
+    }
+
+    /**
      * @param $field
      * @param $values
      * @param array $options

@@ -191,6 +191,13 @@ class SprintItem extends CommonDBTM
             'name'     => __('Linked item type', 'sprint'),
             'datatype' => 'string',
         ];
+        $tab[] = [
+            'id'       => 11,
+            'table'    => $this->getTable(),
+            'field'    => 'is_blocked',
+            'name'     => __('Is Blocked', 'sprint'),
+            'datatype' => 'bool',
+        ];
 
         return $tab;
     }
@@ -682,6 +689,7 @@ class SprintItem extends CommonDBTM
         ];
         $capacityChoices = SprintMember::getCapacityChoices();
         $memberOptions  = $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [];
+        $moveTargets    = $sprintId > 0 ? Sprint::getMoveTargetOptions($sprintId) : [];
 
         // Capacity lock: if the plugin is configured to restrict capacity
         // edits to the Scrum Master, disable the capacity control in the
@@ -743,6 +751,19 @@ class SprintItem extends CommonDBTM
         echo "<div class='mb-3'><label class='form-label'>" . __('Note', 'sprint') . "</label>";
         echo "<textarea name='note' class='form-control' rows='8' style='min-height:180px;'></textarea></div>";
 
+        echo "<div class='mb-3'><label class='form-label'>"
+            . "<i class='fas fa-forward text-success me-1'></i>"
+            . __('Carry over to sprint', 'sprint') . "</label>";
+        echo "<select name='carry_over_to_sprint_id' class='form-select'>";
+        echo "<option value='0'>— " . htmlescape(__('Do not carry over', 'sprint')) . " —</option>";
+        foreach ($moveTargets as $tid => $tlabel) {
+            echo "<option value='" . (int)$tid . "'>" . htmlescape((string)$tlabel) . "</option>";
+        }
+        echo "</select>";
+        echo "<div class='form-text small text-muted'>"
+            . htmlescape(__('A fresh copy is created in the target sprint. The original stays in this sprint.', 'sprint'))
+            . "</div></div>";
+
         echo "</div>";
         echo "<div class='modal-footer'>";
         echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __('Cancel') . "</button>";
@@ -790,6 +811,7 @@ $(function() {
         \$modal.find('input[name=story_points]').val(points);
         \$modal.find('select[name=capacity]').val(String(capacity));
         \$modal.find('textarea[name=note]').val(note);
+        \$modal.find('select[name=carry_over_to_sprint_id]').val('0');
         \$modal.find('.sprint-qe-error').hide().text('');
         \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
 
@@ -825,11 +847,15 @@ $(function() {
                     story_points: \$modal.find('input[name=story_points]').val(),
                     capacity: \$modal.find('select[name=capacity]').val(),
                     note: \$modal.find('textarea[name=note]').val(),
+                    carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 }
             });
         }).done(function(resp) {
             if (resp && resp.success) {
+                if (resp.carried_over && resp.carry_over_message) {
+                    try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.carry_over_message); } } catch (e) {}
+                }
                 var \$row = \$('tr.sprint-row[data-item-id="' + id + '"], tr.sprint-review-row[data-item-id="' + id + '"]');
                 var statusSelect   = \$modal.find('select[name=status]');
                 var statusLabel    = statusSelect.find('option:selected').text() || '';
@@ -1206,6 +1232,70 @@ JS;
      * Check whether a linked item (Ticket/Change/ProjectTask) is already
      * attached to a given sprint via a SprintItem row.
      */
+    /**
+     * Carry an item over to another sprint: create a fresh copy in the
+     * target sprint while leaving the source row intact, so items that
+     * didn't finish stay visible in the current sprint's review and
+     * continue in the next sprint as a new planning entry.
+     */
+    public static function carryOverTo(int $sourceItemId, int $targetSprintId): int
+    {
+        if ($sourceItemId <= 0 || $targetSprintId <= 0) {
+            return 0;
+        }
+
+        $source = new self();
+        if (!$source->getFromDB($sourceItemId)) {
+            return 0;
+        }
+
+        $sourceSprintId = (int)($source->fields['plugin_sprint_sprints_id'] ?? 0);
+        if ($sourceSprintId === $targetSprintId) {
+            return $sourceItemId;
+        }
+
+        $sprint = new Sprint();
+        if (!$sprint->getFromDB($targetSprintId)) {
+            return 0;
+        }
+
+        $itemtype = (string)($source->fields['itemtype'] ?? '');
+        $itemsId  = (int)($source->fields['items_id'] ?? 0);
+
+        // Reuse an existing row in the target sprint if the same GLPI item
+        // is already linked there — manual items have no stable identity.
+        if ($itemtype !== '' && $itemsId > 0) {
+            $existing = (new self())->find([
+                'plugin_sprint_sprints_id' => $targetSprintId,
+                'itemtype'                 => $itemtype,
+                'items_id'                 => $itemsId,
+            ]);
+            if (count($existing) > 0) {
+                $first = reset($existing);
+                return (int)$first['id'];
+            }
+        }
+
+        $copy = new self();
+        $newId = $copy->add([
+            'plugin_sprint_sprints_id' => $targetSprintId,
+            'name'                     => (string)($source->fields['name'] ?? ''),
+            'description'              => (string)($source->fields['description'] ?? ''),
+            'itemtype'                 => $itemtype,
+            'items_id'                 => $itemsId,
+            'status'                   => self::STATUS_TODO,
+            'priority'                 => (int)($source->fields['priority'] ?? 3),
+            'story_points'             => (int)($source->fields['story_points'] ?? 0),
+            'users_id'                 => (int)($source->fields['users_id'] ?? 0),
+            'capacity'                 => 0,
+            'is_fastlane'              => (int)($source->fields['is_fastlane'] ?? 0),
+            'is_blocked'               => 0,
+            'note'                     => '',
+        ]);
+
+        return (int)$newId;
+    }
+
     public static function isLinkedItemInSprint(
         int $sprintId,
         string $itemtype,
@@ -1347,14 +1437,22 @@ JS;
         ]);
         echo "</td></tr>";
 
-        // Fastlane flag — paired hidden input ensures unchecking actually
-        // submits 0, since unchecked HTML checkboxes are simply omitted.
+        // Paired hidden input ensures unchecking submits 0.
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Is Fastlane', 'sprint') . "</td><td colspan='3'>";
         echo "<input type='hidden' name='is_fastlane' value='0'>";
         echo "<label style='display:inline-flex;align-items:center;gap:6px;'>";
         echo "<input type='checkbox' name='is_fastlane' value='1'" . ($isFastlane ? ' checked' : '') . ">";
         echo "<span class='text-muted'>" . __('Mark this item as fastlane (managed via the Fastlane tab on the sprint).', 'sprint') . "</span>";
+        echo "</label>";
+        echo "</td></tr>";
+
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Is Blocked', 'sprint') . "</td><td colspan='3'>";
+        echo "<input type='hidden' name='is_blocked' value='0'>";
+        echo "<label style='display:inline-flex;align-items:center;gap:6px;'>";
+        echo "<input type='checkbox' name='is_blocked' value='1'" . ($isBlocked ? ' checked' : '') . ">";
+        echo "<span class='text-muted'>" . __('Mark this item as blocked (surfaces in the dedicated Blocked section on the backlog for Scrum Master review).', 'sprint') . "</span>";
         echo "</label>";
         echo "</td></tr>";
 

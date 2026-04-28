@@ -848,3 +848,80 @@ msgstr "This project task (#%d) is already linked to this sprint."
 
 msgid "This ticket (#%d) is already linked to this sprint."
 msgstr "This ticket (#%d) is already linked to this sprint."
+
+# ===== 1.0.8 — Is Blocked, backlog visibility on ticket, move-to-sprint =====
+
+msgid "Is Blocked"
+msgstr "Is Blocked"
+
+msgid "Mark this item as blocked (surfaces in the dedicated Blocked section on the backlog for Scrum Master review)."
+msgstr "Mark this item as blocked (surfaces in the dedicated Blocked section on the backlog for Scrum Master review)."
+
+msgid "Items flagged as blocked are surfaced in the Blocked section above for Scrum Master review."
+msgstr "Items flagged as blocked are surfaced in the Blocked section above for Scrum Master review."
+
+msgid "Blocked items"
+msgstr "Blocked items"
+
+msgid "Review periodically and unblock when ready."
+msgstr "Review periodically and unblock when ready."
+
+msgid "No blocked items."
+msgstr "No blocked items."
+
+msgid "Unblock"
+msgstr "Unblock"
+
+msgid "Mark as blocked"
+msgstr "Mark as blocked"
+
+msgid "Item marked as blocked"
+msgstr "Item marked as blocked"
+
+msgid "Blocked flag removed"
+msgstr "Blocked flag removed"
+
+msgid "All (blocked in section above)"
+msgstr "All (blocked in section above)"
+
+msgid "Only blocked"
+msgstr "Only blocked"
+
+msgid "Hide blocked"
+msgstr "Hide blocked"
+
+msgid "Backlog items"
+msgstr "Backlog items"
+
+msgid "Blocked items only"
+msgstr "Blocked items only"
+
+msgid "On backlog"
+msgstr "On backlog"
+
+msgid "Backlog item"
+msgstr "Backlog item"
+
+msgid "Open backlog"
+msgstr "Open backlog"
+
+msgid "Carry over to another sprint"
+msgstr "Carry over to another sprint"
+
+msgid "Carry over to sprint"
+msgstr "Carry over to sprint"
+
+msgid "Carry this item over to: %s ? The original stays in the current sprint."
+msgstr "Carry this item over to: %s ? The original stays in the current sprint."
+
+msgid "Do not carry over"
+msgstr "Do not carry over"
+
+msgid "A fresh copy is created in the target sprint. The original stays in this sprint."
+msgstr "A fresh copy is created in the target sprint. The original stays in this sprint."
+
+msgid "Carried over to %s"
+msgstr "Carried over to %s"
+
+msgid "Could not carry the item over to the target sprint"
+msgstr "Could not carry the item over to the target sprint"

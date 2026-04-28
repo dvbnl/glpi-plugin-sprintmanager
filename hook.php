@@ -120,6 +120,13 @@ function plugin_sprint_install(): bool
             ['value' => 0, 'after' => 'note']
         );
         $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_fastlane');
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitems',
+            'is_blocked',
+            'bool',
+            ['value' => 0, 'after' => 'is_fastlane']
+        );
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_blocked');
     }
 
     // =========================================================================

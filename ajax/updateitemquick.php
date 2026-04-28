@@ -87,14 +87,43 @@ if (!$result) {
 }
 
 $item->getFromDB((int)$_POST['id']);
+
+$carryOverId       = 0;
+$carryOverSprintId = (int)($_POST['carry_over_to_sprint_id'] ?? 0);
+$carryOverMessage  = '';
+if ($carryOverSprintId > 0) {
+    $sourceSprintId = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
+    if ($carryOverSprintId === $sourceSprintId) {
+        $carryOverSprintId = 0;
+    } else {
+        $sprint = new GlpiPlugin\Sprint\Sprint();
+        if ($sprint->getFromDB($carryOverSprintId)) {
+            $carryOverId = GlpiPlugin\Sprint\SprintItem::carryOverTo(
+                (int)$_POST['id'],
+                $carryOverSprintId
+            );
+            if ($carryOverId > 0) {
+                $carryOverMessage = sprintf(
+                    __('Carried over to %s', 'sprint'),
+                    (string)$sprint->fields['name']
+                );
+            }
+        }
+    }
+}
+
 echo json_encode([
-    'success'      => true,
-    'message'      => $messages ? implode("\n", $messages) : 'Item updated',
-    'name'         => (string)$item->fields['name'],
-    'status'       => (string)$item->fields['status'],
-    'priority'     => (int)$item->fields['priority'],
-    'users_id'     => (int)$item->fields['users_id'],
-    'story_points' => (int)$item->fields['story_points'],
-    'capacity'     => (int)($item->fields['capacity'] ?? 0),
-    'note'         => (string)($item->fields['note'] ?? ''),
+    'success'              => true,
+    'message'              => $messages ? implode("\n", $messages) : 'Item updated',
+    'name'                 => (string)$item->fields['name'],
+    'status'               => (string)$item->fields['status'],
+    'priority'             => (int)$item->fields['priority'],
+    'users_id'             => (int)$item->fields['users_id'],
+    'story_points'         => (int)$item->fields['story_points'],
+    'capacity'             => (int)($item->fields['capacity'] ?? 0),
+    'note'                 => (string)($item->fields['note'] ?? ''),
+    'carried_over'         => $carryOverId > 0,
+    'carried_over_id'      => $carryOverId,
+    'carried_over_sprint'  => $carryOverSprintId,
+    'carry_over_message'   => $carryOverMessage,
 ]);

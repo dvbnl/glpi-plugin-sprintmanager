@@ -653,3 +653,80 @@ msgstr "Activite de l'equipe"
 msgid "Audit-log events per member per day — spot uneven workloads."
 msgstr "Evenements du journal par membre par jour - reperez les charges inegales."
 
+
+# ===== 1.0.8 — Is Blocked, backlog visibility on ticket, move-to-sprint =====
+
+msgid "Is Blocked"
+msgstr "Bloqué"
+
+msgid "Mark this item as blocked (surfaces in the dedicated Blocked section on the backlog for Scrum Master review)."
+msgstr "Marquer cet élément comme bloqué (affiché dans la section dédiée Bloqué du backlog pour la revue du Scrum Master)."
+
+msgid "Items flagged as blocked are surfaced in the Blocked section above for Scrum Master review."
+msgstr "Les éléments marqués comme bloqués sont affichés dans la section Bloqué ci-dessus pour la revue du Scrum Master."
+
+msgid "Blocked items"
+msgstr "Éléments bloqués"
+
+msgid "Review periodically and unblock when ready."
+msgstr "Réviser périodiquement et débloquer dès que possible."
+
+msgid "No blocked items."
+msgstr "Aucun élément bloqué."
+
+msgid "Unblock"
+msgstr "Débloquer"
+
+msgid "Mark as blocked"
+msgstr "Marquer comme bloqué"
+
+msgid "Item marked as blocked"
+msgstr "Élément marqué comme bloqué"
+
+msgid "Blocked flag removed"
+msgstr "Indicateur bloqué supprimé"
+
+msgid "All (blocked in section above)"
+msgstr "Tous (bloqués dans la section ci-dessus)"
+
+msgid "Only blocked"
+msgstr "Uniquement bloqués"
+
+msgid "Hide blocked"
+msgstr "Masquer les bloqués"
+
+msgid "Backlog items"
+msgstr "Éléments du backlog"
+
+msgid "Blocked items only"
+msgstr "Éléments bloqués uniquement"
+
+msgid "On backlog"
+msgstr "Sur le backlog"
+
+msgid "Backlog item"
+msgstr "Élément du backlog"
+
+msgid "Open backlog"
+msgstr "Ouvrir le backlog"
+
+msgid "Carry over to another sprint"
+msgstr "Reporter vers un autre sprint"
+
+msgid "Carry over to sprint"
+msgstr "Reporter vers un sprint"
+
+msgid "Carry this item over to: %s ? The original stays in the current sprint."
+msgstr "Reporter cet élément vers : %s ? L'original reste dans le sprint actuel."
+
+msgid "Do not carry over"
+msgstr "Ne pas reporter"
+
+msgid "A fresh copy is created in the target sprint. The original stays in this sprint."
+msgstr "Une nouvelle copie est créée dans le sprint cible. L'original reste dans ce sprint."
+
+msgid "Carried over to %s"
+msgstr "Reporté vers %s"
+
+msgid "Could not carry the item over to the target sprint"
+msgstr "Impossible de reporter l'élément vers le sprint cible"

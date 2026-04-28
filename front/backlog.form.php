@@ -58,6 +58,27 @@ if (isset($_POST['toggle_fastlane'])) {
     Html::back();
 }
 
+if (isset($_POST['toggle_blocked'])) {
+    $id        = (int)($_POST['id'] ?? 0);
+    $isBlocked = (int)(bool)($_POST['is_blocked'] ?? 0);
+
+    if ($id > 0) {
+        $item = new GlpiPlugin\Sprint\SprintItem();
+        $item->check($id, UPDATE);
+        if ($item->update([
+            'id'         => $id,
+            'is_blocked' => $isBlocked,
+        ])) {
+            Session::addMessageAfterRedirect(
+                $isBlocked
+                    ? __('Item marked as blocked', 'sprint')
+                    : __('Blocked flag removed', 'sprint')
+            );
+        }
+    }
+    Html::back();
+}
+
 if (isset($_POST['back_to_backlog'])) {
     $id = (int)($_POST['id'] ?? 0);
 
@@ -73,7 +94,39 @@ if (isset($_POST['back_to_backlog'])) {
         }
     }
 
-    // Redirect back to the originating page if provided
+    if (!empty($_POST['_redirect'])) {
+        Html::redirect($_POST['_redirect']);
+    }
+    Html::back();
+}
+
+if (isset($_POST['carry_over_to_sprint'])) {
+    $id       = (int)($_POST['id'] ?? 0);
+    $sprintId = (int)($_POST['plugin_sprint_sprints_id'] ?? 0);
+
+    if ($id <= 0 || $sprintId <= 0) {
+        Session::addMessageAfterRedirect(
+            __('Please select a sprint', 'sprint'),
+            false,
+            ERROR
+        );
+    } else {
+        $newId = GlpiPlugin\Sprint\SprintItem::carryOverTo($id, $sprintId);
+        $sprint = new GlpiPlugin\Sprint\Sprint();
+        $sprintName = ($sprint->getFromDB($sprintId)) ? $sprint->fields['name'] : '';
+        if ($newId > 0) {
+            Session::addMessageAfterRedirect(
+                sprintf(__('Carried over to %s', 'sprint'), $sprintName)
+            );
+        } else {
+            Session::addMessageAfterRedirect(
+                __('Could not carry the item over to the target sprint', 'sprint'),
+                false,
+                ERROR
+            );
+        }
+    }
+
     if (!empty($_POST['_redirect'])) {
         Html::redirect($_POST['_redirect']);
     }
@@ -90,6 +143,9 @@ if (isset($_POST['assign_to_sprint'])) {
             false,
             ERROR
         );
+        if (!empty($_POST['_redirect'])) {
+            Html::redirect($_POST['_redirect']);
+        }
         Html::back();
     }
 
@@ -100,6 +156,10 @@ if (isset($_POST['assign_to_sprint'])) {
         'plugin_sprint_sprints_id' => $sprintId,
     ])) {
         Session::addMessageAfterRedirect(__('Item assigned to sprint', 'sprint'));
+    }
+
+    if (!empty($_POST['_redirect'])) {
+        Html::redirect($_POST['_redirect']);
     }
     Html::back();
 }

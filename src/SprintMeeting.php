@@ -283,6 +283,10 @@ class SprintMeeting extends CommonDBTM
             $treatedItems = json_decode($this->fields['treated_items'], true) ?: [];
         }
 
+        $carryOverTargetSprints = ($isExisting && $sprintId > 0)
+            ? Sprint::getMoveTargetOptions($sprintId)
+            : [];
+
         if (class_exists('Glpi\Application\View\TemplateRenderer')) {
             \Glpi\Application\View\TemplateRenderer::getInstance()->display(
                 '@sprint/sprintmeeting.form.html.twig',
@@ -306,6 +310,7 @@ class SprintMeeting extends CommonDBTM
                     'backlog_url'       => \GlpiPlugin\Sprint\Backlog::getFormURL(),
                     'meeting_url'       => static::getFormURLWithID($ID),
                     'sprint_id'         => $sprintId,
+                    'move_target_sprints' => $carryOverTargetSprints,
                     'capacity_locked'   => \GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
                         && !\GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId),
                 ]

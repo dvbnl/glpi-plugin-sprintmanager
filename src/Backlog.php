@@ -105,15 +105,6 @@ class Backlog
         echo "</div>";
     }
 
-    /**
-     * Render the full backlog page (filter bar + list + per-row "assign to
-     * sprint" dropdown).
-     *
-     * Filtering is driven by GET parameters so the URL is shareable:
-     *   - q       : free-text search on the item name
-     *   - type    : '', 'Ticket', 'Change', 'ProjectTask', or 'manual'
-     *   - sort    : 'priority' (default), 'name', 'recent', 'oldest'
-     */
     public static function showBacklog(): void
     {
         $canedit = Session::haveRight(SprintItem::$rightname, UPDATE)
@@ -126,70 +117,32 @@ class Backlog
             'ProjectTask' => __('Project task'),
         ];
 
-        // === Read filter inputs from query string =========================
-        $filterQ    = trim((string)($_GET['q'] ?? ''));
-        $filterType = (string)($_GET['type'] ?? '');
-        $filterSort = (string)($_GET['sort'] ?? 'priority');
+        $orderBy = ['priority DESC', 'date_creation DESC'];
+        $item    = new SprintItem();
+        $blocked = $item->find(['plugin_sprint_sprints_id' => 0, 'is_blocked' => 1], $orderBy);
+        $items   = $item->find(['plugin_sprint_sprints_id' => 0, 'is_blocked' => 0], $orderBy);
 
-        // Allowlist filter values
-        $allowedTypes = ['', 'Ticket', 'Change', 'ProjectTask', 'manual'];
-        if (!in_array($filterType, $allowedTypes, true)) {
-            $filterType = '';
-        }
-        $allowedSorts = ['priority', 'name', 'recent', 'oldest'];
-        if (!in_array($filterSort, $allowedSorts, true)) {
-            $filterSort = 'priority';
-        }
-
-        // === Build the WHERE criteria =====================================
-        $criteria = ['plugin_sprint_sprints_id' => 0];
-
-        if ($filterType === 'manual') {
-            // Items added manually (no linked GLPI item)
-            $criteria['itemtype'] = '';
-        } elseif ($filterType !== '') {
-            $criteria['itemtype'] = $filterType;
-        }
-
-        if ($filterQ !== '') {
-            $escaped = str_replace(
-                ['\\', '%', '_'],
-                ['\\\\', '\\%', '\\_'],
-                $filterQ
-            );
-            $criteria['name'] = ['LIKE', '%' . $escaped . '%'];
-        }
-
-        // === Sort order ===================================================
-        $sortMap = [
-            'priority' => ['priority DESC', 'date_creation DESC'],
-            'name'     => ['name ASC'],
-            'recent'   => ['date_creation DESC'],
-            'oldest'   => ['date_creation ASC'],
-        ];
-        $orderBy = $sortMap[$filterSort];
-
-        $item  = new SprintItem();
-        $items = $item->find($criteria, $orderBy);
-
-        // === Header ======================================================
         echo "<div class='center'>";
         echo "<h2><i class='" . self::getIcon() . "'></i> " . self::getTypeName(2) . "</h2>";
         echo "<p class='text-muted'>" .
             __('Items waiting to be assigned to a sprint. Use the dropdown to move an item into a sprint.', 'sprint') .
             "</p>";
 
-        // === Filter bar ==================================================
-        self::renderFilterBar($filterQ, $filterType, $filterSort, $typeLabels);
+        self::renderBlockedSection($blocked, $canedit, $typeLabels);
 
-        echo "<table class='tab_cadre_fixe'>";
+        echo "<h3 style='margin-top:20px;text-align:left;'>"
+            . "<i class='fas fa-list'></i> " . __('Backlog items', 'sprint')
+            . " <span class='badge bg-secondary'>" . count($items) . "</span></h3>";
+
+        self::renderFilterBar($typeLabels);
+
+        echo "<table class='tab_cadre_fixe sprint-backlog-table'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Name') . "</th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
         echo "<th>" . __('Type', 'sprint') . "</th>";
-        echo "<th title='" . __('Items flagged as fastlane will be assigned to a sprint via the dedicated Fastlane tab.', 'sprint') . "'>" .
-            "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" .
-            __('Is Fastlane', 'sprint') . "</th>";
+        echo "<th><i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" . __('Is Fastlane', 'sprint') . "</th>";
+        echo "<th><i class='fas fa-ban' style='color:#dc3545;margin-right:4px;'></i>" . __('Is Blocked', 'sprint') . "</th>";
         if ($canedit) {
             echo "<th>" . __('Assign to sprint', 'sprint') . "</th>";
             echo "<th>" . __('Actions') . "</th>";
@@ -197,154 +150,193 @@ class Backlog
         echo "</tr>";
 
         if (count($items) === 0) {
-            $cols = $canedit ? 6 : 4;
-            echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
-                __('Backlog is empty', 'sprint') . "</td></tr>";
+            $cols = $canedit ? 7 : 5;
+            echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>"
+                . __('Backlog is empty', 'sprint') . "</td></tr>";
         }
 
         foreach ($items as $row) {
-            $linkedDisplay = '<span style="color:#ccc;">-</span>';
-            if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
-                $tmp = new SprintItem();
-                $tmp->fields = $row;
-                $linkedDisplay = $tmp->getLinkedItemDisplay();
-            }
-
-            $typeLabel = $typeLabels[$row['itemtype'] ?? ''] ?? __('Manual', 'sprint');
-
-            $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
-
-            echo "<tr class='tab_bg_1'>";
-            echo "<td><a href='" . SprintItem::getFormURLWithID($row['id']) . "'>" .
-                htmlescape($row['name']) . "</a></td>";
-            echo "<td>" . $linkedDisplay . "</td>";
-            echo "<td>" . $typeLabel . "</td>";
-
-            // Fastlane checkbox column — inline toggle form. Posts to
-            // backlog.form.php which routes to the toggle_fastlane action.
-            echo "<td class='center'>";
-            if ($canedit) {
-                echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
-                echo Html::hidden('id', ['value' => $row['id']]);
-                echo Html::hidden('is_fastlane', ['value' => $isFastlane ? 0 : 1]);
-                echo "<button type='submit' name='toggle_fastlane' value='1' "
-                    . "class='btn btn-sm " . ($isFastlane ? 'btn-warning' : 'btn-outline-secondary') . "' "
-                    . "title='" . ($isFastlane ? __('Disable fastlane', 'sprint') : __('Enable fastlane', 'sprint')) . "'>"
-                    . "<i class='fas " . ($isFastlane ? 'fa-bolt' : 'fa-bolt') . "'></i> "
-                    . ($isFastlane ? __('Yes') : __('No'))
-                    . "</button>";
-                Html::closeForm();
-            } else {
-                echo $isFastlane
-                    ? "<i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Yes')
-                    : "<span class='text-muted'>" . __('No') . "</span>";
-            }
-            echo "</td>";
-
-            if ($canedit) {
-                // Inline assign-to-sprint form (dropdown + submit)
-                echo "<td>";
-                echo "<form method='post' action='" . self::getFormURL() . "' style='display:flex;gap:4px;align-items:center;'>";
-                echo Html::hidden('id', ['value' => $row['id']]);
-                Sprint::dropdown([
-                    'name'      => 'plugin_sprint_sprints_id',
-                    'value'     => 0,
-                    'condition' => ['status' => [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE]],
-                ]);
-                echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-sm btn-primary'>"
-                    . "<i class='fas fa-arrow-right'></i> " . __('Assign', 'sprint')
-                    . "</button>";
-                Html::closeForm();
-                echo "</td>";
-
-                // Delete from backlog
-                echo "<td class='center' style='white-space:nowrap;'>";
-                echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
-                echo Html::hidden('id', ['value' => $row['id']]);
-                echo Html::submit(__('Delete'), [
-                    'name'    => 'purge',
-                    'class'   => 'btn btn-sm btn-outline-danger',
-                    'confirm' => __('Confirm deletion?'),
-                ]);
-                Html::closeForm();
-                echo "</td>";
-            }
-            echo "</tr>";
+            self::renderItemRow($row, $canedit, $typeLabels);
         }
 
         echo "</table>";
         echo "</div>";
     }
 
-    /**
-     * Render the filter bar above the backlog table.
-     *
-     * Uses a plain GET form so the URL captures the filter state and the
-     * page is shareable / bookmarkable, mirroring how GLPI's standard
-     * search pages behave.
-     */
-    private static function renderFilterBar(
-        string $filterQ,
-        string $filterType,
-        string $filterSort,
-        array $typeLabels
-    ): void {
-        $sortLabels = [
-            'priority' => __('Priority') . ' ↓',
-            'name'     => __('Name') . ' ↑',
-            'recent'   => __('Newest first', 'sprint'),
-            'oldest'   => __('Oldest first', 'sprint'),
-        ];
+    private static function renderBlockedSection(array $blockedItems, bool $canedit, array $typeLabels): void
+    {
+        $count = count($blockedItems);
 
-        $hasActiveFilter = ($filterQ !== '' || $filterType !== '' || $filterSort !== 'priority');
+        echo "<div class='sprint-backlog-blocked' style='margin:18px 0;border:1px solid #f5c2c7;border-radius:8px;overflow:hidden;'>";
+        echo "<div class='sprint-backlog-blocked-header' "
+            . "style='display:flex;align-items:center;gap:8px;padding:10px 14px;background:#f8d7da;color:#842029;font-weight:700;cursor:pointer;user-select:none;'>";
+        echo "<i class='fas fa-chevron-down sprint-backlog-blocked-chevron' style='transition:transform 0.15s;'></i>";
+        echo "<i class='fas fa-ban'></i>";
+        echo "<span>" . __('Blocked items', 'sprint') . "</span>";
+        echo "<span class='badge bg-danger'>" . $count . "</span>";
+        echo "<span style='flex:1;'></span>";
+        echo "<span class='text-muted small' style='font-weight:400;'>"
+            . __('Review periodically and unblock when ready.', 'sprint') . "</span>";
+        echo "</div>";
 
-        echo "<form method='get' action='" . self::getSearchURL() . "' class='sprint-backlog-filter' "
+        echo "<div class='sprint-backlog-blocked-body' style='padding:0;'>";
+        if ($count === 0) {
+            echo "<div class='center text-muted' style='padding:14px;'>"
+                . __('No blocked items.', 'sprint') . "</div>";
+        } else {
+            echo "<table class='tab_cadre_fixe' style='margin:0;'>";
+            echo "<tr class='tab_bg_2'>";
+            echo "<th>" . __('Name') . "</th>";
+            echo "<th>" . __('Linked item', 'sprint') . "</th>";
+            echo "<th>" . __('Type', 'sprint') . "</th>";
+            echo "<th><i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" . __('Is Fastlane', 'sprint') . "</th>";
+            echo "<th><i class='fas fa-ban' style='color:#dc3545;margin-right:4px;'></i>" . __('Is Blocked', 'sprint') . "</th>";
+            if ($canedit) {
+                echo "<th>" . __('Assign to sprint', 'sprint') . "</th>";
+                echo "<th>" . __('Actions') . "</th>";
+            }
+            echo "</tr>";
+            foreach ($blockedItems as $row) {
+                self::renderItemRow($row, $canedit, $typeLabels);
+            }
+            echo "</table>";
+        }
+        echo "</div></div>";
+
+        echo "<script>
+        (function() {
+            var key = 'sprint.backlog.blocked.collapsed';
+            $(function() {
+                var \$wrap = $('.sprint-backlog-blocked').last();
+                if (!\$wrap.length) return;
+                var \$body = \$wrap.find('.sprint-backlog-blocked-body');
+                var \$chev = \$wrap.find('.sprint-backlog-blocked-chevron');
+                if (localStorage.getItem(key) === '1') {
+                    \$body.hide();
+                    \$chev.css('transform', 'rotate(-90deg)');
+                }
+                \$wrap.find('.sprint-backlog-blocked-header').on('click', function() {
+                    var collapsed = \$body.is(':visible');
+                    \$body.slideToggle(120);
+                    \$chev.css('transform', collapsed ? 'rotate(-90deg)' : 'rotate(0deg)');
+                    localStorage.setItem(key, collapsed ? '1' : '0');
+                });
+            });
+        })();
+        </script>";
+    }
+
+    private static function renderItemRow(array $row, bool $canedit, array $typeLabels): void
+    {
+        $linkedDisplay = '<span style="color:#ccc;">-</span>';
+        if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
+            $tmp = new SprintItem();
+            $tmp->fields = $row;
+            $linkedDisplay = $tmp->getLinkedItemDisplay();
+        }
+
+        $itemtype   = (string)($row['itemtype'] ?? '');
+        $typeKey    = $itemtype === '' ? 'manual' : $itemtype;
+        $typeLabel  = $typeLabels[$itemtype] ?? __('Manual', 'sprint');
+        $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
+        $isBlocked  = (int)($row['is_blocked'] ?? 0) === 1;
+
+        echo "<tr class='tab_bg_1 sprint-filterable-row' "
+            . "data-item-name='" . htmlescape($row['name']) . "' "
+            . "data-item-type='" . htmlescape($typeKey) . "'>";
+        echo "<td><a href='" . SprintItem::getFormURLWithID($row['id']) . "'>"
+            . htmlescape($row['name']) . "</a></td>";
+        echo "<td>" . $linkedDisplay . "</td>";
+        echo "<td>" . $typeLabel . "</td>";
+
+        echo "<td class='center'>";
+        if ($canedit) {
+            echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
+            echo Html::hidden('id', ['value' => $row['id']]);
+            echo Html::hidden('is_fastlane', ['value' => $isFastlane ? 0 : 1]);
+            echo "<button type='submit' name='toggle_fastlane' value='1' "
+                . "class='btn btn-sm " . ($isFastlane ? 'btn-warning' : 'btn-outline-secondary') . "' "
+                . "title='" . ($isFastlane ? __('Disable fastlane', 'sprint') : __('Enable fastlane', 'sprint')) . "'>"
+                . "<i class='fas fa-bolt'></i> " . ($isFastlane ? __('Yes') : __('No'))
+                . "</button>";
+            Html::closeForm();
+        } else {
+            echo $isFastlane
+                ? "<i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Yes')
+                : "<span class='text-muted'>" . __('No') . "</span>";
+        }
+        echo "</td>";
+
+        echo "<td class='center'>";
+        if ($canedit) {
+            echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
+            echo Html::hidden('id', ['value' => $row['id']]);
+            echo Html::hidden('is_blocked', ['value' => $isBlocked ? 0 : 1]);
+            echo "<button type='submit' name='toggle_blocked' value='1' "
+                . "class='btn btn-sm " . ($isBlocked ? 'btn-danger' : 'btn-outline-secondary') . "' "
+                . "title='" . ($isBlocked ? __('Unblock', 'sprint') : __('Mark as blocked', 'sprint')) . "'>"
+                . "<i class='fas fa-ban'></i> " . ($isBlocked ? __('Yes') : __('No'))
+                . "</button>";
+            Html::closeForm();
+        } else {
+            echo $isBlocked
+                ? "<i class='fas fa-ban' style='color:#dc3545;'></i> " . __('Yes')
+                : "<span class='text-muted'>" . __('No') . "</span>";
+        }
+        echo "</td>";
+
+        if ($canedit) {
+            echo "<td>";
+            echo "<form method='post' action='" . self::getFormURL() . "' style='display:flex;gap:4px;align-items:center;'>";
+            echo Html::hidden('id', ['value' => $row['id']]);
+            Sprint::dropdown([
+                'name'      => 'plugin_sprint_sprints_id',
+                'value'     => 0,
+                'condition' => ['status' => [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE]],
+            ]);
+            echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-sm btn-primary'>"
+                . "<i class='fas fa-arrow-right'></i> " . __('Assign', 'sprint') . "</button>";
+            Html::closeForm();
+            echo "</td>";
+
+            echo "<td class='center' style='white-space:nowrap;'>";
+            echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
+            echo Html::hidden('id', ['value' => $row['id']]);
+            echo Html::submit(__('Delete'), [
+                'name'    => 'purge',
+                'class'   => 'btn btn-sm btn-outline-danger',
+                'confirm' => __('Confirm deletion?'),
+            ]);
+            Html::closeForm();
+            echo "</td>";
+        }
+        echo "</tr>";
+    }
+
+    private static function renderFilterBar(array $typeLabels): void
+    {
+        echo "<div class='sprint-filter-bar' "
             . "style='display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;"
             . "padding:10px;margin-bottom:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;'>";
 
-        // Free-text search on name
-        echo "<div style='display:flex;align-items:center;gap:4px;'>";
-        echo "<i class='fas fa-search' style='color:#6c757d;'></i>";
-        echo "<input type='text' name='q' value='" . htmlescape($filterQ) . "' "
-            . "placeholder='" . __('Search by name', 'sprint') . "' "
-            . "class='form-control form-control-sm' style='min-width:220px;'>";
-        echo "</div>";
+        echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
+            . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
 
-        // Type filter
-        echo "<div style='display:flex;align-items:center;gap:4px;'>";
-        echo "<label style='margin:0;font-weight:600;'>" . __('Type', 'sprint') . ":</label>";
-        echo "<select name='type' class='form-select form-select-sm'>";
-        echo "<option value=''" . ($filterType === '' ? ' selected' : '') . ">" . __('All') . "</option>";
-        echo "<option value='Ticket'" . ($filterType === 'Ticket' ? ' selected' : '') . ">" . htmlescape($typeLabels['Ticket']) . "</option>";
-        echo "<option value='Change'" . ($filterType === 'Change' ? ' selected' : '') . ">" . htmlescape($typeLabels['Change']) . "</option>";
-        echo "<option value='ProjectTask'" . ($filterType === 'ProjectTask' ? ' selected' : '') . ">" . htmlescape($typeLabels['ProjectTask']) . "</option>";
-        echo "<option value='manual'" . ($filterType === 'manual' ? ' selected' : '') . ">" . htmlescape($typeLabels['']) . "</option>";
+        echo "<input type='search' class='form-control form-control-sm sf-text' "
+            . "style='max-width:240px;' placeholder='" . __('Search by name', 'sprint') . "'>";
+
+        echo "<select class='form-select form-select-sm sf-type' style='max-width:200px;'>";
+        echo "<option value=''>" . __('All') . " — " . __('Type', 'sprint') . "</option>";
+        echo "<option value='Ticket'>" . htmlescape($typeLabels['Ticket']) . "</option>";
+        echo "<option value='Change'>" . htmlescape($typeLabels['Change']) . "</option>";
+        echo "<option value='ProjectTask'>" . htmlescape($typeLabels['ProjectTask']) . "</option>";
+        echo "<option value='manual'>" . htmlescape($typeLabels['']) . "</option>";
         echo "</select>";
+
+        echo "<button type='button' class='btn btn-sm btn-outline-secondary sf-reset' data-sprint-action='filter-reset'>"
+            . "<i class='fas fa-times me-1'></i>" . __('Reset', 'sprint') . "</button>";
+
         echo "</div>";
-
-        // Sort
-        echo "<div style='display:flex;align-items:center;gap:4px;'>";
-        echo "<label style='margin:0;font-weight:600;'>" . __('Sort') . ":</label>";
-        echo "<select name='sort' class='form-select form-select-sm'>";
-        foreach ($sortLabels as $key => $label) {
-            $selected = ($filterSort === $key) ? ' selected' : '';
-            echo "<option value='" . $key . "'" . $selected . ">" . htmlescape($label) . "</option>";
-        }
-        echo "</select>";
-        echo "</div>";
-
-        // Buttons
-        echo "<button type='submit' class='btn btn-sm btn-primary'>"
-            . "<i class='fas fa-filter'></i> " . __('Filter', 'sprint')
-            . "</button>";
-
-        if ($hasActiveFilter) {
-            echo "<a href='" . self::getSearchURL() . "' class='btn btn-sm btn-outline-secondary'>"
-                . "<i class='fas fa-times'></i> " . __('Reset', 'sprint')
-                . "</a>";
-        }
-
-        echo "</form>";
     }
 
     /**
