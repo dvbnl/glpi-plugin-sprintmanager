@@ -565,6 +565,22 @@ class SprintAudit extends CommonGLPI
             return $empty;
         }
 
+        // glpi_logs.user_name is typically formatted as "Display Name (login)"
+        // — where `login` is the user's login string, NOT their numeric id.
+        // Build a lookup so we can resolve either form to a sprint member.
+        $loginToUid = [];
+        $userIter = $DB->request([
+            'SELECT' => ['id', 'name'],
+            'FROM'   => 'glpi_users',
+            'WHERE'  => ['id' => array_keys($memberIds)],
+        ]);
+        foreach ($userIter as $u) {
+            $login = trim((string)($u['name'] ?? ''));
+            if ($login !== '') {
+                $loginToUid[$login] = (int)$u['id'];
+            }
+        }
+
         // Same target set as the audit tab — sprint itself, items, members,
         // meetings, fastlane allocations.
         $targets = self::resolveTargetIds($sprintId);
@@ -600,8 +616,17 @@ class SprintAudit extends CommonGLPI
         foreach ($DB->request($criteria) as $row) {
             $raw = (string)($row['user_name'] ?? '');
             $uid = 0;
-            if (preg_match('/\((\d+)\)\s*$/', $raw, $m)) {
-                $uid = (int)$m[1];
+            // glpi_logs typically stores actor as "Display Name (login)".
+            // The token in parens is usually the login string, occasionally
+            // a numeric id. Try numeric first, then resolve login → id via
+            // the sprint-member lookup we built above.
+            if (preg_match('/\(([^)]+)\)\s*$/', $raw, $m)) {
+                $token = trim($m[1]);
+                if (ctype_digit($token)) {
+                    $uid = (int)$token;
+                } elseif (isset($loginToUid[$token])) {
+                    $uid = $loginToUid[$token];
+                }
             }
             if ($uid <= 0 || !isset($memberIds[$uid])) {
                 continue;

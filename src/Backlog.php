@@ -195,6 +195,11 @@ class Backlog
 
         echo "</table>";
         echo "</div>";
+
+        // Mount the modal + JS that powers the pencil "quick edit linked item"
+        // buttons rendered by SprintItem::getLinkedItemDisplay(). Without this
+        // the buttons appear but clicking them is a no-op.
+        SprintItem::renderLinkedQuickEditUI();
     }
 
     private static function renderBlockedSection(array $blockedItems, bool $canedit, array $typeLabels): void

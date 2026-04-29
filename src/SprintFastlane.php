@@ -148,5 +148,10 @@ class SprintFastlane extends CommonGLPI
         }
 
         echo "</table></div>";
+
+        // Mount the modal + JS that powers the pencil "quick edit linked item"
+        // buttons rendered by SprintItem::getLinkedItemDisplay(). Without this
+        // the buttons appear but clicking them is a no-op.
+        SprintItem::renderLinkedQuickEditUI();
     }
 }
