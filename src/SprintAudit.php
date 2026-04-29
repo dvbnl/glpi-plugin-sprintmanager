@@ -526,12 +526,15 @@ class SprintAudit extends CommonGLPI
         $rangeStart = $retentionStart;
         $rangeEnd   = $today;
         if ($sprint->getFromDB($sprintId)) {
+            // Chart begins on day 1 of the sprint — pre-sprint refinement
+            // is not part of "team activity within this sprint".
             if (!empty($sprint->fields['date_start'])) {
                 try {
                     $ds = new \DateTimeImmutable(substr((string)$sprint->fields['date_start'], 0, 10));
                     if ($ds > $rangeStart) { $rangeStart = $ds; }
                 } catch (\Exception $e) { /* ignore */ }
             }
+            // For finished sprints, hide post-sprint activity.
             if (!empty($sprint->fields['date_end'])) {
                 try {
                     $de = new \DateTimeImmutable(substr((string)$sprint->fields['date_end'], 0, 10));

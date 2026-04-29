@@ -9,7 +9,9 @@
  * the UI can show a confirmation toast that links to the sprint.
  */
 
-include(dirname(__DIR__, 3) . '/inc/includes.php');
+if (!defined('GLPI_ROOT')) {
+    include(dirname(__DIR__, 3) . '/inc/includes.php');
+}
 
 header('Content-Type: application/json');
 

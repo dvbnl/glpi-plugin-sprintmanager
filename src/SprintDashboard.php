@@ -762,7 +762,7 @@ class SprintDashboard extends CommonGLPI
             __('Audit-log events per member per day — spot uneven workloads.', 'sprint') .
             "</div>";
 
-        if (count($dates) < 2 || count($members) === 0) {
+        if (count($dates) < 1 || count($members) === 0) {
             // Diagnose why the chart is empty so users (especially on
             // existing/older sprints, where activity may be outside the
             // retention window) understand the feature is present and why

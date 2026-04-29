@@ -7,7 +7,9 @@
  * plugin menu in addition to the Setup > General tab registration.
  */
 
-include(dirname(__DIR__, 3) . '/inc/includes.php');
+if (!defined('GLPI_ROOT')) {
+    include(dirname(__DIR__, 3) . '/inc/includes.php');
+}
 
 Session::checkRight('config', READ);
 

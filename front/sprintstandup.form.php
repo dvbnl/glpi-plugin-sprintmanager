@@ -4,7 +4,9 @@
  * SprintStandup form page
  */
 
-include(dirname(__DIR__, 3) . '/inc/includes.php');
+if (!defined('GLPI_ROOT')) {
+    include(dirname(__DIR__, 3) . '/inc/includes.php');
+}
 
 Session::checkRight('plugin_sprint_item', READ);
 

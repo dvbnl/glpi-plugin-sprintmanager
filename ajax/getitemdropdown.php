@@ -5,7 +5,9 @@
  * (Ticket, Change, or ProjectTask).
  */
 
-include(dirname(__DIR__, 3) . '/inc/includes.php');
+if (!defined('GLPI_ROOT')) {
+    include(dirname(__DIR__, 3) . '/inc/includes.php');
+}
 
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);

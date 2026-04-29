@@ -5,7 +5,9 @@
  * Setup > General > SprintManager tab.
  */
 
-include(dirname(__DIR__, 3) . '/inc/includes.php');
+if (!defined('GLPI_ROOT')) {
+    include(dirname(__DIR__, 3) . '/inc/includes.php');
+}
 
 Session::checkRight('config', UPDATE);
 

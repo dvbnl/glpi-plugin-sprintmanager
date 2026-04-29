@@ -4,7 +4,9 @@
  * AJAX handler to get sprint template data for pre-filling sprint form
  */
 
-include(dirname(__DIR__, 3) . '/inc/includes.php');
+if (!defined('GLPI_ROOT')) {
+    include(dirname(__DIR__, 3) . '/inc/includes.php');
+}
 
 header('Content-Type: application/json');
 
