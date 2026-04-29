@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.0.8');
+define('PLUGIN_SPRINT_VERSION', '1.0.9');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -182,6 +182,14 @@ function plugin_init_sprint(): void
 
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintAudit',
+        ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
+    );
+
+    // End-of-sprint export report tab — registered after SprintAudit so
+    // it appears directly under the Audit log entry in the sprint tab
+    // rail.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintExport',
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
     );
 

@@ -187,6 +187,12 @@ class SprintChange extends CommonDBRelation
             'items_id' => $changeID,
             ['NOT' => ['plugin_sprint_sprints_id' => 0]],
         ]);
+
+        $backlogRows = $si->find([
+            'itemtype'                 => 'Change',
+            'items_id'                 => $changeID,
+            'plugin_sprint_sprints_id' => 0,
+        ]);
         $statuses = Sprint::getAllStatuses();
 
         echo "<div class='center'><table class='tab_cadre_fixe'>";
@@ -234,6 +240,52 @@ class SprintChange extends CommonDBRelation
         }
 
         echo "</table></div>";
+
+        if (count($backlogRows) > 0) {
+            $backlogUrl = Backlog::getSearchURL();
+            echo "<div class='center' style='margin-top:18px;'><table class='tab_cadre_fixe'>";
+            echo "<tr class='tab_bg_2'>";
+            echo "<th colspan='" . ($canedit ? 4 : 3) . "' style='background:#e7f1ff;color:#084298;'>"
+                . "<i class='fas fa-layer-group'></i> "
+                . __('On backlog', 'sprint')
+                . "</th>";
+            echo "</tr>";
+            echo "<tr class='tab_bg_2'>";
+            echo "<th>" . __('Backlog item', 'sprint') . "</th>";
+            echo "<th><i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" . __('Is Fastlane', 'sprint') . "</th>";
+            echo "<th><i class='fas fa-ban' style='color:#dc3545;margin-right:4px;'></i>" . __('Is Blocked', 'sprint') . "</th>";
+            if ($canedit) {
+                echo "<th>" . __('Actions') . "</th>";
+            }
+            echo "</tr>";
+
+            foreach ($backlogRows as $row) {
+                $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
+                $isBlocked  = (int)($row['is_blocked'] ?? 0) === 1;
+
+                echo "<tr class='tab_bg_1'>";
+                echo "<td><a href='" . SprintItem::getFormURLWithID($row['id']) . "'>"
+                    . htmlescape($row['name']) . "</a></td>";
+                echo "<td class='center'>"
+                    . ($isFastlane
+                        ? "<i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Yes')
+                        : "<span class='text-muted'>" . __('No') . "</span>")
+                    . "</td>";
+                echo "<td class='center'>"
+                    . ($isBlocked
+                        ? "<i class='fas fa-ban' style='color:#dc3545;'></i> " . __('Yes')
+                        : "<span class='text-muted'>" . __('No') . "</span>")
+                    . "</td>";
+                if ($canedit) {
+                    echo "<td class='center'><a href='" . $backlogUrl . "' class='btn btn-sm btn-outline-primary'>"
+                        . "<i class='fas fa-layer-group'></i> " . __('Open backlog', 'sprint')
+                        . "</a></td>";
+                }
+                echo "</tr>";
+            }
+
+            echo "</table></div>";
+        }
     }
 
     public function prepareInputForAdd($input)

@@ -730,3 +730,107 @@ msgstr "Reporté vers %s"
 
 msgid "Could not carry the item over to the target sprint"
 msgstr "Impossible de reporter l'élément vers le sprint cible"
+
+# ===== 1.0.9 — backlog visibility on Change/ProjectTask, unassigned filter, team-activity empty states =====
+
+msgid "Unassigned only"
+msgstr "Non assignés uniquement"
+
+msgid "No activity to display yet."
+msgstr "Aucune activité à afficher pour le moment."
+
+msgid "Add team members to start tracking team activity."
+msgstr "Ajoutez des membres d'équipe pour suivre l'activité de l'équipe."
+
+msgid "This sprint ended more than %d days ago — activity data is outside the retention window."
+msgstr "Ce sprint s'est terminé il y a plus de %d jours — les données d'activité sont hors de la fenêtre de conservation."
+
+msgid "Sprint has not started yet — activity will appear here once team members make changes."
+msgstr "Le sprint n'a pas encore commencé — l'activité apparaîtra ici dès que les membres feront des modifications."
+
+msgid "No tracked activity yet for this sprint."
+msgstr "Aucune activité enregistrée pour ce sprint."
+
+msgid "No tracked activity yet for this sprint — make a change in any sprint item, member or meeting and it will show up here."
+msgstr "Aucune activité enregistrée pour ce sprint — modifiez un élément du sprint, un membre ou une réunion et cela apparaîtra ici."
+
+msgid "Already linked to a sprint — use \"Carry over to sprint\" to move it between sprints."
+msgstr "Déjà lié à un sprint — utilisez « Reporter vers un sprint » pour le déplacer entre les sprints."
+
+msgid "This item is already linked to a sprint — use \"Carry over to sprint\" to move it between sprints."
+msgstr "Cet élément est déjà lié à un sprint — utilisez « Reporter vers un sprint » pour le déplacer entre les sprints."
+
+msgid "Assigned to %s"
+msgstr "Affecté à %s"
+
+msgid "Could not assign item to sprint"
+msgstr "Impossible d'affecter l'élément au sprint"
+
+msgid "Export report"
+msgstr "Exporter le rapport"
+
+msgid "Open a printable report — use the browser's print dialog to save as PDF."
+msgstr "Ouvre un rapport imprimable — utilisez la boîte de dialogue d'impression du navigateur pour enregistrer en PDF."
+
+msgid "Sprint report"
+msgstr "Rapport de sprint"
+
+msgid "Sprint report — %s"
+msgstr "Rapport de sprint — %s"
+
+msgid "Summary"
+msgstr "Résumé"
+
+msgid "Workload per member"
+msgstr "Charge de travail par membre"
+
+msgid "Free"
+msgstr "Disponible"
+
+msgid "Distribution"
+msgstr "Distribution"
+
+msgid "No items in this sprint."
+msgstr "Aucun élément dans ce sprint."
+
+msgid "No team members defined for this sprint."
+msgstr "Aucun membre d'équipe défini pour ce sprint."
+
+msgid "No tracked activity to chart for this sprint."
+msgstr "Aucune activité enregistrée à représenter pour ce sprint."
+
+msgid "Print / Save as PDF"
+msgstr "Imprimer / Enregistrer en PDF"
+
+msgid "Generated on %s"
+msgstr "Généré le %s"
+
+msgid "Sprint not found"
+msgstr "Sprint introuvable"
+
+msgid "No fastlane items in this sprint."
+msgstr "Aucun élément fastlane dans ce sprint."
+
+msgid "Allocations"
+msgstr "Allocations"
+
+msgid "Total %"
+msgstr "Total %"
+
+msgid "No allocations"
+msgstr "Aucune allocation"
+
+msgid "Fastlane capacity per member"
+msgstr "Capacité fastlane par membre"
+
+msgid "Manage fastlane members"
+msgstr "Gérer les membres fastlane"
+
+msgid "Fastlane allocations"
+msgstr "Allocations fastlane"
+
+msgid "Report logo URL"
+msgstr "URL du logo du rapport"
+
+msgid "Optional. Absolute URL or path relative to the GLPI install (e.g. \"front/pics/logo.png\", \"https://example.com/logo.svg\") used in the sprint export report header. Leave empty to auto-detect from GLPI's configured central logo or your custom CSS."
+msgstr "Optionnel. URL absolue ou chemin relatif à l'installation GLPI (ex. « front/pics/logo.png », « https://exemple.com/logo.svg ») utilisé dans l'en-tête du rapport d'export de sprint. Laissez vide pour détecter automatiquement à partir du logo central configuré dans GLPI ou de votre CSS personnalisé."

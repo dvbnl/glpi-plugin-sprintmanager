@@ -91,8 +91,9 @@
                     <option value="{{ key }}">{{ label }}</option>
                     {% endfor %}
                 </select>
-                <select class="form-select form-select-sm sf-owner" style="max-width:200px;">
+                <select class="form-select form-select-sm sf-owner" style="max-width:220px;">
                     <option value="">{{ __('All owners', 'sprint') }}</option>
+                    <option value="__unassigned__">{{ __('Unassigned only', 'sprint') }}</option>
                     {% for uid, uname in member_options %}
                     {% if uid > 0 %}
                     <option value="{{ uid }}">{{ uname }}</option>
@@ -132,7 +133,9 @@
                             data-story-points="{{ si.story_points }}"
                             data-capacity="{{ si.capacity }}"
                             data-is-fastlane="1"
-                            data-note="{{ si.note }}">
+                            data-note="{{ si.note }}"
+                            data-fastlane-url="{{ si.fastlane_url }}"
+                            data-fastlane-allocations="{{ si.fastlane_allocations|default([])|json_encode|e('html_attr') }}">
                             <td class="text-center" style="white-space:nowrap;">
                                 {% if si.itemtype == 'Ticket' %}
                                     <i class="fas fa-ticket-alt" style="color:#0d6efd;" title="{{ __('Ticket') }}"></i>
@@ -155,10 +158,25 @@
                                 </span>
                             </td>
                             <td class="sprint-review-owner">
-                                {% if owner_name != '' %}
-                                    <i class="fas fa-user text-muted me-1"></i>{{ owner_name }}
+                                {% if si.fastlane_allocations is defined and si.fastlane_allocations|length > 0 %}
+                                    <div style="display:flex;flex-direction:column;gap:2px;">
+                                        {% for alloc in si.fastlane_allocations %}
+                                            <div style="font-size:0.88em;line-height:1.3;">
+                                                <i class="fas fa-bolt text-warning me-1" style="font-size:0.78em;"></i>{{ alloc.name }}
+                                                <span class="text-muted">({{ alloc.capacity }}%)</span>
+                                            </div>
+                                        {% endfor %}
+                                        {% if si.fastlane_total is defined and si.fastlane_total > 0 %}
+                                            <div class="text-muted" style="font-size:0.78em;margin-top:2px;">
+                                                {{ __('Total', 'sprint') }}: <strong style="color:#fd7e14;">{{ si.fastlane_total }}%</strong>
+                                            </div>
+                                        {% endif %}
+                                    </div>
                                 {% else %}
-                                    <span class="text-muted fst-italic">{{ __('Unassigned', 'sprint') }}</span>
+                                    <span class="text-muted fst-italic">{{ __('No allocations', 'sprint') }}</span>
+                                    <a href="{{ si.fastlane_url }}" class="ms-1" title="{{ __('Manage fastlane members', 'sprint') }}">
+                                        <i class="fas fa-cog text-muted"></i>
+                                    </a>
                                 {% endif %}
                             </td>
                             <td class="sprint-review-note" style="max-width:360px;">
@@ -171,6 +189,11 @@
                                         data-item-id="{{ si.id }}">
                                     <i class="fas fa-pen"></i>
                                 </button>
+                                <a href="{{ si.fastlane_url }}"
+                                   class="btn btn-sm btn-outline-warning me-1"
+                                   title="{{ __('Manage fastlane members', 'sprint') }}">
+                                    <i class="fas fa-users"></i>
+                                </a>
                                 {% if move_target_sprints is defined and move_target_sprints|length > 0 %}
                                 <div class="dropdown d-inline-block me-1">
                                     <button type="button"
@@ -232,8 +255,9 @@
                     <option value="{{ key }}">{{ label }}</option>
                     {% endfor %}
                 </select>
-                <select class="form-select form-select-sm sf-owner" style="max-width:200px;">
+                <select class="form-select form-select-sm sf-owner" style="max-width:220px;">
                     <option value="">{{ __('All owners', 'sprint') }}</option>
+                    <option value="__unassigned__">{{ __('Unassigned only', 'sprint') }}</option>
                     {% for uid, uname in member_options %}
                     {% if uid > 0 %}
                     <option value="{{ uid }}">{{ uname }}</option>
@@ -426,6 +450,51 @@
                 $modal.find('.sprint-qe-error').hide().text('');
                 $modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
 
+                // Fastlane items have multi-member allocations via the
+                // SprintFastlaneMember junction; the single users_id
+                // dropdown isn't authoritative. Hide the owner select for
+                // those rows and surface the per-user allocations + a
+                // shortcut to the manage tab instead.
+                var $owner    = $modal.find('.sprint-qe-owner');
+                var $fastList = $modal.find('.sprint-qe-fastlane-allocations');
+                if (isFastlane) {
+                    $owner.hide();
+                    $fastList.show();
+                    var allocs = [];
+                    var raw = $row.attr('data-fastlane-allocations');
+                    if (raw) {
+                        try { allocs = JSON.parse(raw); } catch (e) { allocs = []; }
+                    }
+                    var $list = $fastList.find('.sprint-qe-fastlane-list').empty();
+                    if (allocs.length === 0) {
+                        $list.append(
+                            $('<span class="text-muted fst-italic"></span>').text('{{ __('No allocations', 'sprint')|e('js') }}')
+                        );
+                    } else {
+                        var total = 0;
+                        allocs.forEach(function(a) {
+                            total += parseInt(a.capacity, 10) || 0;
+                            $list.append(
+                                $('<div></div>').css({display: 'flex', justifyContent: 'space-between', padding: '2px 0'})
+                                    .append($('<span></span>').html('<i class="fas fa-bolt text-warning me-1" style="font-size:0.78em;"></i>').append(document.createTextNode(a.name || '')))
+                                    .append($('<strong></strong>').css('color', '#fd7e14').text((a.capacity || 0) + '%'))
+                            );
+                        });
+                        $list.append(
+                            $('<div class="text-muted small mt-1" style="border-top:1px dashed #fd7e14;padding-top:4px;"></div>')
+                                .append(document.createTextNode('{{ __('Total', 'sprint')|e('js') }}: '))
+                                .append($('<strong></strong>').css('color', '#fd7e14').text(total + '%'))
+                        );
+                    }
+                    var fastUrl = $row.attr('data-fastlane-url') || '';
+                    if (fastUrl) {
+                        $fastList.find('.sprint-qe-fastlane-manage').attr('href', fastUrl);
+                    }
+                } else {
+                    $owner.show();
+                    $fastList.hide();
+                }
+
                 var capacityLocked = {{ capacity_locked ? 'true' : 'false' }};
                 $modal.find('select[name=capacity]').prop('disabled', capacityLocked && !isFastlane);
 
@@ -554,13 +623,22 @@
                         </div>
 
                         <div class="row g-3">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-6 mb-3 sprint-qe-owner">
                                 <label class="form-label">{{ __('Owner', 'sprint') }}</label>
                                 <select name="users_id" class="form-select">
                                     {% for uid, uname in member_options %}
                                     <option value="{{ uid }}">{{ uname }}</option>
                                     {% endfor %}
                                 </select>
+                            </div>
+                            <div class="col-md-6 mb-3 sprint-qe-fastlane-allocations" style="display:none;">
+                                <label class="form-label">
+                                    <i class="fas fa-bolt text-warning me-1"></i>{{ __('Fastlane allocations', 'sprint') }}
+                                </label>
+                                <div class="sprint-qe-fastlane-list" style="border:1px solid #e9ecef;border-radius:6px;padding:8px 10px;background:#fff8e1;font-size:0.9em;min-height:38px;"></div>
+                                <a href="#" class="sprint-qe-fastlane-manage btn btn-sm btn-outline-warning mt-2" target="_blank" rel="noopener">
+                                    <i class="fas fa-cog me-1"></i>{{ __('Manage fastlane members', 'sprint') }}
+                                </a>
                             </div>
                             <div class="col-md-3 mb-3 sprint-qe-story-points">
                                 <label class="form-label">{{ __('Story Points', 'sprint') }}</label>

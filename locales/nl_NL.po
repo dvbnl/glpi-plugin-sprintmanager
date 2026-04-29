@@ -929,3 +929,109 @@ msgstr "Doorgetrokken naar %s"
 
 msgid "Could not carry the item over to the target sprint"
 msgstr "Kon het item niet doortrekken naar de doelsprint"
+
+# ===== 1.0.9 — backlog visibility on Change/ProjectTask, unassigned filter, team-activity empty states =====
+
+msgid "Unassigned only"
+msgstr "Alleen zonder eigenaar"
+
+msgid "No activity to display yet."
+msgstr "Nog geen activiteit om weer te geven."
+
+msgid "Add team members to start tracking team activity."
+msgstr "Voeg teamleden toe om teamactiviteit bij te houden."
+
+msgid "This sprint ended more than %d days ago — activity data is outside the retention window."
+msgstr "Deze sprint is meer dan %d dagen geleden geëindigd — de activiteitsgegevens vallen buiten de bewaarperiode."
+
+msgid "Sprint has not started yet — activity will appear here once team members make changes."
+msgstr "Sprint is nog niet gestart — activiteit verschijnt hier zodra teamleden wijzigingen maken."
+
+msgid "No tracked activity yet for this sprint."
+msgstr "Nog geen geregistreerde activiteit voor deze sprint."
+
+msgid "No tracked activity yet for this sprint — make a change in any sprint item, member or meeting and it will show up here."
+msgstr "Nog geen geregistreerde activiteit voor deze sprint — wijzig een sprint item, lid of meeting en het verschijnt hier."
+
+msgid "Already linked to a sprint — use \"Carry over to sprint\" to move it between sprints."
+msgstr "Al gekoppeld aan een sprint — gebruik \"Doortrekken naar sprint\" om het tussen sprints te verplaatsen."
+
+msgid "This item is already linked to a sprint — use \"Carry over to sprint\" to move it between sprints."
+msgstr "Dit item is al gekoppeld aan een sprint — gebruik \"Doortrekken naar sprint\" om het tussen sprints te verplaatsen."
+
+msgid "Assigned to %s"
+msgstr "Toegewezen aan %s"
+
+msgid "Could not assign item to sprint"
+msgstr "Kon item niet toewijzen aan sprint"
+
+msgid "Export report"
+msgstr "Rapport exporteren"
+
+msgid "Open a printable report — use the browser's print dialog to save as PDF."
+msgstr "Open een printbaar rapport — gebruik het printvenster van de browser om op te slaan als PDF."
+
+
+
+msgid "Sprint report"
+msgstr "Sprintrapport"
+
+msgid "Sprint report — %s"
+msgstr "Sprintrapport — %s"
+
+msgid "Summary"
+msgstr "Samenvatting"
+
+msgid "Workload per member"
+msgstr "Werklast per teamlid"
+
+msgid "Free"
+msgstr "Beschikbaar"
+
+msgid "Distribution"
+msgstr "Verdeling"
+
+msgid "No items in this sprint."
+msgstr "Geen items in deze sprint."
+
+msgid "No team members defined for this sprint."
+msgstr "Geen teamleden gedefinieerd voor deze sprint."
+
+msgid "No tracked activity to chart for this sprint."
+msgstr "Geen geregistreerde activiteit om te visualiseren voor deze sprint."
+
+msgid "Print / Save as PDF"
+msgstr "Printen / opslaan als PDF"
+
+msgid "Generated on %s"
+msgstr "Gegenereerd op %s"
+
+msgid "Sprint not found"
+msgstr "Sprint niet gevonden"
+
+msgid "No fastlane items in this sprint."
+msgstr "Geen fastlane items in deze sprint."
+
+msgid "Allocations"
+msgstr "Toewijzingen"
+
+msgid "Total %"
+msgstr "Totaal %"
+
+msgid "No allocations"
+msgstr "Geen toewijzingen"
+
+msgid "Fastlane capacity per member"
+msgstr "Fastlane capaciteit per teamlid"
+
+msgid "Manage fastlane members"
+msgstr "Fastlane-teamleden beheren"
+
+msgid "Fastlane allocations"
+msgstr "Fastlane toewijzingen"
+
+msgid "Report logo URL"
+msgstr "Rapport logo URL"
+
+msgid "Optional. Absolute URL or path relative to the GLPI install (e.g. \"front/pics/logo.png\", \"https://example.com/logo.svg\") used in the sprint export report header. Leave empty to auto-detect from GLPI's configured central logo or your custom CSS."
+msgstr "Optioneel. Absolute URL of pad relatief aan de GLPI-installatie (bijv. \"front/pics/logo.png\", \"https://voorbeeld.nl/logo.svg\") voor de header van het sprintrapport. Laat leeg om automatisch te detecteren via het centrale logo of je custom CSS."

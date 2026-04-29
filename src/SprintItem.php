@@ -649,8 +649,9 @@ class SprintItem extends CommonDBTM
         }
 
         if (!empty($owners)) {
-            echo "<select class='form-select form-select-sm sf-owner' style='max-width:200px;'>";
+            echo "<select class='form-select form-select-sm sf-owner' style='max-width:220px;'>";
             echo "<option value=''>" . __('All owners', 'sprint') . "</option>";
+            echo "<option value='__unassigned__'>" . __('Unassigned only', 'sprint') . "</option>";
             foreach ($owners as $uidOpt => $name) {
                 if ((int)$uidOpt === 0) continue;
                 echo "<option value='" . (int)$uidOpt . "'>" . htmlescape((string)$name) . "</option>";
@@ -1184,13 +1185,81 @@ JS;
             }
         }
 
+        // Updates often only carry the changed field (e.g. just sprints_id
+        // when assigning a backlog item). Fill in itemtype/items_id from
+        // the persisted row so validateNoDuplicateLink can still detect a
+        // duplicate move into an already-linked sprint.
+        $validationInput = $input;
+        if (!isset($validationInput['itemtype'])) {
+            $validationInput['itemtype'] = (string)($this->fields['itemtype'] ?? '');
+        }
+        if (!isset($validationInput['items_id'])) {
+            $validationInput['items_id'] = (int)($this->fields['items_id'] ?? 0);
+        }
+        if (!isset($validationInput['plugin_sprint_sprints_id'])) {
+            $validationInput['plugin_sprint_sprints_id'] = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        }
+
         if (!$this->validateCapacity($input, (int)($input['id'] ?? 0))) {
             return false;
         }
-        if (!self::validateNoDuplicateLink($input, (int)($input['id'] ?? 0))) {
+        if (!self::validateNoDuplicateLink($validationInput, (int)($input['id'] ?? 0))) {
             return false;
         }
         return parent::prepareInputForUpdate($input);
+    }
+
+    /**
+     * Drop backlog (sprints_id = 0) rows that point at the same linked
+     * GLPI item — a SprintItem in a real sprint and a backlog row for the
+     * same Ticket/Change/ProjectTask should not coexist.
+     *
+     * Manual items (empty itemtype) have no stable identity so this is a
+     * no-op for them.
+     *
+     * @return int Number of backlog rows removed.
+     */
+    public static function removeBacklogDuplicatesForLinkedItem(string $itemtype, int $itemsId): int
+    {
+        if ($itemtype === '' || $itemsId <= 0) {
+            return 0;
+        }
+
+        $si      = new self();
+        $rows    = $si->find([
+            'plugin_sprint_sprints_id' => 0,
+            'itemtype'                 => $itemtype,
+            'items_id'                 => $itemsId,
+        ]);
+        $removed = 0;
+        foreach ($rows as $row) {
+            if ($si->delete(['id' => (int)$row['id']], 1)) {
+                $removed++;
+            }
+        }
+        return $removed;
+    }
+
+    public function post_addItem()
+    {
+        $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        $itemtype = (string)($this->fields['itemtype'] ?? '');
+        $itemsId  = (int)($this->fields['items_id'] ?? 0);
+        if ($sprintId > 0) {
+            self::removeBacklogDuplicatesForLinkedItem($itemtype, $itemsId);
+        }
+        parent::post_addItem();
+    }
+
+    public function post_updateItem($history = true)
+    {
+        $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        $itemtype = (string)($this->fields['itemtype'] ?? '');
+        $itemsId  = (int)($this->fields['items_id'] ?? 0);
+        if ($sprintId > 0) {
+            self::removeBacklogDuplicatesForLinkedItem($itemtype, $itemsId);
+        }
+        parent::post_updateItem($history);
     }
 
     /**

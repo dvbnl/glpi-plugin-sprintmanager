@@ -23,6 +23,10 @@ class Config extends CommonDBTM
     /** Only the sprint's Scrum Master may edit capacity on regular sprint items. */
     const CFG_SCRUM_MASTER_CAPACITY = 'scrum_master_only_capacity';
 
+    /** Optional URL or relative path to a logo to embed in the sprint export
+     *  report header. Overrides any auto-detected logo. */
+    const CFG_REPORT_LOGO_URL = 'report_logo_url';
+
     public static function getTypeName($nb = 0): string
     {
         return __('SprintManager', 'sprint');
@@ -42,9 +46,16 @@ class Config extends CommonDBTM
     {
         $defaults = [
             self::CFG_SCRUM_MASTER_CAPACITY => 0,
+            self::CFG_REPORT_LOGO_URL       => '',
         ];
         $stored = GlpiConfig::getConfigurationValues(self::CONTEXT);
         return array_merge($defaults, $stored);
+    }
+
+    public static function getReportLogoUrl(): string
+    {
+        $cfg = self::getConfig();
+        return trim((string)($cfg[self::CFG_REPORT_LOGO_URL] ?? ''));
     }
 
     /**
@@ -63,6 +74,7 @@ class Config extends CommonDBTM
     {
         $values = [
             self::CFG_SCRUM_MASTER_CAPACITY => (int)(bool)($input[self::CFG_SCRUM_MASTER_CAPACITY] ?? 0),
+            self::CFG_REPORT_LOGO_URL       => trim((string)($input[self::CFG_REPORT_LOGO_URL] ?? '')),
         ];
         GlpiConfig::setConfigurationValues(self::CONTEXT, $values);
     }
@@ -136,6 +148,22 @@ class Config extends CommonDBTM
             . ($canedit ? '' : ' disabled') . ">";
         echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
         echo "</label>";
+        echo "</td></tr>";
+
+        // Report logo URL — explicit override for the sprint export header.
+        // When custom branding is set via custom CSS (no `central_logo`
+        // configured), the export can't auto-detect the logo reliably, so
+        // the admin can paste the URL or relative path here.
+        $logoUrl = htmlescape((string)$cfg[self::CFG_REPORT_LOGO_URL]);
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Report logo URL', 'sprint') . "<br>";
+        echo "<span class='text-muted' style='font-size:0.85em;'>" .
+            __('Optional. Absolute URL or path relative to the GLPI install (e.g. "front/pics/logo.png", "https://example.com/logo.svg") used in the sprint export report header. Leave empty to auto-detect from GLPI\'s configured central logo or your custom CSS.', 'sprint') .
+            "</span></td>";
+        echo "<td>";
+        echo "<input type='text' class='form-control' name='" . self::CFG_REPORT_LOGO_URL . "' "
+            . "value='{$logoUrl}' placeholder='https://...' "
+            . ($canedit ? '' : 'readonly') . ">";
         echo "</td></tr>";
 
         if ($canedit) {

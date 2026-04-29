@@ -78,7 +78,12 @@ class Backlog
     }
 
     /**
-     * Build a 1-click "Add to backlog" form for a Ticket / Change / ProjectTask
+     * Build a 1-click "Add to backlog" form for a Ticket / Change / ProjectTask.
+     *
+     * When the item already lives in a sprint we deliberately do NOT
+     * render the button — backlog and sprint membership are mutually
+     * exclusive in the workflow (use "Carry over to sprint" to loop an
+     * item between sprints instead).
      */
     public static function showAddToBacklogButton(string $itemtype, int $itemId): void
     {
@@ -89,6 +94,16 @@ class Backlog
 
         $allowed = ['Ticket', 'Change', 'ProjectTask'];
         if (!in_array($itemtype, $allowed, true) || $itemId <= 0) {
+            return;
+        }
+
+        if (self::isLinkedItemInAnySprint($itemtype, $itemId)) {
+            echo "<div class='center' style='margin:8px 0;'>";
+            echo "<span class='text-muted small'>"
+                . "<i class='fas fa-info-circle me-1'></i>"
+                . __('Already linked to a sprint — use "Carry over to sprint" to move it between sprints.', 'sprint')
+                . "</span>";
+            echo "</div>";
             return;
         }
 
@@ -103,6 +118,25 @@ class Backlog
             . "</button>";
         Html::closeForm();
         echo "</div>";
+    }
+
+    /**
+     * True when there is at least one SprintItem in a real sprint
+     * (sprints_id > 0) for the given linked GLPI item.
+     */
+    public static function isLinkedItemInAnySprint(string $itemtype, int $itemId): bool
+    {
+        if ($itemtype === '' || $itemId <= 0) {
+            return false;
+        }
+        return countElementsInTable(
+            SprintItem::getTable(),
+            [
+                'itemtype' => $itemtype,
+                'items_id' => $itemId,
+                ['NOT' => ['plugin_sprint_sprints_id' => 0]],
+            ]
+        ) > 0;
     }
 
     public static function showBacklog(): void
@@ -241,7 +275,8 @@ class Backlog
         $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
         $isBlocked  = (int)($row['is_blocked'] ?? 0) === 1;
 
-        echo "<tr class='tab_bg_1 sprint-filterable-row' "
+        echo "<tr class='tab_bg_1 sprint-filterable-row sprint-backlog-row' "
+            . "data-item-id='" . (int)$row['id'] . "' "
             . "data-item-name='" . htmlescape($row['name']) . "' "
             . "data-item-type='" . htmlescape($typeKey) . "'>";
         echo "<td><a href='" . SprintItem::getFormURLWithID($row['id']) . "'>"
@@ -287,14 +322,20 @@ class Backlog
 
         if ($canedit) {
             echo "<td>";
-            echo "<form method='post' action='" . self::getFormURL() . "' style='display:flex;gap:4px;align-items:center;'>";
+            // Sprint dropdown + AJAX-driven assign button. The form is kept
+            // as a no-JS fallback (regular POST → backlog.form.php), but
+            // sprint.js intercepts the submit and uses the dedicated AJAX
+            // endpoint so the row removes itself in place.
+            echo "<form method='post' action='" . self::getFormURL() . "' "
+                . "class='sprint-backlog-assign-form' style='display:flex;gap:4px;align-items:center;' "
+                . "data-item-id='" . (int)$row['id'] . "'>";
             echo Html::hidden('id', ['value' => $row['id']]);
             Sprint::dropdown([
                 'name'      => 'plugin_sprint_sprints_id',
                 'value'     => 0,
                 'condition' => ['status' => [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE]],
             ]);
-            echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-sm btn-primary'>"
+            echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-sm btn-primary sprint-backlog-assign-btn'>"
                 . "<i class='fas fa-arrow-right'></i> " . __('Assign', 'sprint') . "</button>";
             Html::closeForm();
             echo "</td>";
@@ -349,6 +390,13 @@ class Backlog
     {
         $allowed = ['Ticket', 'Change', 'ProjectTask'];
         if (!in_array($itemtype, $allowed, true) || $itemId <= 0) {
+            return 0;
+        }
+
+        // Backlog and sprint membership are mutually exclusive: refuse
+        // to create a backlog row when the linked item already lives in
+        // a sprint.
+        if (self::isLinkedItemInAnySprint($itemtype, $itemId)) {
             return 0;
         }
 

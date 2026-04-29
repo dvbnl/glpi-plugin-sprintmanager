@@ -745,11 +745,35 @@ class SprintDashboard extends CommonGLPI
      */
     private static function showMemberActivityChart(int $sprintId): void
     {
-        $data = SprintAudit::getMemberActivity($sprintId);
+        $data    = SprintAudit::getMemberActivity($sprintId);
         $dates   = $data['dates'];
         $members = $data['members'];
 
+        $collapseKey = 'dash-activity-' . (int)$sprintId;
+        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
+        echo "<div class='sprint-collapsible-header'>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-chart-line' style='margin-left:2px;'></i>";
+        echo "<span>" . __('Team activity', 'sprint') . "</span>";
+        echo "</div>";
+        echo "<div class='sprint-collapsible-body'>";
+
+        echo "<div style='font-size:0.85em;color:#6c757d;margin-bottom:6px;'>" .
+            __('Audit-log events per member per day — spot uneven workloads.', 'sprint') .
+            "</div>";
+
         if (count($dates) < 2 || count($members) === 0) {
+            // Diagnose why the chart is empty so users (especially on
+            // existing/older sprints, where activity may be outside the
+            // retention window) understand the feature is present and why
+            // there's nothing to plot yet.
+            $reason = self::diagnoseActivityEmptyReason($sprintId, $dates, $members);
+            echo "<div style='padding:18px;text-align:center;color:#6c757d;background:#f8f9fa;border:1px dashed #dee2e6;border-radius:6px;'>"
+                . "<i class='fas fa-info-circle' style='margin-right:6px;'></i>"
+                . htmlescape($reason)
+                . "</div>";
+            echo "</div>"; // .sprint-collapsible-body
+            echo "</div>"; // .sprint-collapsible
             return;
         }
 
@@ -780,19 +804,6 @@ class SprintDashboard extends CommonGLPI
 
         $xAt = fn(int $i) => $padL + ($xStep * $i);
         $yAt = fn(int $v) => $padT + $plotH - ($plotH * ($v / $yMax));
-
-        $collapseKey = 'dash-activity-' . (int)$sprintId;
-        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
-        echo "<div class='sprint-collapsible-header'>";
-        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
-        echo "<i class='fas fa-chart-line' style='margin-left:2px;'></i>";
-        echo "<span>" . __('Team activity', 'sprint') . "</span>";
-        echo "</div>";
-        echo "<div class='sprint-collapsible-body'>";
-
-        echo "<div style='font-size:0.85em;color:#6c757d;margin-bottom:6px;'>" .
-            __('Audit-log events per member per day — spot uneven workloads.', 'sprint') .
-            "</div>";
 
         echo "<div class='sprint-member-activity'>";
         echo "<div style='overflow-x:auto;'>";
@@ -872,5 +883,54 @@ class SprintDashboard extends CommonGLPI
         echo "</div>"; // .sprint-member-activity
         echo "</div>"; // .sprint-collapsible-body
         echo "</div>"; // .sprint-collapsible
+    }
+
+    /**
+     * Build a human-friendly explanation for why the team activity chart
+     * has nothing to plot. Helps users distinguish "feature missing on this
+     * sprint" (which it isn't — the chart is now always rendered) from
+     * legitimate empty states (no members, sprint already past the
+     * retention window, no logged actions yet).
+     */
+    private static function diagnoseActivityEmptyReason(int $sprintId, array $dates, array $members): string
+    {
+        $sprint = new Sprint();
+        if (!$sprint->getFromDB($sprintId)) {
+            return __('No activity to display yet.', 'sprint');
+        }
+
+        $hasMembers = countElementsInTable(
+            SprintMember::getTable(),
+            ['plugin_sprint_sprints_id' => $sprintId]
+        ) > 0;
+        if (!$hasMembers) {
+            return __('Add team members to start tracking team activity.', 'sprint');
+        }
+
+        if (count($dates) === 0) {
+            // Either the sprint hasn't started, or it ended outside the
+            // audit retention window so there's no data left to chart.
+            $endTs = !empty($sprint->fields['date_end'])
+                ? strtotime((string)$sprint->fields['date_end'])
+                : 0;
+            $cutoff = time() - (SprintAudit::RETENTION_DAYS * 86400);
+            if ($endTs > 0 && $endTs < $cutoff) {
+                return sprintf(
+                    __('This sprint ended more than %d days ago — activity data is outside the retention window.', 'sprint'),
+                    SprintAudit::RETENTION_DAYS
+                );
+            }
+            $startTs = !empty($sprint->fields['date_start'])
+                ? strtotime((string)$sprint->fields['date_start'])
+                : 0;
+            if ($startTs > time()) {
+                return __('Sprint has not started yet — activity will appear here once team members make changes.', 'sprint');
+            }
+            return __('No tracked activity yet for this sprint.', 'sprint');
+        }
+
+        // Dates exist, but no member crossed the threshold of having any
+        // logged action in range.
+        return __('No tracked activity yet for this sprint — make a change in any sprint item, member or meeting and it will show up here.', 'sprint');
     }
 }

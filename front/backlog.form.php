@@ -24,15 +24,23 @@ if (isset($_POST['add_to_backlog'])) {
     $itemtype = (string)($_POST['itemtype'] ?? '');
     $itemId   = (int)($_POST['items_id'] ?? 0);
 
-    $newId = GlpiPlugin\Sprint\Backlog::addFromLinkedItem($itemtype, $itemId);
-    if ($newId > 0) {
-        Session::addMessageAfterRedirect(__('Added to backlog', 'sprint'));
-    } else {
+    if (GlpiPlugin\Sprint\Backlog::isLinkedItemInAnySprint($itemtype, $itemId)) {
         Session::addMessageAfterRedirect(
-            __('Could not add item to backlog', 'sprint'),
+            __('This item is already linked to a sprint — use "Carry over to sprint" to move it between sprints.', 'sprint'),
             false,
             ERROR
         );
+    } else {
+        $newId = GlpiPlugin\Sprint\Backlog::addFromLinkedItem($itemtype, $itemId);
+        if ($newId > 0) {
+            Session::addMessageAfterRedirect(__('Added to backlog', 'sprint'));
+        } else {
+            Session::addMessageAfterRedirect(
+                __('Could not add item to backlog', 'sprint'),
+                false,
+                ERROR
+            );
+        }
     }
     Html::back();
 }

@@ -397,7 +397,12 @@
                 }
             }
             if (show && owner) {
-                if (String(row.getAttribute('data-users-id') || '') !== owner) { show = false; }
+                var rowOwner = String(row.getAttribute('data-users-id') || '0');
+                if (owner === '__unassigned__') {
+                    if (rowOwner !== '0' && rowOwner !== '') { show = false; }
+                } else if (rowOwner !== owner) {
+                    show = false;
+                }
             }
             if (show && type) {
                 if (String(row.getAttribute('data-item-type') || '') !== type) { show = false; }
@@ -738,5 +743,105 @@
     } else {
         bootBarWiring();
         initCollapsibles();
+    }
+
+    // ---- Backlog: AJAX assign-to-sprint ----
+    //
+    // Hijacks the per-row "Toewijzen" form so the backlog page no longer
+    // does a full reload on every assignment. On success the row is faded
+    // out + removed; the visible badge / counter stays in sync because
+    // the row no longer exists in the DOM. CSP-safe (delegated, no
+    // inline handlers on the markup itself).
+    function wireBacklogAssign() {
+        var pluginRoot = (window.CFG_GLPI && window.CFG_GLPI.root_doc)
+            ? window.CFG_GLPI.root_doc
+            : '';
+        var ajaxBase = pluginRoot + '/plugins/sprint/ajax/';
+
+        document.addEventListener('submit', function(e) {
+            var form = e.target;
+            if (!form || !form.classList || !form.classList.contains('sprint-backlog-assign-form')) {
+                return;
+            }
+            e.preventDefault();
+
+            var itemId = parseInt(form.getAttribute('data-item-id'), 10) || 0;
+            var sel    = form.querySelector('select[name="plugin_sprint_sprints_id"]');
+            var sprintId = sel ? parseInt(sel.value, 10) || 0 : 0;
+            if (itemId <= 0 || sprintId <= 0) {
+                if (window.glpi_toast_warning) { window.glpi_toast_warning('Select a sprint first'); }
+                return;
+            }
+
+            var btn = form.querySelector('.sprint-backlog-assign-btn');
+            if (btn) { btn.disabled = true; }
+
+            window.jQuery.ajax({
+                url: ajaxBase + 'csrftoken.php',
+                type: 'GET', dataType: 'json', cache: false
+            }).then(function(tokResp) {
+                return window.jQuery.ajax({
+                    url: ajaxBase + 'assigntosprint.php',
+                    type: 'POST', dataType: 'json',
+                    data: {
+                        id: itemId,
+                        plugin_sprint_sprints_id: sprintId,
+                        _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                    }
+                });
+            }).done(function(resp) {
+                if (resp && resp.success) {
+                    if (window.glpi_toast_info) {
+                        window.glpi_toast_info(resp.message || 'Assigned');
+                    }
+                    var row = form.closest('tr.sprint-backlog-row');
+                    if (row) {
+                        row.style.transition = 'opacity 0.25s';
+                        row.style.opacity = '0';
+                        setTimeout(function() {
+                            row.parentNode && row.parentNode.removeChild(row);
+                            var table = row.closest('table');
+                            if (table) {
+                                var dataRows = table.querySelectorAll('tr.sprint-backlog-row');
+                                if (dataRows.length === 0) {
+                                    var emptyTr = table.querySelector('tr.sprint-backlog-empty');
+                                    if (!emptyTr) {
+                                        var trEmpty = document.createElement('tr');
+                                        trEmpty.className = 'tab_bg_1 sprint-backlog-empty';
+                                        var td = document.createElement('td');
+                                        td.colSpan = 8;
+                                        td.className = 'center';
+                                        td.textContent = '—';
+                                        trEmpty.appendChild(td);
+                                        var tbody = table.querySelector('tbody') || table;
+                                        tbody.appendChild(trEmpty);
+                                    }
+                                }
+                            }
+                        }, 260);
+                    }
+                } else {
+                    if (window.glpi_toast_error) {
+                        window.glpi_toast_error((resp && resp.message) || 'Assign failed');
+                    } else {
+                        alert((resp && resp.message) || 'Assign failed');
+                    }
+                    if (btn) { btn.disabled = false; }
+                }
+            }).fail(function() {
+                if (window.glpi_toast_error) {
+                    window.glpi_toast_error('Network error');
+                } else {
+                    alert('Network error');
+                }
+                if (btn) { btn.disabled = false; }
+            });
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', wireBacklogAssign);
+    } else {
+        wireBacklogAssign();
     }
 })();

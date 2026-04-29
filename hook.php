@@ -445,6 +445,50 @@ function plugin_sprint_install(): bool
         );
     }
 
+    // One-time cleanup: remove duplicate SprintItem rows that point at the
+    // same linked GLPI item. The plugin pre-1.0.9 had paths that could
+    // create two SprintItems for one (sprint, ticket/change/project_task)
+    // pair — and a backlog row could coexist with the sprint version.
+    // Dedup once on every install/upgrade (cheap when there are no dupes).
+    if ($DB->tableExists('glpi_plugin_sprint_sprintitems')) {
+        // Delete duplicates within the same sprint, keeping the lowest id.
+        $dupeQuery = "DELETE si FROM `glpi_plugin_sprint_sprintitems` si
+            INNER JOIN `glpi_plugin_sprint_sprintitems` sj
+                ON si.plugin_sprint_sprints_id = sj.plugin_sprint_sprints_id
+               AND si.itemtype = sj.itemtype
+               AND si.items_id = sj.items_id
+               AND si.id > sj.id
+            WHERE si.itemtype <> ''
+              AND si.items_id > 0
+              AND si.plugin_sprint_sprints_id > 0";
+        $DB->doQuery($dupeQuery);
+
+        // Delete backlog rows (sprints_id = 0) for items that already live
+        // in at least one sprint.
+        $backlogQuery = "DELETE bl FROM `glpi_plugin_sprint_sprintitems` bl
+            INNER JOIN `glpi_plugin_sprint_sprintitems` sp
+                ON sp.itemtype = bl.itemtype
+               AND sp.items_id = bl.items_id
+            WHERE bl.plugin_sprint_sprints_id = 0
+              AND sp.plugin_sprint_sprints_id > 0
+              AND bl.itemtype <> ''
+              AND bl.items_id > 0";
+        $DB->doQuery($backlogQuery);
+
+        // Collapse multiple backlog rows for the same linked item — keep
+        // the lowest id.
+        $backlogDupeQuery = "DELETE bi FROM `glpi_plugin_sprint_sprintitems` bi
+            INNER JOIN `glpi_plugin_sprint_sprintitems` bj
+                ON bi.itemtype = bj.itemtype
+               AND bi.items_id = bj.items_id
+               AND bi.plugin_sprint_sprints_id = 0
+               AND bj.plugin_sprint_sprints_id = 0
+               AND bi.id > bj.id
+            WHERE bi.itemtype <> ''
+              AND bi.items_id > 0";
+        $DB->doQuery($backlogDupeQuery);
+    }
+
     // Add display preferences
     $pref = new DisplayPreference();
     $found = $pref->find([

@@ -259,20 +259,44 @@ class SprintMeeting extends CommonDBTM
                     }
                 }
 
+                // Fastlane items have multi-member allocations via the
+                // SprintFastlaneMember junction (single users_id is not
+                // authoritative for them). Resolve allocations so the
+                // meeting review can render the same per-user list the
+                // dashboard fastlane block already shows.
+                $fastlaneAllocations = [];
+                $fastlaneTotal       = 0;
+                if ((int)($row['is_fastlane'] ?? 0) === 1) {
+                    $rel = new SprintFastlaneMember();
+                    foreach ($rel->find(['plugin_sprint_sprintitems_id' => (int)$row['id']]) as $alloc) {
+                        $uid = (int)$alloc['users_id'];
+                        $cap = (int)$alloc['capacity'];
+                        $fastlaneTotal += $cap;
+                        $fastlaneAllocations[] = [
+                            'users_id' => $uid,
+                            'name'     => getUserName($uid),
+                            'capacity' => $cap,
+                        ];
+                    }
+                }
+
                 $sprintItemsData[] = [
-                    'id'             => (int)$row['id'],
-                    'name'           => $row['name'],
-                    'url'            => SprintItem::getFormURLWithID((int)$row['id']),
-                    'linked_display' => $linkedDisplay,
-                    'status'         => $row['status'],
-                    'users_id'       => (int)$row['users_id'],
-                    'story_points'   => (int)$row['story_points'],
-                    'capacity'       => (int)($row['capacity'] ?? 0),
-                    'priority'       => (int)($row['priority'] ?? 3),
-                    'note'           => $row['note'] ?? '',
-                    'itemtype'       => $itemtype,
-                    'project_name'   => $projectName,
-                    'is_fastlane'    => (int)($row['is_fastlane'] ?? 0),
+                    'id'                   => (int)$row['id'],
+                    'name'                 => $row['name'],
+                    'url'                  => SprintItem::getFormURLWithID((int)$row['id']),
+                    'linked_display'       => $linkedDisplay,
+                    'status'               => $row['status'],
+                    'users_id'             => (int)$row['users_id'],
+                    'story_points'         => (int)$row['story_points'],
+                    'capacity'             => (int)($row['capacity'] ?? 0),
+                    'priority'             => (int)($row['priority'] ?? 3),
+                    'note'                 => $row['note'] ?? '',
+                    'itemtype'             => $itemtype,
+                    'project_name'         => $projectName,
+                    'is_fastlane'          => (int)($row['is_fastlane'] ?? 0),
+                    'fastlane_allocations' => $fastlaneAllocations,
+                    'fastlane_total'       => $fastlaneTotal,
+                    'fastlane_url'         => SprintItem::getFormURLWithID((int)$row['id']) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintFastlaneMember$1'),
                 ];
             }
         }
