@@ -834,3 +834,8 @@ msgstr "URL del logo del informe"
 
 msgid "Optional. Absolute URL or path relative to the GLPI install (e.g. \"front/pics/logo.png\", \"https://example.com/logo.svg\") used in the sprint export report header. Leave empty to auto-detect from GLPI's configured central logo or your custom CSS."
 msgstr "Opcional. URL absoluta o ruta relativa a la instalación de GLPI (p. ej. «front/pics/logo.png», «https://ejemplo.com/logo.svg») usada en la cabecera del informe de sprint. Déjalo vacío para detectarlo automáticamente desde el logo central configurado en GLPI o tu CSS personalizado."
+
+# ===== 1.0.10 — meeting-source attribution for audit log + team activity chart =====
+
+msgid "via"
+msgstr "vía"

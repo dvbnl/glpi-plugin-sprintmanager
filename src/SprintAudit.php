@@ -125,7 +125,7 @@ class SprintAudit extends CommonGLPI
                 . "background:{$areaColor}22;color:{$areaColor};font-weight:600;font-size:0.78em;'>"
                 . htmlescape($areaLabel) . "</span></td>";
             echo "<td>" . $e['item_html'] . "</td>";
-            echo "<td>" . htmlescape($e['action']) . "</td>";
+            echo "<td>" . htmlescape($e['action']) . $e['source_html'] . "</td>";
             echo "<td>" . $e['change_html'] . "</td>";
             echo "<td style='white-space:nowrap;'>"
                 . ($e['user_name'] !== ''
@@ -196,6 +196,7 @@ class SprintAudit extends CommonGLPI
 
         $entries = [];
         $nameCache = [];
+        $logIds = [];
 
         foreach ($DB->request($criteria) as $row) {
             $area = self::areaForItemtype($row['itemtype']);
@@ -235,15 +236,13 @@ class SprintAudit extends CommonGLPI
             $whenTs   = strtotime($row['date_mod']);
             $whenText = $whenTs ? date('Y-m-d H:i', $whenTs) : (string)$row['date_mod'];
 
-            $search = implode(' ', [
-                $userName,
-                $action,
-                strip_tags($itemHtml),
-                strip_tags($changeHtml),
-                $area,
-            ]);
+            $logId = (int)($row['id'] ?? 0);
+            if ($logId > 0) {
+                $logIds[] = $logId;
+            }
 
             $entries[] = [
+                'log_id'      => $logId,
                 'when'        => $whenText,
                 'ts'          => $whenTs ?: 0,
                 'area'        => $area,
@@ -252,9 +251,43 @@ class SprintAudit extends CommonGLPI
                 'change_html' => $changeHtml,
                 'user_id'     => $userId,
                 'user_name'   => $userName ?: '',
-                'search'      => $search,
+                'search'      => '',
+                'source_html' => '',
+                'source_text' => '',
             ];
         }
+
+        // Tag rows that fanned out from a meeting save with a "via" badge.
+        $sources = self::loadSourcesForLogIds($logIds);
+        foreach ($entries as &$e) {
+            if (!isset($sources[$e['log_id']])) {
+                continue;
+            }
+            $src = $sources[$e['log_id']];
+            $sourceLabel = self::sourceTypeLabel($src['itemtype']);
+            $sourceLink  = self::formatItem($src['itemtype'], $src['items_id']);
+            $e['source_html'] = " <span class='badge bg-warning-subtle text-warning-emphasis ms-1' "
+                . "style='font-weight:500;font-size:0.72em;'>"
+                . "<i class='fas fa-link me-1'></i>"
+                . htmlescape(__('via', 'sprint')) . " "
+                . htmlescape($sourceLabel) . " " . $sourceLink
+                . "</span>";
+            $e['source_text'] = __('via', 'sprint') . ' ' . $sourceLabel . ' ' . strip_tags($sourceLink);
+        }
+        unset($e);
+
+        // Build the search blob last so source text is filterable.
+        foreach ($entries as &$e) {
+            $e['search'] = implode(' ', [
+                $e['user_name'],
+                $e['action'],
+                strip_tags($e['item_html']),
+                strip_tags($e['change_html']),
+                $e['area'],
+                $e['source_text'],
+            ]);
+        }
+        unset($e);
 
         return $entries;
     }
@@ -304,6 +337,14 @@ class SprintAudit extends CommonGLPI
             'meeting'   => __('Meeting', 'sprint'),
             'fastlane'  => __('Fastlane', 'sprint'),
         ];
+    }
+
+    private static function sourceTypeLabel(string $itemtype): string
+    {
+        switch ($itemtype) {
+            case SprintMeeting::class: return __('Meeting', 'sprint');
+            default:                   return $itemtype;
+        }
     }
 
     private static function areaForItemtype(string $itemtype): string
@@ -492,7 +533,127 @@ class SprintAudit extends CommonGLPI
             ['date_mod' => ['<', $cutoff]],
         ]);
 
-        return (int)$DB->affectedRows();
+        $deleted = (int)$DB->affectedRows();
+
+        // Drop attribution rows pointing at logs we just pruned.
+        if ($DB->tableExists('glpi_plugin_sprint_audit_sources')) {
+            $DB->doQuery(
+                "DELETE s FROM `glpi_plugin_sprint_audit_sources` s
+                 LEFT JOIN `glpi_logs` l ON l.`id` = s.`glpi_logs_id`
+                 WHERE l.`id` IS NULL"
+            );
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * {logId => true} for log rows attributed to a meeting save.
+     */
+    private static function loadMeetingSourcedLogIds(): array
+    {
+        global $DB;
+
+        $ids = [];
+        if (!$DB->tableExists('glpi_plugin_sprint_audit_sources')) {
+            return $ids;
+        }
+
+        $iter = $DB->request([
+            'SELECT' => ['glpi_logs_id'],
+            'FROM'   => 'glpi_plugin_sprint_audit_sources',
+            'WHERE'  => ['source_itemtype' => SprintMeeting::class],
+        ]);
+        foreach ($iter as $r) {
+            $ids[(int)$r['glpi_logs_id']] = true;
+        }
+        return $ids;
+    }
+
+    /**
+     * Highest current glpi_logs.id, or 0 if the table is empty/missing.
+     * Use as a "before" marker around an update; pair with
+     * tagNewLogsAsMeetingSourced() to attribute the new rows.
+     */
+    public static function snapshotMaxLogId(): int
+    {
+        global $DB;
+
+        if (!$DB->tableExists('glpi_logs')) {
+            return 0;
+        }
+        foreach ($DB->request([
+            'SELECT' => ['id'],
+            'FROM'   => 'glpi_logs',
+            'ORDER'  => ['id DESC'],
+            'LIMIT'  => 1,
+        ]) as $r) {
+            return (int)$r['id'];
+        }
+        return 0;
+    }
+
+    /**
+     * Mark every glpi_logs row written for this SprintItem after the
+     * given snapshot as caused by a meeting save. No-op when the
+     * side-table doesn't exist or any id is missing.
+     */
+    public static function tagNewLogsAsMeetingSourced(int $afterLogId, int $itemId, int $meetingId): void
+    {
+        global $DB;
+
+        if ($meetingId <= 0 || $itemId <= 0) {
+            return;
+        }
+        if (!$DB->tableExists('glpi_plugin_sprint_audit_sources')) {
+            return;
+        }
+
+        $now = $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s');
+        $iter = $DB->request([
+            'SELECT' => ['id'],
+            'FROM'   => 'glpi_logs',
+            'WHERE'  => [
+                'id'       => ['>', $afterLogId],
+                'itemtype' => SprintItem::class,
+                'items_id' => $itemId,
+            ],
+        ]);
+        foreach ($iter as $logRow) {
+            $DB->insert('glpi_plugin_sprint_audit_sources', [
+                'glpi_logs_id'    => (int)$logRow['id'],
+                'source_itemtype' => SprintMeeting::class,
+                'source_items_id' => $meetingId,
+                'date_creation'   => $now,
+            ]);
+        }
+    }
+
+    /**
+     * @param int[] $logIds
+     * @return array<int, array{itemtype:string, items_id:int}>
+     */
+    private static function loadSourcesForLogIds(array $logIds): array
+    {
+        global $DB;
+
+        $sources = [];
+        if (empty($logIds) || !$DB->tableExists('glpi_plugin_sprint_audit_sources')) {
+            return $sources;
+        }
+
+        $iter = $DB->request([
+            'SELECT' => ['glpi_logs_id', 'source_itemtype', 'source_items_id'],
+            'FROM'   => 'glpi_plugin_sprint_audit_sources',
+            'WHERE'  => ['glpi_logs_id' => array_map('intval', $logIds)],
+        ]);
+        foreach ($iter as $r) {
+            $sources[(int)$r['glpi_logs_id']] = [
+                'itemtype' => (string)$r['source_itemtype'],
+                'items_id' => (int)$r['source_items_id'],
+            ];
+        }
+        return $sources;
     }
 
     /**
@@ -584,9 +745,9 @@ class SprintAudit extends CommonGLPI
             }
         }
 
-        // Subset of the audit-tab targets: meetings are excluded so that
-        // bursts of edits during ceremonies (kick-off, refinement) don't
-        // skew the chart away from actual sprint-item work.
+        // Meeting-record edits don't count as item work; SprintItem rows
+        // that fanned out from a meeting save are filtered via the
+        // audit_sources side-table below.
         $targets = self::resolveTargetIds($sprintId);
         $orClauses = [];
         foreach ($targets as $t) {
@@ -605,8 +766,12 @@ class SprintAudit extends CommonGLPI
         $startSql = $rangeStart->format('Y-m-d') . ' 00:00:00';
         $endSql   = $rangeEnd->format('Y-m-d')   . ' 23:59:59';
 
+        // Drop log rows attributed to a meeting save (set is small —
+        // only meeting-driven logs are recorded).
+        $meetingSourcedLogIds = self::loadMeetingSourcedLogIds();
+
         $criteria = [
-            'SELECT' => ['user_name', 'date_mod'],
+            'SELECT' => ['id', 'user_name', 'date_mod'],
             'FROM'   => 'glpi_logs',
             'WHERE'  => [
                 'date_mod' => ['>=', $startSql],
@@ -618,6 +783,9 @@ class SprintAudit extends CommonGLPI
         // { user_id => { date_str => count } }
         $counts = [];
         foreach ($DB->request($criteria) as $row) {
+            if (isset($meetingSourcedLogIds[(int)$row['id']])) {
+                continue;
+            }
             $raw = (string)($row['user_name'] ?? '');
             $uid = 0;
             // glpi_logs typically stores actor as "Display Name (login)".

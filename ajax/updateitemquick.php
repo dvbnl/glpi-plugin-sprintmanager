@@ -63,7 +63,34 @@ foreach ($allowed as $field) {
     }
 }
 
+// Quick-edits fired from a meeting view send the active meeting id; tag
+// the resulting log rows as meeting-sourced so the activity chart skips
+// them and the audit log shows a "via Meeting" badge.
+$meetingId = (int)($_POST['meeting_id'] ?? 0);
+if ($meetingId > 0) {
+    $meeting = new GlpiPlugin\Sprint\SprintMeeting();
+    if (
+        !$meeting->getFromDB($meetingId)
+        || (int)($meeting->fields['plugin_sprint_sprints_id'] ?? 0)
+            !== (int)($item->fields['plugin_sprint_sprints_id'] ?? -1)
+    ) {
+        $meetingId = 0;
+    }
+}
+
+$beforeLogId = $meetingId > 0
+    ? GlpiPlugin\Sprint\SprintAudit::snapshotMaxLogId()
+    : 0;
+
 $result = $item->update($update);
+
+if ($meetingId > 0) {
+    GlpiPlugin\Sprint\SprintAudit::tagNewLogsAsMeetingSourced(
+        $beforeLogId,
+        (int)$_POST['id'],
+        $meetingId
+    );
+}
 
 // Drain any messages that SprintItem::validateCapacity (and similar) may
 // have queued via Session::addMessageAfterRedirect so we can surface them

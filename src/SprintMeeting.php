@@ -333,6 +333,7 @@ class SprintMeeting extends CommonDBTM
                     'treated_items'     => $treatedItems,
                     'backlog_url'       => \GlpiPlugin\Sprint\Backlog::getFormURL(),
                     'meeting_url'       => static::getFormURLWithID($ID),
+                    'meeting_id'        => $ID,
                     'sprint_id'         => $sprintId,
                     'move_target_sprints' => $carryOverTargetSprints,
                     'capacity_locked'   => \GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
@@ -534,7 +535,9 @@ class SprintMeeting extends CommonDBTM
     {
         // Process sprint item changes before the meeting update
         if (!empty($input['_sprintitems']) && is_array($input['_sprintitems'])) {
-            $si = new SprintItem();
+            $meetingId = (int)($this->fields['id'] ?? 0);
+            $si        = new SprintItem();
+
             foreach ($input['_sprintitems'] as $itemId => $fields) {
                 $itemId = (int)$itemId;
                 if ($itemId <= 0) {
@@ -552,7 +555,14 @@ class SprintMeeting extends CommonDBTM
                 if (array_key_exists('note', $fields)) {
                     $update['note'] = $fields['note'];
                 }
+
+                // Bracket the update with the highest log id so the rows
+                // GLPI writes here can be attributed to this meeting.
+                // Log::history() bypasses CommonDBTM hooks, so we can't
+                // catch them post-insert any other way.
+                $beforeLogId = SprintAudit::snapshotMaxLogId();
                 $si->update($update);
+                SprintAudit::tagNewLogsAsMeetingSourced($beforeLogId, $itemId, $meetingId);
             }
         }
 

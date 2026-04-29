@@ -527,6 +527,7 @@
                             capacity:     $modal.find('select[name=capacity]').val(),
                             note:         $modal.find('textarea[name=note]').val(),
                             carry_over_to_sprint_id: $modal.find('select[name=carry_over_to_sprint_id]').val(),
+                            meeting_id:   {{ meeting_id|default(0) }},
                             _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                         }
                     });

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.10] - 2026-04-29
+
+### Added
+- **Audit-source attribution**: a new side-table `glpi_plugin_sprint_audit_sources` records that a `glpi_logs` row was produced by a meeting context — both the bulk meeting-form save (which fans out into many SprintItem updates via `_sprintitems`) and quick-edits done from the meeting view (which post to `ajax/updateitemquick.php` with the active `meeting_id`). The audit tab shows a "via Meeting <name>" badge next to those rows so ceremony-driven edits are visually distinct from individual ones. Added via idempotent migration — existing sprint data is preserved; only forward-going meeting changes are tagged
+
+### Fixed
+- **Team activity chart no longer skewed by meeting saves**: the chart now deterministically excludes SprintItem log rows attributed to a meeting save (using the new audit-source side-table). Previously a meeting save with N items × multiple fields could inflate one member's activity by hundreds of events, and quick-edits on items during a ceremony were also counted as "individual work". The earlier 1.0.9 hotfix that excluded the SprintMeeting itemtype itself was insufficient because the heavy log fan-out lives on the items, not on the meeting record
+
 ## [1.0.9] - 2026-04-29
 
 ### Added

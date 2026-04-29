@@ -445,6 +445,26 @@ function plugin_sprint_install(): bool
         );
     }
 
+    // =========================================================================
+    // Table: glpi_plugin_sprint_audit_sources
+    // Attributes a glpi_logs row to the entity that triggered it (today:
+    // meeting saves that fan out into SprintItem updates).
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_audit_sources')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_audit_sources` (
+            `id`              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `glpi_logs_id`    INT UNSIGNED NOT NULL,
+            `source_itemtype` VARCHAR(255) NOT NULL DEFAULT '',
+            `source_items_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `date_creation`   TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `glpi_logs_id` (`glpi_logs_id`),
+            KEY `source` (`source_itemtype`, `source_items_id`),
+            KEY `date_creation` (`date_creation`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
+    }
+
     // One-time cleanup: remove duplicate SprintItem rows that point at the
     // same linked GLPI item. The plugin pre-1.0.9 had paths that could
     // create two SprintItems for one (sprint, ticket/change/project_task)
@@ -537,6 +557,7 @@ function plugin_sprint_uninstall(): bool
     global $DB;
 
     $tables = [
+        'glpi_plugin_sprint_audit_sources',
         'glpi_plugin_sprint_sprinttemplatemeetings',
         'glpi_plugin_sprint_sprinttemplateitems',
         'glpi_plugin_sprint_sprinttemplatemembers',
