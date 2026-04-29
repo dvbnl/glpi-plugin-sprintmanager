@@ -584,12 +584,13 @@ class SprintAudit extends CommonGLPI
             }
         }
 
-        // Same target set as the audit tab — sprint itself, items, members,
-        // meetings, fastlane allocations.
+        // Subset of the audit-tab targets: meetings are excluded so that
+        // bursts of edits during ceremonies (kick-off, refinement) don't
+        // skew the chart away from actual sprint-item work.
         $targets = self::resolveTargetIds($sprintId);
         $orClauses = [];
         foreach ($targets as $t) {
-            if (empty($t['ids'])) {
+            if (empty($t['ids']) || $t['itemtype'] === SprintMeeting::class) {
                 continue;
             }
             $orClauses[] = [
