@@ -32,6 +32,14 @@ if (isset($_POST['add'])) {
 
 } elseif (isset($_POST['purge'])) {
     $sprint->check($_POST['id'], PURGE);
+    if (!\GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster((int)$_POST['id'])) {
+        Session::addMessageAfterRedirect(
+            __('Only the Scrum Master can permanently delete a sprint.', 'sprint'),
+            false,
+            ERROR
+        );
+        Html::back();
+    }
     $sprint->delete($_POST, 1);
     $sprint->redirectToList();
 

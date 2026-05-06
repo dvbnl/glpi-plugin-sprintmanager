@@ -73,18 +73,14 @@ class SprintAudit extends CommonGLPI
 
         echo "<div class='center'>";
 
-        // Filter bar: free-text search + event type dropdown + apply + reset.
         $barId = 'sprint-audit-filter-' . mt_rand();
         echo "<div id='{$barId}' class='sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2' "
             . "style='background:#f1f3f5;border-radius:6px;max-width:1200px;margin-left:auto;margin-right:auto;'>";
         echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
             . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
-        // No inline handlers — sprint.js detects audit mode by the
-        // presence of `.sprint-audit-kind` inside the bar and then
-        // filters `tr.sprint-audit-row` on `data-search` + `data-area`.
         echo "<input type='search' class='form-control form-control-sm sf-text' "
             . "style='max-width:240px;' placeholder='" . __('Search action or user...', 'sprint') . "'>";
-        echo "<select class='form-select form-select-sm sprint-audit-kind' style='max-width:180px;'>";
+        echo "<select class='form-select form-select-sm sf-status' style='max-width:180px;'>";
         echo "<option value=''>" . __('All areas', 'sprint') . "</option>";
         $areas = self::getAreaLabels();
         foreach ($areas as $key => $label) {
@@ -116,9 +112,9 @@ class SprintAudit extends CommonGLPI
         foreach ($entries as $e) {
             $areaLabel = $areas[$e['area']] ?? $e['area'];
             $areaColor = self::areaColor($e['area']);
-            echo "<tr class='tab_bg_1 sprint-audit-row' "
-                . "data-search='" . htmlescape(mb_strtolower($e['search'])) . "' "
-                . "data-area='" . htmlescape($e['area']) . "'>";
+            echo "<tr class='tab_bg_1 sprint-filterable-row' "
+                . "data-item-name='" . htmlescape(mb_strtolower($e['search'])) . "' "
+                . "data-item-status='" . htmlescape($e['area']) . "'>";
             echo "<td style='white-space:nowrap;color:#495057;'><i class='far fa-clock text-muted me-1'></i>"
                 . htmlescape($e['when']) . "</td>";
             echo "<td><span style='display:inline-block;padding:3px 10px;border-radius:10px;"
@@ -137,13 +133,6 @@ class SprintAudit extends CommonGLPI
 
         echo "</table>";
         echo "</div>";
-
-        // The audit filter is wired by sprint.js (CSP-safe delegation on
-        // data-sprint-action="audit-reset" + input/change on
-        // .sprint-audit-kind / .sf-text inside a .sprint-filter-bar that
-        // contains rows with class .sprint-audit-row). No inline <script>
-        // is emitted here so a strict Content-Security-Policy (no
-        // `'unsafe-inline'`) won't block it.
     }
 
     /**
@@ -668,7 +657,7 @@ class SprintAudit extends CommonGLPI
      *   members: array<array{user_id:int,name:string,color:string,counts:int[],total:int}>
      * }
      */
-    public static function getMemberActivity(int $sprintId): array
+    public static function getMemberActivity(int $sprintId, ?\DateTimeImmutable $overrideFrom = null, ?\DateTimeImmutable $overrideTo = null): array
     {
         global $DB;
 
@@ -678,29 +667,33 @@ class SprintAudit extends CommonGLPI
             return $empty;
         }
 
-        // Determine the date range: clamped to the retention window so we
-        // never advertise days that have already been purged.
-        $today      = new \DateTimeImmutable('today');
+        $today          = new \DateTimeImmutable('today');
         $retentionStart = $today->modify('-' . (self::RETENTION_DAYS - 1) . ' days');
 
-        $sprint = new Sprint();
-        $rangeStart = $retentionStart;
-        $rangeEnd   = $today;
-        if ($sprint->getFromDB($sprintId)) {
-            // Chart begins on day 1 of the sprint — pre-sprint refinement
-            // is not part of "team activity within this sprint".
-            if (!empty($sprint->fields['date_start'])) {
-                try {
-                    $ds = new \DateTimeImmutable(substr((string)$sprint->fields['date_start'], 0, 10));
-                    if ($ds > $rangeStart) { $rangeStart = $ds; }
-                } catch (\Exception $e) { /* ignore */ }
-            }
-            // For finished sprints, hide post-sprint activity.
-            if (!empty($sprint->fields['date_end'])) {
-                try {
-                    $de = new \DateTimeImmutable(substr((string)$sprint->fields['date_end'], 0, 10));
-                    if ($de < $rangeEnd) { $rangeEnd = $de; }
-                } catch (\Exception $e) { /* ignore */ }
+        if ($overrideFrom !== null || $overrideTo !== null) {
+            // User-specified range — clamped only by the audit retention
+            // window so we never advertise days that have been purged.
+            $rangeStart = $overrideFrom ?? $retentionStart;
+            $rangeEnd   = $overrideTo   ?? $today;
+            if ($rangeStart < $retentionStart) { $rangeStart = $retentionStart; }
+            if ($rangeEnd   > $today)          { $rangeEnd   = $today; }
+        } else {
+            $sprint = new Sprint();
+            $rangeStart = $retentionStart;
+            $rangeEnd   = $today;
+            if ($sprint->getFromDB($sprintId)) {
+                if (!empty($sprint->fields['date_start'])) {
+                    try {
+                        $ds = new \DateTimeImmutable(substr((string)$sprint->fields['date_start'], 0, 10));
+                        if ($ds > $rangeStart) { $rangeStart = $ds; }
+                    } catch (\Exception $e) { /* ignore */ }
+                }
+                if (!empty($sprint->fields['date_end'])) {
+                    try {
+                        $de = new \DateTimeImmutable(substr((string)$sprint->fields['date_end'], 0, 10));
+                        if ($de < $rangeEnd) { $rangeEnd = $de; }
+                    } catch (\Exception $e) { /* ignore */ }
+                }
             }
         }
         if ($rangeEnd < $rangeStart) {

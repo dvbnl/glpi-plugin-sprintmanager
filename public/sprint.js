@@ -375,10 +375,12 @@
         var statusEl = bar.querySelector('.sf-status');
         var ownerEl  = bar.querySelector('.sf-owner');
         var typeEl   = bar.querySelector('.sf-type');
+        var tagEl    = bar.querySelector('.sf-tag');
         var text   = textEl   ? (textEl.value   || '').toLowerCase().trim() : '';
         var status = statusEl ? (statusEl.value || '').toString()           : '';
         var owner  = ownerEl  ? (ownerEl.value  || '').toString()           : '';
         var type   = typeEl   ? (typeEl.value   || '').toString()           : '';
+        var tag    = tagEl    ? (tagEl.value    || '').toLowerCase()        : '';
 
         var rows = table.querySelectorAll('tr.sprint-filterable-row');
         for (var i = 0; i < rows.length; i++) {
@@ -406,6 +408,10 @@
             }
             if (show && type) {
                 if (String(row.getAttribute('data-item-type') || '') !== type) { show = false; }
+            }
+            if (show && tag) {
+                var tagBlob = String(row.getAttribute('data-item-tags') || '');
+                if (tagBlob.indexOf('|' + tag + '|') === -1) { show = false; }
             }
             // Some GLPI table row utility classes force `display: table-row`
             // with higher CSS priority than a plain inline style update.
@@ -445,7 +451,7 @@
     function resetFilter(bar) {
         bar = resolveBar(bar);
         if (!bar) { return; }
-        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sf-type, .sprint-audit-kind');
+        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sf-type, .sf-tag, .sprint-audit-kind');
         for (var i = 0; i < inputs.length; i++) { inputs[i].value = ''; }
         applyFilter(bar);
     }
@@ -555,7 +561,7 @@
     document.addEventListener('change', function(ev) {
         var t = ev.target;
         if (!t || !t.classList) { return; }
-        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sf-type') || t.classList.contains('sprint-audit-kind')) {
+        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sf-type') || t.classList.contains('sf-tag') || t.classList.contains('sprint-audit-kind')) {
             onSelectChange(t);
         }
     }, true);
@@ -576,6 +582,17 @@
         var t = ev.target;
         if (!t) { return; }
 
+        // Capture-phase so Cancel aborts the click before any form handler runs.
+        var confirmEl = t.closest && t.closest('[data-sprint-confirm]');
+        if (confirmEl) {
+            var msg = confirmEl.getAttribute('data-sprint-confirm') || '';
+            if (msg && !window.confirm(msg)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                return;
+            }
+        }
+
         var sortEl = matchAction(t, 'sort');
         if (sortEl) {
             if (claimEvent(ev)) { window.sprintSortClick(sortEl); }
@@ -591,7 +608,7 @@
     if (typeof window.jQuery === 'function') {
         window.jQuery(function($) {
             $(document).off('.sprintFilter')
-                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner, .sprint-filter-bar .sf-type', function() {
+                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner, .sprint-filter-bar .sf-type, .sprint-filter-bar .sf-tag', function() {
                     applyFilter(this);
                 })
                 .on('input.sprintFilter', '.sprint-filter-bar .sf-text', function() {
@@ -605,7 +622,7 @@
         if (!bar || bar.dataset.sprintFilterWired === '1') { return; }
         bar.dataset.sprintFilterWired = '1';
 
-        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sf-type, .sprint-audit-kind');
+        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sf-type, .sf-tag, .sprint-audit-kind');
         for (var i = 0; i < selects.length; i++) {
             selects[i].addEventListener('change', function() { applyFilter(this); });
         }
@@ -734,6 +751,44 @@
     }
     document.addEventListener('mouseover', onActivityLegendEnter, false);
     document.addEventListener('mouseout', onActivityLegendLeave, false);
+
+    function refreshActivityChart(sprintId, fromVal, toVal) {
+        sprintId = parseInt(sprintId, 10) || 0;
+        if (!sprintId) { return; }
+        var wrap = document.querySelector('.sprint-activity-chart-wrap[data-sprint-id="' + sprintId + '"]');
+        if (!wrap) { return; }
+        var url = (window.CFG_GLPI && window.CFG_GLPI.root_doc ? window.CFG_GLPI.root_doc : '')
+            + '/plugins/sprint/ajax/activitychart.php?sprint_id=' + encodeURIComponent(sprintId)
+            + '&activity_from=' + encodeURIComponent(fromVal || '')
+            + '&activity_to='   + encodeURIComponent(toVal   || '');
+        wrap.style.opacity = '0.5';
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.onload = function() {
+            wrap.style.opacity = '';
+            if (xhr.status >= 200 && xhr.status < 300) {
+                wrap.innerHTML = xhr.responseText;
+            }
+        };
+        xhr.onerror = function() { wrap.style.opacity = ''; };
+        xhr.send();
+    }
+    document.addEventListener('submit', function(ev) {
+        var form = ev.target;
+        if (!form || !form.classList || !form.classList.contains('sprint-activity-range')) { return; }
+        ev.preventDefault();
+        refreshActivityChart(
+            form.getAttribute('data-sprint-id'),
+            (form.querySelector('input[name="activity_from"]') || {}).value,
+            (form.querySelector('input[name="activity_to"]')   || {}).value
+        );
+    }, true);
+    document.addEventListener('click', function(ev) {
+        var btn = ev.target && ev.target.closest && ev.target.closest('[data-sprint-action="activity-reset"]');
+        if (!btn) { return; }
+        ev.preventDefault();
+        refreshActivityChart(btn.getAttribute('data-sprint-id'), '', '');
+    }, true);
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {

@@ -1034,3 +1034,61 @@ msgstr "Optional. Absolute URL or path relative to the GLPI install (e.g. \"fron
 
 msgid "via"
 msgstr "via"
+
+# ===== 1.1.0 — tags, danger zone, activity range picker, Problem itemtype =====
+
+msgid "Sprint item tags"
+msgstr "Sprint item tags"
+
+msgid "One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here."
+msgstr "One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here."
+
+msgid "Tags"
+msgstr "Tags"
+
+msgid "All tags"
+msgstr "All tags"
+
+msgid "Danger zone"
+msgstr "Danger zone"
+
+msgid "Permanent deletion is restricted to the Scrum Master and bypasses the trash. Use this only when the sprint should leave no trace."
+msgstr "Permanent deletion is restricted to the Scrum Master and bypasses the trash. Use this only when the sprint should leave no trace."
+
+msgid "Permanently delete sprint"
+msgstr "Permanently delete sprint"
+
+msgid "This permanently removes the sprint and all its items, members, meetings and audit history. This cannot be undone. Continue?"
+msgstr "This permanently removes the sprint and all its items, members, meetings and audit history. This cannot be undone. Continue?"
+
+msgid "Only the Scrum Master can permanently delete a sprint."
+msgstr "Only the Scrum Master can permanently delete a sprint."
+
+msgid "From"
+msgstr "From"
+
+msgid "To"
+msgstr "To"
+
+msgid "Reset to sprint range"
+msgstr "Reset to sprint range"
+
+msgid "Audit retention: last %d days"
+msgstr "Audit retention: last %d days"
+
+msgid "Linked Problem"
+msgid_plural "Linked Problems"
+msgstr[0] "Linked Problem"
+msgstr[1] "Linked Problems"
+
+msgid "Link a problem"
+msgstr "Link a problem"
+
+msgid "No problems linked"
+msgstr "No problems linked"
+
+msgid "Please select a sprint and a problem."
+msgstr "Please select a sprint and a problem."
+
+msgid "This problem (#%d) is already linked to this sprint."
+msgstr "This problem (#%d) is already linked to this sprint."

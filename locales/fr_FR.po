@@ -839,3 +839,61 @@ msgstr "Optionnel. URL absolue ou chemin relatif à l'installation GLPI (ex. « 
 
 msgid "via"
 msgstr "via"
+
+# ===== 1.1.0 — tags, danger zone, activity range picker, Problem itemtype =====
+
+msgid "Sprint item tags"
+msgstr "Tags des éléments de sprint"
+
+msgid "One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here."
+msgstr "Un tag par ligne (les virgules sont également acceptées). Les membres peuvent assigner ces tags aux éléments de sprint et les filtrer, mais seuls les administrateurs peuvent étendre cette liste ici."
+
+msgid "Tags"
+msgstr "Tags"
+
+msgid "All tags"
+msgstr "Tous les tags"
+
+msgid "Danger zone"
+msgstr "Zone de danger"
+
+msgid "Permanent deletion is restricted to the Scrum Master and bypasses the trash. Use this only when the sprint should leave no trace."
+msgstr "La suppression définitive est réservée au Scrum Master et contourne la corbeille. À utiliser uniquement lorsque le sprint ne doit laisser aucune trace."
+
+msgid "Permanently delete sprint"
+msgstr "Supprimer définitivement le sprint"
+
+msgid "This permanently removes the sprint and all its items, members, meetings and audit history. This cannot be undone. Continue?"
+msgstr "Ceci supprime définitivement le sprint et tous ses éléments, membres, réunions et historique d'audit. Cette action est irréversible. Continuer ?"
+
+msgid "Only the Scrum Master can permanently delete a sprint."
+msgstr "Seul le Scrum Master peut supprimer définitivement un sprint."
+
+msgid "From"
+msgstr "Du"
+
+msgid "To"
+msgstr "Au"
+
+msgid "Reset to sprint range"
+msgstr "Réinitialiser à la période du sprint"
+
+msgid "Audit retention: last %d days"
+msgstr "Rétention d'audit : %d derniers jours"
+
+msgid "Linked Problem"
+msgid_plural "Linked Problems"
+msgstr[0] "Problème lié"
+msgstr[1] "Problèmes liés"
+
+msgid "Link a problem"
+msgstr "Lier un problème"
+
+msgid "No problems linked"
+msgstr "Aucun problème lié"
+
+msgid "Please select a sprint and a problem."
+msgstr "Veuillez sélectionner un sprint et un problème."
+
+msgid "This problem (#%d) is already linked to this sprint."
+msgstr "Ce problème (#%d) est déjà lié à ce sprint."

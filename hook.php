@@ -61,7 +61,7 @@ function plugin_sprint_install(): bool
             `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0,
             `name`                     VARCHAR(255) NOT NULL DEFAULT '',
             `description`              TEXT,
-            `itemtype`                 VARCHAR(100) NOT NULL DEFAULT '' COMMENT 'Linked GLPI item type (Ticket, Change, ProjectTask)',
+            `itemtype`                 VARCHAR(100) NOT NULL DEFAULT '' COMMENT 'Linked GLPI item type (Ticket, Change, Problem, ProjectTask)',
             `items_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Linked GLPI item ID',
             `status`                   VARCHAR(50) NOT NULL DEFAULT 'todo',
             `priority`                 INT NOT NULL DEFAULT 3,
@@ -127,6 +127,22 @@ function plugin_sprint_install(): bool
             ['value' => 0, 'after' => 'is_fastlane']
         );
         $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_blocked');
+    }
+
+    // =========================================================================
+    // Table: glpi_plugin_sprint_sprintitemtags (multi-tag per sprint item)
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_sprintitemtags` (
+            `id`                           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprintitems_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `tag`                          VARCHAR(100) NOT NULL DEFAULT '',
+            `date_creation`                TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unicity` (`plugin_sprint_sprintitems_id`, `tag`),
+            KEY `tag` (`tag`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
     }
 
     // =========================================================================
@@ -294,6 +310,26 @@ function plugin_sprint_install(): bool
             ['value' => 0, 'after' => 'changes_id']
         );
         $migration->addKey('glpi_plugin_sprint_sprintchanges', 'users_id');
+    }
+
+    // =========================================================================
+    // Table: glpi_plugin_sprint_sprintproblems (link sprints <-> problems)
+    // With users_id to assign a sprint member to the linked problem
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_sprintproblems')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_sprintproblems` (
+            `id`                       INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `problems_id`              INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Assigned sprint member',
+            `date_creation`            TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unicity` (`plugin_sprint_sprints_id`, `problems_id`),
+            KEY `plugin_sprint_sprints_id` (`plugin_sprint_sprints_id`),
+            KEY `problems_id` (`problems_id`),
+            KEY `users_id` (`users_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
     }
 
     // =========================================================================
@@ -564,11 +600,13 @@ function plugin_sprint_uninstall(): bool
         'glpi_plugin_sprint_sprinttemplates',
         'glpi_plugin_sprint_profiles',
         'glpi_plugin_sprint_sprintprojecttasks',
+        'glpi_plugin_sprint_sprintproblems',
         'glpi_plugin_sprint_sprintchanges',
         'glpi_plugin_sprint_sprinttickets',
         'glpi_plugin_sprint_sprintstandups',
         'glpi_plugin_sprint_sprintmeetings',
         'glpi_plugin_sprint_sprintfastlanemembers',
+        'glpi_plugin_sprint_sprintitemtags',
         'glpi_plugin_sprint_sprintmembers',
         'glpi_plugin_sprint_sprintitems',
         'glpi_plugin_sprint_sprints',

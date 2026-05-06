@@ -2,7 +2,7 @@
 
 /**
  * AJAX handler to render a searchable GLPI dropdown for a given itemtype
- * (Ticket, Change, or ProjectTask).
+ * (Ticket, Change, Problem or ProjectTask).
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -15,7 +15,7 @@ Session::checkRight('plugin_sprint_item', READ);
 $itemtype = (string)($_POST['itemtype'] ?? '');
 $rand     = (int)($_POST['rand'] ?? mt_rand());
 
-$allowed = ['Ticket', 'Change', 'ProjectTask'];
+$allowed = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
 
 if (!in_array($itemtype, $allowed, true)) {
     return;
@@ -62,10 +62,14 @@ if ($itemtype === 'ProjectTask') {
     });
     </script>";
 } else {
-    // Ticket or Change - render GLPI's searchable dropdown
-    $fieldName = ($itemtype === 'Ticket') ? '_linked_ticket' : '_linked_change';
+    // Ticket / Change / Problem — render GLPI's searchable dropdown
+    $fieldNames = [
+        'Ticket'  => '_linked_ticket',
+        'Change'  => '_linked_change',
+        'Problem' => '_linked_problem',
+    ];
     $itemtype::dropdown([
-        'name'        => $fieldName,
+        'name'        => $fieldNames[$itemtype],
         'displaywith' => ['id'],
     ]);
 }

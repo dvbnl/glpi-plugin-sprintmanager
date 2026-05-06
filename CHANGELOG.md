@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-05-06
+
+### Added
+- **Admin-defined tags per sprint item**: a new "Sprint item tags" pool is defined centrally in plugin settings (one per line, comma-separated also accepted, deduplicated). Members assign tags to items from that pool via a checkbox group on the SprintItem form; only admins extend the list. Tags render as pills next to the item name everywhere items appear (Sprint Items tab, Dashboard tabs, Backlog, Meeting Fastlane + Regular review). A new `.sf-tag` filter dropdown in every filter bar narrows the list to a specific tag. Backed by a new junction table `glpi_plugin_sprint_sprintitemtags` (UNIQUE on item+tag); single bulk fetch per page keeps it N+1-free
+- **Permanent delete for Scrum Master**: a danger-zone card below the General form lets the sprint's Scrum Master purge the sprint and all its items, members, meetings and audit history in one step. Gated server-side on `Config::isCurrentUserScrumMaster()` + `PURGE` right; a CSP-safe delegated `data-sprint-confirm` handler shows a native confirm dialog before submit. Non-Scrum-Master purges return an error message
+- **Custom date range on Team activity chart**: From / To date pickers above the chart let users zoom in on any sub-range or pan within the 14-day audit retention window without a full page reload. Backed by a new `ajax/activitychart.php` endpoint that re-renders just the chart fragment in place; range is passed as URL params and clamped to retention server-side
+- **Problem itemtype as first-class linked item**: Problems join Tickets, Changes and Project Tasks as supported sprint item types. New `glpi_plugin_sprint_sprintproblems` link table, `SprintProblem` class with reverse "Sprints" tab on Problems, ITEM_PURGE cleanup hook, type icon (`fa-exclamation-circle`, red), Backlog "Type" filter option, status branch in the linked-item quick-edit modal + AJAX endpoint, and per-type branches in the dashboard / meeting / export type-icon and allowed-types maps
+
+### Fixed
+- **Sprint overview status filter**: the `status` rawSearchOption on Sprint was missing `'searchtype' => ['equals', 'notequals']`, so GLPI's Search UI couldn't construct a WHERE clause for it. Filtering the sprint list on status (notably "is not Completed") now works
+- **Audit-log tab filter**: the filter bar on the Audit log tab used a custom `.sprint-audit-kind` dropdown + `tr.sprint-audit-row` selector that ran through a separate JS code path which set `display: none` without `!important` — losing to GLPI's `display: table-row` utility classes. Re-aligned the audit markup to the same `.sf-status` / `tr.sprint-filterable-row` / `data-item-name` / `data-item-status` contract every other plugin filter uses, so a single shared `applyFilter()` (with `!important` row hiding) drives all five filter bars
+- **PDF export uniform light theme + notifier bell removed**: the export's `@media print` block now overrides Tabler's CSS variables at the root so dark-mode body / text / border colours don't bleed through (CSS can't unload an already-loaded stylesheet), and adds GLPI 10/11 notification-bell selectors to the chrome-hide list. PDFs are visually identical regardless of the user's active theme
+- **Fastlane quick-edit corrupting action cell**: in the meeting review tab, after quick-editing a fastlane item the post-save JS replaced any `<a>` in the row whose `href` contained `sprintitem.form.php` with the item name — corrupting the fastlane "Manage members" button (which has the same href). Skip button-styled anchors so only the name link gets retitled
+
 ## [1.0.10] - 2026-04-29
 
 ### Added
