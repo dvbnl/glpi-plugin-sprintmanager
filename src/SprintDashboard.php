@@ -233,7 +233,10 @@ class SprintDashboard extends CommonGLPI
         SprintItem::renderFilterBar($tableSelector, [
             'statuses' => $statuses,
             'owners'   => $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [],
+            'tags'     => Config::getDefinedTags(),
         ]);
+
+        $tagsById = SprintItem::getTagsForItems(array_map(fn($r) => (int)$r['item_id'], $items));
 
         echo "<table class='tab_cadre_fixe {$tableSelector} sprint-dashboard-table'>";
         echo "<tr class='tab_bg_2'>";
@@ -265,6 +268,8 @@ class SprintDashboard extends CommonGLPI
             // Lay down every data-* attr the quick-edit modal and client-side
             // filter/sort logic need on the row itself, so JS can read them
             // without traversing into cells.
+            $rowTags = $tagsById[(int)$row['item_id']] ?? [];
+
             $dataAttrs = 'class="tab_bg_1 sprint-row sprint-dashboard-row sprint-filterable-row"'
                 . ' data-item-id="' . (int)$row['item_id'] . '"'
                 . ' data-item-name="' . htmlescape((string)$row['name']) . '"'
@@ -279,11 +284,12 @@ class SprintDashboard extends CommonGLPI
                 . ' data-story-points="' . (int)$row['story_points'] . '"'
                 . ' data-capacity="' . (int)($row['capacity'] ?? 0) . '"'
                 . ' data-is-fastlane="0"'
+                . ' data-item-tags="' . htmlescape(SprintItem::tagsToBlob($rowTags)) . '"'
                 . ' data-note="' . htmlescape((string)($row['note'] ?? '')) . '"';
 
             echo "<tr {$dataAttrs}>";
             echo "<td style='white-space:nowrap;'><i class='{$row['icon']}' style='color:{$row['color']};margin-right:5px;opacity:0.85;'></i>{$row['type_label']}</td>";
-            echo "<td class='sprint-cell-name'><a href='{$row['url']}'>" . htmlescape($row['name']) . "</a></td>";
+            echo "<td class='sprint-cell-name'><a href='{$row['url']}'>" . htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . "</td>";
             echo "<td>{$linkedDisplay}</td>";
             echo "<td class='sprint-cell-status'>{$row['status']}</td>";
             echo "<td class='sprint-cell-priority'>{$row['priority']}</td>";
@@ -562,6 +568,7 @@ class SprintDashboard extends CommonGLPI
             ''            => ['fas fa-clipboard-list', '#6c757d', __('Manual', 'sprint')],
             'Ticket'      => ['fas fa-ticket-alt', '#0d6efd', __('Ticket')],
             'Change'      => ['fas fa-exchange-alt', '#6f42c1', __('Change')],
+            'Problem'     => ['fas fa-exclamation-circle', '#dc3545', __('Problem')],
             'ProjectTask' => ['fas fa-tasks', '#fd7e14', __('Project task')],
         ];
 
@@ -588,7 +595,7 @@ class SprintDashboard extends CommonGLPI
             $tmp->fields = $row;
             $linkedDisplayHtml = $tmp->getLinkedItemDisplay();
 
-            $allowedTypes = ['Ticket', 'Change', 'ProjectTask'];
+            $allowedTypes = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
             if (!empty($itemtype) && $itemsId > 0 && in_array($itemtype, $allowedTypes, true) && class_exists($itemtype)) {
                 $linked = new $itemtype();
                 if ($linked->getFromDB($itemsId)) {
@@ -745,10 +752,6 @@ class SprintDashboard extends CommonGLPI
      */
     private static function showMemberActivityChart(int $sprintId): void
     {
-        $data    = SprintAudit::getMemberActivity($sprintId);
-        $dates   = $data['dates'];
-        $members = $data['members'];
-
         $collapseKey = 'dash-activity-' . (int)$sprintId;
         echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
         echo "<div class='sprint-collapsible-header'>";
@@ -758,9 +761,29 @@ class SprintDashboard extends CommonGLPI
         echo "</div>";
         echo "<div class='sprint-collapsible-body'>";
 
+        echo "<div class='sprint-activity-chart-wrap' data-sprint-id='" . (int)$sprintId . "'>";
+        self::renderActivityChartFragment($sprintId, null, null);
+        echo "</div>";
+
+        echo "</div>"; // .sprint-collapsible-body
+        echo "</div>"; // .sprint-collapsible
+    }
+
+    /**
+     * Render the activity chart inner fragment (range picker + SVG + legend).
+     * Reused on initial render and by the AJAX refresh endpoint.
+     */
+    public static function renderActivityChartFragment(int $sprintId, ?\DateTimeImmutable $overrideFrom, ?\DateTimeImmutable $overrideTo): void
+    {
+        $data    = SprintAudit::getMemberActivity($sprintId, $overrideFrom, $overrideTo);
+        $dates   = $data['dates'];
+        $members = $data['members'];
+
         echo "<div style='font-size:0.85em;color:#6c757d;margin-bottom:6px;'>" .
             __('Audit-log events per member per day — spot uneven workloads.', 'sprint') .
             "</div>";
+
+        self::renderActivityRangePicker($sprintId, $dates, $overrideFrom, $overrideTo);
 
         if (count($dates) < 1 || count($members) === 0) {
             // Diagnose why the chart is empty so users (especially on
@@ -883,6 +906,83 @@ class SprintDashboard extends CommonGLPI
         echo "</div>"; // .sprint-member-activity
         echo "</div>"; // .sprint-collapsible-body
         echo "</div>"; // .sprint-collapsible
+    }
+
+    /**
+     * Returns [from, to] DateTimeImmutable or null when the user hasn't
+     * narrowed the range. Invalid or out-of-retention dates fall back to
+     * null so the default sprint-window logic kicks in.
+     */
+    private static function parseActivityRangeFromRequest(): array
+    {
+        $today    = new \DateTimeImmutable('today');
+        $earliest = $today->modify('-' . (SprintAudit::RETENTION_DAYS - 1) . ' days');
+        $parse = function ($v) use ($today, $earliest): ?\DateTimeImmutable {
+            $v = trim((string)$v);
+            if ($v === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+                return null;
+            }
+            try {
+                $d = new \DateTimeImmutable($v);
+            } catch (\Exception $e) {
+                return null;
+            }
+            if ($d < $earliest) { $d = $earliest; }
+            if ($d > $today)    { $d = $today; }
+            return $d;
+        };
+        $from = $parse($_GET['activity_from'] ?? '');
+        $to   = $parse($_GET['activity_to']   ?? '');
+        if ($from && $to && $from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+        return [$from, $to];
+    }
+
+    /**
+     * Date-range picker above the activity chart. Submits as GET to the
+     * sprint form with `forcetab` so the user lands back on this dashboard.
+     */
+    private static function renderActivityRangePicker(int $sprintId, array $dates, ?\DateTimeImmutable $from, ?\DateTimeImmutable $to): void
+    {
+        $today    = new \DateTimeImmutable('today');
+        $earliest = $today->modify('-' . (SprintAudit::RETENTION_DAYS - 1) . ' days');
+        $minStr   = $earliest->format('Y-m-d');
+        $maxStr   = $today->format('Y-m-d');
+        $fromStr  = $from ? $from->format('Y-m-d') : (count($dates) > 0 ? $dates[0] : '');
+        $toStr    = $to   ? $to->format('Y-m-d')   : (count($dates) > 0 ? $dates[count($dates) - 1] : '');
+        $isCustom = ($from !== null || $to !== null);
+
+        $action = Sprint::getFormURL();
+        $tab    = 'GlpiPlugin\\Sprint\\SprintDashboard$1';
+
+        echo "<form method='get' action='" . htmlescape($action) . "' "
+            . "class='sprint-activity-range d-flex flex-wrap align-items-end gap-2 mb-2' "
+            . "data-sprint-id='" . (int)$sprintId . "' "
+            . "style='font-size:0.85em;'>";
+        echo Html::hidden('id', ['value' => (int)$sprintId]);
+        echo Html::hidden('forcetab', ['value' => $tab]);
+        echo "<span class='me-auto text-muted small align-self-center'>"
+            . sprintf(__('Audit retention: last %d days', 'sprint'), SprintAudit::RETENTION_DAYS)
+            . "</span>";
+        echo "<label class='d-flex flex-column' style='gap:2px;'>"
+            . "<span class='text-muted'>" . __('From', 'sprint') . "</span>"
+            . "<input type='date' class='form-control form-control-sm' name='activity_from' "
+            . "value='" . htmlescape($fromStr) . "' min='{$minStr}' max='{$maxStr}'>"
+            . "</label>";
+        echo "<label class='d-flex flex-column' style='gap:2px;'>"
+            . "<span class='text-muted'>" . __('To', 'sprint') . "</span>"
+            . "<input type='date' class='form-control form-control-sm' name='activity_to' "
+            . "value='" . htmlescape($toStr) . "' min='{$minStr}' max='{$maxStr}'>"
+            . "</label>";
+        echo "<button type='submit' class='btn btn-sm btn-primary'>"
+            . "<i class='fas fa-search me-1'></i>" . __('Apply', 'sprint') . "</button>";
+        if ($isCustom) {
+            echo "<button type='button' class='btn btn-sm btn-outline-secondary' "
+                . "data-sprint-action='activity-reset' data-sprint-id='" . (int)$sprintId . "'>"
+                . "<i class='fas fa-undo me-1'></i>" . __('Reset to sprint range', 'sprint') . "</button>";
+        }
+        echo "</form>";
     }
 
     /**

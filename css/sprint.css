@@ -64,6 +64,25 @@
     display: none !important;
 }
 
+.sprint-tag-pills {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.sprint-tag-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: #e7f1ff;
+    color: #1c5ec3;
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
 /* Stats cards */
 .sprint-stats-row {
     display: flex;

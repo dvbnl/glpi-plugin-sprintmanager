@@ -27,6 +27,11 @@ class Config extends CommonDBTM
      *  report header. Overrides any auto-detected logo. */
     const CFG_REPORT_LOGO_URL = 'report_logo_url';
 
+    /** JSON-encoded list of tag labels that admins make available for sprint
+     *  items. Members can pick from this pool, but only admins create new
+     *  entries. */
+    const CFG_SPRINT_ITEM_TAGS = 'sprint_item_tags';
+
     public static function getTypeName($nb = 0): string
     {
         return __('SprintManager', 'sprint');
@@ -47,9 +52,42 @@ class Config extends CommonDBTM
         $defaults = [
             self::CFG_SCRUM_MASTER_CAPACITY => 0,
             self::CFG_REPORT_LOGO_URL       => '',
+            self::CFG_SPRINT_ITEM_TAGS      => '[]',
         ];
         $stored = GlpiConfig::getConfigurationValues(self::CONTEXT);
         return array_merge($defaults, $stored);
+    }
+
+    /**
+     * Admin-defined tag pool. Returns a de-duplicated, trimmed list of tag
+     * labels in their original casing. Members assign tags to sprint items
+     * by picking from this list — only admins extend it.
+     *
+     * @return string[]
+     */
+    public static function getDefinedTags(): array
+    {
+        $cfg  = self::getConfig();
+        $raw  = (string)($cfg[self::CFG_SPRINT_ITEM_TAGS] ?? '[]');
+        $list = json_decode($raw, true);
+        if (!is_array($list)) {
+            return [];
+        }
+        $out  = [];
+        $seen = [];
+        foreach ($list as $tag) {
+            $tag = trim((string)$tag);
+            if ($tag === '') {
+                continue;
+            }
+            $key = mb_strtolower($tag);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[]      = $tag;
+        }
+        return $out;
     }
 
     public static function getReportLogoUrl(): string
@@ -75,8 +113,33 @@ class Config extends CommonDBTM
         $values = [
             self::CFG_SCRUM_MASTER_CAPACITY => (int)(bool)($input[self::CFG_SCRUM_MASTER_CAPACITY] ?? 0),
             self::CFG_REPORT_LOGO_URL       => trim((string)($input[self::CFG_REPORT_LOGO_URL] ?? '')),
+            self::CFG_SPRINT_ITEM_TAGS      => self::normalizeTagInput((string)($input[self::CFG_SPRINT_ITEM_TAGS] ?? '')),
         ];
         GlpiConfig::setConfigurationValues(self::CONTEXT, $values);
+    }
+
+    /**
+     * Parse the textarea input (one tag per line, comma-separated also OK)
+     * into a JSON-encoded de-duplicated list.
+     */
+    private static function normalizeTagInput(string $raw): string
+    {
+        $parts = preg_split('/[\r\n,]+/', $raw) ?: [];
+        $out   = [];
+        $seen  = [];
+        foreach ($parts as $p) {
+            $p = trim((string)$p);
+            if ($p === '') {
+                continue;
+            }
+            $key = mb_strtolower($p);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[]      = $p;
+        }
+        return json_encode($out, JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -164,6 +227,20 @@ class Config extends CommonDBTM
         echo "<input type='text' class='form-control' name='" . self::CFG_REPORT_LOGO_URL . "' "
             . "value='{$logoUrl}' placeholder='https://...' "
             . ($canedit ? '' : 'readonly') . ">";
+        echo "</td></tr>";
+
+        $tagsRaw = implode("\n", self::getDefinedTags());
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Sprint item tags', 'sprint') . "<br>";
+        echo "<span class='text-muted' style='font-size:0.85em;'>" .
+            __('One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here.', 'sprint') .
+            "</span></td>";
+        echo "<td>";
+        echo "<textarea name='" . self::CFG_SPRINT_ITEM_TAGS . "' class='form-control' rows='5' "
+            . "placeholder='Security&#10;Projects&#10;Incident Response'"
+            . ($canedit ? '' : ' readonly') . ">"
+            . htmlescape($tagsRaw)
+            . "</textarea>";
         echo "</td></tr>";
 
         if ($canedit) {

@@ -232,12 +232,14 @@ class SprintMeeting extends CommonDBTM
         // Build sprint items data for the review table
         $sprintItemsData = [];
         if ($isExisting && $sprintId > 0) {
-            $si = new SprintItem();
-            $statuses = SprintItem::getAllStatuses();
-            foreach ($si->find(['plugin_sprint_sprints_id' => $sprintId], ['sort_order ASC', 'priority DESC']) as $row) {
+            $si        = new SprintItem();
+            $statuses  = SprintItem::getAllStatuses();
+            $allRows   = $si->find(['plugin_sprint_sprints_id' => $sprintId], ['sort_order ASC', 'priority DESC']);
+            $tagsByItem = SprintItem::getTagsForItems(array_map(fn($r) => (int)$r['id'], $allRows));
+            foreach ($allRows as $row) {
                 $linkedDisplay = '';
                 $itemtype = $row['itemtype'] ?? '';
-                $allowedTypes = ['Ticket', 'Change', 'ProjectTask'];
+                $allowedTypes = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
                 if (!empty($itemtype) && (int)$row['items_id'] > 0 && in_array($itemtype, $allowedTypes, true) && class_exists($itemtype)) {
                     $tmpItem = new SprintItem();
                     $tmpItem->fields = $row;
@@ -280,6 +282,7 @@ class SprintMeeting extends CommonDBTM
                     }
                 }
 
+                $rowTags = $tagsByItem[(int)$row['id']] ?? [];
                 $sprintItemsData[] = [
                     'id'                   => (int)$row['id'],
                     'name'                 => $row['name'],
@@ -297,6 +300,8 @@ class SprintMeeting extends CommonDBTM
                     'fastlane_allocations' => $fastlaneAllocations,
                     'fastlane_total'       => $fastlaneTotal,
                     'fastlane_url'         => SprintItem::getFormURLWithID((int)$row['id']) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintFastlaneMember$1'),
+                    'tags_blob'            => SprintItem::tagsToBlob($rowTags),
+                    'tags_pills_html'      => SprintItem::renderTagPills($rowTags),
                 ];
             }
         }
@@ -338,6 +343,7 @@ class SprintMeeting extends CommonDBTM
                     'move_target_sprints' => $carryOverTargetSprints,
                     'capacity_locked'   => \GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
                         && !\GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId),
+                    'defined_tags'      => \GlpiPlugin\Sprint\Config::getDefinedTags(),
                 ]
             );
             SprintItem::renderLinkedQuickEditUI();
@@ -418,6 +424,7 @@ class SprintMeeting extends CommonDBTM
             ''            => ['fas fa-clipboard-list', '#6c757d', __('Manual', 'sprint')],
             'Ticket'      => ['fas fa-ticket-alt', '#0d6efd', __('Ticket')],
             'Change'      => ['fas fa-exchange-alt', '#6f42c1', __('Change')],
+            'Problem'     => ['fas fa-exclamation-circle', '#dc3545', __('Problem')],
             'ProjectTask' => ['fas fa-tasks', '#fd7e14', __('Project task')],
         ];
         $backlogUrl = Backlog::getFormURL();

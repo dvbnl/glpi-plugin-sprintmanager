@@ -8,6 +8,7 @@ use Dropdown;
 use Plugin;
 use Ticket;
 use Change;
+use Problem;
 use ProjectTask;
 
 /**
@@ -92,7 +93,7 @@ class Backlog
             return;
         }
 
-        $allowed = ['Ticket', 'Change', 'ProjectTask'];
+        $allowed = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
         if (!in_array($itemtype, $allowed, true) || $itemId <= 0) {
             return;
         }
@@ -148,6 +149,7 @@ class Backlog
             ''            => __('Manual', 'sprint'),
             'Ticket'      => __('Ticket'),
             'Change'      => __('Change'),
+            'Problem'     => __('Problem'),
             'ProjectTask' => __('Project task'),
         ];
 
@@ -156,13 +158,19 @@ class Backlog
         $blocked = $item->find(['plugin_sprint_sprints_id' => 0, 'is_blocked' => 1], $orderBy);
         $items   = $item->find(['plugin_sprint_sprints_id' => 0, 'is_blocked' => 0], $orderBy);
 
+        $allIds   = array_merge(
+            array_map(fn($r) => (int)$r['id'], $blocked),
+            array_map(fn($r) => (int)$r['id'], $items)
+        );
+        $tagsById = SprintItem::getTagsForItems($allIds);
+
         echo "<div class='center'>";
         echo "<h2><i class='" . self::getIcon() . "'></i> " . self::getTypeName(2) . "</h2>";
         echo "<p class='text-muted'>" .
             __('Items waiting to be assigned to a sprint. Use the dropdown to move an item into a sprint.', 'sprint') .
             "</p>";
 
-        self::renderBlockedSection($blocked, $canedit, $typeLabels);
+        self::renderBlockedSection($blocked, $canedit, $typeLabels, $tagsById);
 
         echo "<h3 style='margin-top:20px;text-align:left;'>"
             . "<i class='fas fa-list'></i> " . __('Backlog items', 'sprint')
@@ -190,7 +198,7 @@ class Backlog
         }
 
         foreach ($items as $row) {
-            self::renderItemRow($row, $canedit, $typeLabels);
+            self::renderItemRow($row, $canedit, $typeLabels, $tagsById);
         }
 
         echo "</table>";
@@ -202,7 +210,7 @@ class Backlog
         SprintItem::renderLinkedQuickEditUI();
     }
 
-    private static function renderBlockedSection(array $blockedItems, bool $canedit, array $typeLabels): void
+    private static function renderBlockedSection(array $blockedItems, bool $canedit, array $typeLabels, array $tagsById = []): void
     {
         $count = count($blockedItems);
 
@@ -236,7 +244,7 @@ class Backlog
             }
             echo "</tr>";
             foreach ($blockedItems as $row) {
-                self::renderItemRow($row, $canedit, $typeLabels);
+                self::renderItemRow($row, $canedit, $typeLabels, $tagsById);
             }
             echo "</table>";
         }
@@ -265,7 +273,7 @@ class Backlog
         </script>";
     }
 
-    private static function renderItemRow(array $row, bool $canedit, array $typeLabels): void
+    private static function renderItemRow(array $row, bool $canedit, array $typeLabels, array $tagsById = []): void
     {
         $linkedDisplay = '<span style="color:#ccc;">-</span>';
         if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
@@ -279,13 +287,15 @@ class Backlog
         $typeLabel  = $typeLabels[$itemtype] ?? __('Manual', 'sprint');
         $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
         $isBlocked  = (int)($row['is_blocked'] ?? 0) === 1;
+        $rowTags    = $tagsById[(int)$row['id']] ?? [];
 
         echo "<tr class='tab_bg_1 sprint-filterable-row sprint-backlog-row' "
             . "data-item-id='" . (int)$row['id'] . "' "
             . "data-item-name='" . htmlescape($row['name']) . "' "
-            . "data-item-type='" . htmlescape($typeKey) . "'>";
+            . "data-item-type='" . htmlescape($typeKey) . "' "
+            . "data-item-tags='" . htmlescape(SprintItem::tagsToBlob($rowTags)) . "'>";
         echo "<td><a href='" . SprintItem::getFormURLWithID($row['id']) . "'>"
-            . htmlescape($row['name']) . "</a></td>";
+            . htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . "</td>";
         echo "<td>" . $linkedDisplay . "</td>";
         echo "<td>" . $typeLabel . "</td>";
 
@@ -375,9 +385,20 @@ class Backlog
         echo "<option value=''>" . __('All') . " — " . __('Type', 'sprint') . "</option>";
         echo "<option value='Ticket'>" . htmlescape($typeLabels['Ticket']) . "</option>";
         echo "<option value='Change'>" . htmlescape($typeLabels['Change']) . "</option>";
+        echo "<option value='Problem'>" . htmlescape($typeLabels['Problem']) . "</option>";
         echo "<option value='ProjectTask'>" . htmlescape($typeLabels['ProjectTask']) . "</option>";
         echo "<option value='manual'>" . htmlescape($typeLabels['']) . "</option>";
         echo "</select>";
+
+        $definedTags = Config::getDefinedTags();
+        if (!empty($definedTags)) {
+            echo "<select class='form-select form-select-sm sf-tag' style='max-width:180px;'>";
+            echo "<option value=''>" . __('All tags', 'sprint') . "</option>";
+            foreach ($definedTags as $tag) {
+                echo "<option value='" . htmlescape(mb_strtolower($tag)) . "'>" . htmlescape($tag) . "</option>";
+            }
+            echo "</select>";
+        }
 
         echo "<button type='button' class='btn btn-sm btn-outline-secondary sf-reset' data-sprint-action='filter-reset'>"
             . "<i class='fas fa-times me-1'></i>" . __('Reset', 'sprint') . "</button>";
@@ -393,7 +414,7 @@ class Backlog
      */
     public static function addFromLinkedItem(string $itemtype, int $itemId): int
     {
-        $allowed = ['Ticket', 'Change', 'ProjectTask'];
+        $allowed = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
         if (!in_array($itemtype, $allowed, true) || $itemId <= 0) {
             return 0;
         }

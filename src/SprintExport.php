@@ -596,6 +596,7 @@ class SprintExport extends CommonGLPI
             ''            => __('Manual', 'sprint'),
             'Ticket'      => __('Ticket'),
             'Change'      => __('Change'),
+            'Problem'     => __('Problem'),
             'ProjectTask' => __('Project task'),
         ];
 
@@ -820,6 +821,7 @@ class SprintExport extends CommonGLPI
             ''            => __('Manual', 'sprint'),
             'Ticket'      => __('Ticket'),
             'Change'      => __('Change'),
+            'Problem'     => __('Problem'),
             'ProjectTask' => __('Project task'),
         ];
 
@@ -849,27 +851,46 @@ class SprintExport extends CommonGLPI
 
     private static function renderPrintStyles(): void
     {
-        // Print-specific tweaks: hide GLPI's nav/header/footer chrome and the
-        // export toolbar, set generous margins, prevent awkward page breaks
-        // inside tables. Screen view stays untouched.
+        // PDF output must be uniform across users — overrides win against
+        // the active GLPI theme without unloading its stylesheet.
         echo "<style>
         @media print {
-            /* GLPI 10/11 chrome: top header, sidebar, breadcrumbs, footer */
+            :root, html, body, [data-bs-theme], [data-bs-theme=\"dark\"], [data-theme=\"dark\"] {
+                color-scheme: light !important;
+                --tblr-body-bg: #ffffff !important;
+                --tblr-body-color: #212529 !important;
+                --tblr-body-bg-rgb: 255,255,255 !important;
+                --tblr-body-color-rgb: 33,37,41 !important;
+                --tblr-bg-surface: #ffffff !important;
+                --tblr-bg-surface-secondary: #ffffff !important;
+                --tblr-bg-surface-tertiary: #ffffff !important;
+                --tblr-card-bg: #ffffff !important;
+                --tblr-card-color: #212529 !important;
+                --tblr-border-color: #dee2e6 !important;
+                --tblr-border-color-translucent: rgba(0,0,0,.10) !important;
+                --tblr-light: #f5f7fb !important;
+                --tblr-dark: #1d273b !important;
+                --tblr-secondary: #6c757d !important;
+                --tblr-muted: #6c757d !important;
+            }
             #header, #header-logo, #c_menu, #c_breadcrumb, #c_ssotabs, .c_main_left,
             .navigationheader, .footer, .menu_navigate, #c_footer, #toolbar,
             #navigation-header, .navigation-header, .navigation-header-wrapper,
             .app-sidebar, .app-aside, .header-nav, .scrollable-logo,
             .navbar, .breadcrumb, .breadcrumbs, aside,
-            /* Tab navigation strip + form header above tabs */
+            #notifications, .notifications, .notifications-link, .notifications-bell,
+            .notification-badge, .header-notifications, .navbar-notifications,
+            #see_all_notifications, [data-bs-target=\"#notifications\"],
+            [aria-label*=\"notification\" i], [title*=\"notification\" i],
             .nav-tabs, .nav.nav-tabs, ul.nav-tabs, .nav-tabs-container,
             .tab-content > .nav, .glpi-form-tabs, .tabs-bg,
-            /* Plugin-specific */
             .sprint-export-toolbar, .alert.alert-info { display: none !important; }
             body, .container, .container-fluid, #page, #page > .container-fluid,
             main, .main-content, .tab-content, .tab-pane, .card, .card-body {
                 margin: 0 !important;
                 padding: 0 !important;
-                background: #fff !important;
+                background: #ffffff !important;
+                color: #212529 !important;
                 box-shadow: none !important;
                 border: 0 !important;
             }
@@ -878,7 +899,7 @@ class SprintExport extends CommonGLPI
                 margin: 0 !important;
                 padding: 8mm !important;
                 box-shadow: none !important;
-                background: #fff !important;
+                background-color: #ffffff !important;
                 color: #212529 !important;
             }
             h1, h2 { page-break-after: avoid; }

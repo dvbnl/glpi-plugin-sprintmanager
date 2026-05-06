@@ -106,11 +106,12 @@ class Sprint extends CommonDBTM
         unset($entry);
 
         $tab[] = [
-            'id'       => 3,
-            'table'    => $this->getTable(),
-            'field'    => 'status',
-            'name'     => __('Status'),
-            'datatype' => 'specific',
+            'id'         => 3,
+            'table'      => $this->getTable(),
+            'field'      => 'status',
+            'name'       => __('Status'),
+            'datatype'   => 'specific',
+            'searchtype' => ['equals', 'notequals'],
         ];
 
         $tab[] = [
@@ -359,6 +360,14 @@ class Sprint extends CommonDBTM
                     'can_reassign_scrum_master' => $canReassignScrumMaster,
                 ]
             );
+
+            if (
+                !$isNew
+                && Session::haveRight(self::$rightname, PURGE)
+                && Config::isCurrentUserScrumMaster((int)$this->getID())
+            ) {
+                $this->renderDangerZone();
+            }
         } else {
             // Fallback for GLPI 10.x: use classic PHP form rendering
             $this->showFormHeader($options);
@@ -445,6 +454,35 @@ class Sprint extends CommonDBTM
         }
 
         return true;
+    }
+
+    /**
+     * Scrum-Master-only permanent delete, rendered below the General form.
+     */
+    private function renderDangerZone(): void
+    {
+        $id      = (int)$this->getID();
+        $confirm = __('This permanently removes the sprint and all its items, members, meetings and audit history. This cannot be undone. Continue?', 'sprint');
+
+        echo "<div class='card mt-3' style='max-width:1200px;margin:18px auto 0;border-color:#dc3545;'>";
+        echo "<div class='card-header' style='background:#f8d7da;color:#842029;'>"
+            . "<i class='fas fa-exclamation-triangle me-1'></i>"
+            . htmlescape(__('Danger zone', 'sprint'))
+            . "</div>";
+        echo "<div class='card-body'>";
+        echo "<p class='mb-3 small text-muted'>"
+            . htmlescape(__('Permanent deletion is restricted to the Scrum Master and bypasses the trash. Use this only when the sprint should leave no trace.', 'sprint'))
+            . "</p>";
+        echo "<form method='post' action='" . htmlescape(self::getFormURL()) . "'>";
+        echo Html::hidden('id', ['value' => $id]);
+        echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
+        echo "<button type='submit' name='purge' value='1' class='btn btn-danger' "
+            . "data-sprint-confirm='" . htmlescape($confirm) . "'>"
+            . "<i class='fas fa-trash me-1'></i>"
+            . htmlescape(__('Permanently delete sprint', 'sprint'))
+            . "</button>";
+        echo "</form>";
+        echo "</div></div>";
     }
 
     /**

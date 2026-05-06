@@ -831,3 +831,61 @@ msgstr ""
 
 msgid "via"
 msgstr ""
+
+# ===== 1.1.0 — tags, danger zone, activity range picker, Problem itemtype =====
+
+msgid "Sprint item tags"
+msgstr ""
+
+msgid "One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here."
+msgstr ""
+
+msgid "Tags"
+msgstr ""
+
+msgid "All tags"
+msgstr ""
+
+msgid "Danger zone"
+msgstr ""
+
+msgid "Permanent deletion is restricted to the Scrum Master and bypasses the trash. Use this only when the sprint should leave no trace."
+msgstr ""
+
+msgid "Permanently delete sprint"
+msgstr ""
+
+msgid "This permanently removes the sprint and all its items, members, meetings and audit history. This cannot be undone. Continue?"
+msgstr ""
+
+msgid "Only the Scrum Master can permanently delete a sprint."
+msgstr ""
+
+msgid "From"
+msgstr ""
+
+msgid "To"
+msgstr ""
+
+msgid "Reset to sprint range"
+msgstr ""
+
+msgid "Audit retention: last %d days"
+msgstr ""
+
+msgid "Linked Problem"
+msgid_plural "Linked Problems"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Link a problem"
+msgstr ""
+
+msgid "No problems linked"
+msgstr ""
+
+msgid "Please select a sprint and a problem."
+msgstr ""
+
+msgid "This problem (#%d) is already linked to this sprint."
+msgstr ""

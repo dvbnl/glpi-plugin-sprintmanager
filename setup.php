@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.0.10');
+define('PLUGIN_SPRINT_VERSION', '1.1.0');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -176,6 +176,11 @@ function plugin_init_sprint(): void
     );
 
     Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintProblem',
+        ['addtabon' => ['Problem']]
+    );
+
+    Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintDashboard',
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
     );
@@ -217,6 +222,7 @@ function plugin_init_sprint(): void
     $PLUGIN_HOOKS[Hooks::ITEM_PURGE]['sprint'] = [
         'Ticket'      => ['GlpiPlugin\Sprint\SprintTicket', 'cleanForItem'],
         'Change'      => ['GlpiPlugin\Sprint\SprintChange', 'cleanForItem'],
+        'Problem'     => ['GlpiPlugin\Sprint\SprintProblem', 'cleanForItem'],
         'ProjectTask' => ['GlpiPlugin\Sprint\SprintProjectTask', 'cleanForItem'],
     ];
 

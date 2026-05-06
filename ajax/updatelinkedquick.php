@@ -7,6 +7,7 @@
  * Accepted fields per itemtype:
  *   - Ticket       : status (int)
  *   - Change       : status (int)
+ *   - Problem      : status (int)
  *   - ProjectTask  : projectstates_id (int) + percent_done (0-100)
  *
  * Rights are delegated to GLPI's own item rights via $item->canUpdate()
@@ -28,7 +29,7 @@ $fail = function (string $msg = 'Request failed'): void {
 $itemtype = (string)($_POST['itemtype'] ?? '');
 $id       = (int)($_POST['id'] ?? 0);
 
-$allowed = ['Ticket', 'Change', 'ProjectTask'];
+$allowed = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
 if (!in_array($itemtype, $allowed, true) || $id <= 0 || !class_exists($itemtype)) {
     $fail('Invalid itemtype');
     return;
@@ -48,7 +49,7 @@ if (!$item->canUpdateItem()) {
 
 $update = ['id' => $id];
 
-if ($itemtype === 'Ticket' || $itemtype === 'Change') {
+if ($itemtype === 'Ticket' || $itemtype === 'Change' || $itemtype === 'Problem') {
     if (!isset($_POST['status'])) {
         $fail('Missing status');
         return;
@@ -99,7 +100,7 @@ $response = [
     'id'       => $id,
 ];
 
-if ($itemtype === 'Ticket' || $itemtype === 'Change') {
+if ($itemtype === 'Ticket' || $itemtype === 'Change' || $itemtype === 'Problem') {
     $statuses = $itemtype::getAllStatusArray(true);
     $curStatus = (int)$item->fields['status'];
     $response['status']       = $curStatus;

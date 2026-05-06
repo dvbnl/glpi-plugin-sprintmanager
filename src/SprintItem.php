@@ -32,8 +32,15 @@ class SprintItem extends CommonDBTM
      */
     public function cleanDBonPurge()
     {
+        global $DB;
         $rel = new SprintFastlaneMember();
         $rel->deleteByCriteria(['plugin_sprint_sprintitems_id' => $this->getID()], 1);
+
+        if ($DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+            $DB->delete('glpi_plugin_sprint_sprintitemtags', [
+                'plugin_sprint_sprintitems_id' => $this->getID(),
+            ]);
+        }
 
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         $itemtype = (string)($this->fields['itemtype'] ?? '');
@@ -52,6 +59,11 @@ class SprintItem extends CommonDBTM
             (new SprintChange())->deleteByCriteria([
                 'plugin_sprint_sprints_id' => $sprintId,
                 'changes_id'               => $itemsId,
+            ], 1);
+        } elseif ($itemtype === 'Problem') {
+            (new SprintProblem())->deleteByCriteria([
+                'plugin_sprint_sprints_id' => $sprintId,
+                'problems_id'              => $itemsId,
             ], 1);
         } elseif ($itemtype === 'ProjectTask') {
             (new SprintProjectTask())->deleteByCriteria([
@@ -227,6 +239,7 @@ class SprintItem extends CommonDBTM
             ''            => __('Manual item', 'sprint'),
             'Ticket'      => __('Ticket'),
             'Change'      => __('Change'),
+            'Problem'     => __('Problem'),
             'ProjectTask' => __('Project task'),
         ];
     }
@@ -267,7 +280,7 @@ class SprintItem extends CommonDBTM
         $itemtype = $this->fields['itemtype'] ?? '';
         $itemsId  = (int)($this->fields['items_id'] ?? 0);
 
-        $allowedTypes = ['Ticket', 'Change', 'ProjectTask'];
+        $allowedTypes = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
 
         if (empty($itemtype) || $itemsId <= 0) {
             return '';
@@ -286,6 +299,7 @@ class SprintItem extends CommonDBTM
         $icons = [
             'Ticket'      => 'fas fa-ticket-alt',
             'Change'      => 'fas fa-exchange-alt',
+            'Problem'     => 'fas fa-exclamation-circle',
             'ProjectTask' => 'fas fa-tasks',
         ];
         $icon = $icons[$itemtype] ?? 'fas fa-link';
@@ -385,6 +399,7 @@ class SprintItem extends CommonDBTM
                     '': '" . __('Name') . "',
                     'Ticket': '" . __('Ticket') . "',
                     'Change': '" . __('Change') . "',
+                    'Problem': '" . __('Problem') . "',
                     'ProjectTask': '" . __('Project') . " / " . __('Project task') . "'
                 };
 
@@ -483,7 +498,11 @@ class SprintItem extends CommonDBTM
         self::renderFilterBar('sprint-items-list-table', [
             'statuses' => $statuses,
             'owners'   => SprintMember::getSprintMemberOptions($ID),
+            'tags'     => Config::getDefinedTags(),
         ]);
+
+        $itemIds  = array_map(fn($r) => (int)$r['id'], $items);
+        $tagsById = self::getTagsForItems($itemIds);
 
         echo "<table class='tab_cadre_fixe sprint-items-list-table'>";
         echo "<tr class='tab_bg_2'>";
@@ -519,11 +538,12 @@ class SprintItem extends CommonDBTM
                 $linkedDisplay = $tmpItem->getLinkedItemDisplay();
             }
 
-            $dataAttrs = self::buildRowDataAttrs($row, $statusLabel, $ownerName);
+            $rowTags   = $tagsById[(int)$row['id']] ?? [];
+            $dataAttrs = self::buildRowDataAttrs($row, $statusLabel, $ownerName, $rowTags);
 
             echo "<tr class='tab_bg_1 sprint-row sprint-filterable-row' {$dataAttrs}>";
             echo "<td class='sprint-cell-name'><a href='" . static::getFormURLWithID($row['id']) . "'>" .
-                htmlescape($row['name']) . "</a></td>";
+                htmlescape($row['name']) . "</a>" . self::renderTagPills($rowTags) . "</td>";
             echo "<td>" . $linkedDisplay . "</td>";
             echo "<td class='sprint-cell-status'><span class='sprint-badge {$statusClass}'>" .
                 $statusLabel . "</span></td>";
@@ -584,7 +604,7 @@ class SprintItem extends CommonDBTM
      * by the quick-edit JS to pre-populate the modal without an extra
      * round-trip.
      */
-    private static function buildRowDataAttrs(array $row, string $statusLabel, string $ownerName): string
+    private static function buildRowDataAttrs(array $row, string $statusLabel, string $ownerName, array $tags = []): string
     {
         $attrs = [
             'data-item-id'           => (int)$row['id'],
@@ -598,6 +618,7 @@ class SprintItem extends CommonDBTM
             'data-capacity'          => (int)($row['capacity'] ?? 0),
             'data-is-fastlane'       => (int)($row['is_fastlane'] ?? 0),
             'data-note'              => (string)($row['note'] ?? ''),
+            'data-item-tags'         => self::tagsToBlob($tags),
         ];
 
         $parts = [];
@@ -605,6 +626,34 @@ class SprintItem extends CommonDBTM
             $parts[] = $k . '="' . htmlescape((string)$v) . '"';
         }
         return implode(' ', $parts);
+    }
+
+    /**
+     * Inline tag-pill markup appended to the name cell.
+     */
+    public static function renderTagPills(array $tags): string
+    {
+        if (empty($tags)) {
+            return '';
+        }
+        $out = " <span class='sprint-tag-pills'>";
+        foreach ($tags as $tag) {
+            $out .= "<span class='sprint-tag-pill'>" . htmlescape($tag) . "</span>";
+        }
+        $out .= "</span>";
+        return $out;
+    }
+
+    /**
+     * Pipe-bracketed lowercased blob for `data-item-tags`. JS does
+     * `indexOf('|tag|')` so partial matches never collide.
+     */
+    public static function tagsToBlob(array $tags): string
+    {
+        if (empty($tags)) {
+            return '|';
+        }
+        return '|' . implode('|', array_map('mb_strtolower', $tags)) . '|';
     }
 
     /**
@@ -623,6 +672,7 @@ class SprintItem extends CommonDBTM
     {
         $statuses = $options['statuses'] ?? [];
         $owners   = $options['owners']   ?? [];
+        $tags     = $options['tags']     ?? [];
         $barId    = 'sprint-filter-' . mt_rand();
         $tc       = htmlescape($tableClass);
 
@@ -655,6 +705,15 @@ class SprintItem extends CommonDBTM
             foreach ($owners as $uidOpt => $name) {
                 if ((int)$uidOpt === 0) continue;
                 echo "<option value='" . (int)$uidOpt . "'>" . htmlescape((string)$name) . "</option>";
+            }
+            echo "</select>";
+        }
+
+        if (!empty($tags)) {
+            echo "<select class='form-select form-select-sm sf-tag' style='max-width:180px;'>";
+            echo "<option value=''>" . __('All tags', 'sprint') . "</option>";
+            foreach ($tags as $tag) {
+                echo "<option value='" . htmlescape(mb_strtolower($tag)) . "'>" . htmlescape($tag) . "</option>";
             }
             echo "</select>";
         }
@@ -923,9 +982,15 @@ $(function() {
                 }
                 \$row.find('.sprint-note-display').text(resp.note || '');
 
-                // Keep the meeting name cell's link text in sync too.
+                // Keep the meeting name cell's link text in sync too. Skip
+                // button-styled anchors (e.g. fastlane "Manage members"),
+                // which also point at sprintitem.form.php — replacing their
+                // <i> icon with the item name corrupts the action cell.
                 \$row.find('td a').filter(function() {
-                    return \$(this).attr('href') && \$(this).attr('href').indexOf('sprintitem.form.php') !== -1;
+                    var \$a = \$(this);
+                    if (\$a.hasClass('btn')) { return false; }
+                    var href = \$a.attr('href');
+                    return href && href.indexOf('sprintitem.form.php') !== -1;
                 }).text(resp.name);
 
                 var m = \$modal.data('bs-instance');
@@ -960,8 +1025,9 @@ JS;
         }
         $rendered = true;
 
-        $ticketStatuses = \Ticket::getAllStatusArray(true);
-        $changeStatuses = \Change::getAllStatusArray(true);
+        $ticketStatuses  = \Ticket::getAllStatusArray(true);
+        $changeStatuses  = \Change::getAllStatusArray(true);
+        $problemStatuses = \Problem::getAllStatusArray(true);
 
         $projectStates = [];
         $ps = new \ProjectState();
@@ -1004,6 +1070,15 @@ JS;
         }
         echo "</select></div>";
 
+        // Problem status
+        echo "<div class='mb-3 sprint-lqe-problem-status' style='display:none;'>";
+        echo "<label class='form-label'>" . __('Status') . "</label>";
+        echo "<select class='form-select' name='problem_status'>";
+        foreach ($problemStatuses as $k => $label) {
+            echo "<option value='" . (int)$k . "'>" . htmlescape((string)$label) . "</option>";
+        }
+        echo "</select></div>";
+
         // ProjectTask status + percent done
         echo "<div class='mb-3 sprint-lqe-ptask-status' style='display:none;'>";
         echo "<label class='form-label'>" . __('Status') . "</label>";
@@ -1025,9 +1100,10 @@ JS;
             . "<i class='fas fa-save me-1'></i> " . __('Save') . "</button>";
         echo "</div></div></div></div>";
 
-        $labelTicket = addslashes(__('Ticket'));
-        $labelChange = addslashes(__('Change'));
-        $labelPTask  = addslashes(__('Project task'));
+        $labelTicket  = addslashes(__('Ticket'));
+        $labelChange  = addslashes(__('Change'));
+        $labelProblem = addslashes(__('Problem'));
+        $labelPTask   = addslashes(__('Project task'));
 
         echo <<<JS
 <script>
@@ -1036,9 +1112,10 @@ JS;
     window.__sprintLinkedQuickEditBound = true;
 
     var typeMeta = {
-        'Ticket':      { icon: 'fas fa-ticket-alt',  label: '{$labelTicket}' },
-        'Change':      { icon: 'fas fa-exchange-alt', label: '{$labelChange}' },
-        'ProjectTask': { icon: 'fas fa-tasks',        label: '{$labelPTask}' }
+        'Ticket':      { icon: 'fas fa-ticket-alt',       label: '{$labelTicket}' },
+        'Change':      { icon: 'fas fa-exchange-alt',     label: '{$labelChange}' },
+        'Problem':     { icon: 'fas fa-exclamation-circle', label: '{$labelProblem}' },
+        'ProjectTask': { icon: 'fas fa-tasks',            label: '{$labelPTask}' }
     };
 
     \$(document).on('click', '.sprint-linked-quick-edit-btn', function(ev) {
@@ -1071,6 +1148,9 @@ JS;
         } else if (itemtype === 'Change') {
             \$m.find('.sprint-lqe-change-status').show();
             \$m.find('select[name=change_status]').val(String(status));
+        } else if (itemtype === 'Problem') {
+            \$m.find('.sprint-lqe-problem-status').show();
+            \$m.find('select[name=problem_status]').val(String(status));
         } else if (itemtype === 'ProjectTask') {
             \$m.find('.sprint-lqe-ptask-status').show();
             \$m.find('.sprint-lqe-ptask-percent').show();
@@ -1095,6 +1175,8 @@ JS;
             payload.status = \$m.find('select[name=ticket_status]').val();
         } else if (itemtype === 'Change') {
             payload.status = \$m.find('select[name=change_status]').val();
+        } else if (itemtype === 'Problem') {
+            payload.status = \$m.find('select[name=problem_status]').val();
         } else if (itemtype === 'ProjectTask') {
             payload.projectstates_id = \$m.find('select[name=projectstates_id]').val();
             payload.percent_done     = \$m.find('input[name=percent_done]').val();
@@ -1248,6 +1330,9 @@ JS;
         if ($sprintId > 0) {
             self::removeBacklogDuplicatesForLinkedItem($itemtype, $itemsId);
         }
+        if (array_key_exists('_tags', $this->input)) {
+            self::setTagsForItem((int)$this->getID(), (array)$this->input['_tags']);
+        }
         parent::post_addItem();
     }
 
@@ -1259,7 +1344,121 @@ JS;
         if ($sprintId > 0) {
             self::removeBacklogDuplicatesForLinkedItem($itemtype, $itemsId);
         }
+        if (array_key_exists('_tags', $this->input)) {
+            self::setTagsForItem((int)$this->getID(), (array)$this->input['_tags']);
+        }
         parent::post_updateItem($history);
+    }
+
+    /**
+     * Tags currently assigned to a sprint item, in admin-defined order.
+     *
+     * @return string[]
+     */
+    public static function getTagsForItem(int $itemId): array
+    {
+        global $DB;
+        if ($itemId <= 0 || !$DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+            return [];
+        }
+        $rows = $DB->request([
+            'SELECT' => 'tag',
+            'FROM'   => 'glpi_plugin_sprint_sprintitemtags',
+            'WHERE'  => ['plugin_sprint_sprintitems_id' => $itemId],
+        ]);
+        $stored = [];
+        foreach ($rows as $r) {
+            $stored[mb_strtolower((string)$r['tag'])] = (string)$r['tag'];
+        }
+        $out = [];
+        foreach (Config::getDefinedTags() as $tag) {
+            $key = mb_strtolower($tag);
+            if (isset($stored[$key])) {
+                $out[] = $stored[$key];
+                unset($stored[$key]);
+            }
+        }
+        foreach ($stored as $orphan) {
+            $out[] = $orphan;
+        }
+        return $out;
+    }
+
+    /**
+     * Bulk-fetch tags grouped by sprint-item id, ordered by the admin pool.
+     *
+     * @param int[] $itemIds
+     * @return array<int, string[]>
+     */
+    public static function getTagsForItems(array $itemIds): array
+    {
+        global $DB;
+        $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+        if (empty($itemIds) || !$DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+            return [];
+        }
+        $rows = $DB->request([
+            'SELECT' => ['plugin_sprint_sprintitems_id', 'tag'],
+            'FROM'   => 'glpi_plugin_sprint_sprintitemtags',
+            'WHERE'  => ['plugin_sprint_sprintitems_id' => $itemIds],
+        ]);
+        $grouped = [];
+        foreach ($rows as $r) {
+            $grouped[(int)$r['plugin_sprint_sprintitems_id']][mb_strtolower((string)$r['tag'])] = (string)$r['tag'];
+        }
+        $order = Config::getDefinedTags();
+        $out   = [];
+        foreach ($itemIds as $id) {
+            $stored = $grouped[$id] ?? [];
+            $list   = [];
+            foreach ($order as $tag) {
+                $key = mb_strtolower($tag);
+                if (isset($stored[$key])) {
+                    $list[] = $stored[$key];
+                    unset($stored[$key]);
+                }
+            }
+            foreach ($stored as $orphan) {
+                $list[] = $orphan;
+            }
+            $out[$id] = $list;
+        }
+        return $out;
+    }
+
+    /**
+     * Replace the tag set for an item with the intersection of the input
+     * and the admin-defined pool. Tags outside the pool are silently
+     * dropped so a stale form submission can't smuggle in unknown labels.
+     */
+    public static function setTagsForItem(int $itemId, array $tags): void
+    {
+        global $DB;
+        if ($itemId <= 0 || !$DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+            return;
+        }
+        $allowed = [];
+        foreach (Config::getDefinedTags() as $tag) {
+            $allowed[mb_strtolower($tag)] = $tag;
+        }
+        $kept = [];
+        foreach ($tags as $t) {
+            $key = mb_strtolower(trim((string)$t));
+            if ($key !== '' && isset($allowed[$key])) {
+                $kept[$key] = $allowed[$key];
+            }
+        }
+        $DB->delete('glpi_plugin_sprint_sprintitemtags', [
+            'plugin_sprint_sprintitems_id' => $itemId,
+        ]);
+        $now = $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s');
+        foreach ($kept as $tag) {
+            $DB->insert('glpi_plugin_sprint_sprintitemtags', [
+                'plugin_sprint_sprintitems_id' => $itemId,
+                'tag'                          => $tag,
+                'date_creation'                => $now,
+            ]);
+        }
     }
 
     /**
@@ -1463,6 +1662,12 @@ JS;
             if ($linked->getFromDB($input['items_id']) && empty($input['name'])) {
                 $input['name'] = $linked->fields['name'];
             }
+        } elseif ($itemtype === 'Problem' && !empty($input['_linked_problem'])) {
+            $input['items_id'] = (int)$input['_linked_problem'];
+            $linked = new \Problem();
+            if ($linked->getFromDB($input['items_id']) && empty($input['name'])) {
+                $input['name'] = $linked->fields['name'];
+            }
         } elseif ($itemtype === 'ProjectTask' && !empty($input['_linked_projecttask'])) {
             $input['items_id'] = (int)$input['_linked_projecttask'];
             $linked = new ProjectTask();
@@ -1602,6 +1807,25 @@ JS;
         echo "<tr class='tab_bg_1'><td>" . __('Description') . "</td>";
         echo "<td colspan='3'><textarea name='description' rows='6' cols='80'>" .
             htmlescape($this->fields['description'] ?? '') . "</textarea></td></tr>";
+
+        $definedTags = Config::getDefinedTags();
+        if (!empty($definedTags)) {
+            $assigned = $this->getID() > 0 ? self::getTagsForItem((int)$this->getID()) : [];
+            $assignedKeys = array_flip(array_map('mb_strtolower', $assigned));
+            echo "<tr class='tab_bg_1'><td>" . __('Tags', 'sprint') . "</td>";
+            echo "<td colspan='3'>";
+            echo "<input type='hidden' name='_tags' value=''>";
+            echo "<div class='d-flex flex-wrap gap-3'>";
+            foreach ($definedTags as $tag) {
+                $checked = isset($assignedKeys[mb_strtolower($tag)]) ? ' checked' : '';
+                echo "<label style='display:inline-flex;align-items:center;gap:6px;'>";
+                echo "<input type='checkbox' name='_tags[]' value='" . htmlescape($tag) . "'{$checked}>";
+                echo "<span>" . htmlescape($tag) . "</span>";
+                echo "</label>";
+            }
+            echo "</div>";
+            echo "</td></tr>";
+        }
 
         $this->showFormButtons($options);
 
