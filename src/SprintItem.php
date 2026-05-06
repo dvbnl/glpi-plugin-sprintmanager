@@ -750,6 +750,7 @@ class SprintItem extends CommonDBTM
         $capacityChoices = SprintMember::getCapacityChoices();
         $memberOptions  = $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [];
         $moveTargets    = $sprintId > 0 ? Sprint::getMoveTargetOptions($sprintId) : [];
+        $definedTags    = Config::getDefinedTags();
 
         // Capacity lock: if the plugin is configured to restrict capacity
         // edits to the Scrum Master, disable the capacity control in the
@@ -810,6 +811,19 @@ class SprintItem extends CommonDBTM
 
         echo "<div class='mb-3'><label class='form-label'>" . __('Note', 'sprint') . "</label>";
         echo "<textarea name='note' class='form-control' rows='8' style='min-height:180px;'></textarea></div>";
+
+        if (!empty($definedTags)) {
+            echo "<div class='mb-3 sprint-qe-tags-block'><label class='form-label'>"
+                . "<i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint') . "</label>";
+            echo "<div class='d-flex flex-wrap gap-3'>";
+            foreach ($definedTags as $tag) {
+                echo "<label style='display:inline-flex;align-items:center;gap:6px;'>"
+                    . "<input type='checkbox' class='sprint-qe-tag' value='" . htmlescape($tag) . "'>"
+                    . "<span>" . htmlescape($tag) . "</span>"
+                    . "</label>";
+            }
+            echo "</div></div>";
+        }
 
         echo "<div class='mb-3'><label class='form-label'>"
             . "<i class='fas fa-forward text-success me-1'></i>"
@@ -875,6 +889,13 @@ $(function() {
         \$modal.find('.sprint-qe-error').hide().text('');
         \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
 
+        // Populate tag checkboxes from the row's `|tag1|tag2|` lowercased blob.
+        var tagBlob = String(\$row.attr('data-item-tags') || '|').toLowerCase();
+        \$modal.find('.sprint-qe-tag').each(function() {
+            var v = String(\$(this).val() || '').toLowerCase();
+            \$(this).prop('checked', v !== '' && tagBlob.indexOf('|' + v + '|') !== -1);
+        });
+
         // Lock capacity for non-scrum-master users when the plugin setting
         // requires it — fastlane items stay editable.
         var capacityLocked = {$capacityLockedJs};
@@ -895,6 +916,13 @@ $(function() {
             url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
             type: 'GET', dataType: 'json', cache: false
         }).then(function(tokResp) {
+            var tags = [];
+            \$modal.find('.sprint-qe-tag:checked').each(function() {
+                tags.push(\$(this).val());
+            });
+            // JSON-encode tags so an empty selection still transmits — jQuery
+            // drops empty arrays during form serialization, which would
+            // otherwise prevent unchecking the last tag from clearing it.
             return \$.ajax({
                 url: {$cfgRoot} + '/plugins/sprint/ajax/updateitemquick.php',
                 type: 'POST', dataType: 'json',
@@ -908,6 +936,7 @@ $(function() {
                     capacity: \$modal.find('select[name=capacity]').val(),
                     note: \$modal.find('textarea[name=note]').val(),
                     carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
+                    _tags_json: JSON.stringify(tags),
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 }
             });
@@ -939,6 +968,27 @@ $(function() {
                 \$row.attr('data-story-points', resp.story_points).data('story-points', resp.story_points);
                 \$row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
                 \$row.attr('data-note', resp.note).data('note', resp.note);
+
+                if (typeof resp.tags_blob !== 'undefined') {
+                    \$row.attr('data-item-tags', resp.tags_blob).data('item-tags', resp.tags_blob);
+                }
+                if (typeof resp.tags_pills_html !== 'undefined') {
+                    \$row.each(function() {
+                        var \$r = \$(this);
+                        var \$existing = \$r.find('.sprint-tag-pills');
+                        if (\$existing.length) {
+                            \$existing.replaceWith(resp.tags_pills_html);
+                        } else if (resp.tags_pills_html !== '') {
+                            // No pill span yet — anchor it after the row's
+                            // sprint-item link so it lands in the same cell
+                            // the server-side renderer would have used.
+                            var \$anchor = \$r.find("a[href*='sprintitem.form.php']").first();
+                            if (\$anchor.length) {
+                                \$anchor.after(resp.tags_pills_html);
+                            }
+                        }
+                    });
+                }
 
                 // === Refresh visible cells on PHP-rendered list/dashboard rows ===
                 var \$listRow = \$row.filter('.sprint-row');

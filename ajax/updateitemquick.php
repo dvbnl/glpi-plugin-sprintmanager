@@ -63,6 +63,11 @@ foreach ($allowed as $field) {
     }
 }
 
+if (array_key_exists('_tags_json', $_POST)) {
+    $decoded = json_decode((string)$_POST['_tags_json'], true);
+    $update['_tags'] = is_array($decoded) ? $decoded : [];
+}
+
 // Quick-edits fired from a meeting view send the active meeting id; tag
 // the resulting log rows as meeting-sourced so the activity chart skips
 // them and the audit log shows a "via Meeting" badge.
@@ -141,6 +146,8 @@ if ($carryOverSprintId > 0) {
     }
 }
 
+$updatedTags = GlpiPlugin\Sprint\SprintItem::getTagsForItem((int)$_POST['id']);
+
 echo json_encode([
     'success'              => true,
     'message'              => $messages ? implode("\n", $messages) : 'Item updated',
@@ -151,6 +158,9 @@ echo json_encode([
     'story_points'         => (int)$item->fields['story_points'],
     'capacity'             => (int)($item->fields['capacity'] ?? 0),
     'note'                 => (string)($item->fields['note'] ?? ''),
+    'tags'                 => $updatedTags,
+    'tags_blob'            => GlpiPlugin\Sprint\SprintItem::tagsToBlob($updatedTags),
+    'tags_pills_html'      => GlpiPlugin\Sprint\SprintItem::renderTagPills($updatedTags),
     'carried_over'         => $carryOverId > 0,
     'carried_over_id'      => $carryOverId,
     'carried_over_sprint'  => $carryOverSprintId,

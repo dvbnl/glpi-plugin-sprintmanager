@@ -795,8 +795,6 @@ class SprintDashboard extends CommonGLPI
                 . "<i class='fas fa-info-circle' style='margin-right:6px;'></i>"
                 . htmlescape($reason)
                 . "</div>";
-            echo "</div>"; // .sprint-collapsible-body
-            echo "</div>"; // .sprint-collapsible
             return;
         }
 
@@ -904,8 +902,6 @@ class SprintDashboard extends CommonGLPI
         echo "</div>";
 
         echo "</div>"; // .sprint-member-activity
-        echo "</div>"; // .sprint-collapsible-body
-        echo "</div>"; // .sprint-collapsible
     }
 
     /**
