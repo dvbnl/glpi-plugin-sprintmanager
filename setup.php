@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.1.0');
+define('PLUGIN_SPRINT_VERSION', '1.1.1');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -151,6 +151,11 @@ function plugin_init_sprint(): void
     // SprintItem (only when the item is flagged is_fastlane).
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintFastlaneMember',
+        ['addtabon' => ['GlpiPlugin\Sprint\SprintItem']]
+    );
+
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintItemDependency',
         ['addtabon' => ['GlpiPlugin\Sprint\SprintItem']]
     );
 

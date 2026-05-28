@@ -76,6 +76,54 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
+     * Render a stacked capacity bar with an overflow segment when
+     * dependency/fastlane allocations push used past total. Returns the
+     * <div> HTML so dashboards can drop it in any layout.
+     *
+     * Segments are sized against max(total, used) so they fit regardless
+     * of overflow. A 100% marker line indicates where total capacity sits,
+     * and the slice past it is rendered as a striped red "overflow" band.
+     */
+    public static function renderCapacityBar(
+        int $total,
+        int $regularUsed,
+        int $fastlaneUsed,
+        int $dependencyUsed,
+        int $height = 10,
+        string $borderRadius = '5px'
+    ): string {
+        $used      = $regularUsed + $fastlaneUsed + $dependencyUsed;
+        $denom     = max($total, $used, 1);
+        $regularW    = ($denom > 0) ? round(($regularUsed / $denom) * 100, 2) : 0;
+        $fastlaneW   = ($denom > 0) ? round(($fastlaneUsed / $denom) * 100, 2) : 0;
+        $dependencyW = ($denom > 0) ? round(($dependencyUsed / $denom) * 100, 2) : 0;
+
+        $overflow  = max($used - $total, 0);
+        $overflowW = ($denom > 0 && $overflow > 0) ? round(($overflow / $denom) * 100, 2) : 0;
+
+        $totalMarkerLeft = ($used > $total && $denom > 0) ? round(($total / $denom) * 100, 2) : 0;
+        $regularColor    = $used > $total ? '#dc3545' : ($used >= $total * 0.8 ? '#e67e22' : '#198754');
+
+        $html = "<div style='position:relative;display:flex;height:{$height}px;background:#e9ecef;border-radius:{$borderRadius};overflow:hidden;'>";
+        if ($regularW > 0) {
+            $html .= "<div style='width:{$regularW}%;height:100%;background:{$regularColor};' title='" . __('Regular', 'sprint') . " {$regularUsed}%'></div>";
+        }
+        if ($fastlaneW > 0) {
+            $html .= "<div style='width:{$fastlaneW}%;height:100%;background:#fd7e14;' title='" . __('Fastlane', 'sprint') . " {$fastlaneUsed}%'></div>";
+        }
+        if ($dependencyW > 0) {
+            $html .= "<div style='width:{$dependencyW}%;height:100%;background:#20c997;' title='" . __('Dependencies', 'sprint') . " {$dependencyUsed}%'></div>";
+        }
+        if ($overflowW > 0) {
+            $stripe = 'repeating-linear-gradient(45deg,#dc3545,#dc3545 4px,#a71d2a 4px,#a71d2a 8px)';
+            $html .= "<div style='width:{$overflowW}%;height:100%;background:{$stripe};' title='" . sprintf(__('Overflow %d%%', 'sprint'), $overflow) . "'></div>";
+            $html .= "<div style='position:absolute;top:-2px;bottom:-2px;left:{$totalMarkerLeft}%;width:2px;background:#212529;' title='100%'></div>";
+        }
+        $html .= "</div>";
+        return $html;
+    }
+
+    /**
      * Get all available roles
      */
     public static function getAllRoles(): array
@@ -314,10 +362,11 @@ class SprintMember extends CommonDBRelation
             ]) as $r) {
                 $regularUsed += (int)($r['capacity'] ?? 0);
             }
-            $fastlaneUsed = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
-            $usedCap      = $regularUsed + $fastlaneUsed;
-            $remaining    = max($totalCap - $usedCap, 0);
-            $capUsedPct   = $totalCap > 0 ? round(($usedCap / $totalCap) * 100) : 0;
+            $fastlaneUsed   = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
+            $dependencyUsed = SprintItemDependency::getUsedDependencyCapacityForUser($sprintId, $userId);
+            $usedCap        = $regularUsed + $fastlaneUsed + $dependencyUsed;
+            $remaining      = max($totalCap - $usedCap, 0);
+            $capUsedPct     = $totalCap > 0 ? round(($usedCap / $totalCap) * 100) : 0;
 
             // Status counts — include fastlane items the user is a member of
             $counts = $memberStatusCounts[$userId] ?? [];
@@ -326,7 +375,8 @@ class SprintMember extends CommonDBRelation
             $progressPct = $total > 0 ? round(($done / $total) * 100) : 0;
 
             // Fastlane item count for this user
-            $fastlaneItemCount = (int)($counts['fastlane_total'] ?? 0);
+            $fastlaneItemCount   = (int)($counts['fastlane_total'] ?? 0);
+            $dependencyItemCount = (int)($counts['dependency_total'] ?? 0);
 
             // Color strategy: progress green once done >= 80%, amber if 50+, red otherwise
             $progressColor = $progressPct >= 80 ? '#198754' : ($progressPct >= 50 ? '#ffc107' : ($progressPct > 0 ? '#0d6efd' : '#adb5bd'));
@@ -343,8 +393,13 @@ class SprintMember extends CommonDBRelation
             echo "</div>";
             if ($fastlaneItemCount > 0) {
                 echo "<span title='" . __('Fastlane items assigned', 'sprint') . "' "
-                    . "style='background:#fff3cd;color:#fd7e14;padding:2px 8px;border-radius:10px;font-size:0.78em;font-weight:700;'>"
+                    . "style='background:#fff3cd;color:#fd7e14;padding:2px 8px;border-radius:10px;font-size:0.78em;font-weight:700;margin-right:4px;'>"
                     . "<i class='fas fa-bolt'></i> {$fastlaneItemCount}</span>";
+            }
+            if ($dependencyItemCount > 0) {
+                echo "<span title='" . __('Open dependency allocations', 'sprint') . "' "
+                    . "style='background:#d1f2ea;color:#20c997;padding:2px 8px;border-radius:10px;font-size:0.78em;font-weight:700;'>"
+                    . "<i class='fas fa-link'></i> {$dependencyItemCount}</span>";
             }
             echo "</div>";
 
@@ -360,26 +415,55 @@ class SprintMember extends CommonDBRelation
             echo "</div>";
 
             // Capacity utilization (used vs total)
+            $overflowCap = max($usedCap - $totalCap, 0);
             echo "<div style='margin-bottom:10px;'>";
             echo "<div style='display:flex;justify-content:space-between;font-size:0.78em;color:#6c757d;margin-bottom:3px;'>";
             echo "<span>" . __('Capacity used', 'sprint') . "</span>";
-            echo "<span><strong>{$usedCap}%</strong> / {$totalCap}% &mdash; "
-                . sprintf(__('%d%% free', 'sprint'), $remaining) . "</span>";
-            echo "</div>";
-            $regularWidth  = $totalCap > 0 ? min(round(($regularUsed / $totalCap) * 100), 100) : 0;
-            $fastlaneWidth = $totalCap > 0 ? min(round(($fastlaneUsed / $totalCap) * 100), 100 - $regularWidth) : 0;
-            echo "<div style='display:flex;height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;'>";
-            if ($regularWidth > 0) {
-                echo "<div style='width:{$regularWidth}%;height:100%;background:{$capBarColor};' title='" . __('Regular', 'sprint') . " {$regularUsed}%'></div>";
-            }
-            if ($fastlaneWidth > 0) {
-                echo "<div style='width:{$fastlaneWidth}%;height:100%;background:#fd7e14;' title='" . __('Fastlane', 'sprint') . " {$fastlaneUsed}%'></div>";
+            if ($overflowCap > 0) {
+                echo "<span><strong style='color:#dc3545;'>{$usedCap}%</strong> / {$totalCap}% &mdash; "
+                    . "<span style='color:#dc3545;font-weight:600;'>"
+                    . "<i class='fas fa-exclamation-triangle' style='margin-right:2px;'></i>"
+                    . sprintf(__('%d%% overflow', 'sprint'), $overflowCap)
+                    . "</span></span>";
+            } else {
+                echo "<span><strong>{$usedCap}%</strong> / {$totalCap}% &mdash; "
+                    . sprintf(__('%d%% free', 'sprint'), $remaining) . "</span>";
             }
             echo "</div>";
+            echo self::renderCapacityBar($totalCap, $regularUsed, $fastlaneUsed, $dependencyUsed);
             echo "</div>";
 
             // Status distribution — reuse existing renderer (now includes fastlane)
             echo self::renderStatusDistribution($counts);
+
+            // "Helpt op" — items where this user is helper on at least one open dep
+            $helperItems = SprintItemDependency::getOpenItemsForHelper($sprintId, $userId);
+            if (count($helperItems) > 0) {
+                echo "<div style='margin-top:10px;padding-top:8px;border-top:1px dashed #e9ecef;'>";
+                echo "<div style='font-size:0.78em;color:#6c757d;margin-bottom:4px;'>"
+                    . "<i class='fas fa-link' style='color:#20c997;margin-right:4px;'></i>"
+                    . __('Helping on', 'sprint') . "</div>";
+                $shown = 0;
+                foreach ($helperItems as $h) {
+                    if ($shown >= 3) {
+                        $more = count($helperItems) - 3;
+                        echo "<div style='font-size:0.78em;color:#adb5bd;font-style:italic;'>"
+                            . sprintf(__('+ %d more', 'sprint'), $more) . "</div>";
+                        break;
+                    }
+                    $itemUrl = SprintItem::getFormURLWithID($h['item_id']);
+                    echo "<div style='font-size:0.82em;line-height:1.3;'>"
+                        . "<a href='" . htmlescape($itemUrl) . "'>" . htmlescape($h['name']) . "</a> "
+                        . "<span class='text-muted'>({$h['capacity']}%";
+                    if ($h['owner_name'] !== '') {
+                        echo " — " . htmlescape($h['owner_name']);
+                    }
+                    echo ")</span>"
+                        . "</div>";
+                    $shown++;
+                }
+                echo "</div>";
+            }
 
             echo "</div>";
         }
@@ -406,10 +490,12 @@ class SprintMember extends CommonDBRelation
                     SprintItem::STATUS_TODO        => 0,
                     SprintItem::STATUS_IN_PROGRESS => 0,
                     SprintItem::STATUS_REVIEW      => 0,
+                    SprintItem::STATUS_DEPENDENCY  => 0,
                     SprintItem::STATUS_DONE        => 0,
                     SprintItem::STATUS_BLOCKED     => 0,
                     'total'                        => 0,
                     'fastlane_total'               => 0,
+                    'dependency_total'             => 0,
                 ];
             }
         };
@@ -466,6 +552,27 @@ class SprintMember extends CommonDBRelation
             }
         }
 
+        // Skip 'total'/per-status counts: the parent item is already counted
+        // for its owner; adding it again for the helper would double-count.
+        if (SprintItemDependency::isTableReady()) {
+            $allItems = $si->find(['plugin_sprint_sprints_id' => $sprintId]);
+            if (count($allItems) > 0) {
+                $allItemIds = array_map(fn($r) => (int)$r['id'], $allItems);
+                $depRel = new SprintItemDependency();
+                foreach ($depRel->find([
+                    'plugin_sprint_sprintitems_id' => $allItemIds,
+                    'is_resolved'                  => 0,
+                ]) as $r) {
+                    $uid = (int)$r['users_id'];
+                    if ($uid <= 0) {
+                        continue;
+                    }
+                    $ensureUser($uid);
+                    $counts[$uid]['dependency_total']++;
+                }
+            }
+        }
+
         return $counts;
     }
 
@@ -485,6 +592,7 @@ class SprintMember extends CommonDBRelation
             [SprintItem::STATUS_DONE,        __('Done', 'sprint'),        '#198754', 'fas fa-check-circle'],
             [SprintItem::STATUS_IN_PROGRESS, __('In Progress', 'sprint'), '#0d6efd', 'fas fa-circle-notch'],
             [SprintItem::STATUS_REVIEW,      __('In Review', 'sprint'),   '#6f42c1', 'fas fa-search'],
+            [SprintItem::STATUS_DEPENDENCY,  __('Dependency', 'sprint'),  '#20c997', 'fas fa-link'],
             [SprintItem::STATUS_BLOCKED,     __('Blocked', 'sprint'),     '#dc3545', 'fas fa-hand-paper'],
             [SprintItem::STATUS_TODO,        __('To Do', 'sprint'),       '#d5d8dc', 'fas fa-list-ul'],
         ];
@@ -579,19 +687,22 @@ class SprintMember extends CommonDBRelation
 
     /**
      * Compute the capacity already used by a user in a sprint, summing
-     * both regular SprintItem allocations and Fastlane member allocations.
+     * regular SprintItem allocations, Fastlane member allocations, and
+     * open Dependency allocations.
      *
      * @param int $sprintId
      * @param int $userId
-     * @param int $excludeRegularItemId  SprintItem id to exclude (for updates of a regular item)
-     * @param int $excludeFastlaneMemberId  SprintFastlaneMember id to exclude (for updates of a fastlane allocation)
+     * @param int $excludeRegularItemId      SprintItem id to exclude (for updates of a regular item)
+     * @param int $excludeFastlaneMemberId   SprintFastlaneMember id to exclude (for updates of a fastlane allocation)
+     * @param int $excludeDependencyId       SprintItemDependency id to exclude (for updates of a dependency allocation)
      * @return int  Used capacity %
      */
     public static function getUsedCapacityForUser(
         int $sprintId,
         int $userId,
         int $excludeRegularItemId = 0,
-        int $excludeFastlaneMemberId = 0
+        int $excludeFastlaneMemberId = 0,
+        int $excludeDependencyId = 0
     ): int {
         // Regular sprint items: sum capacity for non-fastlane items the
         // user owns. Fastlane items have multiple owners via the junction
@@ -617,7 +728,13 @@ class SprintMember extends CommonDBRelation
             $excludeFastlaneMemberId
         );
 
-        return $regularUsed + $fastlaneUsed;
+        $dependencyUsed = SprintItemDependency::getUsedDependencyCapacityForUser(
+            $sprintId,
+            $userId,
+            $excludeDependencyId
+        );
+
+        return $regularUsed + $fastlaneUsed + $dependencyUsed;
     }
 
     /**
@@ -630,7 +747,9 @@ class SprintMember extends CommonDBRelation
         int $userId,
         int $additional,
         int $excludeRegularItemId = 0,
-        int $excludeFastlaneMemberId = 0
+        int $excludeFastlaneMemberId = 0,
+        int $excludeDependencyId = 0,
+        bool $allowOverflow = false
     ): bool {
         if ($additional <= 0 || $userId <= 0 || $sprintId <= 0) {
             return true;
@@ -647,10 +766,25 @@ class SprintMember extends CommonDBRelation
         $row           = reset($members);
         $totalCapacity = (int)$row['capacity_percent'];
 
-        $used      = self::getUsedCapacityForUser($sprintId, $userId, $excludeRegularItemId, $excludeFastlaneMemberId);
+        $used      = self::getUsedCapacityForUser($sprintId, $userId, $excludeRegularItemId, $excludeFastlaneMemberId, $excludeDependencyId);
         $remaining = $totalCapacity - $used;
 
         if ($additional > $remaining) {
+            if ($allowOverflow) {
+                $newUsed = $used + $additional;
+                Session::addMessageAfterRedirect(
+                    sprintf(
+                        __('%s is now over capacity: %d%% used of %d%% (+%d%% overflow).', 'sprint'),
+                        getUserName($userId),
+                        $newUsed,
+                        $totalCapacity,
+                        $newUsed - $totalCapacity
+                    ),
+                    false,
+                    WARNING
+                );
+                return true;
+            }
             Session::addMessageAfterRedirect(
                 sprintf(
                     __('%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%.', 'sprint'),

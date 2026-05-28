@@ -36,6 +36,8 @@ class SprintItem extends CommonDBTM
         $rel = new SprintFastlaneMember();
         $rel->deleteByCriteria(['plugin_sprint_sprintitems_id' => $this->getID()], 1);
 
+        SprintItemDependency::purgeForItem((int)$this->getID());
+
         if ($DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
             $DB->delete('glpi_plugin_sprint_sprintitemtags', [
                 'plugin_sprint_sprintitems_id' => $this->getID(),
@@ -78,6 +80,7 @@ class SprintItem extends CommonDBTM
     const STATUS_REVIEW      = 'review';
     const STATUS_DONE        = 'done';
     const STATUS_BLOCKED     = 'blocked';
+    const STATUS_DEPENDENCY  = 'dependency';
 
     /**
      * Check if the current user owns this item
@@ -225,6 +228,7 @@ class SprintItem extends CommonDBTM
             self::STATUS_TODO        => __('To Do', 'sprint'),
             self::STATUS_IN_PROGRESS => __('In Progress', 'sprint'),
             self::STATUS_REVIEW      => __('In Review', 'sprint'),
+            self::STATUS_DEPENDENCY  => __('Dependency', 'sprint'),
             self::STATUS_DONE        => __('Done', 'sprint'),
             self::STATUS_BLOCKED     => __('Blocked', 'sprint'),
         ];
@@ -448,7 +452,7 @@ class SprintItem extends CommonDBTM
             echo "</td>";
             echo "<td>" . __('Story Points', 'sprint') . "</td>";
             echo "<td>";
-            Dropdown::showNumber('story_points', ['value' => 0, 'min' => 0, 'max' => 100]);
+            Dropdown::showNumber('story_points', ['value' => 1, 'min' => 0, 'max' => 100]);
             echo "</td></tr>";
 
             // Row 3: Capacity, Priority + Submit
@@ -503,6 +507,7 @@ class SprintItem extends CommonDBTM
 
         $itemIds  = array_map(fn($r) => (int)$r['id'], $items);
         $tagsById = self::getTagsForItems($itemIds);
+        $depsById = SprintItemDependency::getOpenSummariesForItems($itemIds);
 
         echo "<table class='tab_cadre_fixe sprint-items-list-table'>";
         echo "<tr class='tab_bg_2'>";
@@ -541,9 +546,10 @@ class SprintItem extends CommonDBTM
             $rowTags   = $tagsById[(int)$row['id']] ?? [];
             $dataAttrs = self::buildRowDataAttrs($row, $statusLabel, $ownerName, $rowTags);
 
+            $rowDeps = $depsById[(int)$row['id']] ?? [];
             echo "<tr class='tab_bg_1 sprint-row sprint-filterable-row' {$dataAttrs}>";
             echo "<td class='sprint-cell-name'><a href='" . static::getFormURLWithID($row['id']) . "'>" .
-                htmlescape($row['name']) . "</a>" . self::renderTagPills($rowTags) . "</td>";
+                htmlescape($row['name']) . "</a>" . self::renderTagPills($rowTags) . self::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td>" . $linkedDisplay . "</td>";
             echo "<td class='sprint-cell-status'><span class='sprint-badge {$statusClass}'>" .
                 $statusLabel . "</span></td>";
@@ -642,6 +648,27 @@ class SprintItem extends CommonDBTM
         }
         $out .= "</span>";
         return $out;
+    }
+
+    /**
+     * Inline pill rendered next to an item name showing how many open
+     * dependencies it has, with helper names + % in the tooltip.
+     *
+     * @param array<int,array{users_id:int,name:string,capacity:int}> $openSummaries
+     */
+    public static function renderDependencyBadge(array $openSummaries): string
+    {
+        if (empty($openSummaries)) {
+            return '';
+        }
+        $count = count($openSummaries);
+        $parts = [];
+        foreach ($openSummaries as $s) {
+            $parts[] = ($s['name'] ?: '?') . ' (' . (int)$s['capacity'] . '%)';
+        }
+        $tooltip = __('Waiting on', 'sprint') . ': ' . implode(', ', $parts);
+        return " <span class='sprint-dep-pill' title='" . htmlescape($tooltip) . "'>"
+            . "<i class='fas fa-link'></i> " . $count . "</span>";
     }
 
     /**
@@ -800,7 +827,7 @@ class SprintItem extends CommonDBTM
         }
         echo "</select></div>";
         echo "<div class='col-md-3 mb-3 sprint-qe-story-points'><label class='form-label'>" . __('Story Points', 'sprint') . "</label>";
-        echo "<input type='number' name='story_points' class='form-control' min='0' step='1' value='0'></div>";
+        echo "<input type='number' name='story_points' class='form-control' min='0' step='1' value='1'></div>";
         echo "<div class='col-md-3 mb-3 sprint-qe-capacity'><label class='form-label'>" . __('Capacity (%)', 'sprint') . "</label>";
         echo "<select name='capacity' class='form-select'>";
         foreach ($capacityChoices as $val => $label) {
@@ -838,6 +865,33 @@ class SprintItem extends CommonDBTM
             . htmlescape(__('A fresh copy is created in the target sprint. The original stays in this sprint.', 'sprint'))
             . "</div></div>";
 
+        echo "<div class='mb-3 sprint-qe-deps-block'><label class='form-label'>"
+            . "<i class='fas fa-link' style='color:#20c997;margin-right:4px;'></i>"
+            . __('Dependencies', 'sprint') . "</label>";
+        echo "<div class='alert alert-info py-1 small sprint-qe-dep-status mb-2' style='display:none;'></div>";
+        echo "<div class='d-flex flex-wrap gap-2 align-items-center'>";
+        echo "<select class='form-select form-select-sm sprint-qe-dep-user' style='max-width:240px;'>";
+        echo "<option value='0'>" . htmlescape(__('Select sprint member', 'sprint')) . "</option>";
+        foreach ($memberOptions as $uid => $uname) {
+            if ((int)$uid > 0) {
+                echo "<option value='" . (int)$uid . "'>" . htmlescape((string)$uname) . "</option>";
+            }
+        }
+        echo "</select>";
+        echo "<select class='form-select form-select-sm sprint-qe-dep-cap' style='max-width:120px;'>";
+        foreach ($capacityChoices as $val => $label) {
+            echo "<option value='" . (int)$val . "'" . ((int)$val === 5 ? ' selected' : '') . ">" . htmlescape((string)$label) . "</option>";
+        }
+        echo "</select>";
+        echo "<button type='button' class='btn btn-sm btn-outline-success sprint-qe-dep-add'>"
+            . "<i class='fas fa-plus me-1'></i>" . __('Add helper', 'sprint') . "</button>";
+        echo "<a href='#' class='btn btn-sm btn-outline-secondary sprint-qe-dep-manage' target='_blank' rel='noopener'>"
+            . "<i class='fas fa-external-link-alt me-1'></i>" . __('Manage dependencies', 'sprint') . "</a>";
+        echo "</div>";
+        echo "<div class='form-text small text-muted'>"
+            . htmlescape(__("Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove.", 'sprint'))
+            . "</div></div>";
+
         echo "</div>";
         echo "<div class='modal-footer'>";
         echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __('Cancel') . "</button>";
@@ -858,6 +912,7 @@ $(function() {
         'todo': '#6c757d',
         'in_progress': '#0d6efd',
         'review': '#6f42c1',
+        'dependency': '#20c997',
         'done': '#198754',
         'blocked': '#dc3545'
     };
@@ -888,6 +943,14 @@ $(function() {
         \$modal.find('select[name=carry_over_to_sprint_id]').val('0');
         \$modal.find('.sprint-qe-error').hide().text('');
         \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
+        \$modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
+        \$modal.find('.sprint-qe-dep-user').val('0');
+        \$modal.find('.sprint-qe-dep-manage').attr(
+            'href',
+            {$cfgRoot} + '/plugins/sprint/front/sprintitem.form.php?id=' + encodeURIComponent(itemId) +
+                '&forcetab=' + encodeURIComponent('GlpiPlugin\\\\Sprint\\\\SprintItemDependency') + '\$1'
+        );
+        \$modal.data('deps-added', 0);
 
         // Populate tag checkboxes from the row's `|tag1|tag2|` lowercased blob.
         var tagBlob = String(\$row.attr('data-item-tags') || '|').toLowerCase();
@@ -1053,6 +1116,60 @@ $(function() {
         }).always(function() {
             \$btn.prop('disabled', false);
         });
+    });
+
+    \$(document).on('click', '.sprint-qe-dep-add', function() {
+        var \$btn   = \$(this);
+        var itemId = \$modal.find('input[name=id]').val();
+        var userId = parseInt(\$modal.find('.sprint-qe-dep-user').val(), 10) || 0;
+        var cap    = parseInt(\$modal.find('.sprint-qe-dep-cap').val(), 10) || 0;
+        var \$status = \$modal.find('.sprint-qe-dep-status');
+
+        if (!itemId || userId <= 0 || cap <= 0) {
+            \$status.removeClass('alert-info alert-success').addClass('alert-danger')
+                .text('Select a member and a capacity > 0').show();
+            return;
+        }
+        \$btn.prop('disabled', true);
+
+        \$.ajax({
+            url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
+            type: 'GET', dataType: 'json', cache: false
+        }).then(function(tokResp) {
+            return \$.ajax({
+                url: {$cfgRoot} + '/plugins/sprint/ajax/dependencyadd.php',
+                type: 'POST', dataType: 'json',
+                data: {
+                    plugin_sprint_sprintitems_id: itemId,
+                    users_id: userId,
+                    capacity: cap,
+                    _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                \$status.removeClass('alert-info alert-danger').addClass('alert-success')
+                    .text(resp.message).show();
+                \$modal.find('.sprint-qe-dep-user').val('0');
+                \$modal.data('deps-added', (parseInt(\$modal.data('deps-added'), 10) || 0) + 1);
+            } else {
+                \$status.removeClass('alert-info alert-success').addClass('alert-danger')
+                    .text(resp && resp.message ? resp.message : 'Could not add dependency').show();
+            }
+        }).fail(function() {
+            \$status.removeClass('alert-info alert-success').addClass('alert-danger')
+                .text('Network error').show();
+        }).always(function() {
+            \$btn.prop('disabled', false);
+        });
+    });
+
+    \$modal.on('hidden.bs.modal', function() {
+        var added = parseInt(\$modal.data('deps-added'), 10) || 0;
+        if (added > 0) {
+            \$modal.data('deps-added', 0);
+            location.reload();
+        }
     });
 });
 </script>
@@ -1284,6 +1401,9 @@ JS;
     {
         $input = self::sanitizeInput($input);
         $input = $this->resolveLinkedItem($input);
+        if (!isset($input['story_points']) || $input['story_points'] === '' || $input['story_points'] === null) {
+            $input['story_points'] = 1;
+        }
         if (!$this->validateCapacity($input)) {
             return false;
         }
@@ -1604,7 +1724,7 @@ JS;
             'status'                   => self::STATUS_TODO,
             'priority'                 => (int)($source->fields['priority'] ?? 3),
             'story_points'             => (int)($source->fields['story_points'] ?? 0),
-            'users_id'                 => (int)($source->fields['users_id'] ?? 0),
+            'users_id'                 => 0,
             'capacity'                 => 0,
             'is_fastlane'              => (int)($source->fields['is_fastlane'] ?? 0),
             'is_blocked'               => 0,
@@ -1739,6 +1859,7 @@ JS;
         $memberOptions = SprintMember::getSprintMemberOptions($sprintId);
         $isNew = !$this->getID() || $this->isNewItem();
         $isFastlane = (int)($this->fields['is_fastlane'] ?? 0) === 1;
+        $isBlocked  = (int)($this->fields['is_blocked'] ?? 0) === 1;
 
         // "Back to Sprint" button linking to the parent sprint's Items tab
         if ($sprintId > 0) {

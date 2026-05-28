@@ -3,7 +3,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: SprintManager 1.0.2\n"
+"Project-Id-Version: SprintManager 1.1.1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-03 12:00+0000\n"
 "PO-Revision-Date: 2026-04-03 12:00+0000\n"
@@ -1092,3 +1092,126 @@ msgstr "Please select a sprint and a problem."
 
 msgid "This problem (#%d) is already linked to this sprint."
 msgstr "This problem (#%d) is already linked to this sprint."
+
+# === Dependency feature ===
+msgid "Dependency"
+msgid_plural "Dependencies"
+msgstr[0] "Dependency"
+msgstr[1] "Dependencies"
+
+msgid "Dependencies"
+msgstr "Dependencies"
+
+msgid "Helper"
+msgstr "Helper"
+
+msgid "Helpers (open)"
+msgstr "Helpers (open)"
+
+msgid "Open"
+msgstr "Open"
+
+msgid "Resolved"
+msgstr "Resolved"
+
+msgid "Resolve"
+msgstr "Resolve"
+
+msgid "Reopen"
+msgstr "Reopen"
+
+msgid "No dependencies yet"
+msgstr "No dependencies yet"
+
+msgid "Add a dependency on a colleague for this item"
+msgstr "Add a dependency on a colleague for this item"
+
+msgid "Open dependency capacity"
+msgstr "Open dependency capacity"
+
+msgid "Resolved: %d%%"
+msgstr "Resolved: %d%%"
+
+msgid "Open dependency allocations"
+msgstr "Open dependency allocations"
+
+msgid "Open capacity: %d%%"
+msgstr "Open capacity: %d%%"
+
+msgid "Open total"
+msgstr "Open total"
+
+msgid "Dependency total: %d%%"
+msgstr "Dependency total: %d%%"
+
+msgid "Dependencies are sprint-scoped — assign this item to a sprint first."
+msgstr "Dependencies are sprint-scoped — assign this item to a sprint first."
+
+msgid "Dependency resolved"
+msgstr "Dependency resolved"
+
+msgid "Dependency reopened"
+msgstr "Dependency reopened"
+
+msgid "Dependency allocation"
+msgstr "Dependency allocation"
+
+msgid "Waiting on"
+msgstr "Waiting on"
+
+msgid "Helping on"
+msgstr "Helping on"
+
+msgid "Add helper"
+msgstr "Add helper"
+
+msgid "Manage dependencies"
+msgstr "Manage dependencies"
+
+msgid "Select sprint member"
+msgstr "Select sprint member"
+
+msgid "Could not add dependency"
+msgstr "Could not add dependency"
+
+msgid "Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove."
+msgstr "Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove."
+
+msgid "+ %d more"
+msgstr "+ %d more"
+
+msgid "Dependency added: %s (%d%%)"
+msgstr "Dependency added: %s (%d%%)"
+
+msgid "Please select a sprint member and a capacity > 0"
+msgstr "Please select a sprint member and a capacity > 0"
+
+msgid "%s is now over capacity: %d%% used of %d%% (+%d%% overflow)."
+msgstr "%s is now over capacity: %d%% used of %d%% (+%d%% overflow)."
+
+msgid "Overflow %d%%"
+msgstr "Overflow %d%%"
+
+msgid "%d%% overflow"
+msgstr "%d%% overflow"
+
+msgid "Est. capacity"
+msgstr "Est. capacity"
+
+msgid "Estimated capacity (informational on backlog; enforced once the item joins a sprint)"
+msgstr "Estimated capacity (informational on backlog; enforced once the item joins a sprint)"
+
+msgid "Activity range follows the sprint window."
+msgstr "Activity range follows the sprint window."
+
+msgid "Could not move item back to backlog"
+msgstr "Could not move item back to backlog"
+
+msgid "Newly blocked"
+msgstr "Newly blocked"
+
+msgid "Became blocked since the previous meeting"
+msgstr "Became blocked since the previous meeting"
+
+msgid "This member is already a dependency on this item — adjust the existing one instead."
+msgstr "This member is already a dependency on this item — adjust the existing one instead."

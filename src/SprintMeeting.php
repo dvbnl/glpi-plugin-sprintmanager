@@ -212,6 +212,113 @@ class SprintMeeting extends CommonDBTM
     /**
      * Show the meeting detail form with notes + embedded standup entries
      */
+    /**
+     * The meeting that chronologically precedes this one within the same
+     * sprint, or null when this is the first. Ordered by date_meeting then
+     * id so meetings sharing a timestamp still have a deterministic order.
+     */
+    private function getPreviousMeeting(): ?self
+    {
+        $sprintId    = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        $currentDate = (string)($this->fields['date_meeting'] ?? '');
+        $currentId   = (int)$this->getID();
+        if ($sprintId <= 0 || $currentDate === '' || $currentId <= 0) {
+            return null;
+        }
+
+        $candidates = (new self())->find(
+            [
+                'plugin_sprint_sprints_id' => $sprintId,
+                'OR'                       => [
+                    ['date_meeting' => ['<', $currentDate]],
+                    [
+                        'date_meeting' => $currentDate,
+                        'id'           => ['<', $currentId],
+                    ],
+                ],
+            ],
+            ['date_meeting DESC', 'id DESC'],
+            1
+        );
+        if (empty($candidates)) {
+            return null;
+        }
+
+        $prev = new self();
+        $prev->fields = reset($candidates);
+        return $prev;
+    }
+
+    /**
+     * Replace this meeting's blocked-item snapshot with the given set,
+     * captured when the meeting is viewed. A sentinel row (item 0) marks
+     * that the meeting was snapshotted at all, so an empty blocked-set is
+     * distinguishable from "never viewed".
+     *
+     * @param int[] $blockedItemIds
+     */
+    public static function recordBlockedSnapshot(int $meetingId, array $blockedItemIds): void
+    {
+        global $DB;
+
+        $table = 'glpi_plugin_sprint_meetingblockedsnapshots';
+        if ($meetingId <= 0 || !$DB->tableExists($table)) {
+            return;
+        }
+
+        $now = $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s');
+        $DB->delete($table, ['plugin_sprint_sprintmeetings_id' => $meetingId]);
+        $DB->insert($table, [
+            'plugin_sprint_sprintmeetings_id' => $meetingId,
+            'plugin_sprint_sprintitems_id'    => 0,
+            'date_creation'                   => $now,
+        ]);
+        foreach (array_unique(array_filter(array_map('intval', $blockedItemIds))) as $itemId) {
+            $DB->insert($table, [
+                'plugin_sprint_sprintmeetings_id' => $meetingId,
+                'plugin_sprint_sprintitems_id'    => $itemId,
+                'date_creation'                   => $now,
+            ]);
+        }
+    }
+
+    /**
+     * Item IDs that were blocked as of the last time this meeting was
+     * viewed, or null when the meeting has never been snapshotted (caller
+     * should then fall back to audit-log reconstruction).
+     *
+     * @return int[]|null
+     */
+    public static function getBlockedSnapshot(int $meetingId): ?array
+    {
+        global $DB;
+
+        $table = 'glpi_plugin_sprint_meetingblockedsnapshots';
+        if ($meetingId <= 0 || !$DB->tableExists($table)) {
+            return null;
+        }
+
+        $ids       = [];
+        $hasMarker = false;
+        foreach ($DB->request([
+            'SELECT' => ['plugin_sprint_sprintitems_id'],
+            'FROM'   => $table,
+            'WHERE'  => ['plugin_sprint_sprintmeetings_id' => $meetingId],
+        ]) as $r) {
+            $itemId = (int)$r['plugin_sprint_sprintitems_id'];
+            if ($itemId === 0) {
+                $hasMarker = true;
+                continue;
+            }
+            $ids[$itemId] = true;
+        }
+
+        if (!$hasMarker && empty($ids)) {
+            return null;
+        }
+        return array_keys($ids);
+    }
+
     public function showForm($ID, array $options = []): bool
     {
         $this->initForm($ID, $options);
@@ -235,8 +342,52 @@ class SprintMeeting extends CommonDBTM
             $si        = new SprintItem();
             $statuses  = SprintItem::getAllStatuses();
             $allRows   = $si->find(['plugin_sprint_sprints_id' => $sprintId], ['sort_order ASC', 'priority DESC']);
-            $tagsByItem = SprintItem::getTagsForItems(array_map(fn($r) => (int)$r['id'], $allRows));
+            $rowItemIds = array_map(fn($r) => (int)$r['id'], $allRows);
+            $tagsByItem = SprintItem::getTagsForItems($rowItemIds);
+            $depsByItem = SprintItemDependency::getOpenSummariesForItems($rowItemIds);
+
+            // Highlight items that became blocked since the previous meeting.
+            // The baseline is what the previous meeting recorded as blocked
+            // when it was last viewed (a per-meeting snapshot). For meetings
+            // that predate this feature (no snapshot yet) we fall back to
+            // reconstructing the status from the audit log at the previous
+            // meeting's scheduled date.
+            $prevBlockedSet   = [];      // [itemId => true]
+            $havePrevBaseline = false;
+            $prevMeeting      = $this->getPreviousMeeting();
+            if ($prevMeeting !== null) {
+                $prevSnapshot = self::getBlockedSnapshot((int)$prevMeeting->getID());
+                if ($prevSnapshot !== null) {
+                    foreach ($prevSnapshot as $iid) {
+                        $prevBlockedSet[(int)$iid] = true;
+                    }
+                    $havePrevBaseline = true;
+                } else {
+                    $prevDate = (string)($prevMeeting->fields['date_meeting'] ?? '');
+                    if ($prevDate !== '') {
+                        $currentStatuses = [];
+                        foreach ($allRows as $r) {
+                            $currentStatuses[(int)$r['id']] = (string)$r['status'];
+                        }
+                        foreach (SprintAudit::getItemStatusAtTimestamp($rowItemIds, $prevDate, $currentStatuses) as $iid => $st) {
+                            if ($st === SprintItem::STATUS_BLOCKED) {
+                                $prevBlockedSet[(int)$iid] = true;
+                            }
+                        }
+                        $havePrevBaseline = true;
+                    }
+                }
+            }
+
+            $currentBlockedIds = [];
+
             foreach ($allRows as $row) {
+                $itemId        = (int)$row['id'];
+                $isBlockedNow  = ($row['status'] ?? '') === SprintItem::STATUS_BLOCKED;
+                if ($isBlockedNow) {
+                    $currentBlockedIds[] = $itemId;
+                }
+                $newlyBlocked  = $havePrevBaseline && $isBlockedNow && empty($prevBlockedSet[$itemId]);
                 $linkedDisplay = '';
                 $itemtype = $row['itemtype'] ?? '';
                 $allowedTypes = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
@@ -283,6 +434,7 @@ class SprintMeeting extends CommonDBTM
                 }
 
                 $rowTags = $tagsByItem[(int)$row['id']] ?? [];
+                $rowDeps = $depsByItem[(int)$row['id']] ?? [];
                 $sprintItemsData[] = [
                     'id'                   => (int)$row['id'],
                     'name'                 => $row['name'],
@@ -302,8 +454,16 @@ class SprintMeeting extends CommonDBTM
                     'fastlane_url'         => SprintItem::getFormURLWithID((int)$row['id']) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintFastlaneMember$1'),
                     'tags_blob'            => SprintItem::tagsToBlob($rowTags),
                     'tags_pills_html'      => SprintItem::renderTagPills($rowTags),
+                    'deps_open'            => $rowDeps,
+                    'deps_open_count'      => count($rowDeps),
+                    'newly_blocked'        => $newlyBlocked,
                 ];
             }
+
+            // Capture what this meeting saw as blocked, so the next meeting
+            // compares against this baseline instead of re-flagging items
+            // that were already blocked here.
+            self::recordBlockedSnapshot((int)$ID, $currentBlockedIds);
         }
 
         // Parse treated items from JSON

@@ -23,8 +23,13 @@ class SprintAudit extends CommonGLPI
 {
     public static $rightname = 'plugin_sprint_sprint';
 
-    /** Log entries older than this many days are hidden from the audit
-     *  tab AND purged by {@see pruneOldLogs()}. */
+    /**
+     * Audit-log retention is now scoped per-sprint: log rows are kept
+     * as long as the sprint they belong to exists, so we can always look
+     * back at a finished sprint's history. This constant is kept as a
+     * fallback for code paths that still need a default upper bound when
+     * a sprint has no start/end date set.
+     */
     const RETENTION_DAYS = 14;
 
     public static function getTypeName($nb = 0): string
@@ -168,17 +173,21 @@ class SprintAudit extends CommonGLPI
             return [];
         }
 
-        $cutoff = date('Y-m-d H:i:s', time() - (self::RETENTION_DAYS * 86400));
+        [$windowStart, $windowEnd] = self::getRetentionWindowForSprint($sprintId);
 
         // Top-level array keys are implicitly AND'd in GLPI's DB iterator.
         // Nested 'OR' groups the itemtype/items_id combinations together.
+        $where = ['OR' => $orClauses];
+        if ($windowStart !== null) {
+            $where['date_mod'] = ['>=', $windowStart];
+        }
+        if ($windowEnd !== null) {
+            $where[] = ['date_mod' => ['<=', $windowEnd]];
+        }
         $criteria = [
             'SELECT' => '*',
             'FROM'   => 'glpi_logs',
-            'WHERE'  => [
-                'date_mod' => ['>=', $cutoff],
-                'OR'       => $orClauses,
-            ],
+            'WHERE'  => $where,
             'ORDER'  => ['date_mod DESC'],
             'LIMIT'  => 500,
         ];
@@ -302,29 +311,37 @@ class SprintAudit extends CommonGLPI
         }
 
         $fastlaneMemberIds = [];
+        $dependencyIds     = [];
         if (!empty($itemIds)) {
             foreach ((new SprintFastlaneMember())->find(['plugin_sprint_sprintitems_id' => $itemIds]) as $r) {
                 $fastlaneMemberIds[] = (int)$r['id'];
             }
+            if (SprintItemDependency::isTableReady()) {
+                foreach ((new SprintItemDependency())->find(['plugin_sprint_sprintitems_id' => $itemIds]) as $r) {
+                    $dependencyIds[] = (int)$r['id'];
+                }
+            }
         }
 
         return [
-            ['itemtype' => Sprint::class,               'ids' => [$sprintId]],
-            ['itemtype' => SprintItem::class,           'ids' => $itemIds],
-            ['itemtype' => SprintMember::class,         'ids' => $memberIds],
-            ['itemtype' => SprintMeeting::class,        'ids' => $meetingIds],
-            ['itemtype' => SprintFastlaneMember::class, 'ids' => $fastlaneMemberIds],
+            ['itemtype' => Sprint::class,                'ids' => [$sprintId]],
+            ['itemtype' => SprintItem::class,            'ids' => $itemIds],
+            ['itemtype' => SprintMember::class,          'ids' => $memberIds],
+            ['itemtype' => SprintMeeting::class,         'ids' => $meetingIds],
+            ['itemtype' => SprintFastlaneMember::class,  'ids' => $fastlaneMemberIds],
+            ['itemtype' => SprintItemDependency::class,  'ids' => $dependencyIds],
         ];
     }
 
     private static function getAreaLabels(): array
     {
         return [
-            'sprint'    => __('Sprint', 'sprint'),
-            'item'      => __('Sprint item', 'sprint'),
-            'member'    => __('Member', 'sprint'),
-            'meeting'   => __('Meeting', 'sprint'),
-            'fastlane'  => __('Fastlane', 'sprint'),
+            'sprint'     => __('Sprint', 'sprint'),
+            'item'       => __('Sprint item', 'sprint'),
+            'member'     => __('Member', 'sprint'),
+            'meeting'    => __('Meeting', 'sprint'),
+            'fastlane'   => __('Fastlane', 'sprint'),
+            'dependency' => __('Dependency', 'sprint'),
         ];
     }
 
@@ -339,24 +356,26 @@ class SprintAudit extends CommonGLPI
     private static function areaForItemtype(string $itemtype): string
     {
         switch ($itemtype) {
-            case Sprint::class:                return 'sprint';
-            case SprintItem::class:            return 'item';
-            case SprintMember::class:          return 'member';
-            case SprintMeeting::class:         return 'meeting';
-            case SprintFastlaneMember::class:  return 'fastlane';
-            default:                           return 'sprint';
+            case Sprint::class:                 return 'sprint';
+            case SprintItem::class:             return 'item';
+            case SprintMember::class:           return 'member';
+            case SprintMeeting::class:          return 'meeting';
+            case SprintFastlaneMember::class:   return 'fastlane';
+            case SprintItemDependency::class:   return 'dependency';
+            default:                            return 'sprint';
         }
     }
 
     private static function areaColor(string $area): string
     {
         switch ($area) {
-            case 'sprint':   return '#0d6efd';
-            case 'item':     return '#198754';
-            case 'member':   return '#6f42c1';
-            case 'meeting':  return '#e67e22';
-            case 'fastlane': return '#fd7e14';
-            default:         return '#6c757d';
+            case 'sprint':     return '#0d6efd';
+            case 'item':       return '#198754';
+            case 'member':     return '#6f42c1';
+            case 'meeting':    return '#e67e22';
+            case 'fastlane':   return '#fd7e14';
+            case 'dependency': return '#20c997';
+            default:           return '#6c757d';
         }
     }
 
@@ -367,11 +386,12 @@ class SprintAudit extends CommonGLPI
     private static function formatItem(string $itemtype, int $itemsId): string
     {
         $typeLabel = [
-            Sprint::class               => __('Sprint', 'sprint'),
-            SprintItem::class           => __('Sprint item', 'sprint'),
-            SprintMember::class         => __('Member', 'sprint'),
-            SprintMeeting::class        => __('Meeting', 'sprint'),
-            SprintFastlaneMember::class => __('Fastlane allocation', 'sprint'),
+            Sprint::class                => __('Sprint', 'sprint'),
+            SprintItem::class            => __('Sprint item', 'sprint'),
+            SprintMember::class          => __('Member', 'sprint'),
+            SprintMeeting::class         => __('Meeting', 'sprint'),
+            SprintFastlaneMember::class  => __('Fastlane allocation', 'sprint'),
+            SprintItemDependency::class  => __('Dependency allocation', 'sprint'),
         ][$itemtype] ?? $itemtype;
 
         if (!class_exists($itemtype)) {
@@ -493,9 +513,95 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Delete sprint-related glpi_logs rows older than the retention
-     * window. Safe to call from any request — the DELETE is scoped to
-     * the plugin's own itemtypes.
+     * Returns [windowStart, windowEnd] (Y-m-d H:i:s strings or null) for
+     * the audit log of a specific sprint. Bounded by the sprint's own
+     * start/end dates so old sprints stay fully viewable; nulls mean "no
+     * bound" — i.e. the sprint hasn't started or hasn't ended yet.
+     */
+    public static function getRetentionWindowForSprint(int $sprintId): array
+    {
+        $sprint = new Sprint();
+        if ($sprintId <= 0 || !$sprint->getFromDB($sprintId)) {
+            return [null, null];
+        }
+        $start = !empty($sprint->fields['date_start'])
+            ? date('Y-m-d 00:00:00', strtotime((string)$sprint->fields['date_start']))
+            : null;
+        $end = !empty($sprint->fields['date_end'])
+            ? date('Y-m-d 23:59:59', strtotime((string)$sprint->fields['date_end']))
+            : null;
+        return [$start, $end];
+    }
+
+    /**
+     * Reconstruct the `status` value of each given SprintItem as it was at
+     * (or just before) $timestamp, using glpi_logs (id_search_option = 3,
+     * the SprintItem status field). Returns [itemId => statusString].
+     *
+     * Reconstruction per item:
+     *   - latest status-change log with date_mod <= $timestamp → its new_value
+     *   - else, earliest log after $timestamp → its old_value
+     *   - else (no status changes recorded) → the current status passed in,
+     *     since the status never changed it also held at $timestamp.
+     *
+     * @param int[]             $itemIds
+     * @param string            $timestamp        Y-m-d H:i:s
+     * @param array<int,string> $currentStatuses  [itemId => current status]
+     * @return array<int,string>
+     */
+    public static function getItemStatusAtTimestamp(array $itemIds, string $timestamp, array $currentStatuses = []): array
+    {
+        global $DB;
+
+        $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+        $out = [];
+        if (empty($itemIds)) {
+            return $out;
+        }
+
+        $logsByItem = [];
+        if ($timestamp !== '' && $DB->tableExists('glpi_logs')) {
+            foreach ($DB->request([
+                'SELECT' => ['items_id', 'date_mod', 'old_value', 'new_value'],
+                'FROM'   => 'glpi_logs',
+                'WHERE'  => [
+                    'itemtype'         => SprintItem::class,
+                    'items_id'         => $itemIds,
+                    'id_search_option' => 3,
+                ],
+                'ORDER'  => ['date_mod ASC', 'id ASC'],
+            ]) as $r) {
+                $logsByItem[(int)$r['items_id']][] = $r;
+            }
+        }
+
+        foreach ($itemIds as $id) {
+            $valueBefore   = null;
+            $firstAfterOld = null;
+            foreach ($logsByItem[$id] ?? [] as $log) {
+                if ((string)$log['date_mod'] <= $timestamp) {
+                    $valueBefore = (string)$log['new_value'];
+                } elseif ($firstAfterOld === null) {
+                    $firstAfterOld = (string)$log['old_value'];
+                }
+            }
+            if ($valueBefore !== null) {
+                $out[$id] = $valueBefore;
+            } elseif ($firstAfterOld !== null) {
+                $out[$id] = $firstAfterOld;
+            } else {
+                $out[$id] = (string)($currentStatuses[$id] ?? '');
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Delete sprint-related glpi_logs rows that fall outside the union of
+     * all existing sprints' windows. As long as a sprint still exists,
+     * its audit history is preserved indefinitely — this matters when
+     * looking back at completed sprints.
      *
      * Called opportunistically from the audit tab, and on a schedule by
      * {@see cronAuditCleanup()}.
@@ -508,18 +614,33 @@ class SprintAudit extends CommonGLPI
             return 0;
         }
 
-        $cutoff = date('Y-m-d H:i:s', time() - (self::RETENTION_DAYS * 86400));
+        // Earliest sprint start across the system. Anything older than
+        // that cannot belong to a visible sprint window and is safe to
+        // purge. If no sprint has a start date, leave glpi_logs alone.
+        $earliest = null;
+        foreach ($DB->request([
+            'SELECT' => ['MIN' => 'date_start AS earliest'],
+            'FROM'   => Sprint::getTable(),
+            'WHERE'  => ['NOT' => ['date_start' => null]],
+        ]) as $r) {
+            $earliest = $r['earliest'] ?? null;
+        }
+        if ($earliest === null) {
+            return 0;
+        }
+
         $itemtypes = [
             Sprint::class,
             SprintItem::class,
             SprintMember::class,
             SprintMeeting::class,
             SprintFastlaneMember::class,
+            SprintItemDependency::class,
         ];
 
         $DB->delete('glpi_logs', [
             'itemtype' => $itemtypes,
-            ['date_mod' => ['<', $cutoff]],
+            ['date_mod' => ['<', $earliest]],
         ]);
 
         $deleted = (int)$DB->affectedRows();
@@ -667,34 +788,33 @@ class SprintAudit extends CommonGLPI
             return $empty;
         }
 
-        $today          = new \DateTimeImmutable('today');
-        $retentionStart = $today->modify('-' . (self::RETENTION_DAYS - 1) . ' days');
+        $today      = new \DateTimeImmutable('today');
+        $sprint     = new Sprint();
+        $sprintStart = null;
+        $sprintEnd   = null;
+        if ($sprint->getFromDB($sprintId)) {
+            if (!empty($sprint->fields['date_start'])) {
+                try {
+                    $sprintStart = new \DateTimeImmutable(substr((string)$sprint->fields['date_start'], 0, 10));
+                } catch (\Exception $e) { /* ignore */ }
+            }
+            if (!empty($sprint->fields['date_end'])) {
+                try {
+                    $sprintEnd = new \DateTimeImmutable(substr((string)$sprint->fields['date_end'], 0, 10));
+                } catch (\Exception $e) { /* ignore */ }
+            }
+        }
 
         if ($overrideFrom !== null || $overrideTo !== null) {
-            // User-specified range — clamped only by the audit retention
-            // window so we never advertise days that have been purged.
-            $rangeStart = $overrideFrom ?? $retentionStart;
-            $rangeEnd   = $overrideTo   ?? $today;
-            if ($rangeStart < $retentionStart) { $rangeStart = $retentionStart; }
-            if ($rangeEnd   > $today)          { $rangeEnd   = $today; }
+            // User-specified range — clamped to the sprint window so we
+            // don't advertise days outside the sprint we're viewing.
+            $rangeStart = $overrideFrom ?? $sprintStart ?? $today->modify('-30 days');
+            $rangeEnd   = $overrideTo   ?? $sprintEnd   ?? $today;
+            if ($sprintStart && $rangeStart < $sprintStart) { $rangeStart = $sprintStart; }
+            if ($sprintEnd   && $rangeEnd   > $sprintEnd)   { $rangeEnd   = $sprintEnd; }
         } else {
-            $sprint = new Sprint();
-            $rangeStart = $retentionStart;
-            $rangeEnd   = $today;
-            if ($sprint->getFromDB($sprintId)) {
-                if (!empty($sprint->fields['date_start'])) {
-                    try {
-                        $ds = new \DateTimeImmutable(substr((string)$sprint->fields['date_start'], 0, 10));
-                        if ($ds > $rangeStart) { $rangeStart = $ds; }
-                    } catch (\Exception $e) { /* ignore */ }
-                }
-                if (!empty($sprint->fields['date_end'])) {
-                    try {
-                        $de = new \DateTimeImmutable(substr((string)$sprint->fields['date_end'], 0, 10));
-                        if ($de < $rangeEnd) { $rangeEnd = $de; }
-                    } catch (\Exception $e) { /* ignore */ }
-                }
-            }
+            $rangeStart = $sprintStart ?? $today->modify('-30 days');
+            $rangeEnd   = $sprintEnd   ?? $today;
         }
         if ($rangeEnd < $rangeStart) {
             return $empty;

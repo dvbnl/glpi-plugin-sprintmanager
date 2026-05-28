@@ -104,7 +104,10 @@ class SprintFastlane extends CommonGLPI
                 __('No fastlane items in this sprint', 'sprint') . "</td></tr>";
         }
 
-        $rel = new SprintFastlaneMember();
+        $rel      = new SprintFastlaneMember();
+        $itemIds  = array_map(fn($r) => (int)$r['id'], $items);
+        $tagsById = SprintItem::getTagsForItems($itemIds);
+        $depsById = SprintItemDependency::getOpenSummariesForItems($itemIds);
         foreach ($items as $row) {
             $itemId = (int)$row['id'];
             $rels   = $rel->find(['plugin_sprint_sprintitems_id' => $itemId]);
@@ -128,9 +131,12 @@ class SprintFastlane extends CommonGLPI
                 $linkedDisplay = $tmp->getLinkedItemDisplay();
             }
 
+            $rowTags = $tagsById[$itemId] ?? [];
+            $rowDeps = $depsById[$itemId] ?? [];
+
             echo "<tr class='tab_bg_1'>";
             echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
-                htmlescape($row['name']) . "</a></td>";
+                htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td>" . $linkedDisplay . "</td>";
             echo "<td><span class='sprint-badge {$statusClass}'>" . $statusLabel . "</span></td>";
             echo "<td>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";

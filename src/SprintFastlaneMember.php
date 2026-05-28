@@ -115,7 +115,9 @@ class SprintFastlaneMember extends CommonDBRelation
             $userId,
             $capacity,
             0,                  // not excluding any regular item
-            $excludeId          // exclude this fastlane member row when updating
+            $excludeId,         // exclude this fastlane member row when updating
+            0,
+            true                // fastlane allocations may overflow capacity
         );
     }
 

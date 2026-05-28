@@ -3,7 +3,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: SprintManager 1.0.2\n"
+"Project-Id-Version: SprintManager 1.1.1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-03 12:00+0000\n"
 "PO-Revision-Date: 2026-04-03 12:00+0000\n"
@@ -897,3 +897,304 @@ msgstr "Por favor seleccione un sprint y un problema."
 
 msgid "This problem (#%d) is already linked to this sprint."
 msgstr "Este problema (#%d) ya está vinculado a este sprint."
+
+# === Dependency feature ===
+msgid "Dependency"
+msgid_plural "Dependencies"
+msgstr[0] "Dependencia"
+msgstr[1] "Dependencias"
+
+msgid "Dependencies"
+msgstr "Dependencias"
+
+msgid "Helper"
+msgstr "Ayudante"
+
+msgid "Helpers (open)"
+msgstr "Ayudantes (abiertos)"
+
+msgid "Open"
+msgstr "Abierto"
+
+msgid "Resolved"
+msgstr "Resuelto"
+
+msgid "Resolve"
+msgstr "Resolver"
+
+msgid "Reopen"
+msgstr "Reabrir"
+
+msgid "No dependencies yet"
+msgstr "Aún no hay dependencias"
+
+msgid "Add a dependency on a colleague for this item"
+msgstr "Añadir una dependencia con un compañero para este elemento"
+
+msgid "Open dependency capacity"
+msgstr "Capacidad de dependencia abierta"
+
+msgid "Resolved: %d%%"
+msgstr "Resuelto: %d%%"
+
+msgid "Open dependency allocations"
+msgstr "Asignaciones de dependencia abiertas"
+
+msgid "Open capacity: %d%%"
+msgstr "Capacidad abierta: %d%%"
+
+msgid "Open total"
+msgstr "Total abierto"
+
+msgid "Dependency total: %d%%"
+msgstr "Total dependencias: %d%%"
+
+msgid "Dependencies are sprint-scoped — assign this item to a sprint first."
+msgstr "Las dependencias son de ámbito sprint — asigna primero este elemento a un sprint."
+
+msgid "Dependency resolved"
+msgstr "Dependencia resuelta"
+
+msgid "Dependency reopened"
+msgstr "Dependencia reabierta"
+
+msgid "Dependency allocation"
+msgstr "Asignación de dependencia"
+
+# === Catch-up translations for older feature strings ===
+msgid "%d%% free"
+msgstr "%d%% libre"
+
+msgid "Action"
+msgstr "Acción"
+
+msgid "All areas"
+msgstr "Todas las áreas"
+
+msgid "All owners"
+msgstr "Todos los propietarios"
+
+msgid "All statuses"
+msgstr "Todos los estados"
+
+msgid "Apply"
+msgstr "Aplicar"
+
+msgid "Area"
+msgstr "Área"
+
+msgid "Audit log"
+msgstr "Registro de auditoría"
+
+msgid "Capacity used"
+msgstr "Capacidad utilizada"
+
+msgid "Change"
+msgstr "Cambio"
+
+msgid "Created"
+msgstr "Creado"
+
+msgid "Deleted (soft)"
+msgstr "Eliminado (lógico)"
+
+msgid "Document added"
+msgstr "Documento añadido"
+
+msgid "Document removed"
+msgstr "Documento eliminado"
+
+msgid "Enable"
+msgstr "Activar"
+
+msgid "Fastlane allocation"
+msgstr "Asignación Fastlane"
+
+msgid "Fastlane items assigned"
+msgstr "Elementos Fastlane asignados"
+
+msgid "Group added"
+msgstr "Grupo añadido"
+
+msgid "Group removed"
+msgstr "Grupo eliminado"
+
+msgid "Linked to item"
+msgstr "Vinculado al elemento"
+
+msgid "Member settings"
+msgstr "Configuración del miembro"
+
+msgid "Modified"
+msgstr "Modificado"
+
+msgid "No audit entries yet"
+msgstr "Aún no hay entradas de auditoría"
+
+msgid "No items assigned"
+msgstr "No hay elementos asignados"
+
+msgid "Only Scrum Master can edit capacity on sprint items"
+msgstr "Solo el Scrum Master puede editar la capacidad de los elementos del sprint"
+
+msgid "Only the current Scrum Master can reassign this role."
+msgstr "Solo el Scrum Master actual puede reasignar este rol."
+
+msgid "Please select a sprint and a change."
+msgstr "Selecciona un sprint y un cambio."
+
+msgid "Please select a sprint and a project task."
+msgstr "Selecciona un sprint y una tarea de proyecto."
+
+msgid "Please select a sprint and a ticket."
+msgstr "Selecciona un sprint y un ticket."
+
+msgid "Problem added"
+msgstr "Problema añadido"
+
+msgid "Problem removed"
+msgstr "Problema eliminado"
+
+msgid "Purge sprint audit log entries older than the retention window"
+msgstr "Purgar entradas del registro de auditoría más antiguas que la ventana de retención"
+
+msgid "Purged"
+msgstr "Purgado"
+
+msgid "Quick edit"
+msgstr "Edición rápida"
+
+msgid "Regular"
+msgstr "Regular"
+
+msgid "Relation added"
+msgstr "Relación añadida"
+
+msgid "Relation removed"
+msgstr "Relación eliminada"
+
+msgid "Relation updated"
+msgstr "Relación actualizada"
+
+msgid "Remove"
+msgstr "Quitar"
+
+msgid "Restored"
+msgstr "Restaurado"
+
+msgid "Search action or user..."
+msgstr "Buscar acción o usuario..."
+
+msgid "Search name..."
+msgstr "Buscar por nombre..."
+
+msgid "Settings"
+msgstr "Configuración"
+
+msgid "Sprint item"
+msgstr "Elemento de sprint"
+
+msgid "Sprint progress"
+msgstr "Progreso del sprint"
+
+msgid "SprintManager settings saved"
+msgstr "Configuración de SprintManager guardada"
+
+msgid "SprintManager settings"
+msgstr "Configuración de SprintManager"
+
+msgid "System"
+msgstr "Sistema"
+
+msgid "Team dashboard"
+msgstr "Panel del equipo"
+
+msgid "This %1$s (#%2$d) is already linked to this sprint."
+msgstr "Este %1$s (#%2$d) ya está vinculado a este sprint."
+
+msgid "This change (#%d) is already linked to this sprint."
+msgstr "Este cambio (#%d) ya está vinculado a este sprint."
+
+msgid "This project task (#%d) is already linked to this sprint."
+msgstr "Esta tarea de proyecto (#%d) ya está vinculada a este sprint."
+
+msgid "This ticket (#%d) is already linked to this sprint."
+msgstr "Este ticket (#%d) ya está vinculado a este sprint."
+
+msgid "Unlinked from item"
+msgstr "Desvinculado del elemento"
+
+msgid "User added"
+msgstr "Usuario añadido"
+
+msgid "User removed"
+msgstr "Usuario eliminado"
+
+msgid "When"
+msgstr "Cuándo"
+
+msgid "entries"
+msgstr "entradas"
+
+msgid "items done"
+msgstr "elementos completados"
+
+msgid "Waiting on"
+msgstr "Esperando a"
+
+msgid "Helping on"
+msgstr "Ayudando en"
+
+msgid "Add helper"
+msgstr "Añadir ayudante"
+
+msgid "Manage dependencies"
+msgstr "Gestionar dependencias"
+
+msgid "Select sprint member"
+msgstr "Selecciona un miembro del sprint"
+
+msgid "Could not add dependency"
+msgstr "No se ha podido añadir la dependencia"
+
+msgid "Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove."
+msgstr "Vincula a un compañero a este elemento con su propio % de capacidad. Abre 'Gestionar' para resolver, reabrir o quitar."
+
+msgid "+ %d more"
+msgstr "+ %d más"
+
+msgid "Dependency added: %s (%d%%)"
+msgstr "Dependencia añadida: %s (%d%%)"
+
+msgid "Please select a sprint member and a capacity > 0"
+msgstr "Selecciona un miembro del sprint y una capacidad > 0"
+
+msgid "%s is now over capacity: %d%% used of %d%% (+%d%% overflow)."
+msgstr "%s supera ahora la capacidad: %d%% usado de %d%% (+%d%% desbordamiento)."
+
+msgid "Overflow %d%%"
+msgstr "Desbordamiento %d%%"
+
+msgid "%d%% overflow"
+msgstr "%d%% de desbordamiento"
+
+msgid "Est. capacity"
+msgstr "Cap. estimada"
+
+msgid "Estimated capacity (informational on backlog; enforced once the item joins a sprint)"
+msgstr "Capacidad estimada (informativa en el backlog; se aplica cuando el ítem entra en un sprint)"
+
+msgid "Activity range follows the sprint window."
+msgstr "El rango de actividad sigue la ventana del sprint."
+
+msgid "Could not move item back to backlog"
+msgstr "No se pudo mover el ítem de vuelta al backlog"
+
+msgid "Newly blocked"
+msgstr "Recién bloqueado"
+
+msgid "Became blocked since the previous meeting"
+msgstr "Bloqueado desde la reunión anterior"
+
+msgid "This member is already a dependency on this item — adjust the existing one instead."
+msgstr "Este miembro ya es una dependencia de este elemento — ajusta la existente."

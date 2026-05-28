@@ -4,7 +4,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: SprintManager 1.0.2\n"
+"Project-Id-Version: SprintManager 1.1.1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-03 12:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -888,4 +888,324 @@ msgid "Please select a sprint and a problem."
 msgstr ""
 
 msgid "This problem (#%d) is already linked to this sprint."
+msgstr ""
+
+# === Dependency feature ===
+msgid "Dependency"
+msgid_plural "Dependencies"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Dependencies"
+msgstr ""
+
+msgid "Helper"
+msgstr ""
+
+msgid "Helpers (open)"
+msgstr ""
+
+msgid "Open"
+msgstr ""
+
+msgid "Resolved"
+msgstr ""
+
+msgid "Resolve"
+msgstr ""
+
+msgid "Reopen"
+msgstr ""
+
+msgid "No dependencies yet"
+msgstr ""
+
+msgid "Add a dependency on a colleague for this item"
+msgstr ""
+
+msgid "Open dependency capacity"
+msgstr ""
+
+msgid "Resolved: %d%%"
+msgstr ""
+
+msgid "Open dependency allocations"
+msgstr ""
+
+msgid "Open capacity: %d%%"
+msgstr ""
+
+msgid "Open total"
+msgstr ""
+
+msgid "Dependency total: %d%%"
+msgstr ""
+
+msgid "Dependencies are sprint-scoped — assign this item to a sprint first."
+msgstr ""
+
+msgid "Dependency resolved"
+msgstr ""
+
+msgid "Dependency reopened"
+msgstr ""
+
+msgid "Dependency allocation"
+msgstr ""
+
+# === Catch-up: strings used in source but missing from earlier .pot ===
+msgid "%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%."
+msgstr ""
+
+msgid "A Scrum Master is required to create a sprint"
+msgstr ""
+
+msgid "Add a meeting to the schedule"
+msgstr ""
+
+msgid "An error occurred"
+msgstr ""
+
+msgid "Back to Sprint"
+msgstr ""
+
+msgid "Ceremony"
+msgstr ""
+
+msgid "Create sprint from template"
+msgstr ""
+
+msgid "Create sprint"
+msgstr ""
+
+msgid "Day before end"
+msgstr ""
+
+msgid "Description"
+msgstr ""
+
+msgid "Document added"
+msgstr ""
+
+msgid "Document removed"
+msgstr ""
+
+msgid "Every %d days"
+msgstr ""
+
+msgid "Failed to create sprint"
+msgstr ""
+
+msgid "First day of sprint"
+msgstr ""
+
+msgid "General"
+msgstr ""
+
+msgid "Goal"
+msgstr ""
+
+msgid "Group added"
+msgstr ""
+
+msgid "Group removed"
+msgstr ""
+
+msgid "Interval (days)"
+msgstr ""
+
+msgid "Interval"
+msgstr ""
+
+msgid "Last day of sprint"
+msgstr ""
+
+msgid "Linked to item"
+msgstr ""
+
+msgid "Manage own items only"
+msgstr ""
+
+msgid "No items assigned"
+msgstr ""
+
+msgid "No meetings in schedule"
+msgstr ""
+
+msgid "Open template"
+msgstr ""
+
+msgid "Optional"
+msgstr ""
+
+msgid "Please select a sprint and a change."
+msgstr ""
+
+msgid "Please select a sprint and a project task."
+msgstr ""
+
+msgid "Please select a sprint and a ticket."
+msgstr ""
+
+msgid "Please select a template"
+msgstr ""
+
+msgid "Problem added"
+msgstr ""
+
+msgid "Problem removed"
+msgstr ""
+
+msgid "Recurring interval"
+msgstr ""
+
+msgid "Regular"
+msgstr ""
+
+msgid "Relation added"
+msgstr ""
+
+msgid "Relation removed"
+msgstr ""
+
+msgid "Relation updated"
+msgstr ""
+
+msgid "Remove this meeting?"
+msgstr ""
+
+msgid "Remove"
+msgstr ""
+
+msgid "Rights saved successfully"
+msgstr ""
+
+msgid "Save as template"
+msgstr ""
+
+msgid "Saving..."
+msgstr ""
+
+msgid "Schedule"
+msgstr ""
+
+msgid "Skip weekends"
+msgstr ""
+
+msgid "Special"
+msgstr ""
+
+msgid "Sprint name"
+msgstr ""
+
+msgid "SprintManager"
+msgstr ""
+
+msgid "Standup"
+msgstr ""
+
+msgid "Template Meeting"
+msgstr ""
+
+msgid "Template created successfully!"
+msgstr ""
+
+msgid "Template details"
+msgstr ""
+
+msgid "Template name"
+msgstr ""
+
+msgid "Template not found"
+msgstr ""
+
+msgid "Template"
+msgstr ""
+
+msgid "This %1$s (#%2$d) is already linked to this sprint."
+msgstr ""
+
+msgid "This change (#%d) is already linked to this sprint."
+msgstr ""
+
+msgid "This project task (#%d) is already linked to this sprint."
+msgstr ""
+
+msgid "This ticket (#%d) is already linked to this sprint."
+msgstr ""
+
+msgid "Total"
+msgstr ""
+
+msgid "Unlinked from item"
+msgstr ""
+
+msgid "User added"
+msgstr ""
+
+msgid "User removed"
+msgstr ""
+
+msgid "weeks"
+msgstr ""
+
+# === Dependency UX additions: badge / quick-edit / member card / meeting review ===
+msgid "Waiting on"
+msgstr ""
+
+msgid "Helping on"
+msgstr ""
+
+msgid "Add helper"
+msgstr ""
+
+msgid "Manage dependencies"
+msgstr ""
+
+msgid "Select sprint member"
+msgstr ""
+
+msgid "Could not add dependency"
+msgstr ""
+
+msgid "Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove."
+msgstr ""
+
+msgid "+ %d more"
+msgstr ""
+
+msgid "Dependency added: %s (%d%%)"
+msgstr ""
+
+msgid "Please select a sprint member and a capacity > 0"
+msgstr ""
+
+msgid "%s is now over capacity: %d%% used of %d%% (+%d%% overflow)."
+msgstr ""
+
+msgid "Overflow %d%%"
+msgstr ""
+
+msgid "%d%% overflow"
+msgstr ""
+
+msgid "Est. capacity"
+msgstr ""
+
+msgid "Estimated capacity (informational on backlog; enforced once the item joins a sprint)"
+msgstr ""
+
+msgid "Activity range follows the sprint window."
+msgstr ""
+
+msgid "Could not move item back to backlog"
+msgstr ""
+
+msgid "Newly blocked"
+msgstr ""
+
+msgid "Became blocked since the previous meeting"
+msgstr ""
+
+msgid "This member is already a dependency on this item — adjust the existing one instead."
 msgstr ""

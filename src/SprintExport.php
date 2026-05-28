@@ -589,6 +589,7 @@ class SprintExport extends CommonGLPI
             SprintItem::STATUS_TODO        => '#6c757d',
             SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
             SprintItem::STATUS_REVIEW      => '#6f42c1',
+            SprintItem::STATUS_DEPENDENCY  => '#20c997',
             SprintItem::STATUS_DONE        => '#198754',
             SprintItem::STATUS_BLOCKED     => '#dc3545',
         ];
@@ -599,6 +600,10 @@ class SprintExport extends CommonGLPI
             'Problem'     => __('Problem'),
             'ProjectTask' => __('Project task'),
         ];
+
+        $fastIds  = array_map(fn($r) => (int)$r['id'], $fastItems);
+        $tagsById = SprintItem::getTagsForItems($fastIds);
+        $depsByIdFast = SprintItemDependency::getOpenSummariesForItems($fastIds);
 
         // Per-item table — name, type, status, story points, allocations.
         echo "<table style='width:100%;border-collapse:collapse;font-size:0.86em;margin-bottom:14px;'>";
@@ -635,10 +640,13 @@ class SprintExport extends CommonGLPI
                 ? implode(', ', $allocText)
                 : "<span style='color:#adb5bd;font-style:italic;'>" . __('No allocations', 'sprint') . "</span>";
 
+            $rowTags = $tagsById[$itemId] ?? [];
+            $rowDeps = $depsByIdFast[$itemId] ?? [];
+
             echo "<tr style='border-bottom:1px solid #fff3cd;page-break-inside:avoid;'>";
             echo "<td style='padding:5px 8px;'>"
                 . "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>"
-                . htmlescape((string)$row['name']) . "</td>";
+                . htmlescape((string)$row['name']) . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td style='padding:5px 8px;color:#6c757d;'>" . htmlescape((string)$type) . "</td>";
             echo "<td style='padding:5px 8px;'>"
                 . "<span style='display:inline-block;padding:2px 8px;border-radius:12px;color:#fff;background:{$statusBg};font-size:0.78em;'>"
@@ -802,9 +810,12 @@ class SprintExport extends CommonGLPI
             SprintItem::STATUS_TODO        => '#6c757d',
             SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
             SprintItem::STATUS_REVIEW      => '#6f42c1',
+            SprintItem::STATUS_DEPENDENCY  => '#20c997',
             SprintItem::STATUS_DONE        => '#198754',
             SprintItem::STATUS_BLOCKED     => '#dc3545',
         ];
+
+        $depsById = SprintItemDependency::getOpenSummariesForItems(array_map(fn($r) => (int)$r['id'], $items));
 
         echo "<table style='width:100%;border-collapse:collapse;font-size:0.86em;'>";
         echo "<thead><tr style='background:#f1f3f5;'>";
@@ -835,7 +846,8 @@ class SprintExport extends CommonGLPI
             echo "<td style='padding:5px 8px;text-align:center;'>"
                 . ($isFast ? "<i class='fas fa-bolt' style='color:#fd7e14;' title='" . htmlescape(__('Fastlane', 'sprint')) . "'></i>" : '')
                 . "</td>";
-            echo "<td style='padding:5px 8px;'>" . htmlescape((string)$row['name']) . "</td>";
+            $rowDeps = $depsById[(int)$row['id']] ?? [];
+            echo "<td style='padding:5px 8px;'>" . htmlescape((string)$row['name']) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td style='padding:5px 8px;color:#6c757d;'>" . htmlescape((string)$type) . "</td>";
             echo "<td style='padding:5px 8px;'>" . htmlescape((string)$owner) . "</td>";
             echo "<td style='padding:5px 8px;'>"

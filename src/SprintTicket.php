@@ -173,7 +173,10 @@ class SprintTicket extends CommonDBRelation
             echo "<tr class='tab_bg_1'>";
             echo "<td>" . __('Sprint', 'sprint') . "</td>";
             echo "<td>";
-            Sprint::dropdown(['name' => 'plugin_sprint_sprints_id']);
+            Sprint::dropdown([
+                'name'      => 'plugin_sprint_sprints_id',
+                'condition' => ['status' => [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE]],
+            ]);
             echo "</td>";
             echo "<td>";
             echo Html::submit(__('Link'), ['name' => 'add', 'class' => 'btn btn-primary']);

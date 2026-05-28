@@ -8,6 +8,7 @@
     --sprint-done: #198754;
     --sprint-progress: #0d6efd;
     --sprint-review: #6f42c1;
+    --sprint-dependency: #20c997;
     --sprint-blocked: #dc3545;
     --sprint-todo: #6c757d;
     --sprint-cancelled: #dc3545;
@@ -24,6 +25,33 @@
     --sprint-muted: #6c757d;
     --sprint-border: #e2e8f0;
     --sprint-bg-subtle: #f8fafc;
+}
+
+/* === Newly-blocked highlight (meeting review) === */
+/* An item that wasn't blocked at the previous meeting but is now: the row
+   gets a soft red wash + left accent so the Scrum Master spots fresh
+   blockers at a glance. */
+.sprint-review-row.sprint-newly-blocked > td {
+    background-color: #fff1f0 !important;
+    box-shadow: inset 3px 0 0 0 var(--sprint-blocked);
+}
+.sprint-newly-blocked-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 8px;
+    border-radius: var(--sprint-radius-pill);
+    background: var(--sprint-blocked);
+    color: #ffffff;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    vertical-align: middle;
+    animation: sprint-newly-blocked-pulse 1.6s ease-in-out 3;
+}
+@keyframes sprint-newly-blocked-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
 }
 
 /* === Status badges === */
@@ -46,6 +74,7 @@
 .sprint-status-todo        { background-color: #6c757d !important; background-color: var(--sprint-todo) !important; }
 .sprint-status-in-progress { background-color: #0d6efd !important; background-color: var(--sprint-progress) !important; }
 .sprint-status-review      { background-color: #6f42c1 !important; background-color: var(--sprint-review) !important; }
+.sprint-status-dependency  { background-color: #20c997 !important; background-color: var(--sprint-dependency) !important; }
 .sprint-status-done        { background-color: #198754 !important; background-color: var(--sprint-done) !important; }
 .sprint-status-blocked     { background-color: #dc3545 !important; background-color: var(--sprint-blocked) !important; }
 .sprint-status-planned     { background-color: #6c757d !important; background-color: var(--sprint-planned) !important; }
@@ -81,6 +110,22 @@
     font-weight: 600;
     line-height: 1.5;
     white-space: nowrap;
+}
+.sprint-dep-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    margin-left: 4px;
+    border-radius: 10px;
+    background: #d1f2ea;
+    color: #20c997;
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    cursor: help;
+}
+.sprint-dep-pill i {
+    margin-right: 3px;
 }
 
 /* Stats cards */

@@ -95,11 +95,25 @@ if (isset($_POST['back_to_backlog'])) {
     if ($id > 0) {
         $item = new GlpiPlugin\Sprint\SprintItem();
         $item->check($id, UPDATE);
-        if ($item->update([
+
+        // Preserve blocked state so the backlog's dedicated "Blocked" section catches it.
+        $wasBlocked = ($item->fields['status'] ?? '') === GlpiPlugin\Sprint\SprintItem::STATUS_BLOCKED
+            || (int)($item->fields['is_blocked'] ?? 0) === 1;
+
+        $update = [
             'id'                       => $id,
             'plugin_sprint_sprints_id' => 0,
             'is_fastlane'              => 0,
-        ])) {
+        ];
+        if ($wasBlocked) {
+            $update['is_blocked'] = 1;
+        }
+
+        if ($item->update($update)) {
+            // Dependencies are sprint-scoped capacity allocations; they have
+            // no meaning on a backlog row, so we wipe them when the item
+            // leaves the sprint.
+            GlpiPlugin\Sprint\SprintItemDependency::purgeForItem($id);
             Session::addMessageAfterRedirect(__('Item moved back to backlog', 'sprint'));
         }
     }

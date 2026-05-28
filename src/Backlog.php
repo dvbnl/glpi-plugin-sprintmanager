@@ -10,6 +10,7 @@ use Ticket;
 use Change;
 use Problem;
 use ProjectTask;
+use User;
 
 /**
  * Backlog - Sprint backlog (un-assigned SprintItems)
@@ -185,6 +186,9 @@ class Backlog
         echo "<th>" . __('Type', 'sprint') . "</th>";
         echo "<th><i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" . __('Is Fastlane', 'sprint') . "</th>";
         echo "<th><i class='fas fa-ban' style='color:#dc3545;margin-right:4px;'></i>" . __('Is Blocked', 'sprint') . "</th>";
+        echo "<th><i class='fas fa-user' style='margin-right:4px;'></i>" . __('Owner', 'sprint') . "</th>";
+        echo "<th title='" . __('Estimated capacity (informational on backlog; enforced once the item joins a sprint)', 'sprint') . "'>"
+            . __('Est. capacity', 'sprint') . " %</th>";
         if ($canedit) {
             echo "<th>" . __('Assign to sprint', 'sprint') . "</th>";
             echo "<th>" . __('Actions') . "</th>";
@@ -192,7 +196,7 @@ class Backlog
         echo "</tr>";
 
         if (count($items) === 0) {
-            $cols = $canedit ? 7 : 5;
+            $cols = $canedit ? 9 : 7;
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>"
                 . __('Backlog is empty', 'sprint') . "</td></tr>";
         }
@@ -208,6 +212,82 @@ class Backlog
         // buttons rendered by SprintItem::getLinkedItemDisplay(). Without this
         // the buttons appear but clicking them is a no-op.
         SprintItem::renderLinkedQuickEditUI();
+
+        self::renderInlineEditScript();
+    }
+
+    /**
+     * On-change handlers for the inline owner / estimated-capacity selects.
+     * Persists changes through ajax/updateitemquick.php so people can
+     * pre-plan on the backlog without round-tripping a form.
+     */
+    private static function renderInlineEditScript(): void
+    {
+        $endpoint = Plugin::getWebDir('sprint') . '/ajax/updateitemquick.php';
+        $tokenUrl = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
+
+        echo <<<HTML
+<script>
+(function(){
+    if (typeof jQuery === 'undefined') { return; }
+    var endpoint = "{$endpoint}";
+    var tokenUrl = "{$tokenUrl}";
+
+    function findRowId(\$el) {
+        var \$row = \$el.closest('tr.sprint-backlog-row');
+        return \$row.length ? parseInt(\$row.data('item-id'), 10) || 0 : 0;
+    }
+
+    function postUpdate(itemId, field, value, \$el) {
+        \$el.prop('disabled', true);
+        jQuery.ajax({
+            url: tokenUrl, type: 'GET', dataType: 'json', cache: false
+        }).then(function(tokResp) {
+            var data = {
+                id: itemId,
+                _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+            };
+            data[field] = value;
+            return jQuery.ajax({
+                url: endpoint, type: 'POST', dataType: 'json', data: data
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                if (window.glpi_toast_info) {
+                    window.glpi_toast_info('Saved');
+                }
+            } else {
+                if (window.glpi_toast_error) {
+                    window.glpi_toast_error((resp && resp.message) || 'Save failed');
+                }
+            }
+        }).fail(function() {
+            if (window.glpi_toast_error) {
+                window.glpi_toast_error('Network error');
+            }
+        }).always(function() {
+            \$el.prop('disabled', false);
+        });
+    }
+
+    jQuery(document).on('change', '.sprint-backlog-owner-wrap select', function() {
+        var \$sel = jQuery(this);
+        var itemId = parseInt(\$sel.closest('.sprint-backlog-owner-wrap').data('item-id'), 10) || 0;
+        if (itemId > 0) {
+            postUpdate(itemId, 'users_id', parseInt(\$sel.val(), 10) || 0, \$sel);
+        }
+    });
+
+    jQuery(document).on('change', '.sprint-backlog-capacity-wrap select', function() {
+        var \$sel = jQuery(this);
+        var itemId = parseInt(\$sel.closest('.sprint-backlog-capacity-wrap').data('item-id'), 10) || 0;
+        if (itemId > 0) {
+            postUpdate(itemId, 'capacity', parseInt(\$sel.val(), 10) || 0, \$sel);
+        }
+    });
+})();
+</script>
+HTML;
     }
 
     private static function renderBlockedSection(array $blockedItems, bool $canedit, array $typeLabels, array $tagsById = []): void
@@ -238,6 +318,8 @@ class Backlog
             echo "<th>" . __('Type', 'sprint') . "</th>";
             echo "<th><i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" . __('Is Fastlane', 'sprint') . "</th>";
             echo "<th><i class='fas fa-ban' style='color:#dc3545;margin-right:4px;'></i>" . __('Is Blocked', 'sprint') . "</th>";
+            echo "<th><i class='fas fa-user' style='margin-right:4px;'></i>" . __('Owner', 'sprint') . "</th>";
+            echo "<th>" . __('Est. capacity', 'sprint') . " %</th>";
             if ($canedit) {
                 echo "<th>" . __('Assign to sprint', 'sprint') . "</th>";
                 echo "<th>" . __('Actions') . "</th>";
@@ -332,6 +414,44 @@ class Backlog
             echo $isBlocked
                 ? "<i class='fas fa-ban' style='color:#dc3545;'></i> " . __('Yes')
                 : "<span class='text-muted'>" . __('No') . "</span>";
+        }
+        echo "</td>";
+
+        $ownerId       = (int)($row['users_id'] ?? 0);
+        $estCapacity   = (int)($row['capacity'] ?? 0);
+
+        echo "<td class='center'>";
+        if ($canedit) {
+            echo "<span class='sprint-backlog-owner-wrap' data-item-id='" . (int)$row['id'] . "'>";
+            User::dropdown([
+                'name'      => '_backlog_users_id_' . (int)$row['id'],
+                'value'     => $ownerId,
+                'right'     => 'all',
+                'entity'    => $_SESSION['glpiactiveentities'] ?? -1,
+                'rand'      => (int)$row['id'],
+                'width'     => '180px',
+            ]);
+            echo "</span>";
+        } else {
+            echo $ownerId > 0
+                ? htmlescape(getUserName($ownerId))
+                : "<span class='text-muted'>" . __('Unassigned', 'sprint') . "</span>";
+        }
+        echo "</td>";
+
+        echo "<td class='center'>";
+        if ($canedit) {
+            echo "<span class='sprint-backlog-capacity-wrap' data-item-id='" . (int)$row['id'] . "'>";
+            Dropdown::showFromArray('_backlog_capacity_' . (int)$row['id'], SprintMember::getCapacityChoices(), [
+                'value'    => $estCapacity,
+                'rand'     => (int)$row['id'],
+                'width'    => '90px',
+            ]);
+            echo "</span>";
+        } else {
+            echo $estCapacity > 0
+                ? $estCapacity . '%'
+                : "<span class='text-muted'>-</span>";
         }
         echo "</td>";
 
@@ -455,7 +575,7 @@ class Backlog
             'priority'                 => $priority,
             'users_id'                 => 0,
             'capacity'                 => 0,
-            'story_points'             => 0,
+            'story_points'             => 1,
         ]);
 
         return (int)$newId;

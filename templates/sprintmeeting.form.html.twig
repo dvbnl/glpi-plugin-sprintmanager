@@ -121,6 +121,7 @@
                             <th>{{ __('Linked item', 'sprint') }}</th>
                             <th class="sprint-sortable" data-sort-type="status" data-sprint-action="sort" style="cursor:pointer;">{{ __('Status') }} <i class="fas fa-sort text-muted"></i></th>
                             <th class="sprint-sortable" data-sort-type="owner" data-sprint-action="sort" style="cursor:pointer;">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
+                            <th style="min-width:160px;">{{ __('Waiting on', 'sprint') }}</th>
                             <th style="min-width:220px;">{{ __('Note', 'sprint') }}</th>
                             <th style="width:80px;"></th>
                         </tr>
@@ -130,7 +131,7 @@
                         {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
                         {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
                         {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
-                        <tr class="sprint-review-row sprint-filterable-row"
+                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}"
                             data-item-id="{{ si.id }}"
                             data-item-name="{{ si.name }}"
                             data-item-status="{{ si.status }}"
@@ -141,6 +142,7 @@
                             data-story-points="{{ si.story_points }}"
                             data-capacity="{{ si.capacity }}"
                             data-is-fastlane="1"
+                            data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"
                             data-note="{{ si.note }}"
                             data-item-tags="{{ si.tags_blob|default('|') }}"
                             data-fastlane-url="{{ si.fastlane_url }}"
@@ -168,6 +170,11 @@
                                 <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
                                     {{ status_label }}
                                 </span>
+                                {% if si.newly_blocked %}
+                                <span class="sprint-newly-blocked-badge" title="{{ __('Became blocked since the previous meeting', 'sprint') }}">
+                                    <i class="fas fa-exclamation-triangle"></i> {{ __('Newly blocked', 'sprint') }}
+                                </span>
+                                {% endif %}
                             </td>
                             <td class="sprint-review-owner">
                                 {% if si.fastlane_allocations is defined and si.fastlane_allocations|length > 0 %}
@@ -189,6 +196,17 @@
                                     <a href="{{ si.fastlane_url }}" class="ms-1" title="{{ __('Manage fastlane members', 'sprint') }}">
                                         <i class="fas fa-cog text-muted"></i>
                                     </a>
+                                {% endif %}
+                            </td>
+                            <td class="sprint-review-deps" style="font-size:0.85em;line-height:1.3;">
+                                {% if si.deps_open is defined and si.deps_open_count > 0 %}
+                                    {% for d in si.deps_open %}
+                                        <div><i class="fas fa-link" style="color:#20c997;font-size:0.75em;"></i>
+                                            {{ d.name }} <span class="text-muted">({{ d.capacity }}%)</span>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted fst-italic">{{ __('None', 'sprint') }}</span>
                                 {% endif %}
                             </td>
                             <td class="sprint-review-note" style="max-width:360px;">
@@ -297,6 +315,7 @@
                             <th>{{ __('Linked item', 'sprint') }}</th>
                             <th class="sprint-sortable" data-sort-type="status" data-sprint-action="sort" style="cursor:pointer;">{{ __('Status') }} <i class="fas fa-sort text-muted"></i></th>
                             <th class="sprint-sortable" data-sort-type="owner" data-sprint-action="sort" style="cursor:pointer;">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
+                            <th style="min-width:160px;">{{ __('Waiting on', 'sprint') }}</th>
                             <th style="min-width:220px;">{{ __('Note', 'sprint') }}</th>
                             <th style="width:80px;"></th>
                         </tr>
@@ -306,7 +325,7 @@
                         {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
                         {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
                         {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
-                        <tr class="sprint-review-row sprint-filterable-row"
+                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}"
                             data-item-id="{{ si.id }}"
                             data-item-name="{{ si.name }}"
                             data-item-status="{{ si.status }}"
@@ -317,6 +336,7 @@
                             data-story-points="{{ si.story_points }}"
                             data-capacity="{{ si.capacity }}"
                             data-is-fastlane="0"
+                            data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"
                             data-item-tags="{{ si.tags_blob|default('|') }}"
                             data-note="{{ si.note }}">
                             <td class="text-center" style="white-space:nowrap;">
@@ -338,12 +358,28 @@
                                 <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
                                     {{ status_label }}
                                 </span>
+                                {% if si.newly_blocked %}
+                                <span class="sprint-newly-blocked-badge" title="{{ __('Became blocked since the previous meeting', 'sprint') }}">
+                                    <i class="fas fa-exclamation-triangle"></i> {{ __('Newly blocked', 'sprint') }}
+                                </span>
+                                {% endif %}
                             </td>
                             <td class="sprint-review-owner">
                                 {% if owner_name != '' %}
                                     <i class="fas fa-user text-muted me-1"></i>{{ owner_name }}
                                 {% else %}
                                     <span class="text-muted fst-italic">{{ __('Unassigned', 'sprint') }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="sprint-review-deps" style="font-size:0.85em;line-height:1.3;">
+                                {% if si.deps_open is defined and si.deps_open_count > 0 %}
+                                    {% for d in si.deps_open %}
+                                        <div><i class="fas fa-link" style="color:#20c997;font-size:0.75em;"></i>
+                                            {{ d.name }} <span class="text-muted">({{ d.capacity }}%)</span>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted fst-italic">{{ __('None', 'sprint') }}</span>
                                 {% endif %}
                             </td>
                             <td class="sprint-review-note" style="max-width:360px;">
@@ -410,19 +446,41 @@
                 'blocked':     '#dc3545'
             };
 
-            // Back to backlog: create a standalone form outside the parent meeting form and submit it
+            // Back to backlog: AJAX call, remove the row in place
             $(document).on('click', '.sprint-backlog-btn', function() {
-                var itemId = $(this).data('backlog-id');
+                var $btn   = $(this);
+                var itemId = $btn.data('backlog-id');
+                if (!itemId) { return; }
                 if (!confirm('{{ __('Move this item back to the backlog?', 'sprint') }}')) {
                     return;
                 }
-                var f = $('<form method="post" action="{{ backlog_url }}" style="display:none;"></form>');
-                f.append('<input type="hidden" name="id" value="' + itemId + '">');
-                f.append('<input type="hidden" name="back_to_backlog" value="1">');
-                f.append('<input type="hidden" name="_redirect" value="{{ meeting_url }}">');
-                f.append('<input type="hidden" name="_glpi_csrf_token" value="' + $('input[name=_glpi_csrf_token]').first().val() + '">');
-                $('body').append(f);
-                f.submit();
+                $btn.prop('disabled', true);
+
+                $.ajax({
+                    url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
+                    type: 'GET', dataType: 'json', cache: false
+                }).then(function(tokResp) {
+                    return $.ajax({
+                        url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/backtobacklog.php',
+                        type: 'POST', dataType: 'json',
+                        data: {
+                            id: itemId,
+                            _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                        }
+                    });
+                }).done(function(resp) {
+                    if (resp && resp.success) {
+                        try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.message); } } catch (e) {}
+                        var $row = $('tr.sprint-review-row[data-item-id="' + itemId + '"]');
+                        $row.fadeOut(150, function() { $(this).remove(); });
+                    } else {
+                        alert(resp && resp.message ? resp.message : 'Could not move item back to backlog');
+                        $btn.prop('disabled', false);
+                    }
+                }).fail(function() {
+                    alert('Network error');
+                    $btn.prop('disabled', false);
+                });
             });
 
             $(document).on('click', '.sprint-carry-over-btn', function(e) {
@@ -472,6 +530,14 @@
                 $modal.find('select[name=carry_over_to_sprint_id]').val('0');
                 $modal.find('.sprint-qe-error').hide().text('');
                 $modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
+                $modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
+                $modal.find('.sprint-qe-dep-user').val('0');
+                $modal.find('.sprint-qe-dep-manage').attr(
+                    'href',
+                    CFG_GLPI.root_doc + '/plugins/sprint/front/sprintitem.form.php?id=' + encodeURIComponent(itemId) +
+                        '&forcetab=' + encodeURIComponent('GlpiPlugin\\Sprint\\SprintItemDependency') + '$1'
+                );
+                $modal.data('deps-added', 0);
 
                 // Fastlane items have multi-member allocations via the
                 // SprintFastlaneMember junction; the single users_id
@@ -607,6 +673,84 @@
                     $btn.prop('disabled', false);
                 });
             });
+
+            $(document).on('click', '.sprint-qe-dep-add', function() {
+                var $btn   = $(this);
+                var itemId = $modal.find('input[name=id]').val();
+                var userId = parseInt($modal.find('.sprint-qe-dep-user').val(), 10) || 0;
+                var cap    = parseInt($modal.find('.sprint-qe-dep-cap').val(), 10) || 0;
+                var $status = $modal.find('.sprint-qe-dep-status');
+
+                if (!itemId || userId <= 0 || cap <= 0) {
+                    $status.removeClass('alert-info alert-success').addClass('alert-danger')
+                        .text('{{ __('Please select a sprint member and a capacity > 0', 'sprint')|e('js') }}').show();
+                    return;
+                }
+                $btn.prop('disabled', true);
+
+                $.ajax({
+                    url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
+                    type: 'GET', dataType: 'json', cache: false
+                }).then(function(tokResp) {
+                    return $.ajax({
+                        url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/dependencyadd.php',
+                        type: 'POST', dataType: 'json',
+                        data: {
+                            plugin_sprint_sprintitems_id: itemId,
+                            users_id: userId,
+                            capacity: cap,
+                            _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                        }
+                    });
+                }).done(function(resp) {
+                    if (resp && resp.success) {
+                        if (resp.warning) {
+                            $status.removeClass('alert-info alert-success alert-danger').addClass('alert-warning')
+                                .text(resp.message + ' — ' + resp.warning).show();
+                        } else {
+                            $status.removeClass('alert-info alert-danger alert-warning').addClass('alert-success')
+                                .text(resp.message).show();
+                        }
+                        $modal.find('.sprint-qe-dep-user').val('0');
+                        $modal.data('deps-added', (parseInt($modal.data('deps-added'), 10) || 0) + 1);
+
+                        // Re-render "Waiting on" cell in place from the new dep list.
+                        var $depRow = $('tr.sprint-review-row[data-item-id="' + itemId + '"]');
+                        var $depCell = $depRow.find('.sprint-review-deps');
+                        if ($depCell.length) {
+                            $depCell.empty();
+                            var deps = (resp && resp.open_deps) ? resp.open_deps : [];
+                            if (deps.length === 0) {
+                                $depCell.append(
+                                    $('<span class="text-muted fst-italic"></span>').text('{{ __('None', 'sprint')|e('js') }}')
+                                );
+                            } else {
+                                deps.forEach(function(d) {
+                                    var $line = $('<div></div>')
+                                        .append($('<i class="fas fa-link" style="color:#20c997;font-size:0.75em;"></i>'))
+                                        .append(document.createTextNode(' '))
+                                        .append(document.createTextNode(d.name || ''))
+                                        .append(document.createTextNode(' '))
+                                        .append($('<span class="text-muted"></span>').text('(' + (d.capacity || 0) + '%)'));
+                                    $depCell.append($line);
+                                });
+                            }
+                        }
+                    } else {
+                        $status.removeClass('alert-info alert-success').addClass('alert-danger')
+                            .text(resp && resp.message ? resp.message : '{{ __('Could not add dependency', 'sprint')|e('js') }}').show();
+                    }
+                }).fail(function() {
+                    $status.removeClass('alert-info alert-success').addClass('alert-danger')
+                        .text('Network error').show();
+                }).always(function() {
+                    $btn.prop('disabled', false);
+                });
+            });
+
+            $modal.on('hidden.bs.modal', function() {
+                $modal.data('deps-added', 0);
+            });
         });
         </script>
 
@@ -669,7 +813,7 @@
                             </div>
                             <div class="col-md-3 mb-3 sprint-qe-story-points">
                                 <label class="form-label">{{ __('Story Points', 'sprint') }}</label>
-                                <input type="number" name="story_points" class="form-control" min="0" step="1" value="0">
+                                <input type="number" name="story_points" class="form-control" min="0" step="1" value="1">
                             </div>
                             <div class="col-md-3 mb-3 sprint-qe-capacity">
                                 <label class="form-label">{{ __('Capacity (%)', 'sprint') }}</label>
@@ -698,6 +842,37 @@
                             </select>
                             <div class="form-text small text-muted">
                                 {{ __('A fresh copy is created in the target sprint. The original stays in this sprint.', 'sprint') }}
+                            </div>
+                        </div>
+
+                        <div class="mb-3 sprint-qe-deps-block">
+                            <label class="form-label">
+                                <i class="fas fa-link" style="color:#20c997;margin-right:4px;"></i>{{ __('Dependencies', 'sprint') }}
+                            </label>
+                            <div class="alert alert-info py-1 small sprint-qe-dep-status mb-2" style="display:none;"></div>
+                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                                <select class="form-select form-select-sm sprint-qe-dep-user" style="max-width:240px;">
+                                    <option value="0">{{ __('Select sprint member', 'sprint') }}</option>
+                                    {% for uid, uname in member_options %}
+                                    {% if uid > 0 %}
+                                    <option value="{{ uid }}">{{ uname }}</option>
+                                    {% endif %}
+                                    {% endfor %}
+                                </select>
+                                <select class="form-select form-select-sm sprint-qe-dep-cap" style="max-width:120px;">
+                                    {% for val, label in capacity_choices %}
+                                    <option value="{{ val }}"{% if val == 5 %} selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-success sprint-qe-dep-add">
+                                    <i class="fas fa-plus me-1"></i>{{ __('Add helper', 'sprint') }}
+                                </button>
+                                <a href="#" class="btn btn-sm btn-outline-secondary sprint-qe-dep-manage" target="_blank" rel="noopener">
+                                    <i class="fas fa-external-link-alt me-1"></i>{{ __('Manage dependencies', 'sprint') }}
+                                </a>
+                            </div>
+                            <div class="form-text small text-muted">
+                                {{ __("Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove.", 'sprint') }}
                             </div>
                         </div>
                     </div>

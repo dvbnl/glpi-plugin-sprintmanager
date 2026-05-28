@@ -65,7 +65,7 @@ function plugin_sprint_install(): bool
             `items_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Linked GLPI item ID',
             `status`                   VARCHAR(50) NOT NULL DEFAULT 'todo',
             `priority`                 INT NOT NULL DEFAULT 3,
-            `story_points`             INT UNSIGNED NOT NULL DEFAULT 0,
+            `story_points`             INT UNSIGNED NOT NULL DEFAULT 1,
             `users_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owner/Assignee',
             `sort_order`               INT NOT NULL DEFAULT 0,
             `capacity`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Capacity usage in %',
@@ -164,6 +164,30 @@ function plugin_sprint_install(): bool
             UNIQUE KEY `unicity` (`plugin_sprint_sprintitems_id`, `users_id`),
             KEY `plugin_sprint_sprintitems_id` (`plugin_sprint_sprintitems_id`),
             KEY `users_id` (`users_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
+    }
+
+    // =========================================================================
+    // Table: glpi_plugin_sprint_sprintitemdependencies
+    // Soft-resolve via is_resolved keeps the row for audit while releasing
+    // the helper's capacity.
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_sprintitemdependencies')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_sprintitemdependencies` (
+            `id`                            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprintitems_id`  INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id`                      INT UNSIGNED NOT NULL DEFAULT 0,
+            `capacity`                      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Capacity allocated to this dependency, in %',
+            `is_resolved`                   TINYINT NOT NULL DEFAULT 0,
+            `comment`                       TEXT,
+            `date_creation`                 TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`                      TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unicity` (`plugin_sprint_sprintitems_id`, `users_id`),
+            KEY `plugin_sprint_sprintitems_id` (`plugin_sprint_sprintitems_id`),
+            KEY `users_id` (`users_id`),
+            KEY `is_resolved` (`is_resolved`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
         $DB->doQueryOrDie($query, $DB->error());
     }
@@ -501,6 +525,27 @@ function plugin_sprint_install(): bool
         $DB->doQueryOrDie($query, $DB->error());
     }
 
+    // =========================================================================
+    // Table: glpi_plugin_sprint_meetingblockedsnapshots
+    // Records which SprintItems were blocked "as of" each meeting (captured
+    // when the meeting is viewed). The next meeting compares against the
+    // previous meeting's recorded set so an item that was already blocked at
+    // the previous meeting isn't re-flagged as newly blocked — independent of
+    // the meetings' scheduled dates.
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_meetingblockedsnapshots')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_meetingblockedsnapshots` (
+            `id`                             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprintmeetings_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `plugin_sprint_sprintitems_id`    INT UNSIGNED NOT NULL DEFAULT 0,
+            `date_creation`                  TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `meeting_item` (`plugin_sprint_sprintmeetings_id`, `plugin_sprint_sprintitems_id`),
+            KEY `meeting` (`plugin_sprint_sprintmeetings_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
+    }
+
     // One-time cleanup: remove duplicate SprintItem rows that point at the
     // same linked GLPI item. The plugin pre-1.0.9 had paths that could
     // create two SprintItems for one (sprint, ticket/change/project_task)
@@ -567,7 +612,8 @@ function plugin_sprint_install(): bool
     GlpiPlugin\Sprint\Profile::installRights();
 
     // Register the nightly audit-log cleanup cron. Purges sprint-related
-    // glpi_logs rows older than SprintAudit::RETENTION_DAYS (14 days).
+    // glpi_logs rows older than the earliest existing sprint's start
+    // date so each sprint keeps its own history for its full window.
     CronTask::Register(
         'GlpiPlugin\Sprint\SprintAudit',
         'AuditCleanup',
@@ -593,6 +639,7 @@ function plugin_sprint_uninstall(): bool
     global $DB;
 
     $tables = [
+        'glpi_plugin_sprint_meetingblockedsnapshots',
         'glpi_plugin_sprint_audit_sources',
         'glpi_plugin_sprint_sprinttemplatemeetings',
         'glpi_plugin_sprint_sprinttemplateitems',
@@ -605,6 +652,7 @@ function plugin_sprint_uninstall(): bool
         'glpi_plugin_sprint_sprinttickets',
         'glpi_plugin_sprint_sprintstandups',
         'glpi_plugin_sprint_sprintmeetings',
+        'glpi_plugin_sprint_sprintitemdependencies',
         'glpi_plugin_sprint_sprintfastlanemembers',
         'glpi_plugin_sprint_sprintitemtags',
         'glpi_plugin_sprint_sprintmembers',

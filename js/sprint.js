@@ -868,7 +868,7 @@
                                         var trEmpty = document.createElement('tr');
                                         trEmpty.className = 'tab_bg_1 sprint-backlog-empty';
                                         var td = document.createElement('td');
-                                        td.colSpan = 8;
+                                        td.colSpan = 9;
                                         td.className = 'center';
                                         td.textContent = '—';
                                         trEmpty.appendChild(td);
