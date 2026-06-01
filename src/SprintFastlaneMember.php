@@ -191,7 +191,7 @@ class SprintFastlaneMember extends CommonDBRelation
             $totalCap += $cap;
 
             echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . getUserName($uid) . "</td>";
+            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($uid)) . "</td>";
             echo "<td class='center'>{$cap}%</td>";
             if ($canedit) {
                 echo "<td class='center' style='white-space:nowrap;'>";

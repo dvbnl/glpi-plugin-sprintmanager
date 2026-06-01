@@ -10,7 +10,6 @@ use User;
 use Project;
 use Dropdown;
 use Search;
-use Log;
 
 /**
  * Sprint - Main sprint entity

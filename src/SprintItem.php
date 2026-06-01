@@ -556,7 +556,7 @@ class SprintItem extends CommonDBTM
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td class='center sprint-cell-story-points'>" . (int)$row['story_points'] . "</td>";
             echo "<td class='center sprint-cell-capacity'>" . (int)($row['capacity'] ?? 0) . "%</td>";
-            echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? getUserName($row['users_id']) :
+            echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? htmlescape(getUserName($row['users_id'])) :
                 '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
             if ($canedit) {
                 $isOwn = (int)$row['users_id'] === (int)Session::getLoginUserID();
@@ -972,10 +972,11 @@ $(function() {
     \$(document).on('click', '.sprint-qe-save', function() {
         var \$btn = \$(this);
         var id = \$modal.find('input[name=id]').val();
-        \$btn.prop('disabled', true);
         \$modal.find('.sprint-qe-error').hide().text('');
 
-        \$.ajax({
+        function runSave(confirmOverflow) {
+            \$btn.prop('disabled', true);
+            return \$.ajax({
             url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
             type: 'GET', dataType: 'json', cache: false
         }).then(function(tokResp) {
@@ -1000,10 +1001,22 @@ $(function() {
                     note: \$modal.find('textarea[name=note]').val(),
                     carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
                     _tags_json: JSON.stringify(tags),
+                    confirm_overflow: confirmOverflow ? 1 : 0,
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 }
             });
-        }).done(function(resp) {
+            });
+        }
+
+        function onResp(resp) {
+            if (resp && resp.needs_confirm) {
+                if (window.confirm(resp.message)) {
+                    runSave(true).done(onResp).fail(onFail).always(onAlways);
+                } else {
+                    \$btn.prop('disabled', false);
+                }
+                return;
+            }
             if (resp && resp.success) {
                 if (resp.carried_over && resp.carry_over_message) {
                     try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.carry_over_message); } } catch (e) {}
@@ -1111,11 +1124,15 @@ $(function() {
             } else {
                 \$modal.find('.sprint-qe-error').text(resp && resp.message ? resp.message : 'Save failed').show();
             }
-        }).fail(function() {
+        }
+        function onFail() {
             \$modal.find('.sprint-qe-error').text('Network error').show();
-        }).always(function() {
+        }
+        function onAlways() {
             \$btn.prop('disabled', false);
-        });
+        }
+
+        runSave(false).done(onResp).fail(onFail).always(onAlways);
     });
 
     \$(document).on('click', '.sprint-qe-dep-add', function() {
@@ -1130,9 +1147,9 @@ $(function() {
                 .text('Select a member and a capacity > 0').show();
             return;
         }
-        \$btn.prop('disabled', true);
-
-        \$.ajax({
+        function runDepAdd(confirmOverflow) {
+            \$btn.prop('disabled', true);
+            return \$.ajax({
             url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
             type: 'GET', dataType: 'json', cache: false
         }).then(function(tokResp) {
@@ -1143,10 +1160,22 @@ $(function() {
                     plugin_sprint_sprintitems_id: itemId,
                     users_id: userId,
                     capacity: cap,
+                    confirm_overflow: confirmOverflow ? 1 : 0,
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 }
             });
-        }).done(function(resp) {
+            });
+        }
+
+        function onDepResp(resp) {
+            if (resp && resp.needs_confirm) {
+                if (window.confirm(resp.message)) {
+                    runDepAdd(true).done(onDepResp).fail(onDepFail).always(onDepAlways);
+                } else {
+                    \$btn.prop('disabled', false);
+                }
+                return;
+            }
             if (resp && resp.success) {
                 \$status.removeClass('alert-info alert-danger').addClass('alert-success')
                     .text(resp.message).show();
@@ -1156,12 +1185,16 @@ $(function() {
                 \$status.removeClass('alert-info alert-success').addClass('alert-danger')
                     .text(resp && resp.message ? resp.message : 'Could not add dependency').show();
             }
-        }).fail(function() {
+        }
+        function onDepFail() {
             \$status.removeClass('alert-info alert-success').addClass('alert-danger')
                 .text('Network error').show();
-        }).always(function() {
+        }
+        function onDepAlways() {
             \$btn.prop('disabled', false);
-        });
+        }
+
+        runDepAdd(false).done(onDepResp).fail(onDepFail).always(onDepAlways);
     });
 
     \$modal.on('hidden.bs.modal', function() {
@@ -1803,12 +1836,19 @@ JS;
         $userId   = (int)($input['users_id'] ?? 0);
         $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? $this->fields['plugin_sprint_sprints_id'] ?? 0);
 
+        // Regular items no longer hard-block on overflow: a member can be
+        // pushed past 100% (e.g. when fastlane / dependency work already
+        // filled their budget) and only gets a WARNING. The AJAX modal asks
+        // for explicit confirmation first via SprintMember::overflowInfo();
+        // this keeps the no-JS form path and any other caller non-blocking.
         return SprintMember::checkCapacityForUser(
             $sprintId,
             $userId,
             $capacity,
             $excludeId,
-            0
+            0,
+            0,
+            true
         );
     }
 

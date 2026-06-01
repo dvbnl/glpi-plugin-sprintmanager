@@ -596,10 +596,11 @@
                 var $btn = $(this);
                 var id = $modal.find('input[name=id]').val();
 
-                $btn.prop('disabled', true);
                 $modal.find('.sprint-qe-error').hide().text('');
 
-                $.ajax({
+                function runSave(confirmOverflow) {
+                    $btn.prop('disabled', true);
+                    return $.ajax({
                     url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
                     type: 'GET', dataType: 'json', cache: false
                 }).then(function(tokResp) {
@@ -617,10 +618,22 @@
                             note:         $modal.find('textarea[name=note]').val(),
                             carry_over_to_sprint_id: $modal.find('select[name=carry_over_to_sprint_id]').val(),
                             meeting_id:   {{ meeting_id|default(0) }},
+                            confirm_overflow: confirmOverflow ? 1 : 0,
                             _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                         }
                     });
-                }).done(function(resp) {
+                    });
+                }
+
+                function onResp(resp) {
+                    if (resp && resp.needs_confirm) {
+                        if (window.confirm(resp.message)) {
+                            runSave(true).done(onResp).fail(onFail).always(onAlways);
+                        } else {
+                            $btn.prop('disabled', false);
+                        }
+                        return;
+                    }
                     if (resp && resp.success) {
                         if (resp.carried_over && resp.carry_over_message) {
                             try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.carry_over_message); } } catch (e) {}
@@ -667,11 +680,15 @@
                     } else {
                         $modal.find('.sprint-qe-error').text(resp && resp.message ? resp.message : 'Save failed').show();
                     }
-                }).fail(function() {
+                }
+                function onFail() {
                     $modal.find('.sprint-qe-error').text('Network error').show();
-                }).always(function() {
+                }
+                function onAlways() {
                     $btn.prop('disabled', false);
-                });
+                }
+
+                runSave(false).done(onResp).fail(onFail).always(onAlways);
             });
 
             $(document).on('click', '.sprint-qe-dep-add', function() {
@@ -686,9 +703,9 @@
                         .text('{{ __('Please select a sprint member and a capacity > 0', 'sprint')|e('js') }}').show();
                     return;
                 }
-                $btn.prop('disabled', true);
-
-                $.ajax({
+                function runDepAdd(confirmOverflow) {
+                    $btn.prop('disabled', true);
+                    return $.ajax({
                     url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
                     type: 'GET', dataType: 'json', cache: false
                 }).then(function(tokResp) {
@@ -699,10 +716,22 @@
                             plugin_sprint_sprintitems_id: itemId,
                             users_id: userId,
                             capacity: cap,
+                            confirm_overflow: confirmOverflow ? 1 : 0,
                             _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                         }
                     });
-                }).done(function(resp) {
+                    });
+                }
+
+                function onDepResp(resp) {
+                    if (resp && resp.needs_confirm) {
+                        if (window.confirm(resp.message)) {
+                            runDepAdd(true).done(onDepResp).fail(onDepFail).always(onDepAlways);
+                        } else {
+                            $btn.prop('disabled', false);
+                        }
+                        return;
+                    }
                     if (resp && resp.success) {
                         if (resp.warning) {
                             $status.removeClass('alert-info alert-success alert-danger').addClass('alert-warning')
@@ -740,12 +769,16 @@
                         $status.removeClass('alert-info alert-success').addClass('alert-danger')
                             .text(resp && resp.message ? resp.message : '{{ __('Could not add dependency', 'sprint')|e('js') }}').show();
                     }
-                }).fail(function() {
+                }
+                function onDepFail() {
                     $status.removeClass('alert-info alert-success').addClass('alert-danger')
                         .text('Network error').show();
-                }).always(function() {
+                }
+                function onDepAlways() {
                     $btn.prop('disabled', false);
-                });
+                }
+
+                runDepAdd(false).done(onDepResp).fail(onDepFail).always(onDepAlways);
             });
 
             $modal.on('hidden.bs.modal', function() {

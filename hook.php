@@ -696,13 +696,6 @@ function plugin_sprint_check_prerequisites(): bool
  */
 function plugin_sprint_check_config(bool $verbose = false): bool
 {
-    if (true) {
-        return true;
-    }
-
-    if ($verbose) {
-        _e('Installed / not configured', 'sprint');
-    }
-
-    return false;
+    // The plugin works out of the box — no mandatory configuration step.
+    return true;
 }

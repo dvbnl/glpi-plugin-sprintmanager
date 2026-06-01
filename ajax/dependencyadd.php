@@ -54,6 +54,24 @@ if ((int)($item->fields['plugin_sprint_sprints_id'] ?? 0) <= 0) {
     return;
 }
 
+// Coupling a helper always adds to their load, so ask for confirmation once
+// when it would push them past their sprint capacity. The allocation still
+// goes through on confirm (dependencies may overflow) — this is just a guard
+// rail so the over-commit is a deliberate choice.
+$confirmOverflow = (int)($_POST['confirm_overflow'] ?? 0) === 1;
+if (!$confirmOverflow) {
+    $sprintId = (int)$item->fields['plugin_sprint_sprints_id'];
+    $info = GlpiPlugin\Sprint\SprintMember::overflowInfo($sprintId, $userId, $capacity);
+    if ($info !== null) {
+        echo json_encode([
+            'success'       => false,
+            'needs_confirm' => true,
+            'message'       => GlpiPlugin\Sprint\SprintMember::overflowConfirmMessage($info),
+        ]);
+        return;
+    }
+}
+
 $rel    = new GlpiPlugin\Sprint\SprintItemDependency();
 $newId  = $rel->add([
     'plugin_sprint_sprintitems_id' => $itemId,

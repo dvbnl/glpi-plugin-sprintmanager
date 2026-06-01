@@ -280,7 +280,7 @@ class SprintMember extends CommonDBRelation
             $userId     = (int)$row['users_id'];
 
             echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user'></i> " . getUserName($userId) . "</td>";
+            echo "<td><i class='fas fa-user'></i> " . htmlescape(getUserName($userId)) . "</td>";
             echo "<td><i class='{$icon}'></i> {$roleName}</td>";
             echo "<td class='center'>";
             $pct = (int)$row['capacity_percent'];
@@ -800,6 +800,75 @@ class SprintMember extends CommonDBRelation
             return false;
         }
         return true;
+    }
+
+    /**
+     * Non-mutating overflow probe used by the AJAX assignment endpoints to
+     * decide whether to ask the user for confirmation *before* committing.
+     *
+     * Unlike {@see checkCapacityForUser()} this queues no messages and never
+     * blocks — it just reports whether assigning $additional% to $userId
+     * would push their combined load (regular + fastlane + dependency) past
+     * their sprint capacity, and by how much.
+     *
+     * Returns null when there is no member row, no positive assignment, or
+     * the result still fits within capacity. Callers should additionally
+     * skip the prompt when the change does not increase the member's load
+     * (e.g. editing an item's name while it stays over capacity) so an
+     * already-overflowed member isn't nagged on every unrelated edit.
+     *
+     * @return array{used:int,total:int,after:int,overflow:int,name:string}|null
+     */
+    public static function overflowInfo(
+        int $sprintId,
+        int $userId,
+        int $additional,
+        int $excludeRegularItemId = 0,
+        int $excludeFastlaneMemberId = 0,
+        int $excludeDependencyId = 0
+    ): ?array {
+        if ($additional <= 0 || $userId <= 0 || $sprintId <= 0) {
+            return null;
+        }
+
+        $member  = new self();
+        $members = $member->find([
+            'plugin_sprint_sprints_id' => $sprintId,
+            'users_id'                 => $userId,
+        ]);
+        if (count($members) === 0) {
+            return null;
+        }
+        $total = (int)reset($members)['capacity_percent'];
+        $used  = self::getUsedCapacityForUser($sprintId, $userId, $excludeRegularItemId, $excludeFastlaneMemberId, $excludeDependencyId);
+        $after = $used + $additional;
+        if ($after <= $total) {
+            return null;
+        }
+
+        return [
+            'used'     => $used,
+            'total'    => $total,
+            'after'    => $after,
+            'overflow' => $after - $total,
+            'name'     => getUserName($userId),
+        ];
+    }
+
+    /**
+     * Build the plain-text confirmation question for an overflow assignment.
+     * Rendered in a native JS confirm() dialog, so no HTML escaping needed.
+     */
+    public static function overflowConfirmMessage(array $info): string
+    {
+        return sprintf(
+            __('%1$s is already at %2$d%% of %3$d%% capacity. This brings the total to %4$d%% (+%5$d%% over). Assign anyway?', 'sprint'),
+            $info['name'],
+            $info['used'],
+            $info['total'],
+            $info['after'],
+            $info['overflow']
+        );
     }
 
     /**

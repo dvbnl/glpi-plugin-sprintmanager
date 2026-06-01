@@ -12,6 +12,7 @@ if (!defined('GLPI_ROOT')) {
 Session::checkRight('config', UPDATE);
 
 if (isset($_POST['update_sprint_config'])) {
+    Session::checkCSRF($_POST);
     GlpiPlugin\Sprint\Config::saveConfig($_POST);
     Session::addMessageAfterRedirect(__('SprintManager settings saved', 'sprint'));
     Html::back();

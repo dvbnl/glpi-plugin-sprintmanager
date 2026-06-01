@@ -404,7 +404,7 @@ class SprintDashboard extends CommonGLPI
                 : '';
 
             echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . getUserName($uid) . "</td>";
+            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($uid)) . "</td>";
             echo "<td>" . $roleName . "</td>";
             echo "<td class='center'>{$total}%</td>";
             echo "<td class='center'>{$regular}%</td>";
@@ -771,6 +771,7 @@ class SprintDashboard extends CommonGLPI
                 SprintItem::STATUS_TODO        => '#6c757d',
                 SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
                 SprintItem::STATUS_REVIEW      => '#6f42c1',
+                SprintItem::STATUS_DEPENDENCY  => '#20c997',
                 SprintItem::STATUS_DONE        => '#198754',
                 SprintItem::STATUS_BLOCKED     => '#dc3545',
             ];
@@ -868,7 +869,7 @@ class SprintDashboard extends CommonGLPI
         echo "</tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . getUserName($userId) . "</td>";
+        echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($userId)) . "</td>";
         echo "<td>" . $roleName . "</td>";
         echo "<td class='center'>{$total}%</td>";
         echo "<td class='center'>{$regularUsed}%</td>";
@@ -891,7 +892,7 @@ class SprintDashboard extends CommonGLPI
     private static function getMemberName(int $usersId): string
     {
         if ($usersId > 0) {
-            return getUserName($usersId);
+            return htmlescape(getUserName($usersId));
         }
         return '<span style="color:#adb5bd;font-style:italic;">' . __('Unassigned', 'sprint') . '</span>';
     }

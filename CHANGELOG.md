@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-06-01
+
+### Changed
+- **Capacity is now a soft limit everywhere, with a confirmation prompt instead of a hard block**: regular sprint items used to hard-fail (`Update failed`) when a member's combined load (regular + fastlane + dependency) was already at/over 100% — and because fastlane and dependency allocations were deliberately allowed to overflow, that combined total could lock *every* regular item the member owned from being edited at all. Regular items now follow the same soft-overflow model as fastlane/dependency (`SprintItem::validateCapacity()` passes `allowOverflow=true`), so a save never hard-blocks. Instead, when assigning an owner/capacity (quick-edit modal) or coupling a helper (dependency add) would push that member past their capacity, the AJAX flow shows a native confirm dialog — *"X is already at Y% of Z%. This brings the total to W% (+N% over). Assign anyway?"* — and only commits on confirmation. The prompt fires only when the change actually **increases** that member's load, so editing the name/notes/status of an item owned by an already-overflowed member no longer nags. New non-mutating `SprintMember::overflowInfo()` / `overflowConfirmMessage()` helpers back the gate; endpoints accept a `confirm_overflow` flag. The no-JS form path and any other caller simply save with the existing `WARNING` message
+
+### Fixed
+- **Dependency status badge colour**: items with the `dependency` workflow state now render their status badge in the teal `#20c997` brand colour everywhere, matching the "Dependency" dashboard stat card. Two separate gaps were closed: the main dashboard "Sprint items" table built its badge from an inline `$statusBgColors` map that was missing the `STATUS_DEPENDENCY` entry (so it fell back to grey `#6c757d`), and the active `public/sprint.css` was missing the `--sprint-dependency` variable and the `.sprint-status-dependency` rule altogether — leaving the class-based badges on the Sprint Items tab and the Meeting review tab with no background
+
+### Security
+- **Stored-XSS hardening on member names**: every place that echoed `getUserName()` straight into HTML now wraps it in `htmlescape()` (linked-item tabs for Ticket/Change/Problem/Project Task, the Sprint Items / Members / Template Members / Fastlane Members / Standup / Meeting tables, the dashboard capacity tables and `getMemberName()`). A user whose GLPI display name contained markup could previously inject it into any sprint view that listed them as owner/member. Output paths that were already safe (PDF export, audit log, Twig templates, dropdowns and `data-*` attributes all escape at their own render point) were left unchanged
+- **CSRF check on the settings form**: `front/config.form.php` now calls `Session::checkCSRF()` before `Config::saveConfig()`. Because the save runs through GLPI's config writer rather than `CommonDBTM`, the implicit token validation never fired; the form already emits the token via `Html::closeForm()`, so legitimate saves are unaffected
+
+### Removed
+- **Dead code cleanup**: dropped an unreachable `if ($verbose)` branch in `plugin_sprint_check_config()`, an unused `use Log;` import in `Sprint.php`, and unused CSS (the never-rendered Kanban board styles, the unused capacity-bar / empty-state rules, and the `planned`/`active`/`completed`/`cancelled` status-badge classes that were never applied — Sprint status renders as a plain text label). No behavioural change
+
 ## [1.1.1] - 2026-05-28
 
 ### Added

@@ -3,7 +3,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: SprintManager 1.1.1\n"
+"Project-Id-Version: SprintManager 1.1.2\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-03 12:00+0000\n"
 "PO-Revision-Date: 2026-04-03 12:00+0000\n"
@@ -1194,6 +1194,9 @@ msgstr "Selecteer een sprintlid en een capaciteit > 0"
 
 msgid "%s is now over capacity: %d%% used of %d%% (+%d%% overflow)."
 msgstr "%s zit nu boven capaciteit: %d%% gebruikt van %d%% (+%d%% overflow)."
+
+msgid "%1$s is already at %2$d%% of %3$d%% capacity. This brings the total to %4$d%% (+%5$d%% over). Assign anyway?"
+msgstr "%1$s zit al op %2$d%% van %3$d%% capaciteit. Dit brengt het totaal op %4$d%% (+%5$d%% over). Toch toewijzen?"
 
 msgid "Overflow %d%%"
 msgstr "Overflow %d%%"

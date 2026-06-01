@@ -8,6 +8,7 @@
     --sprint-done: #198754;
     --sprint-progress: #0d6efd;
     --sprint-review: #6f42c1;
+    --sprint-dependency: #20c997;
     --sprint-blocked: #dc3545;
     --sprint-todo: #6c757d;
     --sprint-cancelled: #dc3545;
@@ -46,12 +47,9 @@
 .sprint-status-todo        { background-color: #6c757d !important; background-color: var(--sprint-todo) !important; }
 .sprint-status-in-progress { background-color: #0d6efd !important; background-color: var(--sprint-progress) !important; }
 .sprint-status-review      { background-color: #6f42c1 !important; background-color: var(--sprint-review) !important; }
+.sprint-status-dependency  { background-color: #20c997 !important; background-color: var(--sprint-dependency) !important; }
 .sprint-status-done        { background-color: #198754 !important; background-color: var(--sprint-done) !important; }
 .sprint-status-blocked     { background-color: #dc3545 !important; background-color: var(--sprint-blocked) !important; }
-.sprint-status-planned     { background-color: #6c757d !important; background-color: var(--sprint-planned) !important; }
-.sprint-status-active      { background-color: #0d6efd !important; background-color: var(--sprint-active) !important; }
-.sprint-status-completed   { background-color: #198754 !important; background-color: var(--sprint-completed) !important; }
-.sprint-status-cancelled   { background-color: #dc3545 !important; background-color: var(--sprint-cancelled) !important; }
 
 /* === Dashboard === */
 .sprint-dashboard {
@@ -199,36 +197,6 @@
 .sprint-progress-bar .bar-blocked    { background: var(--sprint-blocked); }
 .sprint-progress-bar .bar-todo       { background: #d5d8dc; }
 
-/* Capacity bar */
-.sprint-capacity-bar {
-    height: 16px;
-    background: var(--sprint-done);
-    border-radius: 8px;
-    overflow: hidden;
-    display: flex;
-    justify-content: flex-end;
-}
-
-.sprint-capacity-bar .used-segment {
-    height: 100%;
-    background: var(--sprint-blocked);
-    transition: width 0.3s ease;
-}
-
-/* Items table enhancements */
-.sprint-items-empty {
-    padding: 32px !important;
-    color: #adb5bd !important;
-    text-align: center;
-}
-
-.sprint-items-empty i {
-    font-size: 2.2em;
-    display: block;
-    margin-bottom: 10px;
-    opacity: 0.5;
-}
-
 /* Overload indicator */
 .sprint-overloaded {
     color: var(--sprint-blocked);
@@ -252,73 +220,6 @@
     font-style: italic;
 }
 
-/* === Kanban board === */
-.sprint-board {
-    display: flex;
-    gap: 16px;
-    padding: 16px;
-    overflow-x: auto;
-}
-
-.sprint-board-column {
-    flex: 1;
-    min-width: 250px;
-    background: var(--sprint-bg-subtle);
-    border-radius: var(--sprint-radius);
-    padding: 12px;
-}
-
-.sprint-board-column-header {
-    font-weight: 700;
-    font-size: 0.85em;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 8px 12px;
-    margin-bottom: 10px;
-    border-radius: var(--sprint-radius-sm);
-    color: #fff;
-}
-
-.sprint-board-column-header.todo        { background: var(--sprint-todo); }
-.sprint-board-column-header.in-progress { background: var(--sprint-progress); }
-.sprint-board-column-header.review      { background: var(--sprint-review); }
-.sprint-board-column-header.done        { background: var(--sprint-done); }
-.sprint-board-column-header.blocked     { background: var(--sprint-blocked); }
-
-.sprint-board-card {
-    background: #fff;
-    border: 1px solid var(--sprint-border);
-    border-radius: var(--sprint-radius-sm);
-    padding: 10px 12px;
-    margin-bottom: 8px;
-    cursor: pointer;
-    transition: box-shadow var(--sprint-transition), transform var(--sprint-transition);
-}
-
-.sprint-board-card:hover {
-    box-shadow: var(--sprint-shadow-hover);
-    transform: translateY(-1px);
-}
-
-.sprint-board-card .card-title {
-    font-weight: 600;
-    font-size: 0.9em;
-    margin-bottom: 4px;
-}
-
-.sprint-board-card .card-meta {
-    font-size: 0.8em;
-    color: var(--sprint-muted);
-}
-
-.sprint-board-card .card-points {
-    display: inline-block;
-    background: #edf2f7;
-    border-radius: 10px;
-    padding: 1px 8px;
-    font-size: 0.75em;
-    font-weight: 700;
-}
 
 /* === Template meeting schedule === */
 .sprint-schedule-row {
@@ -395,14 +296,6 @@
     .sprint-stat-card .stat-value { font-size: 1.35em; }
     .sprint-stat-card .stat-icon  { font-size: 1.1em; }
 
-    .sprint-board {
-        flex-direction: column;
-        padding: 8px;
-        gap: 10px;
-    }
-    .sprint-board-column {
-        min-width: 100%;
-    }
     .sprint-progress-legend {
         flex-wrap: wrap;
         gap: 8px;

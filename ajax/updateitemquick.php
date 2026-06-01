@@ -83,6 +83,41 @@ if ($meetingId > 0) {
     }
 }
 
+// Capacity overflow confirmation gate. Regular items no longer hard-block,
+// but if this edit would push the (new) owner past their sprint capacity we
+// ask the client to confirm once before committing. Only prompt when the
+// change actually *increases* that owner's load — editing the name/notes of
+// an item whose owner is already over capacity must not nag.
+$confirmOverflow = (int)($_POST['confirm_overflow'] ?? 0) === 1;
+if (!$confirmOverflow && !$isFastlane) {
+    $sprintId   = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
+    $targetUser = array_key_exists('users_id', $update)
+        ? (int)$update['users_id'] : (int)$item->fields['users_id'];
+    $targetCap  = array_key_exists('capacity', $update)
+        ? (int)$update['capacity'] : (int)($item->fields['capacity'] ?? 0);
+    // The owner's current contribution from *this* item, so an increase can
+    // be told apart from a no-op / decrease.
+    $priorContribution = ((int)$item->fields['users_id'] === $targetUser)
+        ? (int)($item->fields['capacity'] ?? 0) : 0;
+
+    if ($sprintId > 0 && $targetUser > 0 && $targetCap > $priorContribution) {
+        $info = GlpiPlugin\Sprint\SprintMember::overflowInfo(
+            $sprintId,
+            $targetUser,
+            $targetCap,
+            (int)$item->getID()
+        );
+        if ($info !== null) {
+            echo json_encode([
+                'success'       => false,
+                'needs_confirm' => true,
+                'message'       => GlpiPlugin\Sprint\SprintMember::overflowConfirmMessage($info),
+            ]);
+            return;
+        }
+    }
+}
+
 $beforeLogId = $meetingId > 0
     ? GlpiPlugin\Sprint\SprintAudit::snapshotMaxLogId()
     : 0;
