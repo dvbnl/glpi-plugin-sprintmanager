@@ -84,7 +84,6 @@ class SprintTemplateItem extends CommonDBTM
             echo "</div>";
         }
 
-        // List items
         $item  = new self();
         $items = $item->find(
             ['plugin_sprint_sprinttemplates_id' => $ID],

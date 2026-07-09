@@ -8,18 +8,11 @@ use Session;
 use Html;
 
 /**
- * SprintExport - End-of-sprint printable report.
+ * SprintExport - End-of-sprint printable report (summary, charts, workload,
+ * item list) as a self-contained, printer-friendly HTML view.
  *
- * Renders a self-contained, printer-friendly HTML view containing every
- * stat the team needs at a sprint review: summary numbers, status mix,
- * workload per member (regular + fastlane capacity), team activity chart
- * (audit-log derived) and the full item list.
- *
- * The page ships an inline "Print / Save as PDF" button. We deliberately
- * lean on the browser's print pipeline rather than a server-side PDF
- * library — every modern browser can save print output to PDF, the
- * output stays consistent with what users see, and the plugin avoids a
- * binary dependency on TCPDF/Dompdf.
+ * Uses the browser's "Print / Save as PDF" pipeline rather than a server-side
+ * PDF library — avoids a TCPDF/Dompdf dependency and matches what users see.
  */
 class SprintExport extends CommonGLPI
 {
@@ -63,14 +56,10 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Render the export page body (toolbar + sections). Caller is
-     * responsible for the surrounding <html>/<head>/<body> chrome —
-     * either GLPI's tab framework when rendered as a Sprint tab, or
-     * `front/sprint.export.php` when opened standalone.
+     * Render the export page body (toolbar + sections). Caller owns the
+     * surrounding html chrome (GLPI tab framework or front/sprint.export.php).
      *
-     * @param bool $standalone true when rendered outside the sprint
-     *                         tab framework (adds a "Back to Sprint"
-     *                         button so the user can navigate back).
+     * @param bool $standalone true when rendered outside the tab framework (adds a "Back to Sprint" button).
      */
     public static function render(Sprint $sprint, bool $standalone = false): void
     {
@@ -84,7 +73,10 @@ class SprintExport extends CommonGLPI
                 . "</a>";
         }
         echo "</div>";
-        echo "<div>";
+        echo "<div style='display:flex;gap:8px;'>";
+        echo "<a href='" . htmlescape(self::getExportURL($sprintId) . '&format=csv') . "' class='btn btn-outline-success'>"
+            . "<i class='fas fa-file-csv me-1'></i>" . __('Download CSV', 'sprint')
+            . "</a>";
         echo "<button type='button' class='btn btn-primary' onclick='window.print()'>"
             . "<i class='fas fa-print me-1'></i>" . __('Print / Save as PDF', 'sprint')
             . "</button>";
@@ -95,8 +87,11 @@ class SprintExport extends CommonGLPI
 
         self::renderHeader($sprint);
         self::renderSummary($sprintId);
+        self::renderBurndown($sprint);
+        self::renderVelocity($sprint);
         self::renderMemberWorkload($sprintId);
         self::renderFastlane($sprintId);
+        self::renderDependencies($sprintId);
         self::renderTeamActivity($sprintId);
         self::renderItemsBreakdown($sprintId);
 
@@ -152,25 +147,14 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Resolve a logo to embed in the report header.
+     * Resolve a logo for the report header, in preference order:
+     *  1. plugin `report_logo_url` override, 2. GLPI `central_logo`,
+     *  3. logo URL parsed from the entity/global custom CSS.
      *
-     * Preference order:
-     *  1. The plugin's configured `report_logo_url` override (Setup →
-     *     General → SprintManager). Accepts a full URL, a path relative
-     *     to GLPI's install, or an absolute filesystem path.
-     *  2. GLPI's `$CFG_GLPI['central_logo']` (Setup → General →
-     *     Personalization → Custom central logo) when readable on disk.
-     *  3. A logo URL extracted from the active entity's custom CSS —
-     *     handles instances that brand the sidebar/header via custom
-     *     CSS instead of uploading a central logo.
-     *
-     * If none of the above resolve, returns an empty string so the
-     * caller suppresses the `<img>` rather than falling back to GLPI's
-     * default logo (which would be misleading for branded instances).
-     *
-     * Returned strings are either an absolute URL the browser can
-     * resolve from the same origin, or a `data:` URI when we can read
-     * the file directly (so a saved PDF stays self-contained).
+     * Returns '' when nothing resolves (caller suppresses the <img> rather
+     * than showing GLPI's default, which would mislead branded instances).
+     * Result is an absolute URL, or a `data:` URI when readable on disk so a
+     * saved PDF stays self-contained.
      */
     private static function resolveLogoSrc(): string
     {
@@ -212,10 +196,8 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Turn a logo "address" (absolute URL, root-relative URL, or path
-     * relative to GLPI_ROOT) into either a `data:` URI (when readable on
-     * disk) or an absolute URL the browser can fetch.
-     *
+     * Turn a logo address (absolute/root-relative URL, or GLPI_ROOT-relative
+     * path) into a `data:` URI (when readable on disk) or a fetchable URL.
      * Returns '' when nothing usable can be resolved.
      */
     private static function resolveLogoCandidate(string $candidate): string
@@ -232,9 +214,7 @@ class SprintExport extends CommonGLPI
 
         $glpiRoot = defined('GLPI_ROOT') ? rtrim((string)constant('GLPI_ROOT'), '/') : '';
 
-        // Absolute http(s):// URL → try to map to a local file when it
-        // points back to this GLPI install (so we can embed as data: URI),
-        // otherwise return as-is.
+        // Absolute http(s) URL → embed as data: URI if it maps to a local file, else return as-is.
         if (preg_match('#^https?://#i', $candidate)) {
             $localPath = self::mapAbsoluteUrlToLocalPath($candidate);
             if ($localPath !== '' && is_readable($localPath) && is_file($localPath)) {
@@ -266,8 +246,7 @@ class SprintExport extends CommonGLPI
             }
         }
 
-        // Not readable on disk — fall back to a root_doc-anchored URL so
-        // the browser at least tries to load it.
+        // Not readable on disk — fall back to a root_doc-anchored URL for the browser to try.
         global $CFG_GLPI;
         $rootDoc = (string)($CFG_GLPI['root_doc'] ?? '');
         if ($rootDoc !== '') {
@@ -277,11 +256,19 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Encode a local file as a `data:` URI. Returns '' on read failure.
+     * Encode a local file as a `data:` URI. Returns '' on read failure or
+     * when the file lives outside the GLPI install (containment guard, so a
+     * config-supplied path can never leak arbitrary server files).
      */
     private static function embedAsDataUri(string $absPath): string
     {
-        $bytes = @file_get_contents($absPath);
+        $real     = realpath($absPath);
+        $glpiRoot = defined('GLPI_ROOT') ? realpath((string)constant('GLPI_ROOT')) : false;
+        if ($real === false || $glpiRoot === false
+            || strpos($real, rtrim($glpiRoot, '/') . '/') !== 0) {
+            return '';
+        }
+        $bytes = @file_get_contents($real);
         if ($bytes === false || $bytes === '') {
             return '';
         }
@@ -294,10 +281,8 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Best-effort mapping of an absolute http(s) URL pointing at this
-     * GLPI install back to a filesystem path under GLPI_ROOT, so we can
-     * embed instead of linking. Returns '' if the URL is external or
-     * doesn't share the configured root_doc prefix.
+     * Best-effort map of an absolute URL back to a GLPI_ROOT filesystem path
+     * (so we can embed, not link). Returns '' for external/non-root_doc URLs.
      */
     private static function mapAbsoluteUrlToLocalPath(string $url): string
     {
@@ -322,20 +307,16 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Pull together every custom CSS body GLPI knows about for the
-     * current session: the active entity tree (via `getUsedConfig`,
-     * which inherits up the entity chain) plus the global config keys.
-     * Returns a single concatenated string for downstream regex parsing.
+     * Concatenate every custom CSS body GLPI knows about (active entity tree
+     * via getUsedConfig + global config keys) for downstream regex parsing.
      */
     private static function collectCustomCss(): string
     {
         global $CFG_GLPI;
         $css = '';
 
-        // Entity-scoped: GLPI 10/11 stores per-entity custom CSS in
-        // glpi_entities (`enable_custom_css` toggle + `custom_css_code`).
-        // `Entity::getUsedConfig` walks the entity tree to inherit a
-        // parent's setting when the current entity hasn't set its own.
+        // Entity-scoped: GLPI 10/11 stores per-entity custom CSS in glpi_entities.
+        // getUsedConfig walks the entity tree to inherit a parent's setting.
         if (class_exists('Entity')) {
             $entityId = (int)\Session::getActiveEntity();
             try {
@@ -348,8 +329,7 @@ class SprintExport extends CommonGLPI
             }
         }
 
-        // Global / instance-wide config — different keys depending on
-        // GLPI version, so try the common ones in order.
+        // Global config — key name varies by GLPI version, so try the common ones.
         foreach (['custom_css_code', 'custom_css', 'css_code'] as $key) {
             if (!empty($CFG_GLPI[$key]) && is_string($CFG_GLPI[$key])) {
                 $css .= "\n" . $CFG_GLPI[$key];
@@ -360,13 +340,8 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Best-effort regex pluck of a logo URL out of arbitrary CSS.
-     *
-     * Strategy: find every CSS rule whose selector mentions "logo" and
-     * grab the first url(...) value inside its body. Falls back to a
-     * generic url() that points at a file with "logo" in its name when
-     * no selector matches.
-     *
+     * Best-effort regex pluck of a logo URL out of arbitrary CSS: first the
+     * url() in any "logo" selector, then any url() pointing at a "logo" file.
      * Returns '' if nothing useful is found.
      */
     private static function extractLogoFromCss(string $css): string
@@ -400,7 +375,6 @@ class SprintExport extends CommonGLPI
     private static function renderSummary(int $sprintId): void
     {
         $stats = self::computeStats($sprintId);
-        $total = max($stats['total_items'], 1);
 
         echo "<h2 style='font-size:1.15em;margin:18px 0 10px;color:#0d6efd;'>"
             . "<i class='fas fa-chart-pie me-1'></i>" . __('Summary', 'sprint') . "</h2>";
@@ -425,29 +399,35 @@ class SprintExport extends CommonGLPI
         }
         echo "</div>";
 
-        // Stacked progress bar (mirrors the dashboard look).
+        // Stacked progress bar (mirrors the dashboard look). Weighted by
+        // allocated capacity (%) so the bar reflects effort rather than a raw
+        // item headcount; falls back to item count when no capacities are set.
         $segments = [
-            [SprintItem::STATUS_DONE,        __('Done', 'sprint'),        '#198754', $stats['done_items']],
-            [SprintItem::STATUS_IN_PROGRESS, __('In Progress', 'sprint'), '#0d6efd', $stats['in_progress']],
-            [SprintItem::STATUS_REVIEW,      __('In Review', 'sprint'),   '#6f42c1', $stats['review_items']],
-            [SprintItem::STATUS_BLOCKED,     __('Blocked', 'sprint'),     '#dc3545', $stats['blocked_items']],
-            [SprintItem::STATUS_TODO,        __('To Do', 'sprint'),       '#d5d8dc', $stats['todo_items']],
+            [SprintItem::STATUS_DONE,        __('Done', 'sprint'),        '#198754', $stats['done_items'],   (int)$stats['done_cap']],
+            [SprintItem::STATUS_IN_PROGRESS, __('In Progress', 'sprint'), '#0d6efd', $stats['in_progress'],  (int)$stats['in_progress_cap']],
+            [SprintItem::STATUS_REVIEW,      __('In Review', 'sprint'),   '#6f42c1', $stats['review_items'], (int)$stats['review_cap']],
+            [SprintItem::STATUS_BLOCKED,     __('Blocked', 'sprint'),     '#dc3545', $stats['blocked_items'],(int)$stats['blocked_cap']],
+            [SprintItem::STATUS_TODO,        __('To Do', 'sprint'),       '#d5d8dc', $stats['todo_items'],   (int)$stats['todo_cap']],
         ];
 
+        $totalCap   = array_sum(array_map(fn($s) => $s[4], $segments));
+        $weightIdx  = $totalCap > 0 ? 4 : 3;
+        $weightDen  = max(array_sum(array_map(fn($s) => $s[$weightIdx], $segments)), 1);
+
         echo "<div style='display:flex;gap:14px;justify-content:center;margin-bottom:6px;font-size:0.78em;color:#6c757d;flex-wrap:wrap;'>";
-        foreach ($segments as [$key, $label, $color, $count]) {
-            $pct = round(($count / $total) * 100, 1);
-            echo "<span><span style='display:inline-block;width:9px;height:9px;border-radius:50%;background:{$color};margin-right:4px;vertical-align:middle;'></span>"
-                . htmlescape((string)$label) . " {$pct}%</span>";
+        foreach ($segments as $seg) {
+            $pct = round(($seg[$weightIdx] / $weightDen) * 100, 1);
+            echo "<span><span style='display:inline-block;width:9px;height:9px;border-radius:50%;background:{$seg[2]};margin-right:4px;vertical-align:middle;'></span>"
+                . htmlescape((string)$seg[1]) . " {$pct}%</span>";
         }
         echo "</div>";
         echo "<div style='width:100%;height:14px;background:#e9ecef;border-radius:7px;overflow:hidden;display:flex;'>";
-        foreach ($segments as [$key, $label, $color, $count]) {
-            $pct = round(($count / $total) * 100, 2);
+        foreach ($segments as $seg) {
+            $pct = round(($seg[$weightIdx] / $weightDen) * 100, 2);
             if ($pct <= 0) {
                 continue;
             }
-            echo "<div style='width:{$pct}%;height:100%;background:{$color};'></div>";
+            echo "<div style='width:{$pct}%;min-width:4px;height:100%;background:{$seg[2]};'></div>";
         }
         echo "</div>";
     }
@@ -464,23 +444,33 @@ class SprintExport extends CommonGLPI
             'total_points'  => 0,
             'done_points'   => 0,
             'fastlane_items' => 0,
+            // Allocated capacity (%) per status — drives the progress bar weight.
+            'todo_cap'      => 0,
+            'in_progress_cap' => 0,
+            'review_cap'    => 0,
+            'done_cap'      => 0,
+            'blocked_cap'   => 0,
         ];
         $si = new SprintItem();
         foreach ($si->find(['plugin_sprint_sprints_id' => $sprintId]) as $row) {
             $stats['total_items']++;
             $stats['total_points'] += (int)$row['story_points'];
+            // Min weight 1 per item so zero-capacity items keep a slice; real
+            // capacities dominate. Mirrors the dashboard. See renderSummary().
+            $cap = max((int)($row['capacity'] ?? 0), 1);
             if (!empty($row['is_fastlane'])) {
                 $stats['fastlane_items']++;
             }
             switch ($row['status']) {
-                case SprintItem::STATUS_TODO:        $stats['todo_items']++; break;
-                case SprintItem::STATUS_IN_PROGRESS: $stats['in_progress']++; break;
-                case SprintItem::STATUS_REVIEW:      $stats['review_items']++; break;
+                case SprintItem::STATUS_TODO:        $stats['todo_items']++; $stats['todo_cap'] += $cap; break;
+                case SprintItem::STATUS_IN_PROGRESS: $stats['in_progress']++; $stats['in_progress_cap'] += $cap; break;
+                case SprintItem::STATUS_REVIEW:      $stats['review_items']++; $stats['review_cap'] += $cap; break;
                 case SprintItem::STATUS_DONE:
                     $stats['done_items']++;
                     $stats['done_points'] += (int)$row['story_points'];
+                    $stats['done_cap'] += $cap;
                     break;
-                case SprintItem::STATUS_BLOCKED:     $stats['blocked_items']++; break;
+                case SprintItem::STATUS_BLOCKED:     $stats['blocked_items']++; $stats['blocked_cap'] += $cap; break;
             }
         }
         return $stats;
@@ -556,16 +546,29 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Dedicated Fastlane section: lists every fastlane item with its
-     * status / story points + per-member capacity allocations, plus a
-     * summary of total fastlane capacity used per team member. Lets the
-     * Scrum Master review interrupt-driven work distinct from the regular
-     * planned work.
+     * Fastlane section: per-item status/points/allocations plus a per-member
+     * capacity summary, separating interrupt-driven work from planned work.
      */
     private static function renderFastlane(int $sprintId): void
     {
         echo "<h2 style='font-size:1.15em;margin:22px 0 10px;color:#fd7e14;page-break-before:auto;'>"
             . "<i class='fas fa-bolt me-1'></i>" . __('Fastlane', 'sprint') . "</h2>";
+
+        $sprintObj   = new Sprint();
+        $fastlaneCap = ($sprintObj->getFromDB($sprintId))
+            ? (int)($sprintObj->fields['fastlane_capacity'] ?? 0)
+            : 0;
+        if ($fastlaneCap > 0) {
+            $fastTotal = SprintFastlaneMember::getTotalFastlaneCapacityForSprint($sprintId);
+            echo "<div style='margin:-4px 0 10px;font-size:0.86em;color:#6c757d;'>"
+                . sprintf(__('Total capacity: %1$d%% / %2$d%%', 'sprint'), $fastTotal, $fastlaneCap);
+            if ($fastTotal > $fastlaneCap) {
+                echo " <span style='color:#dc3545;font-weight:700;'>"
+                    . sprintf(__('+%d%% overflow', 'sprint'), $fastTotal - $fastlaneCap)
+                    . "</span>";
+            }
+            echo "</div>";
+        }
 
         $si = new SprintItem();
         $fastItems = $si->find(
@@ -616,8 +619,7 @@ class SprintExport extends CommonGLPI
         echo "<th style='text-align:right;padding:6px 8px;border-bottom:1px solid #ffeeba;'>" . __('Total %', 'sprint') . "</th>";
         echo "</tr></thead><tbody>";
 
-        // Aggregate per-user totals across all fastlane items so we can
-        // build the summary table below in a single pass.
+        // Aggregate per-user totals in this pass to feed the summary table below.
         $perUserTotal = [];
         $rel = new SprintFastlaneMember();
 
@@ -693,6 +695,95 @@ class SprintExport extends CommonGLPI
         }
     }
 
+    /**
+     * Dependency section: one row per sprint item with dependency helpers,
+     * resolved helpers struck through, mirroring the dashboard widget.
+     */
+    private static function renderDependencies(int $sprintId): void
+    {
+        if (!SprintItemDependency::isTableReady()) {
+            return;
+        }
+
+        echo "<h2 style='font-size:1.15em;margin:22px 0 10px;color:#20c997;page-break-before:auto;'>"
+            . "<i class='fas fa-link me-1'></i>" . __('Dependencies', 'sprint') . "</h2>";
+
+        $si          = new SprintItem();
+        $sprintItems = $si->find(['plugin_sprint_sprints_id' => $sprintId]);
+
+        $relRowsByItem = [];
+        if (count($sprintItems) > 0) {
+            $rel = new SprintItemDependency();
+            foreach ($rel->find(['plugin_sprint_sprintitems_id' => array_keys($sprintItems)], ['date_creation ASC']) as $r) {
+                $relRowsByItem[(int)$r['plugin_sprint_sprintitems_id']][] = $r;
+            }
+        }
+
+        if (count($relRowsByItem) === 0) {
+            echo "<div style='padding:14px;background:#e6fcf5;border:1px dashed #20c997;border-radius:6px;color:#0c6b58;'>"
+                . "<i class='fas fa-link me-1' style='color:#20c997;'></i>"
+                . __('No dependencies in this sprint.', 'sprint')
+                . "</div>";
+            return;
+        }
+
+        $statuses = SprintItem::getAllStatuses();
+        $statusBgColors = [
+            SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
+            SprintItem::STATUS_REVIEW      => '#6f42c1',
+            SprintItem::STATUS_DEPENDENCY  => '#20c997',
+            SprintItem::STATUS_DONE        => '#198754',
+            SprintItem::STATUS_BLOCKED     => '#dc3545',
+        ];
+
+        echo "<table style='width:100%;border-collapse:collapse;font-size:0.86em;margin-bottom:14px;'>";
+        echo "<thead><tr style='background:#d1f2ea;'>";
+        echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #a3e4d3;'>" . __('Name') . "</th>";
+        echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #a3e4d3;'>" . __('Owner', 'sprint') . "</th>";
+        echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #a3e4d3;'>" . __('Status') . "</th>";
+        echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #a3e4d3;'>" . __('Helpers', 'sprint') . "</th>";
+        echo "<th style='text-align:right;padding:6px 8px;border-bottom:1px solid #a3e4d3;'>" . __('Open total', 'sprint') . "</th>";
+        echo "</tr></thead><tbody>";
+
+        foreach ($relRowsByItem as $itemId => $relRows) {
+            $row = $sprintItems[$itemId];
+
+            $openCap     = 0;
+            $helperLines = [];
+            foreach ($relRows as $r) {
+                $cap  = (int)$r['capacity'];
+                $name = htmlescape(getUserName((int)$r['users_id']));
+                if ((int)($r['is_resolved'] ?? 0) === 1) {
+                    $helperLines[] = "<span style='color:#6c757d;text-decoration:line-through;'>{$name} ({$cap}%)</span>";
+                } else {
+                    $openCap      += $cap;
+                    $helperLines[] = "{$name} ({$cap}%)";
+                }
+            }
+
+            $statusBg  = $statusBgColors[$row['status']] ?? '#6c757d';
+            $ownerName = ((int)$row['users_id'] > 0)
+                ? htmlescape(getUserName((int)$row['users_id']))
+                : "<span style='color:#adb5bd;font-style:italic;'>" . __('Unassigned', 'sprint') . "</span>";
+
+            echo "<tr style='border-bottom:1px solid #d1f2ea;page-break-inside:avoid;'>";
+            echo "<td style='padding:5px 8px;'>"
+                . "<i class='fas fa-link' style='color:#20c997;margin-right:4px;'></i>"
+                . htmlescape((string)$row['name']) . "</td>";
+            echo "<td style='padding:5px 8px;'>{$ownerName}</td>";
+            echo "<td style='padding:5px 8px;'>"
+                . "<span style='display:inline-block;padding:2px 8px;border-radius:12px;color:#fff;background:{$statusBg};font-size:0.78em;'>"
+                . htmlescape($statuses[$row['status']] ?? $row['status'])
+                . "</span></td>";
+            echo "<td style='padding:5px 8px;'>" . implode('<br>', $helperLines) . "</td>";
+            echo "<td style='padding:5px 8px;text-align:right;font-weight:600;'>{$openCap}%</td>";
+            echo "</tr>";
+        }
+
+        echo "</tbody></table>";
+    }
+
     private static function renderTeamActivity(int $sprintId): void
     {
         $data    = SprintAudit::getMemberActivity($sprintId);
@@ -708,8 +799,7 @@ class SprintExport extends CommonGLPI
             return;
         }
 
-        // Inline SVG chart — same layout as the dashboard variant but
-        // sized for letter/A4 print (no overflow, no horizontal scroll).
+        // Inline SVG chart, sized for letter/A4 print (no overflow/scroll).
         $width  = 760;
         $height = 220;
         $padL   = 40;
@@ -789,6 +879,26 @@ class SprintExport extends CommonGLPI
         echo "</div>";
     }
 
+    /**
+     * Burndown chart for the report — reuses the dashboard's chart body so the export matches the dashboard.
+     */
+    private static function renderBurndown(Sprint $sprint): void
+    {
+        echo "<h2 style='font-size:1.15em;margin:22px 0 10px;color:#0d6efd;page-break-before:auto;'>"
+            . "<i class='fas fa-chart-area me-1'></i>" . __('Burndown', 'sprint') . "</h2>";
+        SprintDashboard::renderBurndownChartBody($sprint);
+    }
+
+    /**
+     * Velocity chart in the printable report (see {@see renderBurndown()}).
+     */
+    private static function renderVelocity(Sprint $sprint): void
+    {
+        echo "<h2 style='font-size:1.15em;margin:22px 0 10px;color:#0d6efd;page-break-before:auto;'>"
+            . "<i class='fas fa-chart-column me-1'></i>" . __('Velocity', 'sprint') . "</h2>";
+        SprintDashboard::renderVelocityChartBody($sprint);
+    }
+
     private static function renderItemsBreakdown(int $sprintId): void
     {
         $statuses = SprintItem::getAllStatuses();
@@ -859,6 +969,147 @@ class SprintExport extends CommonGLPI
             echo "</tr>";
         }
         echo "</tbody></table>";
+    }
+
+    /**
+     * Stream the sprint items as a CSV download (one row per item, with tags,
+     * owner and capacity %). Fastlane items list every member with their share
+     * and the summed capacity; regular items use their single owner + capacity.
+     *
+     * Caller must NOT have emitted any HTML/headers yet (see
+     * front/sprint.export.php, which branches on ?format=csv before Html::header()).
+     */
+    public static function streamCsv(Sprint $sprint): void
+    {
+        $sprintId   = (int)$sprint->getID();
+        $statuses   = SprintItem::getAllStatuses();
+        $typeLabels = [
+            ''            => __('Manual', 'sprint'),
+            'Ticket'      => __('Ticket'),
+            'Change'      => __('Change'),
+            'Problem'     => __('Problem'),
+            'ProjectTask' => __('Project task'),
+        ];
+
+        $si    = new SprintItem();
+        $items = $si->find(
+            ['plugin_sprint_sprints_id' => $sprintId],
+            ['is_fastlane DESC', 'priority DESC', 'sort_order ASC']
+        );
+
+        $itemIds  = array_map(fn($r) => (int)$r['id'], $items);
+        $tagsById = SprintItem::getTagsForItems($itemIds);
+        $rel      = new SprintFastlaneMember();
+
+        // Sanitised filename: sprint-<name>-<timestamp>.csv
+        $slug = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string)($sprint->fields['name'] ?? 'sprint'));
+        $slug = trim((string)$slug, '-');
+        if ($slug === '') {
+            $slug = 'sprint';
+        }
+        $filename = 'sprint-' . $slug . '-' . date('Ymd-His') . '.csv';
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+        $out = fopen('php://output', 'w');
+        // UTF-8 BOM so Excel reads accented characters correctly.
+        fwrite($out, "\xEF\xBB\xBF");
+
+        // Explicit escape arg ('') keeps output RFC-compliant and silences the PHP 8.4+ escape-default deprecation.
+        fputcsv($out, [
+            __('Name'),
+            __('Type'),
+            __('Fastlane', 'sprint'),
+            __('Owner', 'sprint'),
+            __('Status'),
+            __('Story Points', 'sprint'),
+            __('Capacity', 'sprint') . ' %',
+            __('Tags', 'sprint'),
+            __('Linked item', 'sprint'),
+        ], ',', '"', '');
+
+        foreach ($items as $row) {
+            $itemId = (int)$row['id'];
+            $isFast = !empty($row['is_fastlane']);
+            $type   = $typeLabels[$row['itemtype']] ?? $row['itemtype'];
+
+            if ($isFast) {
+                $names    = [];
+                $capacity = 0;
+                foreach ($rel->find(['plugin_sprint_sprintitems_id' => $itemId]) as $alloc) {
+                    $uid       = (int)$alloc['users_id'];
+                    $cap       = (int)$alloc['capacity'];
+                    $capacity += $cap;
+                    $names[]   = getUserName($uid) . ' (' . $cap . '%)';
+                }
+                $owner = $names
+                    ? implode(', ', $names)
+                    : (((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : __('Unassigned', 'sprint'));
+            } else {
+                $owner    = ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : __('Unassigned', 'sprint');
+                $capacity = (int)($row['capacity'] ?? 0);
+            }
+
+            $linkedName = '';
+            $itemtype   = (string)($row['itemtype'] ?? '');
+            $itemsId    = (int)($row['items_id'] ?? 0);
+            if ($itemtype !== '' && $itemsId > 0 && class_exists($itemtype)) {
+                $linked = new $itemtype();
+                if ($linked->getFromDB($itemsId)) {
+                    $linkedName = (string)($linked->fields['name'] ?? '');
+                }
+            }
+
+            fputcsv($out, [
+                (string)$row['name'],
+                (string)$type,
+                $isFast ? __('Yes') : __('No'),
+                $owner,
+                (string)($statuses[$row['status']] ?? $row['status']),
+                (int)$row['story_points'],
+                $capacity,
+                implode('; ', $tagsById[$itemId] ?? []),
+                $linkedName,
+            ], ',', '"', '');
+        }
+
+        // Dependency rows as a second section: one row per helper, so
+        // capacity and resolution state stay analysable in a spreadsheet.
+        $depRows = (SprintItemDependency::isTableReady() && count($itemIds) > 0)
+            ? (new SprintItemDependency())->find(['plugin_sprint_sprintitems_id' => $itemIds], ['date_creation ASC'])
+            : [];
+        if (count($depRows) > 0) {
+            fputcsv($out, [''], ',', '"', '');
+            fputcsv($out, [__('Dependencies', 'sprint')], ',', '"', '');
+            fputcsv($out, [
+                __('Name'),
+                __('Owner', 'sprint'),
+                __('Helper', 'sprint'),
+                __('Capacity', 'sprint') . ' %',
+                __('Resolved', 'sprint'),
+                __('Comments'),
+                __('Creation date'),
+            ], ',', '"', '');
+
+            foreach ($depRows as $r) {
+                $parent = $items[(int)$r['plugin_sprint_sprintitems_id']] ?? null;
+                if ($parent === null) {
+                    continue;
+                }
+                fputcsv($out, [
+                    (string)$parent['name'],
+                    ((int)$parent['users_id'] > 0) ? getUserName((int)$parent['users_id']) : __('Unassigned', 'sprint'),
+                    getUserName((int)$r['users_id']),
+                    (int)$r['capacity'],
+                    ((int)($r['is_resolved'] ?? 0) === 1) ? __('Yes') : __('No'),
+                    (string)($r['comment'] ?? ''),
+                    (string)($r['date_creation'] ?? ''),
+                ], ',', '"', '');
+            }
+        }
+
+        fclose($out);
     }
 
     private static function renderPrintStyles(): void

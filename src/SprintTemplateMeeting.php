@@ -9,9 +9,7 @@ use Session;
 use Dropdown;
 
 /**
- * SprintTemplateMeeting - Default meeting schedule for a sprint template
- *
- * Defines ceremonies like kickoff, standups (with interval), review, and retrospective.
+ * Default meeting schedule for a sprint template (kickoff, standups, review, retro).
  */
 class SprintTemplateMeeting extends CommonDBTM
 {
@@ -290,10 +288,8 @@ class SprintTemplateMeeting extends CommonDBTM
             ['sort_order ASC']
         );
 
-        // Two-pass scheduling so recurring standups can be excluded from
-        // days that already host a fixed ceremony (review / retrospective /
-        // kickoff). First pass: collect dates for all non-interval meetings
-        // and remember which calendar days are "reserved" by them.
+        // Two-pass: collect fixed-ceremony days first so recurring standups
+        // can skip days already hosting a kickoff/review/retro.
         $reservedDays = [];
         $planned      = []; // [['row' => ..., 'dates' => [...]], ...]
 
@@ -377,9 +373,8 @@ class SprintTemplateMeeting extends CommonDBTM
                 if ($end) {
                     $d = clone $end;
                     if ($skipWeekends) {
-                        // Snap backwards: a Sun-ending sprint must put the
-                        // ceremony on Fri *inside* the sprint, not Mon of
-                        // the next sprint.
+                        // Snap backward so the ceremony stays inside the
+                        // sprint (Fri), not Mon of the next sprint.
                         $d = self::skipToWeekday($d, 'backward');
                     }
                     $dates[] = $d;
@@ -414,10 +409,8 @@ class SprintTemplateMeeting extends CommonDBTM
                 break;
         }
 
-        // Hard guarantee: every meeting date must fall within the sprint
-        // window [start, end]. Any case above (forward weekend snap, future
-        // schedule types, ...) that drifts outside the window is silently
-        // dropped here so the rule lives in one place.
+        // Single place enforcing every date stays within [start, end];
+        // anything that drifted outside (weekend snap, etc.) is dropped.
         return array_values(array_filter(
             $dates,
             static function (\DateTime $d) use ($start, $end): bool {
@@ -433,12 +426,9 @@ class SprintTemplateMeeting extends CommonDBTM
     }
 
     /**
-     * If the date falls on a weekend, snap to the nearest weekday.
-     *
-     * Direction matters: end-of-sprint ceremonies (review/retrospective)
-     * must snap *backwards* to Friday so they stay inside the sprint
-     * window — snapping forward would land on Monday of the next sprint.
-     * Recurring standups snap *forwards* to the next working day.
+     * Snap a weekend date to the nearest weekday. Direction matters:
+     * end-of-sprint ceremonies snap backward (stay inside the sprint),
+     * recurring standups snap forward.
      */
     private static function skipToWeekday(\DateTime $date, string $direction = 'forward'): \DateTime
     {

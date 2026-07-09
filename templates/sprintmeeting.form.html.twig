@@ -131,7 +131,7 @@
                         {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
                         {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
                         {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
-                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}"
+                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}{% if si.review_unclosed %} sprint-review-unclosed{% endif %}"
                             data-item-id="{{ si.id }}"
                             data-item-name="{{ si.name }}"
                             data-item-status="{{ si.status }}"
@@ -165,11 +165,16 @@
                                 <a href="{{ si.url }}">{{ si.name }}</a>
                                 {{ si.tags_pills_html|default('')|raw }}
                             </td>
-                            <td>{{ si.linked_display|raw }}</td>
+                            <td class="sprint-review-linked">{{ si.linked_display|raw }}</td>
                             <td>
                                 <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
                                     {{ status_label }}
                                 </span>
+                                {% if si.review_unclosed %}
+                                <span class="sprint-review-unclosed-badge" title="{{ __('The linked ticket/change is not closed/solved yet', 'sprint') }}">
+                                    <i class="fas fa-exclamation-triangle"></i> {{ __('Linked item open', 'sprint') }}
+                                </span>
+                                {% endif %}
                                 {% if si.newly_blocked %}
                                 <span class="sprint-newly-blocked-badge" title="{{ __('Became blocked since the previous meeting', 'sprint') }}">
                                     <i class="fas fa-exclamation-triangle"></i> {{ __('Newly blocked', 'sprint') }}
@@ -248,12 +253,14 @@
                                     </ul>
                                 </div>
                                 {% endif %}
+                                {% if si.itemtype %}
                                 <button type="button"
                                         class="btn btn-sm btn-outline-warning sprint-backlog-btn"
                                         title="{{ __('Back to backlog', 'sprint') }}"
                                         data-backlog-id="{{ si.id }}">
                                     <i class="fas fa-undo"></i>
                                 </button>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -325,7 +332,7 @@
                         {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
                         {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
                         {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
-                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}"
+                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}{% if si.review_unclosed %} sprint-review-unclosed{% endif %}"
                             data-item-id="{{ si.id }}"
                             data-item-name="{{ si.name }}"
                             data-item-status="{{ si.status }}"
@@ -353,11 +360,16 @@
                                 {% endif %}
                             </td>
                             <td><a href="{{ si.url }}">{{ si.name }}</a>{{ si.tags_pills_html|default('')|raw }}</td>
-                            <td>{{ si.linked_display|raw }}</td>
+                            <td class="sprint-review-linked">{{ si.linked_display|raw }}</td>
                             <td>
                                 <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
                                     {{ status_label }}
                                 </span>
+                                {% if si.review_unclosed %}
+                                <span class="sprint-review-unclosed-badge" title="{{ __('The linked ticket/change is not closed/solved yet', 'sprint') }}">
+                                    <i class="fas fa-exclamation-triangle"></i> {{ __('Linked item open', 'sprint') }}
+                                </span>
+                                {% endif %}
                                 {% if si.newly_blocked %}
                                 <span class="sprint-newly-blocked-badge" title="{{ __('Became blocked since the previous meeting', 'sprint') }}">
                                     <i class="fas fa-exclamation-triangle"></i> {{ __('Newly blocked', 'sprint') }}
@@ -416,12 +428,14 @@
                                     </ul>
                                 </div>
                                 {% endif %}
+                                {% if si.itemtype %}
                                 <button type="button"
                                         class="btn btn-sm btn-outline-warning sprint-backlog-btn"
                                         title="{{ __('Back to backlog', 'sprint') }}"
                                         data-backlog-id="{{ si.id }}">
                                     <i class="fas fa-undo"></i>
                                 </button>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -446,16 +460,16 @@
                 'blocked':     '#dc3545'
             };
 
-            // Back to backlog: AJAX call, remove the row in place
-            $(document).on('click', '.sprint-backlog-btn', function() {
-                var $btn   = $(this);
-                var itemId = $btn.data('backlog-id');
-                if (!itemId) { return; }
-                if (!confirm('{{ __('Move this item back to the backlog?', 'sprint') }}')) {
-                    return;
-                }
-                $btn.prop('disabled', true);
+            // Back to backlog: ask for a reason first (stored in the item
+            // note), then AJAX. When the item is linked to a ticket/change the
+            // sprint item stays put (capacity is preserved) and only the
+            // underlying item moves to the backlog, so we keep the row and
+            // just clear the linked cell. Manual items leave the sprint and
+            // their row is removed.
+            var $backlogModal = $('#sprint-backlog-reason-modal').detach().appendTo('body');
 
+            function runBackToBacklog(itemId, reason, removeFromSprint, $btn) {
+                if ($btn) { $btn.prop('disabled', true); }
                 $.ajax({
                     url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
                     type: 'GET', dataType: 'json', cache: false
@@ -465,6 +479,8 @@
                         type: 'POST', dataType: 'json',
                         data: {
                             id: itemId,
+                            reason: reason,
+                            remove_from_sprint: removeFromSprint ? 1 : 0,
                             _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                         }
                     });
@@ -472,17 +488,58 @@
                     if (resp && resp.success) {
                         try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.message); } } catch (e) {}
                         var $row = $('tr.sprint-review-row[data-item-id="' + itemId + '"]');
-                        $row.fadeOut(150, function() { $(this).remove(); });
+                        if (resp.stayed) {
+                            // Item stays in the sprint as a manual placeholder.
+                            $row.find('.sprint-review-linked')
+                                .html('<span class="text-muted fst-italic">{{ __('Moved to backlog', 'sprint') }}</span>');
+                            $row.css('transition', 'background-color 0.3s').css('background-color', '#fff3cd');
+                            setTimeout(function() { $row.css('background-color', ''); }, 800);
+                            if ($btn) { $btn.prop('disabled', false); }
+                        } else {
+                            $row.fadeOut(150, function() { $(this).remove(); });
+                        }
                     } else {
                         alert(resp && resp.message ? resp.message : 'Could not move item back to backlog');
-                        $btn.prop('disabled', false);
+                        if ($btn) { $btn.prop('disabled', false); }
                     }
                 }).fail(function() {
                     alert('Network error');
-                    $btn.prop('disabled', false);
+                    if ($btn) { $btn.prop('disabled', false); }
                 });
+            }
+
+            $(document).on('click', '.sprint-backlog-btn', function() {
+                var $btn   = $(this);
+                var itemId = $btn.data('backlog-id');
+                if (!itemId) { return; }
+                $backlogModal.find('textarea[name=reason]').val('');
+                $backlogModal.find('.sprint-backlog-reason-error').hide();
+                $backlogModal.find('input[name=remove_from_sprint][value="0"]').prop('checked', true);
+                $backlogModal.data('target-item', itemId);
+                $backlogModal.data('target-btn', $btn);
+                var inst = bootstrap.Modal.getOrCreateInstance($backlogModal[0]);
+                inst.show();
+                setTimeout(function() { $backlogModal.find('textarea[name=reason]').trigger('focus'); }, 200);
             });
 
+            $backlogModal.on('click', '.sprint-backlog-reason-confirm', function() {
+                var reason = ($backlogModal.find('textarea[name=reason]').val() || '').trim();
+                if (reason === '') {
+                    $backlogModal.find('.sprint-backlog-reason-error').show();
+                    return;
+                }
+                $backlogModal.find('.sprint-backlog-reason-error').hide();
+                var itemId = $backlogModal.data('target-item');
+                var $btn   = $backlogModal.data('target-btn');
+                var removeFromSprint = $backlogModal.find('input[name=remove_from_sprint]:checked').val() === '1';
+                bootstrap.Modal.getOrCreateInstance($backlogModal[0]).hide();
+                runBackToBacklog(itemId, reason, removeFromSprint, $btn);
+            });
+
+            // Carry over to another sprint: AJAX call so the meeting board
+            // confirms in place (just like "back to backlog") instead of a
+            // full page reload. The original row stays — carrying over is
+            // additive — so we only flash the row and show a toast.
             $(document).on('click', '.sprint-carry-over-btn', function(e) {
                 e.preventDefault();
                 var $btn = $(this);
@@ -493,14 +550,34 @@
                 if (!confirm(msg)) {
                     return;
                 }
-                var f = $('<form method="post" action="{{ backlog_url }}" style="display:none;"></form>');
-                f.append('<input type="hidden" name="id" value="' + itemId + '">');
-                f.append('<input type="hidden" name="plugin_sprint_sprints_id" value="' + sprintId + '">');
-                f.append('<input type="hidden" name="carry_over_to_sprint" value="1">');
-                f.append('<input type="hidden" name="_redirect" value="{{ meeting_url }}">');
-                f.append('<input type="hidden" name="_glpi_csrf_token" value="' + $('input[name=_glpi_csrf_token]').first().val() + '">');
-                $('body').append(f);
-                f.submit();
+
+                $.ajax({
+                    url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
+                    type: 'GET', dataType: 'json', cache: false
+                }).then(function(tokResp) {
+                    return $.ajax({
+                        url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/carryover.php',
+                        type: 'POST', dataType: 'json',
+                        data: {
+                            id: itemId,
+                            plugin_sprint_sprints_id: sprintId,
+                            _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                        }
+                    });
+                }).done(function(resp) {
+                    if (resp && resp.success) {
+                        try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.message); } } catch (e) {}
+                        // Brief green flash on the source row for feedback.
+                        var $row = $('tr.sprint-review-row[data-item-id="' + itemId + '"]');
+                        $row.css('transition', 'background-color 0.3s')
+                            .css('background-color', '#d1e7dd');
+                        setTimeout(function() { $row.css('background-color', ''); }, 700);
+                    } else {
+                        alert(resp && resp.message ? resp.message : 'Could not carry the item over');
+                    }
+                }).fail(function() {
+                    alert('Network error');
+                });
             });
 
             // === Quick-edit modal ===
@@ -913,6 +990,41 @@
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ __('Cancel') }}</button>
                         <button type="button" class="btn btn-primary sprint-qe-save">
                             <i class="fas fa-save me-1"></i> {{ __('Save') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="sprint-backlog-reason-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="fas fa-undo me-1"></i> {{ __('Back to backlog', 'sprint') }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ __('Close') }}"></button>
+                    </div>
+                    <div class="modal-body">
+                        <label class="form-label fw-bold">{{ __('Reason', 'sprint') }}</label>
+                        <textarea name="reason" class="form-control" rows="3" placeholder="{{ __('Why is this going back to the backlog?', 'sprint') }}"></textarea>
+                        <div class="text-danger small mt-1 sprint-backlog-reason-error" style="display:none;">
+                            {{ __('Please enter a reason.', 'sprint') }}
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label fw-bold d-block">{{ __('What should happen to the sprint item?', 'sprint') }}</label>
+                            <label class="form-check">
+                                <input class="form-check-input" type="radio" name="remove_from_sprint" value="0" checked>
+                                <span class="form-check-label">{{ __('Keep it in the sprint (capacity preserved); only the linked item returns to the backlog', 'sprint') }}</span>
+                            </label>
+                            <label class="form-check">
+                                <input class="form-check-input" type="radio" name="remove_from_sprint" value="1">
+                                <span class="form-check-label">{{ __('Also remove the item from the current sprint (move the whole item to the backlog)', 'sprint') }}</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ __('Cancel') }}</button>
+                        <button type="button" class="btn btn-warning sprint-backlog-reason-confirm">
+                            <i class="fas fa-undo me-1"></i> {{ __('Back to backlog', 'sprint') }}
                         </button>
                     </div>
                 </div>

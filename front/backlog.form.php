@@ -1,19 +1,11 @@
 <?php
 
 /**
- * Backlog form handler
+ * Backlog form handler (add_to_backlog / assign_to_sprint / purge).
  *
- * Handles three actions:
- *   - add_to_backlog   : create a SprintItem (sprint_id = 0) from a Ticket / Change / ProjectTask
- *   - assign_to_sprint : move a backlog SprintItem into a real sprint (it then leaves the backlog)
- *   - purge            : delete a backlog SprintItem
- *
- * NOTE: We deliberately do not call Session::checkCSRF() here. CommonDBTM
- * add/update/delete already trigger GLPI's CSRF validation on the same
- * token, and calling checkCSRF() first consumes the token, causing the
- * later validation to fail with HTTP 403. The other form handlers in this
- * plugin (sprintitem.form.php, sprintticket.form.php, ...) follow the same
- * pattern.
+ * No Session::checkCSRF() here on purpose: CommonDBTM add/update/delete
+ * already validate the same single-use token, so calling checkCSRF() first
+ * consumes it and the later validation fails with HTTP 403.
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -21,6 +13,18 @@ if (!defined('GLPI_ROOT')) {
 }
 
 Session::checkRight('plugin_sprint_item', READ);
+
+/**
+ * Follow only same-site redirect targets; absolute or protocol-relative
+ * URLs (open redirect) fall back to the referer.
+ */
+function plugin_sprint_safe_redirect(string $target): void
+{
+    if ($target === '' || preg_match('#^\s*(?:[a-z][a-z0-9+.\-]*:|//|\\\\)#i', $target)) {
+        Html::back();
+    }
+    Html::redirect($target);
+}
 
 if (isset($_POST['add_to_backlog'])) {
     $itemtype = (string)($_POST['itemtype'] ?? '');
@@ -96,63 +100,21 @@ if (isset($_POST['back_to_backlog'])) {
         $item = new GlpiPlugin\Sprint\SprintItem();
         $item->check($id, UPDATE);
 
-        // Preserve blocked state so the backlog's dedicated "Blocked" section catches it.
-        $wasBlocked = ($item->fields['status'] ?? '') === GlpiPlugin\Sprint\SprintItem::STATUS_BLOCKED
-            || (int)($item->fields['is_blocked'] ?? 0) === 1;
+        $reason           = (string)($_POST['reason'] ?? '');
+        $removeFromSprint = (int)($_POST['remove_from_sprint'] ?? 0) === 1;
+        $outcome = GlpiPlugin\Sprint\SprintItem::backToBacklog($id, $reason, $removeFromSprint);
 
-        $update = [
-            'id'                       => $id,
-            'plugin_sprint_sprints_id' => 0,
-            'is_fastlane'              => 0,
-        ];
-        if ($wasBlocked) {
-            $update['is_blocked'] = 1;
-        }
-
-        if ($item->update($update)) {
-            // Dependencies are sprint-scoped capacity allocations; they have
-            // no meaning on a backlog row, so we wipe them when the item
-            // leaves the sprint.
-            GlpiPlugin\Sprint\SprintItemDependency::purgeForItem($id);
-            Session::addMessageAfterRedirect(__('Item moved back to backlog', 'sprint'));
-        }
-    }
-
-    if (!empty($_POST['_redirect'])) {
-        Html::redirect($_POST['_redirect']);
-    }
-    Html::back();
-}
-
-if (isset($_POST['carry_over_to_sprint'])) {
-    $id       = (int)($_POST['id'] ?? 0);
-    $sprintId = (int)($_POST['plugin_sprint_sprints_id'] ?? 0);
-
-    if ($id <= 0 || $sprintId <= 0) {
-        Session::addMessageAfterRedirect(
-            __('Please select a sprint', 'sprint'),
-            false,
-            ERROR
-        );
-    } else {
-        $newId = GlpiPlugin\Sprint\SprintItem::carryOverTo($id, $sprintId);
-        $sprint = new GlpiPlugin\Sprint\Sprint();
-        $sprintName = ($sprint->getFromDB($sprintId)) ? $sprint->fields['name'] : '';
-        if ($newId > 0) {
+        if ($outcome['ok']) {
             Session::addMessageAfterRedirect(
-                sprintf(__('Carried over to %s', 'sprint'), $sprintName)
-            );
-        } else {
-            Session::addMessageAfterRedirect(
-                __('Could not carry the item over to the target sprint', 'sprint'),
-                false,
-                ERROR
+                $outcome['stayed']
+                    ? __('Underlying item moved to backlog; the sprint item stays for capacity.', 'sprint')
+                    : __('Item moved back to backlog', 'sprint')
             );
         }
     }
 
     if (!empty($_POST['_redirect'])) {
-        Html::redirect($_POST['_redirect']);
+        plugin_sprint_safe_redirect((string)$_POST['_redirect']);
     }
     Html::back();
 }
@@ -168,22 +130,46 @@ if (isset($_POST['assign_to_sprint'])) {
             ERROR
         );
         if (!empty($_POST['_redirect'])) {
-            Html::redirect($_POST['_redirect']);
+            plugin_sprint_safe_redirect((string)$_POST['_redirect']);
         }
         Html::back();
     }
 
     $item = new GlpiPlugin\Sprint\SprintItem();
-    $item->check($id, UPDATE);
-    if ($item->update([
+    if (!$item->getFromDB($id)) {
+        Html::back();
+    }
+
+    // Normal items: only the target sprint's Scrum Master may assign (mirrors
+    // ajax/assigntosprint.php; UPDATE right is not enough). Fastlane items are
+    // interrupt work and may be assigned by anyone.
+    $currentUserId = (int)Session::getLoginUserID();
+    $isFastlane    = (int)($item->fields['is_fastlane'] ?? 0) === 1;
+    $canAssign = $isFastlane
+        || GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId)
+        || GlpiPlugin\Sprint\SprintMember::isScrumMaster($sprintId, $currentUserId);
+
+    if (!$canAssign) {
+        Session::addMessageAfterRedirect(
+            __('Only the Scrum Master of the selected sprint can assign items to it.', 'sprint'),
+            false,
+            ERROR
+        );
+    } elseif ($item->update([
         'id'                       => $id,
         'plugin_sprint_sprints_id' => $sprintId,
+        'proposed_sprints_id'      => 0,
     ])) {
+        GlpiPlugin\Sprint\SprintItem::purgeBacklogCoupling(
+            (string)($item->fields['itemtype'] ?? ''),
+            (int)($item->fields['items_id'] ?? 0),
+            $id
+        );
         Session::addMessageAfterRedirect(__('Item assigned to sprint', 'sprint'));
     }
 
     if (!empty($_POST['_redirect'])) {
-        Html::redirect($_POST['_redirect']);
+        plugin_sprint_safe_redirect((string)$_POST['_redirect']);
     }
     Html::back();
 }

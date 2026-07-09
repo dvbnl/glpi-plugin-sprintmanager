@@ -1,9 +1,5 @@
 <?php
 
-/**
- * SprintMeeting form page
- */
-
 if (!defined('GLPI_ROOT')) {
     include(dirname(__DIR__, 3) . '/inc/includes.php');
 }

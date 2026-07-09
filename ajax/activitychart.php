@@ -1,9 +1,7 @@
 <?php
 
 /**
- * AJAX handler — returns the team-activity chart fragment for a given
- * sprint and date range. Used by the date-range picker above the chart
- * so the user can zoom/pan without a full page reload.
+ * AJAX handler — returns the team-activity chart fragment for a sprint and date range.
  */
 
 if (!defined('GLPI_ROOT')) {

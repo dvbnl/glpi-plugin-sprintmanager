@@ -1,8 +1,8 @@
 <?php
 
 /**
- * AJAX handler for quick sprint item status updates
- * GLPI 11 compatible: no exit(), uses return flow
+ * AJAX handler for quick sprint item status updates.
+ * GLPI 11 compatible: no exit(), uses return flow.
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -27,7 +27,7 @@ if (!$item->getFromDB((int)$_POST['id'])) {
     return;
 }
 
-// Check if user can update this item (full right or own-item right)
+// Allow full update right, or own-item right when the user owns the item.
 $hasFullUpdate = Session::haveRight('plugin_sprint_item', UPDATE);
 $hasOwnOnly = !$hasFullUpdate
     && Session::haveRight('plugin_sprint_item', GlpiPlugin\Sprint\Profile::RIGHT_OWN_ITEMS);

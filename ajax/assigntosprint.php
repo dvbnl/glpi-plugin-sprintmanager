@@ -2,11 +2,7 @@
 
 /**
  * AJAX handler for assigning a backlog SprintItem to a sprint.
- *
- * Replaces the form-submit + page-refresh flow on the backlog page with
- * an in-place update: the row removes itself once the assignment is
- * persisted server-side. Feeds back the chosen sprint's name + URL so
- * the UI can show a confirmation toast that links to the sprint.
+ * Returns the sprint's name + URL so the UI can show a confirmation toast.
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -37,16 +33,6 @@ if (!$item->getFromDB($id)) {
     return;
 }
 
-$hasFullUpdate = Session::haveRight('plugin_sprint_item', UPDATE);
-$hasOwnOnly = !$hasFullUpdate
-    && Session::haveRight('plugin_sprint_item', GlpiPlugin\Sprint\Profile::RIGHT_OWN_ITEMS);
-$isOwner = (int)$item->fields['users_id'] === (int)Session::getLoginUserID();
-
-if (!$hasFullUpdate && !($hasOwnOnly && $isOwner)) {
-    echo json_encode($response);
-    return;
-}
-
 $sprint = new GlpiPlugin\Sprint\Sprint();
 if (!$sprint->getFromDB($sprintId)) {
     echo json_encode([
@@ -56,10 +42,40 @@ if (!$sprint->getFromDB($sprintId)) {
     return;
 }
 
+// Normal items: only the target sprint's Scrum Master may assign (the general
+// plugin UPDATE right is intentionally NOT enough). Fastlane items are
+// interrupt work — anyone with backlog access may pull them into a sprint.
+$currentUserId = (int)Session::getLoginUserID();
+$isFastlane    = (int)($item->fields['is_fastlane'] ?? 0) === 1;
+$canAssign = $isFastlane
+    || GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId)
+    || GlpiPlugin\Sprint\SprintMember::isScrumMaster($sprintId, $currentUserId);
+
+if (!$canAssign) {
+    echo json_encode([
+        'success' => false,
+        'message' => sprintf(
+            __('Only the Scrum Master of %s can assign items to it.', 'sprint'),
+            (string)$sprint->fields['name']
+        ),
+    ]);
+    return;
+}
+
 $result = $item->update([
     'id'                       => $id,
     'plugin_sprint_sprints_id' => $sprintId,
+    'proposed_sprints_id'      => 0,
 ]);
+
+if ($result) {
+    // Coupled items live in one place: drop leftover backlog rows for the coupling.
+    GlpiPlugin\Sprint\SprintItem::purgeBacklogCoupling(
+        (string)($item->fields['itemtype'] ?? ''),
+        (int)($item->fields['items_id'] ?? 0),
+        $id
+    );
+}
 
 $messages = [];
 if (isset($_SESSION['MESSAGE_AFTER_REDIRECT']) && is_array($_SESSION['MESSAGE_AFTER_REDIRECT'])) {

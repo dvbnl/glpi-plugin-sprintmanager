@@ -1,10 +1,8 @@
 <?php
 
 /**
- * Standalone page for the SprintManager plugin settings.
- *
- * Exposed via Sprint::getMenuContent() so the setting is reachable from the
- * plugin menu in addition to the Setup > General tab registration.
+ * Standalone SprintManager settings page, exposed via Sprint::getMenuContent()
+ * so settings are reachable from the plugin menu, not just the Setup tab.
  */
 
 if (!defined('GLPI_ROOT')) {

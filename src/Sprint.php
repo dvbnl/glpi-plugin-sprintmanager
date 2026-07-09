@@ -12,16 +12,13 @@ use Dropdown;
 use Search;
 
 /**
- * Sprint - Main sprint entity
- *
- * Represents a 2-week (configurable) sprint with goal, status, and linked items.
+ * Sprint - a configurable-length sprint with goal, status, and linked items.
  */
 class Sprint extends CommonDBTM
 {
     public static $rightname = 'plugin_sprint_sprint';
     public $dohistory        = true;
 
-    // Sprint statuses
     const STATUS_PLANNED    = 'planned';
     const STATUS_ACTIVE     = 'active';
     const STATUS_COMPLETED  = 'completed';
@@ -72,8 +69,7 @@ class Sprint extends CommonDBTM
             ],
         ];
 
-        // Plugin settings — also registered as a tab on GLPI's Config page,
-        // but exposed here so it's discoverable straight from the Sprint menu.
+        // Also a tab on GLPI's Config page; exposed here for discoverability.
         if (Session::haveRight('config', READ)) {
             $menu['options']['config'] = [
                 'title' => __('Settings', 'sprint'),
@@ -82,8 +78,7 @@ class Sprint extends CommonDBTM
             ];
         }
 
-        // Backlog is exposed as its own top-level helpdesk menu entry via
-        // setup.php (menu_toadd), see Backlog::getMenuContent().
+        // Backlog has its own top-level menu entry via setup.php (menu_toadd).
 
         return $menu;
     }
@@ -95,7 +90,7 @@ class Sprint extends CommonDBTM
     {
         $tab = parent::rawSearchOptions();
 
-        // Override default name field (id 1) to make it a clickable link
+        // Make the name field (id 1) a clickable link.
         foreach ($tab as &$entry) {
             if (isset($entry['id']) && $entry['id'] == 1) {
                 $entry['datatype'] = 'itemlink';
@@ -191,8 +186,6 @@ class Sprint extends CommonDBTM
     }
 
     /**
-     * Get all possible statuses
-     *
      * @return array
      */
     public static function getAllStatuses(): array
@@ -236,6 +229,211 @@ class Sprint extends CommonDBTM
             $options[(int)$row['id']] = $label;
         }
         return $options;
+    }
+
+    /**
+     * Sprint picker. Overrides CommonDBTM::dropdown() for natural ordering
+     * (GLPI sorts names as strings, so "Sprint 10" beats "Sprint 9") and to
+     * hide completed/cancelled sprints unless the caller scopes status itself.
+     *
+     * @param array $options
+     * @return int|string
+     */
+    public static function dropdown($options = [])
+    {
+        $p = [
+            'name'                => 'plugin_sprint_sprints_id',
+            'value'               => 0,
+            'condition'           => [],
+            'display'             => true,
+            'width'               => '',
+            'rand'                => mt_rand(),
+            'display_emptychoice' => true,
+            'on_change'           => '',
+        ];
+        foreach ($options as $key => $val) {
+            $p[$key] = $val;
+        }
+
+        $criteria = is_array($p['condition']) ? $p['condition'] : [];
+        // Hide completed/cancelled sprints unless the caller scopes status.
+        if (!array_key_exists('status', $criteria)) {
+            $criteria['status'] = [self::STATUS_PLANNED, self::STATUS_ACTIVE];
+        }
+        // Honour multi-entity setups like GLPI's native dropdown.
+        $entityCriteria = getEntitiesRestrictCriteria(self::getTable(), '', '', true);
+        if (!empty($entityCriteria)) {
+            $criteria = array_merge($criteria, $entityCriteria);
+        }
+
+        $model = new self();
+        $rows  = $model->find($criteria);
+        usort($rows, [self::class, 'compareForDropdownOrder']);
+
+        $elements = [];
+        foreach ($rows as $row) {
+            $elements[(int)$row['id']] = $row['name'];
+        }
+
+        // Keep the selected sprint visible even if now completed/cancelled,
+        // so edit forms still render its value.
+        $value = (int)$p['value'];
+        if ($value > 0 && !isset($elements[$value])) {
+            $current = new self();
+            if ($current->getFromDB($value)) {
+                $elements = [$value => $current->fields['name']] + $elements;
+            }
+        }
+
+        return Dropdown::showFromArray($p['name'], $elements, [
+            'value'               => $value,
+            'width'               => $p['width'],
+            'rand'                => $p['rand'],
+            'display'             => $p['display'],
+            'display_emptychoice' => $p['display_emptychoice'],
+            'on_change'           => $p['on_change'],
+        ]);
+    }
+
+    /**
+     * Natural sprint ordering: start date, then sprint number, then a
+     * natural-case name compare so "Sprint 9" precedes "Sprint 10".
+     */
+    private static function compareForDropdownOrder(array $a, array $b): int
+    {
+        $da = (string)($a['date_start'] ?? '');
+        $db = (string)($b['date_start'] ?? '');
+        if ($da !== '' && $db !== '' && $da !== $db) {
+            return strcmp($da, $db);
+        }
+
+        $na = (int)($a['sprint_number'] ?? 0);
+        $nb = (int)($b['sprint_number'] ?? 0);
+        if ($na !== $nb) {
+            return $na <=> $nb;
+        }
+
+        return strnatcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
+    }
+
+    /**
+     * Shared header bar atop every sprint tab: name/status, goal, progress,
+     * days remaining, and a quick sprint switcher.
+     */
+    public static function renderHeaderBar(Sprint $sprint): void
+    {
+        $id = (int)$sprint->getID();
+        if ($id <= 0) {
+            return;
+        }
+
+        $statuses    = self::getAllStatuses();
+        $statusKey   = (string)($sprint->fields['status'] ?? '');
+        $statusLabel = $statuses[$statusKey] ?? $statusKey;
+        $statusColors = [
+            self::STATUS_PLANNED   => '#6c757d',
+            self::STATUS_ACTIVE    => '#0d6efd',
+            self::STATUS_COMPLETED => '#198754',
+            self::STATUS_CANCELLED => '#dc3545',
+        ];
+        $sColor = $statusColors[$statusKey] ?? '#6c757d';
+        $goal   = trim((string)($sprint->fields['goal'] ?? ''));
+
+        $total = countElementsInTable(SprintItem::getTable(), ['plugin_sprint_sprints_id' => $id]);
+        $done  = countElementsInTable(SprintItem::getTable(), [
+            'plugin_sprint_sprints_id' => $id,
+            'status'                   => SprintItem::STATUS_DONE,
+        ]);
+        $pct = $total > 0 ? (int)round($done / $total * 100) : 0;
+
+        // Days remaining (hidden for finished/cancelled sprints).
+        $daysHtml = '';
+        $endRaw   = (string)($sprint->fields['date_end'] ?? '');
+        if ($endRaw !== '' && !in_array($statusKey, [self::STATUS_COMPLETED, self::STATUS_CANCELLED], true)) {
+            try {
+                $end   = new \DateTimeImmutable(substr($endRaw, 0, 10));
+                $today = new \DateTimeImmutable('today');
+                $diff  = (int)$today->diff($end)->format('%r%a');
+                if ($diff > 0) {
+                    $daysHtml = sprintf(_n('%d day left', '%d days left', $diff, 'sprint'), $diff);
+                } elseif ($diff === 0) {
+                    $daysHtml = __('Last day', 'sprint');
+                } else {
+                    $daysHtml = sprintf(_n('%d day overdue', '%d days overdue', -$diff, 'sprint'), -$diff);
+                }
+            } catch (\Exception $e) {
+                $daysHtml = '';
+            }
+        }
+
+        $dateRange = '';
+        if ($endRaw !== '' || !empty($sprint->fields['date_start'])) {
+            $s = !empty($sprint->fields['date_start']) ? \Html::convDate($sprint->fields['date_start']) : '?';
+            $e = $endRaw !== '' ? \Html::convDate($endRaw) : '?';
+            $dateRange = $s . ' → ' . $e;
+        }
+
+        echo "<div class='sprint-header-bar'>";
+
+        echo "<div class='sprint-header-main'>";
+        echo "<span class='sprint-header-status' style='background:" . htmlescape($sColor) . ";'>"
+            . htmlescape($statusLabel) . "</span>";
+        echo "<span class='sprint-header-name'>" . htmlescape((string)$sprint->fields['name']) . "</span>";
+        if ($dateRange !== '') {
+            echo "<span class='sprint-header-dates'><i class='fas fa-calendar-alt'></i> " . htmlescape($dateRange) . "</span>";
+        }
+        if ($daysHtml !== '') {
+            echo "<span class='sprint-header-days'><i class='fas fa-hourglass-half'></i> " . htmlescape($daysHtml) . "</span>";
+        }
+        echo "</div>";
+
+        if ($goal !== '') {
+            echo "<div class='sprint-header-goal'><i class='fas fa-bullseye'></i> " . htmlescape($goal) . "</div>";
+        }
+
+        echo "<div class='sprint-header-right'>";
+        echo "<div class='sprint-header-progress' title='" . sprintf(__('%1$d of %2$d items done', 'sprint'), $done, $total) . "'>";
+        echo "<div class='sprint-header-progress-bar'><span style='width:{$pct}%;'></span></div>";
+        echo "<span class='sprint-header-progress-label'>{$done}/{$total} · {$pct}%</span>";
+        echo "</div>";
+
+        // Sprint switcher — planned/active sprints plus the current one.
+        $model = new self();
+        $rows  = $model->find(['status' => [self::STATUS_PLANNED, self::STATUS_ACTIVE]]);
+        $haveCurrent = false;
+        foreach ($rows as $r) {
+            if ((int)$r['id'] === $id) { $haveCurrent = true; break; }
+        }
+        if (!$haveCurrent) {
+            $rows[] = $sprint->fields;
+        }
+        usort($rows, [self::class, 'compareForDropdownOrder']);
+
+        $activeTab = (string)($_GET['forcetab'] ?? '');
+        echo "<select class='form-select form-select-sm sprint-switcher' "
+            . "data-base-url='" . htmlescape(self::getFormURL()) . "' "
+            . "data-forcetab='" . htmlescape($activeTab) . "' "
+            . "title='" . __('Switch sprint', 'sprint') . "' style='max-width:240px;'>";
+        foreach ($rows as $r) {
+            $rid = (int)$r['id'];
+            $sel = $rid === $id ? ' selected' : '';
+            echo "<option value='{$rid}'{$sel}>" . htmlescape((string)$r['name']) . "</option>";
+        }
+        echo "</select>";
+        echo "</div>";
+
+        echo "</div>";
+
+        echo "<script>(function(){"
+            . "if (window.__sprintSwitcherBound) { return; } window.__sprintSwitcherBound = true;"
+            . "document.addEventListener('change', function(e){"
+            . "var s = e.target.closest && e.target.closest('.sprint-switcher'); if(!s) return;"
+            . "var id = parseInt(s.value,10)||0; if(id<=0) return;"
+            . "var url = s.getAttribute('data-base-url') + '?id=' + id;"
+            . "var tab = s.getAttribute('data-forcetab'); if(tab){ url += '&forcetab=' + encodeURIComponent(tab); }"
+            . "window.location.href = url;"
+            . "});"
+            . "})();</script>";
     }
 
     /**
@@ -286,11 +484,42 @@ class Sprint extends CommonDBTM
     }
 
     /**
-     * Define tabs
-     *
-     * @param array $options
-     * @return array
+     * On completion, warn about unfinished items so the team carries them
+     * over or returns them to the backlog. Never moves items itself.
      */
+    public function post_updateItem($history = 1)
+    {
+        if (
+            in_array('status', $this->updates ?? [], true)
+            && ($this->fields['status'] ?? '') === self::STATUS_COMPLETED
+        ) {
+            $unfinished = countElementsInTable(
+                SprintItem::getTable(),
+                [
+                    'plugin_sprint_sprints_id' => (int)$this->getID(),
+                    ['NOT' => ['status' => SprintItem::STATUS_DONE]],
+                ]
+            );
+            if ($unfinished > 0) {
+                Session::addMessageAfterRedirect(
+                    sprintf(
+                        _n(
+                            'Sprint completed with %d unfinished item — carry it over to another sprint or send it back to the backlog.',
+                            'Sprint completed with %d unfinished items — carry them over to another sprint or send them back to the backlog.',
+                            $unfinished,
+                            'sprint'
+                        ),
+                        $unfinished
+                    ),
+                    false,
+                    WARNING
+                );
+            }
+        }
+
+        return parent::post_updateItem($history);
+    }
+
     public function defineTabs($options = []): array
     {
         $ong = [];
@@ -299,12 +528,13 @@ class Sprint extends CommonDBTM
         $this->addDefaultFormTab($ong);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintMember', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintItem', $ong, $options);
+        $this->addStandardTab('GlpiPlugin\Sprint\SprintBoard', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintFastlane', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintMeeting', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintAudit', $ong, $options);
         $this->addStandardTab('Log', $ong, $options);
 
-        // Rename the default form tab from "Sprint" to "General"
+        // Rename the default form tab to "General".
         foreach ($ong as $key => $label) {
             if (str_contains($key, '$main')) {
                 $ong[$key] = self::createTabEntry(__('General', 'sprint'));
@@ -316,10 +546,7 @@ class Sprint extends CommonDBTM
     }
 
     /**
-     * Show the main form
-     *
-     * Uses Twig TemplateRenderer for GLPI 11 compatibility.
-     * Falls back to generic form on GLPI 10.
+     * Main form. Twig TemplateRenderer on GLPI 11, classic PHP form on GLPI 10.
      *
      * @param int $ID
      * @param array $options
@@ -336,8 +563,7 @@ class Sprint extends CommonDBTM
                 $memberOptions = SprintMember::getSprintMemberOptions($this->getID());
             }
 
-            // Once a sprint has a Scrum Master, only that user can reassign
-            // the role. Render the field read-only for everyone else.
+            // Once set, only the Scrum Master can reassign the role; read-only for others.
             $currentMaster        = (int)($this->fields['users_id'] ?? 0);
             $canReassignScrumMaster = $isNew
                 || $currentMaster === 0
@@ -368,10 +594,9 @@ class Sprint extends CommonDBTM
                 $this->renderDangerZone();
             }
         } else {
-            // Fallback for GLPI 10.x: use classic PHP form rendering
+            // GLPI 10.x fallback: classic PHP form.
             $this->showFormHeader($options);
 
-            // Template selector (only for new sprints)
             if ($isNew) {
                 echo "<tr class='tab_bg_1'>";
                 echo "<td>" . __('From template', 'sprint') . "</td>";
@@ -425,8 +650,17 @@ class Sprint extends CommonDBTM
 
             echo "<tr class='tab_bg_1'>";
             echo "<td>" . __('Scrum Master', 'sprint') . " *</td>";
-            echo "<td colspan='3'>";
+            echo "<td>";
             User::dropdown(['name' => 'users_id', 'value' => $this->fields['users_id'] ?? 0, 'right' => 'all']);
+            echo "</td>";
+            echo "<td>" . __('Fastlane capacity cap (%)', 'sprint') . "<br>"
+                . "<span class='text-muted' style='font-size:0.82em;'>" . __('0 = no cap; exceeding it shows as overflow on the fastlane', 'sprint') . "</span></td>";
+            echo "<td>";
+            Dropdown::showNumber('fastlane_capacity', [
+                'value' => $this->fields['fastlane_capacity'] ?? 0,
+                'min'   => 0, 'max' => 100, 'step' => 5,
+                'unit'  => '%',
+            ]);
             echo "</td></tr>";
 
             echo "<tr class='tab_bg_1'>";
@@ -442,12 +676,10 @@ class Sprint extends CommonDBTM
             $this->showFormButtons($options);
         }
 
-        // "Save as Template" button for existing sprints
         if (!$isNew && $this->getID() && self::canCreate()) {
             $this->showSaveAsTemplateForm();
         }
 
-        // Template pre-fill JS for new sprints
         if ($isNew) {
             $this->showTemplateLoadScript();
         }
@@ -484,9 +716,6 @@ class Sprint extends CommonDBTM
         echo "</div></div>";
     }
 
-    /**
-     * Show a "Save as Template" form below the sprint form
-     */
     private function showSaveAsTemplateForm(): void
     {
         $sprintId = $this->getID();
@@ -558,9 +787,6 @@ class Sprint extends CommonDBTM
         </script>";
     }
 
-    /**
-     * Show template pre-fill JS for new sprint forms
-     */
     private function showTemplateLoadScript(): void
     {
         echo "<script>
@@ -600,9 +826,6 @@ class Sprint extends CommonDBTM
         </script>";
     }
 
-    /**
-     * Validate input before adding
-     */
     public function prepareInputForAdd($input)
     {
         if (empty($input['users_id']) || (int)$input['users_id'] <= 0) {
@@ -617,11 +840,8 @@ class Sprint extends CommonDBTM
     }
 
     /**
-     * Validate input before updating
-     *
-     * Once a sprint has a Scrum Master assigned, only that person may
-     * reassign the role. This prevents other members from silently
-     * transferring the role during normal sprint edits.
+     * Once assigned, only the Scrum Master may reassign the role — stops
+     * other members silently transferring it during normal sprint edits.
      */
     public function prepareInputForUpdate($input)
     {
@@ -640,22 +860,18 @@ class Sprint extends CommonDBTM
                     false,
                     ERROR
                 );
-                // Preserve the existing value instead of rejecting the whole
-                // update — other fields in the submission still go through.
+                // Preserve the existing value so other submitted fields still apply.
                 $input['users_id'] = $currentMaster;
             }
         }
         return parent::prepareInputForUpdate($input);
     }
 
-    /**
-     * Actions done after adding an item
-     */
     public function post_addItem(): void
     {
         parent::post_addItem();
 
-        // Auto-calculate end date if not set
+        // Auto-calculate end date if not set.
         if (
             empty($this->fields['date_end'])
             && !empty($this->fields['date_start'])
@@ -669,7 +885,7 @@ class Sprint extends CommonDBTM
             ]);
         }
 
-        // Apply template if selected
+        // Apply template if selected.
         $templateId = (int)($this->input['plugin_sprint_sprinttemplates_id'] ?? 0);
         if ($templateId > 0) {
             SprintTemplate::applyToSprint($templateId, $this->getID());
@@ -677,7 +893,7 @@ class Sprint extends CommonDBTM
     }
 
     /**
-     * Get the count of linked items for dashboard display
+     * Linked-item counts and points for the dashboard.
      *
      * @return array
      */
@@ -706,8 +922,7 @@ class Sprint extends CommonDBTM
 
         $stats['total_items'] = count($items);
         foreach ($items as $row) {
-            // Fastlane items don't contribute to sprint velocity — their
-            // story points are ignored in total/done counts.
+            // Fastlane items don't count toward velocity — points are ignored.
             $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
             if (!$isFastlane) {
                 $stats['total_points'] += (int)$row['story_points'];
@@ -731,7 +946,6 @@ class Sprint extends CommonDBTM
             }
         }
 
-        // Count linked item types from SprintItem
         foreach ($items as $row) {
             switch ($row['itemtype'] ?? '') {
                 case 'Ticket':

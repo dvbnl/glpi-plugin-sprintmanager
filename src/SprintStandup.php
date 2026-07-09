@@ -10,9 +10,7 @@ use User;
 use Dropdown;
 
 /**
- * SprintStandup - Standup log entries linked to meetings and sprint items
- *
- * Each entry records: what was done, what's planned, blockers, and item status.
+ * Standup log entries (done/planned/blockers/status) linked to a meeting and sprint item.
  */
 class SprintStandup extends CommonDBTM
 {
@@ -65,9 +63,6 @@ class SprintStandup extends CommonDBTM
         return false;
     }
 
-    /**
-     * Show standup entries for a specific meeting + add form
-     */
     public static function showForMeeting(SprintMeeting $meeting): void
     {
         $meetingID = $meeting->getID();
@@ -75,7 +70,6 @@ class SprintStandup extends CommonDBTM
         $canedit   = self::canUpdate()
             || Session::haveRight(self::$rightname, Profile::RIGHT_OWN_ITEMS);
 
-        // Get sprint items for dropdown
         $sprintItem  = new SprintItem();
         $sprintItems = $sprintItem->find(['plugin_sprint_sprints_id' => $sprintID]);
         $itemOptions = [0 => Dropdown::EMPTY_VALUE];
@@ -149,36 +143,6 @@ class SprintStandup extends CommonDBTM
             $canedit
         );
     }
-
-    /**
-     * Show full standup log across all meetings for a sprint
-     */
-    public static function showLogForSprint(Sprint $sprint): void
-    {
-        $sprintID = $sprint->getID();
-
-        // Get all meeting IDs for this sprint
-        $meetingObj = new SprintMeeting();
-        $meetings   = $meetingObj->find(['plugin_sprint_sprints_id' => $sprintID]);
-        $meetingIDs = array_column($meetings, 'id');
-
-        if (empty($meetingIDs)) {
-            echo "<div class='center'><table class='tab_cadre_fixe'>";
-            echo "<tr class='tab_bg_1'><td class='center'>" .
-                __('No standup entries yet', 'sprint') . "</td></tr>";
-            echo "</table></div>";
-            return;
-        }
-
-        self::renderStandupTable(
-            ['plugin_sprint_sprintmeetings_id' => $meetingIDs],
-            false
-        );
-    }
-
-    /**
-     * Render a table of standup entries matching given criteria
-     */
     private static function renderStandupTable(array $criteria, bool $showActions): void
     {
         $standup = new self();
@@ -215,7 +179,6 @@ class SprintStandup extends CommonDBTM
         foreach ($entries as $row) {
             $icon = $statusIcons[$row['status_update']] ?? 'fas fa-question';
 
-            // Get sprint item name
             $itemName = '-';
             if ($row['plugin_sprint_sprintitems_id'] > 0) {
                 $si = new SprintItem();
@@ -252,14 +215,10 @@ class SprintStandup extends CommonDBTM
         echo "</table></div>";
     }
 
-    /**
-     * Show the standup entry edit form
-     */
     public function showForm($ID, array $options = []): bool
     {
         $this->initForm($ID, $options);
 
-        // Build sprint items dropdown data
         $meetingID = $this->fields['plugin_sprint_sprintmeetings_id'] ?? 0;
         $sprintID  = 0;
         if ($meetingID > 0) {
@@ -299,7 +258,6 @@ class SprintStandup extends CommonDBTM
             echo "</td></tr>";
 
             echo "<tr class='tab_bg_1'><td>" . __('Reporter', 'sprint') . "</td><td>";
-            // Get sprint ID via meeting
             $meetingId = (int)($this->fields['plugin_sprint_sprintmeetings_id'] ?? 0);
             $sprintIdForDropdown = 0;
             if ($meetingId > 0) {

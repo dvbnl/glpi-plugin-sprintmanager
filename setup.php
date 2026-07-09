@@ -30,12 +30,11 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.1.2');
+define('PLUGIN_SPRINT_VERSION', '1.1.4');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
-// Polyfill: htmlescape() was added in GLPI 10.0.x as bridge to GLPI 11
-// Provide fallback for older GLPI 10 installations
+// Polyfill htmlescape() (added mid-GLPI-10) for older GLPI 10 installs.
 if (!function_exists('htmlescape')) {
     function htmlescape(?string $string): string
     {
@@ -44,8 +43,6 @@ if (!function_exists('htmlescape')) {
 }
 
 /**
- * Plugin description
- *
  * @return array
  */
 function plugin_version_sprint(): array
@@ -69,8 +66,6 @@ function plugin_version_sprint(): array
 }
 
 /**
- * Init hooks of the plugin
- *
  * @return void
  */
 function plugin_init_sprint(): void
@@ -82,18 +77,10 @@ function plugin_init_sprint(): void
     // "Configure" wrench icon in the Plugins list → opens the settings page.
     $PLUGIN_HOOKS['config_page']['sprint'] = 'front/config.php';
 
-    // Add CSS and JS (public/ for GLPI 11, css/js/ for GLPI 10). Use
-    // `__DIR__` instead of `GLPI_ROOT . '/plugins/sprint/'` because the
-    // plugin may be installed under `marketplace/` rather than
-    // `plugins/` — a hardcoded path then misses the public/ dir and
-    // falls back to js/, which also doesn't exist under marketplace/,
-    // producing a 404 on the asset URL. `__DIR__` is the directory of
-    // setup.php and resolves correctly in both layouts.
-    //
-    // Do NOT append `?v=...` to the hook value: GLPI's asset resolver
-    // treats the value as a literal filename on disk, so
-    // `sprint.js?v=1.0.6` would 404. GLPI already appends its own
-    // fingerprint when rendering the <script> tag.
+    // Assets: public/ on GLPI 11, css/js/ on GLPI 10. Use __DIR__ (not a
+    // hardcoded plugins/ path) so it also resolves under marketplace/.
+    // Don't append `?v=...`: GLPI treats the hook value as a literal
+    // filename and adds its own cache-busting fingerprint.
     if (is_dir(__DIR__ . '/public/')) {
         $PLUGIN_HOOKS['add_css']['sprint'] = 'public/sprint.css';
         $PLUGIN_HOOKS['add_javascript']['sprint'] = 'public/sprint.js';
@@ -102,9 +89,7 @@ function plugin_init_sprint(): void
         $PLUGIN_HOOKS['add_javascript']['sprint'] = 'js/sprint.js';
     }
 
-    // Menu entry - under Assistance (helpdesk)
-    // Both SprintManager and Backlog appear as clickable items in the
-    // helpdesk menu group.
+    // Menu entries under Assistance (helpdesk): SprintManager and Backlog.
     $PLUGIN_HOOKS['menu_toadd']['sprint'] = [
         'helpdesk' => [
             'GlpiPlugin\Sprint\Sprint',
@@ -140,15 +125,19 @@ function plugin_init_sprint(): void
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
     );
 
+    // Kanban board: virtual tab on Sprint grouping items by status.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintBoard',
+        ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
+    );
+
     // Fastlane: virtual tab on Sprint listing fastlane items.
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintFastlane',
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
     );
 
-    // Junction linking fastlane SprintItems to multiple sprint members,
-    // each with their own assigned capacity. Renders as a tab on
-    // SprintItem (only when the item is flagged is_fastlane).
+    // Fastlane member junction: tab on SprintItem (only when is_fastlane).
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintFastlaneMember',
         ['addtabon' => ['GlpiPlugin\Sprint\SprintItem']]
@@ -195,9 +184,7 @@ function plugin_init_sprint(): void
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
     );
 
-    // End-of-sprint export report tab — registered after SprintAudit so
-    // it appears directly under the Audit log entry in the sprint tab
-    // rail.
+    // Registered after SprintAudit so it appears just below it in the tab rail.
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintExport',
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]

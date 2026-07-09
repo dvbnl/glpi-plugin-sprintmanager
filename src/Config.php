@@ -9,10 +9,8 @@ use Html;
 use Session;
 
 /**
- * Config - Plugin-wide settings stored in GLPI's native glpi_configs table
- * under context='plugin:sprint'.
- *
- * Exposed as a tab on GLPI's Setup > General configuration page.
+ * Plugin-wide settings, stored in GLPI's glpi_configs under
+ * context='plugin:sprint' and exposed as a tab on Setup > General config.
  */
 class Config extends CommonDBTM
 {
@@ -27,10 +25,13 @@ class Config extends CommonDBTM
      *  report header. Overrides any auto-detected logo. */
     const CFG_REPORT_LOGO_URL = 'report_logo_url';
 
-    /** JSON-encoded list of tag labels that admins make available for sprint
-     *  items. Members can pick from this pool, but only admins create new
-     *  entries. */
+    /** JSON-encoded pool of tag labels admins make available for sprint items;
+     *  members pick from it, only admins add new entries. */
     const CFG_SPRINT_ITEM_TAGS = 'sprint_item_tags';
+
+    /** When a backlog item with an estimated capacity %% joins a sprint,
+     *  seed its story points from that capacity (1%% = 1 SP). Default off. */
+    const CFG_CAPACITY_TO_POINTS = 'backlog_capacity_to_story_points';
 
     public static function getTypeName($nb = 0): string
     {
@@ -53,15 +54,14 @@ class Config extends CommonDBTM
             self::CFG_SCRUM_MASTER_CAPACITY => 0,
             self::CFG_REPORT_LOGO_URL       => '',
             self::CFG_SPRINT_ITEM_TAGS      => '[]',
+            self::CFG_CAPACITY_TO_POINTS    => 0,
         ];
         $stored = GlpiConfig::getConfigurationValues(self::CONTEXT);
         return array_merge($defaults, $stored);
     }
 
     /**
-     * Admin-defined tag pool. Returns a de-duplicated, trimmed list of tag
-     * labels in their original casing. Members assign tags to sprint items
-     * by picking from this list — only admins extend it.
+     * Admin-defined tag pool: de-duplicated, trimmed labels in original casing.
      *
      * @return string[]
      */
@@ -106,6 +106,16 @@ class Config extends CommonDBTM
     }
 
     /**
+     * Whether backlog estimated capacity should seed story points (1% = 1 SP)
+     * when an item is assigned to a sprint.
+     */
+    public static function isBacklogCapacityToStoryPoints(): bool
+    {
+        $cfg = self::getConfig();
+        return (int)($cfg[self::CFG_CAPACITY_TO_POINTS] ?? 0) === 1;
+    }
+
+    /**
      * Persist a full set of plugin settings (called from front/config.form.php).
      */
     public static function saveConfig(array $input): void
@@ -114,6 +124,7 @@ class Config extends CommonDBTM
             self::CFG_SCRUM_MASTER_CAPACITY => (int)(bool)($input[self::CFG_SCRUM_MASTER_CAPACITY] ?? 0),
             self::CFG_REPORT_LOGO_URL       => trim((string)($input[self::CFG_REPORT_LOGO_URL] ?? '')),
             self::CFG_SPRINT_ITEM_TAGS      => self::normalizeTagInput((string)($input[self::CFG_SPRINT_ITEM_TAGS] ?? '')),
+            self::CFG_CAPACITY_TO_POINTS    => (int)(bool)($input[self::CFG_CAPACITY_TO_POINTS] ?? 0),
         ];
         GlpiConfig::setConfigurationValues(self::CONTEXT, $values);
     }
@@ -143,9 +154,8 @@ class Config extends CommonDBTM
     }
 
     /**
-     * Check whether the current user is the Scrum Master of the given sprint.
-     * Returns true for brand-new sprints (no id yet) so the creation flow
-     * isn't gated — we only enforce restrictions on existing sprints.
+     * Whether the current user is the sprint's Scrum Master. New sprints
+     * (no id yet) return true so the creation flow isn't gated.
      */
     public static function isCurrentUserScrumMaster(int $sprintId): bool
     {
@@ -213,10 +223,25 @@ class Config extends CommonDBTM
         echo "</label>";
         echo "</td></tr>";
 
-        // Report logo URL — explicit override for the sprint export header.
-        // When custom branding is set via custom CSS (no `central_logo`
-        // configured), the export can't auto-detect the logo reliably, so
-        // the admin can paste the URL or relative path here.
+        // Backlog capacity → story points on sprint assignment
+        $checkedCap = (int)$cfg[self::CFG_CAPACITY_TO_POINTS] === 1 ? 'checked' : '';
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Convert backlog capacity to story points on sprint assignment', 'sprint') . "<br>";
+        echo "<span class='text-muted' style='font-size:0.85em;'>" .
+            __('When enabled, assigning a backlog item with an estimated capacity % to a sprint automatically sets its story points to that capacity (1% = 1 story point). An explicitly estimated item keeps its own story points.', 'sprint') .
+            "</span></td>";
+        echo "<td>";
+        echo "<input type='hidden' name='" . self::CFG_CAPACITY_TO_POINTS . "' value='0'>";
+        echo "<label class='form-check form-switch'>";
+        echo "<input class='form-check-input' type='checkbox' role='switch' "
+            . "name='" . self::CFG_CAPACITY_TO_POINTS . "' value='1' {$checkedCap}"
+            . ($canedit ? '' : ' disabled') . ">";
+        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
+        echo "</label>";
+        echo "</td></tr>";
+
+        // Report logo URL — explicit override for the export header, for when
+        // custom-CSS branding (no `central_logo`) defeats logo auto-detection.
         $logoUrl = htmlescape((string)$cfg[self::CFG_REPORT_LOGO_URL]);
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Report logo URL', 'sprint') . "<br>";

@@ -10,10 +10,7 @@ use User;
 use Dropdown;
 
 /**
- * SprintMember - Link GLPI Users to Sprints with a role
- *
- * Roles: Scrum Master, Product Owner, Developer, Tester, Designer, etc.
- * Also tracks capacity (availability percentage) per sprint.
+ * Link GLPI Users to Sprints with a role and a per-sprint capacity %.
  */
 class SprintMember extends CommonDBRelation
 {
@@ -45,11 +42,8 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Build the canonical capacity-percent dropdown choices.
-     *
-     * Granular at the bottom (1..5) so very small allocations
-     * (e.g. a 1% Fastlane slot) can still be expressed, then
-     * grouped per 5% from 5..100 to keep the picker manageable.
+     * Capacity-percent dropdown choices. Granular 1..5 so tiny allocations
+     * (e.g. a 1% Fastlane slot) are expressible, then per-5 to keep it short.
      *
      * @param bool $includeZero If true, prepends a 0% option.
      * @return array<int,string> [value => label]
@@ -60,11 +54,9 @@ class SprintMember extends CommonDBRelation
         if ($includeZero) {
             $values[] = 0;
         }
-        // 1..5 incremental
         for ($i = 1; $i <= 5; $i++) {
             $values[] = $i;
         }
-        // 10..100 grouped per 5
         for ($i = 10; $i <= 100; $i += 5) {
             $values[] = $i;
         }
@@ -76,13 +68,9 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Render a stacked capacity bar with an overflow segment when
-     * dependency/fastlane allocations push used past total. Returns the
-     * <div> HTML so dashboards can drop it in any layout.
-     *
-     * Segments are sized against max(total, used) so they fit regardless
-     * of overflow. A 100% marker line indicates where total capacity sits,
-     * and the slice past it is rendered as a striped red "overflow" band.
+     * Render a stacked capacity bar. Segments are sized against max(total, used)
+     * so they fit even when over capacity; the slice past total renders as a
+     * striped red overflow band with a 100% marker line.
      */
     public static function renderCapacityBar(
         int $total,
@@ -123,9 +111,6 @@ class SprintMember extends CommonDBRelation
         return $html;
     }
 
-    /**
-     * Get all available roles
-     */
     public static function getAllRoles(): array
     {
         return [
@@ -172,16 +157,13 @@ class SprintMember extends CommonDBRelation
         return parent::prepareInputForAdd($input);
     }
 
-    /**
-     * Show members list + add form for a sprint
-     */
+    /** Show members list + add form for a sprint. */
     public static function showForSprint(Sprint $sprint): void
     {
         $ID      = $sprint->getID();
         $canedit = Sprint::canUpdate();
         $roles   = self::getAllRoles();
 
-        // === Add member form ===
         if ($canedit) {
             echo "<div class='center'>";
             echo "<form method='post' action='" . static::getFormURL() . "'>";
@@ -228,22 +210,16 @@ class SprintMember extends CommonDBRelation
             echo "</div>";
         }
 
-        // === List members ===
         $member  = new self();
         $members = $member->find(
             ['plugin_sprint_sprints_id' => $ID],
             ['role ASC']
         );
 
-        // Per-member status distribution across sprint items
         $memberStatusCounts = self::getMemberStatusCounts($ID);
 
-        // === Dashboard section on top: per-member cards with sprint items
-        // status distribution (incl. fastlane), fastlane capacity indicator,
-        // and overall progress vs. allocated capacity.
         self::renderMembersDashboard($ID, $members, $memberStatusCounts);
 
-        // === Simplified table below: role, capacity and actions only ===
         $roleIcons = [
             self::ROLE_SCRUM_MASTER  => 'fas fa-hat-wizard',
             self::ROLE_PRODUCT_OWNER => 'fas fa-briefcase',
@@ -316,10 +292,8 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Render the top-of-tab dashboard view: one card per member showing
-     * their sprint items status distribution (regular + fastlane), their
-     * fastlane capacity usage, and overall progress as done-items % of
-     * their sprint workload.
+     * Top-of-tab dashboard: one card per member with status distribution,
+     * capacity usage, and done-items progress.
      *
      * @param array<int,array<string,int>> $memberStatusCounts
      */
@@ -353,7 +327,6 @@ class SprintMember extends CommonDBRelation
             $roleName = $roles[$row['role']] ?? $row['role'];
             $roleIcon = $roleIcons[$row['role']] ?? 'fas fa-user';
 
-            // Capacity usage (regular + fastlane)
             $regularUsed = 0;
             foreach ($si->find([
                 'plugin_sprint_sprints_id' => $sprintId,
@@ -368,23 +341,19 @@ class SprintMember extends CommonDBRelation
             $remaining      = max($totalCap - $usedCap, 0);
             $capUsedPct     = $totalCap > 0 ? round(($usedCap / $totalCap) * 100) : 0;
 
-            // Status counts — include fastlane items the user is a member of
             $counts = $memberStatusCounts[$userId] ?? [];
             $total  = (int)($counts['total'] ?? 0);
             $done   = (int)($counts[SprintItem::STATUS_DONE] ?? 0);
             $progressPct = $total > 0 ? round(($done / $total) * 100) : 0;
 
-            // Fastlane item count for this user
             $fastlaneItemCount   = (int)($counts['fastlane_total'] ?? 0);
             $dependencyItemCount = (int)($counts['dependency_total'] ?? 0);
 
-            // Color strategy: progress green once done >= 80%, amber if 50+, red otherwise
             $progressColor = $progressPct >= 80 ? '#198754' : ($progressPct >= 50 ? '#ffc107' : ($progressPct > 0 ? '#0d6efd' : '#adb5bd'));
             $capBarColor   = $capUsedPct >= 100 ? '#dc3545' : ($capUsedPct >= 80 ? '#e67e22' : '#198754');
 
             echo "<div style='border:1px solid #e9ecef;border-radius:10px;padding:14px 16px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.03);'>";
 
-            // Header
             echo "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>";
             echo "<i class='fas fa-user-circle' style='font-size:1.6em;color:#6c757d;'></i>";
             echo "<div style='flex:1;'>";
@@ -403,7 +372,6 @@ class SprintMember extends CommonDBRelation
             }
             echo "</div>";
 
-            // Sprint progress (done / total items)
             echo "<div style='margin-bottom:8px;'>";
             echo "<div style='display:flex;justify-content:space-between;font-size:0.78em;color:#6c757d;margin-bottom:3px;'>";
             echo "<span>" . __('Sprint progress', 'sprint') . "</span>";
@@ -414,7 +382,6 @@ class SprintMember extends CommonDBRelation
             echo "</div>";
             echo "</div>";
 
-            // Capacity utilization (used vs total)
             $overflowCap = max($usedCap - $totalCap, 0);
             echo "<div style='margin-bottom:10px;'>";
             echo "<div style='display:flex;justify-content:space-between;font-size:0.78em;color:#6c757d;margin-bottom:3px;'>";
@@ -433,10 +400,9 @@ class SprintMember extends CommonDBRelation
             echo self::renderCapacityBar($totalCap, $regularUsed, $fastlaneUsed, $dependencyUsed);
             echo "</div>";
 
-            // Status distribution — reuse existing renderer (now includes fastlane)
             echo self::renderStatusDistribution($counts);
 
-            // "Helpt op" — items where this user is helper on at least one open dep
+            // Items where this user helps on at least one open dependency.
             $helperItems = SprintItemDependency::getOpenItemsForHelper($sprintId, $userId);
             if (count($helperItems) > 0) {
                 echo "<div style='margin-top:10px;padding-top:8px;border-top:1px dashed #e9ecef;'>";
@@ -472,11 +438,9 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Count sprint items per member per status, for the mini distribution bar.
-     *
-     * Includes both regular items (owned via users_id) and Fastlane items
-     * the member is allocated on via the SprintFastlaneMember junction, so
-     * the Sprintleden dashboard reflects the user's full sprint workload.
+     * Count sprint items per member per status for the distribution bar.
+     * Includes regular items (owned via users_id) plus Fastlane items the
+     * member is allocated on, so it reflects the user's full workload.
      *
      * @return array<int, array<string,int>> [users_id => [status => count]]
      */
@@ -502,7 +466,7 @@ class SprintMember extends CommonDBRelation
 
         $si = new SprintItem();
 
-        // Regular (non-fastlane) items — owned by the row's users_id.
+        // Regular (non-fastlane) items, owned by the row's users_id.
         foreach ($si->find([
             'plugin_sprint_sprints_id' => $sprintId,
             'is_fastlane'              => 0,
@@ -519,8 +483,8 @@ class SprintMember extends CommonDBRelation
             $counts[$uid]['total']++;
         }
 
-        // Fastlane items — attribute each item to every user assigned via
-        // the junction table so fastlane shows up on the owner's card.
+        // Fastlane items: attribute each to every user assigned via the
+        // junction table so fastlane shows up on each member's card.
         $fastlaneItems = $si->find([
             'plugin_sprint_sprints_id' => $sprintId,
             'is_fastlane'              => 1,
@@ -552,8 +516,8 @@ class SprintMember extends CommonDBRelation
             }
         }
 
-        // Skip 'total'/per-status counts: the parent item is already counted
-        // for its owner; adding it again for the helper would double-count.
+        // Only bump dependency_total: the parent item is already counted for
+        // its owner, so counting it again for the helper would double-count.
         if (SprintItemDependency::isTableReady()) {
             $allItems = $si->find(['plugin_sprint_sprints_id' => $sprintId]);
             if (count($allItems) > 0) {
@@ -576,10 +540,7 @@ class SprintMember extends CommonDBRelation
         return $counts;
     }
 
-    /**
-     * Render a compact per-member status distribution: count pills + mini progress bar.
-     * Mirrors the look of the main sprint dashboard stats bar.
-     */
+    /** Compact per-member status distribution: count pills + mini progress bar. */
     private static function renderStatusDistribution(array $counts): string
     {
         $total = (int)($counts['total'] ?? 0);
@@ -599,7 +560,6 @@ class SprintMember extends CommonDBRelation
 
         $out = "<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;'>";
 
-        // Count pills
         $out .= "<div style='display:flex;gap:6px;flex-wrap:wrap;'>";
         foreach ($segments as [$key, $label, $color, $icon]) {
             $n = (int)($counts[$key] ?? 0);
@@ -613,7 +573,6 @@ class SprintMember extends CommonDBRelation
         }
         $out .= "</div>";
 
-        // Stacked mini progress bar
         $out .= "<div style='flex:1;min-width:120px;height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;display:flex;'>";
         foreach ($segments as [$key, $label, $color, $icon]) {
             $n = (int)($counts[$key] ?? 0);
@@ -631,14 +590,12 @@ class SprintMember extends CommonDBRelation
         return $out;
     }
 
-    /**
-     * Show edit form for a member
-     */
+    /** Show edit form for a member. */
     public function showForm($ID, array $options = []): bool
     {
         $this->initForm($ID, $options);
 
-        // "Back to Sprint" button linking to the parent sprint's Members tab
+        // "Back to Sprint" button linking to the parent sprint's Members tab.
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         if ($sprintId > 0) {
             $sprintUrl = Sprint::getFormURLWithID($sprintId) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintMember$1');
@@ -686,15 +643,14 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Compute the capacity already used by a user in a sprint, summing
-     * regular SprintItem allocations, Fastlane member allocations, and
-     * open Dependency allocations.
+     * Capacity already used by a user in a sprint: regular + Fastlane + open
+     * Dependency allocations. Exclude ids let an update re-check the row it edits.
      *
      * @param int $sprintId
      * @param int $userId
-     * @param int $excludeRegularItemId      SprintItem id to exclude (for updates of a regular item)
-     * @param int $excludeFastlaneMemberId   SprintFastlaneMember id to exclude (for updates of a fastlane allocation)
-     * @param int $excludeDependencyId       SprintItemDependency id to exclude (for updates of a dependency allocation)
+     * @param int $excludeRegularItemId      SprintItem id to exclude
+     * @param int $excludeFastlaneMemberId   SprintFastlaneMember id to exclude
+     * @param int $excludeDependencyId       SprintItemDependency id to exclude
      * @return int  Used capacity %
      */
     public static function getUsedCapacityForUser(
@@ -704,9 +660,8 @@ class SprintMember extends CommonDBRelation
         int $excludeFastlaneMemberId = 0,
         int $excludeDependencyId = 0
     ): int {
-        // Regular sprint items: sum capacity for non-fastlane items the
-        // user owns. Fastlane items have multiple owners via the junction
-        // table, so we explicitly exclude them here.
+        // Fastlane items have multiple owners via the junction table, so
+        // only sum non-fastlane items the user owns here.
         $si = new SprintItem();
         $criteria = [
             'plugin_sprint_sprints_id' => $sprintId,
@@ -721,7 +676,6 @@ class SprintMember extends CommonDBRelation
             $regularUsed += (int)($row['capacity'] ?? 0);
         }
 
-        // Fastlane allocations from the junction table.
         $fastlaneUsed = SprintFastlaneMember::getUsedFastlaneCapacityForUser(
             $sprintId,
             $userId,
@@ -738,9 +692,8 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Validate that adding $additional% to the user's allocation in a sprint
-     * does not exceed the member's total capacity. Adds an error message
-     * via Session::addMessageAfterRedirect on failure.
+     * Validate that adding $additional% stays within the member's capacity.
+     * Queues a Session message on failure (or a warning when $allowOverflow).
      */
     public static function checkCapacityForUser(
         int $sprintId,
@@ -803,19 +756,15 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Non-mutating overflow probe used by the AJAX assignment endpoints to
-     * decide whether to ask the user for confirmation *before* committing.
+     * Non-mutating overflow probe for the AJAX endpoints: reports whether
+     * assigning $additional% would push the user past capacity, and by how
+     * much, so they can be asked to confirm before committing. Queues no
+     * messages and never blocks (unlike checkCapacityForUser()).
      *
-     * Unlike {@see checkCapacityForUser()} this queues no messages and never
-     * blocks — it just reports whether assigning $additional% to $userId
-     * would push their combined load (regular + fastlane + dependency) past
-     * their sprint capacity, and by how much.
-     *
-     * Returns null when there is no member row, no positive assignment, or
-     * the result still fits within capacity. Callers should additionally
-     * skip the prompt when the change does not increase the member's load
-     * (e.g. editing an item's name while it stays over capacity) so an
-     * already-overflowed member isn't nagged on every unrelated edit.
+     * Returns null when there is no member row, no positive assignment, or the
+     * result still fits. Callers should also skip the prompt when the change
+     * does not increase load, so an already-overflowed member isn't nagged on
+     * every unrelated edit.
      *
      * @return array{used:int,total:int,after:int,overflow:int,name:string}|null
      */
@@ -856,8 +805,8 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Build the plain-text confirmation question for an overflow assignment.
-     * Rendered in a native JS confirm() dialog, so no HTML escaping needed.
+     * Plain-text overflow confirmation question. Shown in a native JS
+     * confirm() dialog, so no HTML escaping is needed.
      */
     public static function overflowConfirmMessage(array $info): string
     {
@@ -872,12 +821,27 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Get members of a sprint as dropdown options
-     * Useful for the link tables (SprintTicket, SprintChange, SprintProjectTask)
+     * Get members of a sprint as dropdown options.
      *
      * @param int $sprintId
      * @return array [users_id => "Username (Role)"]
      */
+    /**
+     * True when the user is a Scrum Master (member with ROLE_SCRUM_MASTER) on
+     * the sprint. Complements the Sprint.users_id check in Config.
+     */
+    public static function isScrumMaster(int $sprintId, int $userId): bool
+    {
+        if ($sprintId <= 0 || $userId <= 0) {
+            return false;
+        }
+        return countElementsInTable(self::getTable(), [
+            'plugin_sprint_sprints_id' => $sprintId,
+            'users_id'                 => $userId,
+            'role'                     => self::ROLE_SCRUM_MASTER,
+        ]) > 0;
+    }
+
     public static function getSprintMemberOptions(int $sprintId): array
     {
         $options = [0 => Dropdown::EMPTY_VALUE];

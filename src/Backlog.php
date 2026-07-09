@@ -13,11 +13,9 @@ use ProjectTask;
 use User;
 
 /**
- * Backlog - Sprint backlog (un-assigned SprintItems)
- *
- * Not a CommonDBTM: this is a virtual collection over SprintItem rows
- * where plugin_sprint_sprints_id = 0. Provides menu integration and
- * the listing/assignment UI.
+ * Sprint backlog: a virtual collection over SprintItem rows where
+ * plugin_sprint_sprints_id = 0 (not a CommonDBTM). Provides the menu
+ * entry and the listing/assignment UI.
  */
 class Backlog
 {
@@ -42,11 +40,8 @@ class Backlog
     }
 
     /**
-     * Permission shim used by the menu registration.
-     *
-     * The backlog is just a filtered view over SprintItem rows, so its
-     * visibility piggy-backs on the SprintItem READ right (and the
-     * "own items" right used elsewhere in the plugin).
+     * Visibility piggy-backs on the SprintItem READ right (plus the
+     * "own items" right), since the backlog is just a filtered view of them.
      */
     public static function canView(): bool
     {
@@ -61,10 +56,8 @@ class Backlog
     }
 
     /**
-     * Menu entry for the helpdesk menu group.
-     *
-     * Registered via $PLUGIN_HOOKS['menu_toadd'] in setup.php so that
-     * "Backlog" appears as its own clickable item next to SprintManager.
+     * Menu entry, registered via $PLUGIN_HOOKS['menu_toadd'] in setup.php so
+     * "Backlog" appears as its own item next to SprintManager.
      */
     public static function getMenuContent()
     {
@@ -80,12 +73,9 @@ class Backlog
     }
 
     /**
-     * Build a 1-click "Add to backlog" form for a Ticket / Change / ProjectTask.
-     *
-     * When the item already lives in a sprint we deliberately do NOT
-     * render the button — backlog and sprint membership are mutually
-     * exclusive in the workflow (use "Carry over to sprint" to loop an
-     * item between sprints instead).
+     * Build a 1-click "Add to backlog" form for a Ticket/Change/ProjectTask.
+     * Renders nothing when the item is already in a sprint: backlog and sprint
+     * membership are mutually exclusive (use "Carry over to sprint" instead).
      */
     public static function showAddToBacklogButton(string $itemtype, int $itemId): void
     {
@@ -109,8 +99,8 @@ class Backlog
             return;
         }
 
-        // Use a real <button> instead of Html::submit() so we can render
-        // an icon inside the button (Html::submit escapes its value).
+        // Real <button> instead of Html::submit() so the icon survives
+        // (Html::submit escapes its value).
         echo "<div class='center' style='margin:8px 0;'>";
         echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
         echo Html::hidden('itemtype', ['value' => $itemtype]);
@@ -122,10 +112,7 @@ class Backlog
         echo "</div>";
     }
 
-    /**
-     * True when there is at least one SprintItem in a real sprint
-     * (sprints_id > 0) for the given linked GLPI item.
-     */
+    /** True when the linked GLPI item is in a real sprint (sprints_id > 0). */
     public static function isLinkedItemInAnySprint(string $itemtype, int $itemId): bool
     {
         if ($itemtype === '' || $itemId <= 0) {
@@ -154,7 +141,9 @@ class Backlog
             'ProjectTask' => __('Project task'),
         ];
 
-        $orderBy = ['priority DESC', 'date_creation DESC'];
+        // Manual drag order wins; un-ordered items (sort_order 0) fall back to
+        // priority/date so existing backlogs look unchanged until reordered.
+        $orderBy = ['sort_order ASC', 'priority DESC', 'date_creation DESC'];
         $item    = new SprintItem();
         $blocked = $item->find(['plugin_sprint_sprints_id' => 0, 'is_blocked' => 1], $orderBy);
         $items   = $item->find(['plugin_sprint_sprints_id' => 0, 'is_blocked' => 0], $orderBy);
@@ -173,14 +162,43 @@ class Backlog
 
         self::renderBlockedSection($blocked, $canedit, $typeLabels, $tagsById);
 
-        echo "<h3 style='margin-top:20px;text-align:left;'>"
+        // Count pre-selected items the Scrum Master can assign in one click.
+        $readyCount = 0;
+        foreach (array_merge($blocked, $items) as $r) {
+            if ((int)($r['proposed_sprints_id'] ?? 0) > 0) {
+                $readyCount++;
+            }
+        }
+
+        echo "<div style='display:flex;align-items:center;gap:10px;margin-top:20px;'>";
+        echo "<h3 style='margin:0;text-align:left;flex:1;'>"
             . "<i class='fas fa-list'></i> " . __('Backlog items', 'sprint')
             . " <span class='badge bg-secondary'>" . count($items) . "</span></h3>";
+        if ($canedit && $readyCount > 0) {
+            echo "<button type='button' class='btn btn-sm btn-success sprint-backlog-bulk-assign'>"
+                . "<i class='fas fa-layer-group me-1'></i>"
+                . sprintf(__('Assign all ready (%d)', 'sprint'), $readyCount)
+                . "</button>";
+        }
+        echo "</div>";
 
-        self::renderFilterBar($typeLabels);
+        // Owners present in the backlog, for the owner filter.
+        $owners = [];
+        foreach (array_merge($blocked, $items) as $r) {
+            $uid = (int)($r['users_id'] ?? 0);
+            if ($uid > 0 && !isset($owners[$uid])) {
+                $owners[$uid] = getUserName($uid);
+            }
+        }
+        asort($owners);
+
+        self::renderFilterBar($typeLabels, $owners);
 
         echo "<table class='tab_cadre_fixe sprint-backlog-table'>";
         echo "<tr class='tab_bg_2'>";
+        if ($canedit) {
+            echo "<th style='width:26px;' title='" . __('Drag to reorder', 'sprint') . "'></th>";
+        }
         echo "<th>" . __('Name') . "</th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
         echo "<th>" . __('Type', 'sprint') . "</th>";
@@ -196,35 +214,190 @@ class Backlog
         echo "</tr>";
 
         if (count($items) === 0) {
-            $cols = $canedit ? 9 : 7;
+            $cols = $canedit ? 10 : 7;
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>"
                 . __('Backlog is empty', 'sprint') . "</td></tr>";
         }
 
         foreach ($items as $row) {
-            self::renderItemRow($row, $canedit, $typeLabels, $tagsById);
+            self::renderItemRow($row, $canedit, $typeLabels, $tagsById, true);
         }
 
         echo "</table>";
         echo "</div>";
 
-        // Mount the modal + JS that powers the pencil "quick edit linked item"
-        // buttons rendered by SprintItem::getLinkedItemDisplay(). Without this
-        // the buttons appear but clicking them is a no-op.
+        // Mounts the modal + JS for the quick-edit-linked-item buttons rendered
+        // by SprintItem::getLinkedItemDisplay(); without it they're no-ops.
         SprintItem::renderLinkedQuickEditUI();
 
         self::renderInlineEditScript();
+        self::renderDependencyUI();
     }
 
     /**
-     * On-change handlers for the inline owner / estimated-capacity selects.
-     * Persists changes through ajax/updateitemquick.php so people can
-     * pre-plan on the backlog without round-tripping a form.
+     * Modal + JS for the per-row "add dependency" button. Dependencies are
+     * limited to members of the row's pre-selected sprint; the member list is
+     * fetched live for whatever sprint is chosen in that row's dropdown.
+     */
+    private static function renderDependencyUI(): void
+    {
+        $depEndpoint = Plugin::getWebDir('sprint') . '/ajax/dependencyadd.php';
+        $membersUrl  = Plugin::getWebDir('sprint') . '/ajax/getsprintmembers.php';
+        $tokenUrl    = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
+
+        $capacityOptions = '';
+        foreach (SprintMember::getCapacityChoices(false) as $val => $label) {
+            $capacityOptions .= "<option value='" . (int)$val . "'>" . htmlescape($label) . "</option>";
+        }
+
+        $titleAdd      = __('Add dependency', 'sprint');
+        $lblMember     = __('Sprint member', 'sprint');
+        $lblCapacity   = __('Capacity', 'sprint');
+        $lblCancel     = __('Cancel');
+        $lblAdd        = __('Add', 'sprint');
+        $msgPickSprint = __('Pre-select a sprint for this item first.', 'sprint');
+        $msgNoMembers  = __('The selected sprint has no members yet.', 'sprint');
+        $hint          = __('Only members of the pre-selected sprint can be added.', 'sprint');
+
+        echo <<<HTML
+<div class="modal fade" id="sprint-backlog-deps-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-link me-1"></i> {$titleAdd}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted sprint-deps-item-name fw-bold mb-2"></p>
+        <p class="text-muted small">{$hint}</p>
+        <div class="mb-2">
+          <label class="form-label fw-bold">{$lblMember}</label>
+          <select class="form-select sprint-deps-member"></select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-bold">{$lblCapacity} %</label>
+          <select class="form-select sprint-deps-capacity">{$capacityOptions}</select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$lblCancel}</button>
+        <button type="button" class="btn btn-primary sprint-deps-add">{$lblAdd}</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+    if (typeof jQuery === 'undefined') { return; }
+    var depEndpoint = "{$depEndpoint}";
+    var membersUrl  = "{$membersUrl}";
+    var tokenUrl    = "{$tokenUrl}";
+    var \$modal;
+
+    jQuery(function(){
+        \$modal = jQuery('#sprint-backlog-deps-modal');
+        if (\$modal.length === 0) { return; }
+        \$modal = \$modal.detach().appendTo('body');
+    });
+
+    function currentSprintFor(itemId) {
+        var \$sel = jQuery('.sprint-backlog-sprint-wrap[data-item-id="' + itemId + '"] select');
+        return \$sel.length ? (parseInt(\$sel.val(), 10) || 0) : 0;
+    }
+
+    jQuery(document).on('click', '.sprint-backlog-deps-btn', function(){
+        var \$btn    = jQuery(this);
+        var itemId  = parseInt(\$btn.data('item-id'), 10) || 0;
+        var name    = \$btn.data('item-name') || '';
+        var ownerId = parseInt(\$btn.data('owner-id'), 10) || 0;
+        var sprintId = currentSprintFor(itemId);
+        if (itemId <= 0) { return; }
+        if (sprintId <= 0) {
+            if (window.glpi_toast_warning) { window.glpi_toast_warning("{$msgPickSprint}"); }
+            return;
+        }
+        \$modal.data('item-id', itemId);
+        \$modal.find('.sprint-deps-item-name').text(name);
+        var \$member = \$modal.find('.sprint-deps-member');
+        \$member.html('<option value="0">…</option>');
+
+        jQuery.ajax({
+            url: membersUrl, type: 'GET', dataType: 'json', cache: false,
+            data: { sprint_id: sprintId, exclude_user: ownerId }
+        }).done(function(resp){
+            \$member.empty();
+            if (resp && resp.success && resp.members && resp.members.length) {
+                resp.members.forEach(function(m){
+                    \$member.append(jQuery('<option>').val(m.id).text(m.label));
+                });
+            } else {
+                \$member.append('<option value="0">{$msgNoMembers}</option>');
+            }
+        });
+
+        var inst = bootstrap.Modal.getOrCreateInstance(\$modal[0]);
+        inst.show();
+    });
+
+    function doAdd(itemId, userId, capacity, confirmOverflow) {
+        jQuery.ajax({
+            url: tokenUrl, type: 'GET', dataType: 'json', cache: false
+        }).then(function(tokResp){
+            return jQuery.ajax({
+                url: depEndpoint, type: 'POST', dataType: 'json',
+                data: {
+                    plugin_sprint_sprintitems_id: itemId,
+                    users_id: userId,
+                    capacity: capacity,
+                    confirm_overflow: confirmOverflow ? 1 : 0,
+                    _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                }
+            });
+        }).done(function(resp){
+            if (resp && resp.success) {
+                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || 'Saved'); }
+                bootstrap.Modal.getOrCreateInstance(\$modal[0]).hide();
+            } else if (resp && resp.needs_confirm) {
+                if (confirm(resp.message)) {
+                    doAdd(itemId, userId, capacity, true);
+                }
+            } else {
+                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
+                else { alert((resp && resp.message) || 'Failed'); }
+            }
+        }).fail(function(){
+            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+        });
+    }
+
+    jQuery(document).on('click', '.sprint-deps-add', function(){
+        var itemId   = parseInt(\$modal.data('item-id'), 10) || 0;
+        var userId   = parseInt(\$modal.find('.sprint-deps-member').val(), 10) || 0;
+        var capacity = parseInt(\$modal.find('.sprint-deps-capacity').val(), 10) || 0;
+        if (itemId <= 0 || userId <= 0 || capacity <= 0) {
+            if (window.glpi_toast_warning) { window.glpi_toast_warning('Select a member and capacity'); }
+            return;
+        }
+        doAdd(itemId, userId, capacity, false);
+    });
+})();
+</script>
+HTML;
+    }
+
+    /**
+     * On-change handlers for the inline owner/capacity/sprint selects.
+     * Persist via ajax/updateitemquick.php so users can pre-plan on the
+     * backlog without round-tripping a form.
      */
     private static function renderInlineEditScript(): void
     {
         $endpoint = Plugin::getWebDir('sprint') . '/ajax/updateitemquick.php';
         $tokenUrl = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
+        $bulkUrl  = Plugin::getWebDir('sprint') . '/ajax/bulkassign.php';
+        $bulkConfirm = addslashes(__('Assign all backlog items that have a pre-selected sprint? Only the ones you are Scrum Master of will be assigned.', 'sprint'));
+        $reorderUrl  = Plugin::getWebDir('sprint') . '/ajax/reorder.php';
+        $savedOrderMsg = addslashes(__('Order saved', 'sprint'));
 
         echo <<<HTML
 <script>
@@ -284,6 +457,87 @@ class Backlog
         if (itemId > 0) {
             postUpdate(itemId, 'capacity', parseInt(\$sel.val(), 10) || 0, \$sel);
         }
+    });
+
+    // Pre-select a target sprint (Scrum Master still has to press Assign).
+    jQuery(document).on('change', '.sprint-backlog-sprint-wrap select', function() {
+        var \$sel = jQuery(this);
+        var itemId = parseInt(\$sel.closest('.sprint-backlog-sprint-wrap').data('item-id'), 10) || 0;
+        if (itemId > 0) {
+            postUpdate(itemId, 'proposed_sprints_id', parseInt(\$sel.val(), 10) || 0, \$sel);
+        }
+    });
+
+    // Kick-off: assign every item that has a pre-selected sprint in one click.
+    jQuery(document).on('click', '.sprint-backlog-bulk-assign', function() {
+        var \$btn = jQuery(this);
+        if (!window.confirm('{$bulkConfirm}')) { return; }
+        \$btn.prop('disabled', true);
+        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
+        .then(function(tok) {
+            return jQuery.ajax({
+                url: "{$bulkUrl}", type: 'POST', dataType: 'json',
+                data: { _glpi_csrf_token: tok && tok.token ? tok.token : '' }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message); }
+                window.location.reload();
+            } else {
+                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
+                \$btn.prop('disabled', false);
+            }
+        }).fail(function() {
+            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+            \$btn.prop('disabled', false);
+        });
+    });
+
+    // Drag-to-reorder the backlog via the grip handle (persists sort_order).
+    var sprintDragRow = null;
+    jQuery(document).on('mousedown', '.sprint-backlog-table .sprint-backlog-grip', function() {
+        var row = this.closest('tr');
+        if (row) { row.setAttribute('draggable', 'true'); }
+    });
+    jQuery(document).on('dragstart', '.sprint-backlog-table .sprint-backlog-row', function(e) {
+        sprintDragRow = this;
+        this.classList.add('sprint-row-dragging');
+        try {
+            e.originalEvent.dataTransfer.effectAllowed = 'move';
+            e.originalEvent.dataTransfer.setData('text/plain', '');
+        } catch (ex) {}
+    });
+    jQuery(document).on('dragover', '.sprint-backlog-table .sprint-backlog-row', function(e) {
+        if (!sprintDragRow || this === sprintDragRow) { return; }
+        e.preventDefault();
+        var rect  = this.getBoundingClientRect();
+        var after = (e.originalEvent.clientY - rect.top) > rect.height / 2;
+        var parent = this.parentNode;
+        parent.insertBefore(sprintDragRow, after ? this.nextSibling : this);
+    });
+    jQuery(document).on('dragend', '.sprint-backlog-table .sprint-backlog-row', function() {
+        if (!sprintDragRow) { return; }
+        sprintDragRow.classList.remove('sprint-row-dragging');
+        sprintDragRow.removeAttribute('draggable');
+        sprintDragRow = null;
+        var ids = [];
+        jQuery('.sprint-backlog-table .sprint-backlog-row').each(function() {
+            var id = parseInt(this.getAttribute('data-item-id'), 10) || 0;
+            if (id) { ids.push(id); }
+        });
+        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
+        .then(function(tok) {
+            return jQuery.ajax({
+                url: "{$reorderUrl}", type: 'POST', dataType: 'json',
+                data: { order: JSON.stringify(ids), _glpi_csrf_token: tok && tok.token ? tok.token : '' }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                if (window.glpi_toast_info) { window.glpi_toast_info('{$savedOrderMsg}'); }
+            } else if (window.glpi_toast_error) {
+                window.glpi_toast_error('Save failed');
+            }
+        });
     });
 })();
 </script>
@@ -355,7 +609,7 @@ HTML;
         </script>";
     }
 
-    private static function renderItemRow(array $row, bool $canedit, array $typeLabels, array $tagsById = []): void
+    private static function renderItemRow(array $row, bool $canedit, array $typeLabels, array $tagsById = [], bool $reorderable = false): void
     {
         $linkedDisplay = '<span style="color:#ccc;">-</span>';
         if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
@@ -371,13 +625,29 @@ HTML;
         $isBlocked  = (int)($row['is_blocked'] ?? 0) === 1;
         $rowTags    = $tagsById[(int)$row['id']] ?? [];
 
+        $ownerName = (int)($row['users_id'] ?? 0) > 0 ? getUserName((int)$row['users_id']) : '';
         echo "<tr class='tab_bg_1 sprint-filterable-row sprint-backlog-row' "
             . "data-item-id='" . (int)$row['id'] . "' "
             . "data-item-name='" . htmlescape($row['name']) . "' "
             . "data-item-type='" . htmlescape($typeKey) . "' "
+            . "data-users-id='" . (int)($row['users_id'] ?? 0) . "' "
+            . "data-owner-name='" . htmlescape($ownerName) . "' "
             . "data-item-tags='" . htmlescape(SprintItem::tagsToBlob($rowTags)) . "'>";
+        if ($reorderable && $canedit) {
+            echo "<td class='sprint-backlog-grip' style='cursor:grab;text-align:center;color:#adb5bd;' "
+                . "title='" . __('Drag to reorder', 'sprint') . "'><i class='fas fa-grip-vertical'></i></td>";
+        }
+
+        $isReady = (int)($row['proposed_sprints_id'] ?? 0) > 0
+            && (int)($row['users_id'] ?? 0) > 0
+            && (int)($row['capacity'] ?? 0) > 0;
         echo "<td><a href='" . SprintItem::getFormURLWithID($row['id']) . "'>"
-            . htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . "</td>";
+            . htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags);
+        if ($isReady) {
+            echo " <span class='sprint-ready-badge' title='" . __('Owner, capacity and sprint set — ready for the Scrum Master to assign', 'sprint') . "'>"
+                . "<i class='fas fa-check'></i> " . __('Ready', 'sprint') . "</span>";
+        }
+        echo "</td>";
         echo "<td>" . $linkedDisplay . "</td>";
         echo "<td>" . $typeLabel . "</td>";
 
@@ -456,26 +726,44 @@ HTML;
         echo "</td>";
 
         if ($canedit) {
+            $proposedId = (int)($row['proposed_sprints_id'] ?? 0);
+
             echo "<td>";
-            // Sprint dropdown + AJAX-driven assign button. The form is kept
-            // as a no-JS fallback (regular POST → backlog.form.php), but
-            // sprint.js intercepts the submit and uses the dedicated AJAX
-            // endpoint so the row removes itself in place.
+            // Anyone who can edit may pre-select a sprint (persisted to
+            // proposed_sprints_id), but only its Scrum Master or a full updater
+            // can Assign — enforced server-side in assigntosprint.php.
             echo "<form method='post' action='" . self::getFormURL() . "' "
                 . "class='sprint-backlog-assign-form' style='display:flex;gap:4px;align-items:center;' "
                 . "data-item-id='" . (int)$row['id'] . "'>";
             echo Html::hidden('id', ['value' => $row['id']]);
+            echo "<span class='sprint-backlog-sprint-wrap' data-item-id='" . (int)$row['id'] . "'>";
             Sprint::dropdown([
-                'name'      => 'plugin_sprint_sprints_id',
-                'value'     => 0,
-                'condition' => ['status' => [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE]],
+                'name'  => 'plugin_sprint_sprints_id',
+                'value' => $proposedId,
+                'width' => '160px',
+                'rand'  => (int)$row['id'],
             ]);
-            echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-sm btn-primary sprint-backlog-assign-btn'>"
+            echo "</span>";
+            $assignTitle = $isFastlane
+                ? __('Fastlane item — anyone can assign it to a sprint', 'sprint')
+                : __('Only the Scrum Master of the selected sprint can assign it', 'sprint');
+            echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-sm btn-primary sprint-backlog-assign-btn' "
+                . "title='" . $assignTitle . "'>"
                 . "<i class='fas fa-arrow-right'></i> " . __('Assign', 'sprint') . "</button>";
             Html::closeForm();
             echo "</td>";
 
             echo "<td class='center' style='white-space:nowrap;'>";
+            // Dependency button hidden for fastlane items: they spread capacity
+            // across members via the Fastlane junction, not single-owner deps.
+            if (!$isFastlane) {
+                echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-backlog-deps-btn me-1' "
+                    . "data-item-id='" . (int)$row['id'] . "' "
+                    . "data-item-name='" . htmlescape($row['name']) . "' "
+                    . "data-owner-id='" . (int)($row['users_id'] ?? 0) . "' "
+                    . "title='" . __('Add dependency (only members of the selected sprint)', 'sprint') . "'>"
+                    . "<i class='fas fa-link'></i></button>";
+            }
             echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
             echo Html::hidden('id', ['value' => $row['id']]);
             echo Html::submit(__('Delete'), [
@@ -489,7 +777,7 @@ HTML;
         echo "</tr>";
     }
 
-    private static function renderFilterBar(array $typeLabels): void
+    private static function renderFilterBar(array $typeLabels, array $owners = []): void
     {
         echo "<div class='sprint-filter-bar' "
             . "style='display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;"
@@ -510,6 +798,21 @@ HTML;
         echo "<option value='manual'>" . htmlescape($typeLabels['']) . "</option>";
         echo "</select>";
 
+        // Owner filter, handled by the shared filter JS (.sf-owner +
+        // data-users-id / data-owner-name), as inside a sprint.
+        if (!empty($owners)) {
+            echo "<select class='form-select form-select-sm sf-owner' style='max-width:220px;'>";
+            echo "<option value=''>" . __('All owners', 'sprint') . "</option>";
+            echo "<option value='__unassigned__'>" . __('Unassigned only', 'sprint') . "</option>";
+            foreach ($owners as $uidOpt => $name) {
+                if ((int)$uidOpt === 0) {
+                    continue;
+                }
+                echo "<option value='" . (int)$uidOpt . "'>" . htmlescape((string)$name) . "</option>";
+            }
+            echo "</select>";
+        }
+
         $definedTags = Config::getDefinedTags();
         if (!empty($definedTags)) {
             echo "<select class='form-select form-select-sm sf-tag' style='max-width:180px;'>";
@@ -527,10 +830,9 @@ HTML;
     }
 
     /**
-     * Create a backlog item from a Ticket / Change / ProjectTask
-     *
-     * Returns the created SprintItem ID, or 0 if it could not be created
-     * (for example because an identical backlog entry already exists).
+     * Create a backlog item from a Ticket/Change/ProjectTask. Returns the
+     * SprintItem ID, or 0 if it could not be created. An existing backlog
+     * entry for the same linked item is reused instead of duplicated.
      */
     public static function addFromLinkedItem(string $itemtype, int $itemId): int
     {
@@ -539,14 +841,12 @@ HTML;
             return 0;
         }
 
-        // Backlog and sprint membership are mutually exclusive: refuse
-        // to create a backlog row when the linked item already lives in
-        // a sprint.
+        // Backlog and sprint membership are mutually exclusive.
         if (self::isLinkedItemInAnySprint($itemtype, $itemId)) {
             return 0;
         }
 
-        // Avoid duplicates: same linked item already in backlog
+        // Reuse an existing backlog row for the same linked item.
         $existing = (new SprintItem())->find([
             'plugin_sprint_sprints_id' => 0,
             'itemtype'                 => $itemtype,

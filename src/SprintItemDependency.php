@@ -34,9 +34,8 @@ class SprintItemDependency extends CommonDBRelation
     }
 
     /**
-     * Render paths can run before the install/upgrade migration creates the
-     * table; every DB read short-circuits via this guard so the plugin
-     * doesn't 500 on first load after the new code lands.
+     * Guard for DB reads: render paths can run before the migration creates
+     * the table, so this prevents a 500 on first load after new code lands.
      */
     public static function isTableReady(): bool
     {
@@ -78,10 +77,8 @@ class SprintItemDependency extends CommonDBRelation
         if (isset($input['capacity']))                     $input['capacity']                     = max(0, min(100, (int)$input['capacity']));
         if (isset($input['is_resolved']))                  $input['is_resolved']                  = (int)(bool)$input['is_resolved'];
 
-        // One dependency row per (item, member): the table has a UNIQUE
-        // index on (plugin_sprint_sprintitems_id, users_id). Catch the
-        // duplicate here so callers get a clear message instead of an
-        // uncaught DB constraint violation (HTTP 500).
+        // One dependency row per (item, member) — table has a UNIQUE index.
+        // Catch dupes here for a clear message instead of a DB 500.
         $dupeItemId = (int)($input['plugin_sprint_sprintitems_id'] ?? 0);
         $dupeUserId = (int)($input['users_id'] ?? 0);
         if ($dupeItemId > 0 && $dupeUserId > 0 && self::isTableReady()) {
@@ -300,9 +297,8 @@ class SprintItemDependency extends CommonDBRelation
     }
 
     /**
-     * Resolved rows still count: the helper has actually spent that capacity,
-     * so freeing it after resolve would make the sprint capacity bar lie
-     * about real spend.
+     * Resolved rows still count: the helper already spent that capacity, so
+     * freeing it would make the sprint capacity bar understate real spend.
      */
     public static function getUsedDependencyCapacityForUser(int $sprintId, int $userId, int $excludeId = 0): int
     {
@@ -403,9 +399,8 @@ class SprintItemDependency extends CommonDBRelation
     }
 
     /**
-     * Items in the sprint where $userId is helper on at least one open dep,
-     * with the parent owner's name. Used to render "Helpt op:" on the
-     * member card.
+     * Sprint items where $userId is helper on an open dependency, with the
+     * parent owner's name. Renders "Helpt op:" on the member card.
      *
      * @return array<int, array{item_id:int,name:string,owner_id:int,owner_name:string,capacity:int}>
      */

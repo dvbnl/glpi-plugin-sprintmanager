@@ -8,27 +8,19 @@ use Html;
 use Session;
 
 /**
- * SprintAudit - Consolidated audit trail for a sprint.
+ * SprintAudit - consolidated audit trail for a sprint.
  *
- * Aggregates rows from GLPI's native `glpi_logs` table for the sprint
- * itself plus every owned sub-entity (items, members, meetings,
- * fastlane allocations), and renders them as a single chronological
- * audit log with timestamps + acting user.
- *
- * Registered as a tab on Sprint. Uses only GLPI's built-in logging —
- * no new tables, no writes. Works out of the box because each tracked
- * class declares `$dohistory = true` on their CommonDBTM subclass.
+ * Aggregates GLPI's native glpi_logs rows for the sprint and its owned
+ * sub-entities into one chronological log. Read-only: no new tables or
+ * writes; it works because each tracked class sets $dohistory = true.
  */
 class SprintAudit extends CommonGLPI
 {
     public static $rightname = 'plugin_sprint_sprint';
 
     /**
-     * Audit-log retention is now scoped per-sprint: log rows are kept
-     * as long as the sprint they belong to exists, so we can always look
-     * back at a finished sprint's history. This constant is kept as a
-     * fallback for code paths that still need a default upper bound when
-     * a sprint has no start/end date set.
+     * Retention is scoped per-sprint (rows kept as long as the sprint
+     * exists). This is only a fallback bound for sprints with no dates set.
      */
     const RETENTION_DAYS = 14;
 
@@ -69,9 +61,8 @@ class SprintAudit extends CommonGLPI
             return;
         }
 
-        // Opportunistic cleanup — keeps the glpi_logs table from growing
-        // unbounded for sprint-related itemtypes. Cheap when there's
-        // nothing to delete (indexed on date_mod).
+        // Opportunistic cleanup so glpi_logs doesn't grow unbounded; cheap
+        // when there's nothing to delete (indexed on date_mod).
         self::pruneOldLogs();
 
         $entries = self::collectEntries($sprintId);
@@ -141,8 +132,8 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Collect log entries across all sprint-related itemtypes, sort by
-     * timestamp descending, and return a render-ready list.
+     * Collect log entries across all sprint-related itemtypes, newest
+     * first, as a render-ready list.
      */
     private static function collectEntries(int $sprintId): array
     {
@@ -152,12 +143,10 @@ class SprintAudit extends CommonGLPI
             return [];
         }
 
-        // Map every itemtype we log for this sprint to the area it
-        // belongs to + the specific ids that fall under this sprint.
+        // Itemtypes we log for this sprint, with the ids under this sprint.
         $targets = self::resolveTargetIds($sprintId);
 
-        // Build a DB criteria array — GLPI 11 forbids raw SQL strings
-        // passed through $DB->request().
+        // Build a criteria array — GLPI 11 forbids raw SQL strings in $DB->request().
         $orClauses = [];
         foreach ($targets as $t) {
             if (empty($t['ids'])) {
@@ -175,8 +164,8 @@ class SprintAudit extends CommonGLPI
 
         [$windowStart, $windowEnd] = self::getRetentionWindowForSprint($sprintId);
 
-        // Top-level array keys are implicitly AND'd in GLPI's DB iterator.
-        // Nested 'OR' groups the itemtype/items_id combinations together.
+        // GLPI's iterator AND's top-level keys; nested 'OR' groups the
+        // itemtype/items_id combinations.
         $where = ['OR' => $orClauses];
         if ($windowStart !== null) {
             $where['date_mod'] = ['>=', $windowStart];
@@ -199,10 +188,8 @@ class SprintAudit extends CommonGLPI
         foreach ($DB->request($criteria) as $row) {
             $area = self::areaForItemtype($row['itemtype']);
 
-            // glpi_logs stores the actor as a single string in `user_name`,
-            // typically formatted as "Display Name (login_id)". Parse out
-            // the numeric id when present so we can resolve the user's
-            // current display name (respecting rename etc.).
+            // glpi_logs.user_name is a string like "Display Name (login_id)".
+            // Parse any numeric id so we can resolve the current display name.
             $rawUser = (string)($row['user_name'] ?? '');
             $userId  = 0;
             if (preg_match('/\((\d+)\)\s*$/', $rawUser, $m)) {
@@ -217,16 +204,14 @@ class SprintAudit extends CommonGLPI
             $linkedAction = (int)($row['linked_action'] ?? 0);
             $searchOptId  = (int)($row['id_search_option'] ?? 0);
 
-            // Action label: map numeric linked_action to a short verb,
-            // plus the affected field name when this is a field update.
+            // Short verb for linked_action, plus the field name on field updates.
             $fieldLabel = self::fieldLabel((string)$row['itemtype'], $searchOptId);
             $action = self::actionLabel($linkedAction);
             if ($fieldLabel !== '' && $linkedAction === 0) {
                 $action .= ': ' . $fieldLabel;
             }
 
-            // Change summary: "<old> → <new>" for field updates, or a
-            // plain description for adds/purges.
+            // "<old> → <new>" for field updates, plain text for adds/purges.
             $changeHtml = self::formatChange($linkedAction, (string)($row['old_value'] ?? ''), (string)($row['new_value'] ?? ''));
 
             $itemHtml = self::formatItem($row['itemtype'], (int)$row['items_id']);
@@ -380,8 +365,8 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Fetch the display name for the affected item. Falls back to the
-     * itemtype + id when the row has already been purged.
+     * Display name for the affected item; falls back to itemtype + id
+     * when the row has already been purged.
      */
     private static function formatItem(string $itemtype, int $itemsId): string
     {
@@ -423,9 +408,8 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Resolve a search option id back to its field label, using each
-     * tracked itemtype's rawSearchOptions(). Cached per-itemtype so
-     * the lookup stays cheap over the 500-row loop.
+     * Resolve a search-option id to its field label via the itemtype's
+     * rawSearchOptions(). Cached per-itemtype to stay cheap over 500 rows.
      */
     private static function fieldLabel(string $itemtype, int $searchOptId): string
     {
@@ -448,8 +432,7 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * GLPI stores linked_action as a numeric enum. Translate the ones we
-     * care about into short, localized verbs.
+     * Translate GLPI's numeric linked_action enum into short localized verbs.
      */
     private static function actionLabel(int $action): string
     {
@@ -479,8 +462,7 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Render the old→new diff. Values are already plain strings from
-     * glpi_logs; truncate long text to keep the table readable.
+     * Render the old→new diff, truncating long values for readability.
      */
     private static function formatChange(int $action, string $oldValue, string $newValue): string
     {
@@ -504,8 +486,8 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * GLPI stores `user_name` as "Login (id)" or a raw login string.
-     * Strip any trailing id to keep only the display part.
+     * glpi_logs.user_name is "Login (id)" or a raw login; strip any
+     * trailing id to keep the display part.
      */
     private static function stripUserName(string $raw): string
     {
@@ -513,10 +495,9 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Returns [windowStart, windowEnd] (Y-m-d H:i:s strings or null) for
-     * the audit log of a specific sprint. Bounded by the sprint's own
-     * start/end dates so old sprints stay fully viewable; nulls mean "no
-     * bound" — i.e. the sprint hasn't started or hasn't ended yet.
+     * Returns [windowStart, windowEnd] (Y-m-d H:i:s strings or null),
+     * bounded by the sprint's own start/end dates. Null means "no bound"
+     * (sprint hasn't started/ended yet).
      */
     public static function getRetentionWindowForSprint(int $sprintId): array
     {
@@ -598,13 +579,9 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Delete sprint-related glpi_logs rows that fall outside the union of
-     * all existing sprints' windows. As long as a sprint still exists,
-     * its audit history is preserved indefinitely — this matters when
-     * looking back at completed sprints.
-     *
-     * Called opportunistically from the audit tab, and on a schedule by
-     * {@see cronAuditCleanup()}.
+     * Delete sprint-related glpi_logs rows older than every existing
+     * sprint's window, so a sprint's history survives as long as it does.
+     * Called opportunistically from the audit tab and via {@see cronAuditCleanup()}.
      */
     public static function pruneOldLogs(): int
     {
@@ -614,9 +591,8 @@ class SprintAudit extends CommonGLPI
             return 0;
         }
 
-        // Earliest sprint start across the system. Anything older than
-        // that cannot belong to a visible sprint window and is safe to
-        // purge. If no sprint has a start date, leave glpi_logs alone.
+        // Anything older than the earliest sprint start can't belong to a
+        // visible window and is safe to purge; no start dates → leave alone.
         $earliest = null;
         foreach ($DB->request([
             'SELECT' => ['MIN' => 'date_start AS earliest'],
@@ -681,9 +657,8 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Highest current glpi_logs.id, or 0 if the table is empty/missing.
-     * Use as a "before" marker around an update; pair with
-     * tagNewLogsAsMeetingSourced() to attribute the new rows.
+     * Highest glpi_logs.id (0 if empty/missing). A "before" marker around
+     * an update; pair with tagNewLogsAsMeetingSourced() to attribute new rows.
      */
     public static function snapshotMaxLogId(): int
     {
@@ -704,9 +679,8 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Mark every glpi_logs row written for this SprintItem after the
-     * given snapshot as caused by a meeting save. No-op when the
-     * side-table doesn't exist or any id is missing.
+     * Tag glpi_logs rows written for this SprintItem after the snapshot as
+     * meeting-sourced. No-op without the side-table or with a missing id.
      */
     public static function tagNewLogsAsMeetingSourced(int $afterLogId, int $itemId, int $meetingId): void
     {
@@ -767,11 +741,9 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Aggregate audit-log events per sprint member per day, for the
-     * global-dashboard activity chart. Only counts rows from glpi_logs
-     * (actual field/relation changes — GLPI does not log views) and only
-     * attributes events to users who are registered members of this
-     * sprint.
+     * Aggregate audit events per member per day for the dashboard activity
+     * chart. Counts only glpi_logs rows (real changes; GLPI doesn't log
+     * views) and only for registered sprint members.
      *
      * @return array {
      *   dates:   string[]   list of YYYY-MM-DD day buckets (ascending),
@@ -806,8 +778,7 @@ class SprintAudit extends CommonGLPI
         }
 
         if ($overrideFrom !== null || $overrideTo !== null) {
-            // User-specified range — clamped to the sprint window so we
-            // don't advertise days outside the sprint we're viewing.
+            // User-specified range, clamped to the sprint window.
             $rangeStart = $overrideFrom ?? $sprintStart ?? $today->modify('-30 days');
             $rangeEnd   = $overrideTo   ?? $sprintEnd   ?? $today;
             if ($sprintStart && $rangeStart < $sprintStart) { $rangeStart = $sprintStart; }
@@ -829,8 +800,7 @@ class SprintAudit extends CommonGLPI
         }
         $dateIndex = array_flip($dates);
 
-        // Sprint members define which users count as "team activity".
-        // Events from people outside the team are ignored.
+        // Only sprint members count as team activity; outsiders are ignored.
         $memberIds = [];
         foreach ((new SprintMember())->find(['plugin_sprint_sprints_id' => $sprintId]) as $r) {
             $uid = (int)$r['users_id'];
@@ -842,9 +812,8 @@ class SprintAudit extends CommonGLPI
             return $empty;
         }
 
-        // glpi_logs.user_name is typically formatted as "Display Name (login)"
-        // — where `login` is the user's login string, NOT their numeric id.
-        // Build a lookup so we can resolve either form to a sprint member.
+        // glpi_logs.user_name is "Display Name (login)" — the paren token is
+        // the login string, NOT a numeric id. Lookup to resolve it to a member.
         $loginToUid = [];
         $userIter = $DB->request([
             'SELECT' => ['id', 'name'],
@@ -858,9 +827,8 @@ class SprintAudit extends CommonGLPI
             }
         }
 
-        // Meeting-record edits don't count as item work; SprintItem rows
-        // that fanned out from a meeting save are filtered via the
-        // audit_sources side-table below.
+        // Meeting edits aren't item work; meeting-driven SprintItem rows are
+        // filtered via the audit_sources side-table below.
         $targets = self::resolveTargetIds($sprintId);
         $orClauses = [];
         foreach ($targets as $t) {
@@ -901,10 +869,8 @@ class SprintAudit extends CommonGLPI
             }
             $raw = (string)($row['user_name'] ?? '');
             $uid = 0;
-            // glpi_logs typically stores actor as "Display Name (login)".
-            // The token in parens is usually the login string, occasionally
-            // a numeric id. Try numeric first, then resolve login → id via
-            // the sprint-member lookup we built above.
+            // Paren token is usually the login, occasionally a numeric id:
+            // try numeric first, then resolve login → id via the member lookup.
             if (preg_match('/\(([^)]+)\)\s*$/', $raw, $m)) {
                 $token = trim($m[1]);
                 if (ctype_digit($token)) {
@@ -928,8 +894,7 @@ class SprintAudit extends CommonGLPI
             $counts[$uid][$day]++;
         }
 
-        // Stable palette — cycle through a handful of distinct hues. Keeps
-        // labels legible without pulling in a palette library.
+        // Stable palette of distinct hues, cycled — no palette library needed.
         $palette = [
             '#0d6efd', '#198754', '#fd7e14', '#6f42c1', '#dc3545',
             '#20c997', '#d63384', '#0dcaf0', '#ffc107', '#6c757d',
@@ -964,10 +929,8 @@ class SprintAudit extends CommonGLPI
         return ['dates' => $dates, 'members' => $members];
     }
 
-    // === GLPI cron task integration ===
-    //
-    // Registered via plugin_sprint_install() so a nightly task prunes
-    // sprint-related log entries even for sprints nobody opens.
+    // GLPI cron task — registered via plugin_sprint_install() so a nightly
+    // task prunes sprint logs even for sprints nobody opens.
 
     public static function cronInfo(string $name): array
     {

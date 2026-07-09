@@ -196,8 +196,7 @@ class SprintTemplate extends CommonDBTM
     }
 
     /**
-     * Apply template to a newly created sprint:
-     * copy members and items from template to sprint
+     * Copy a template's members, items and meetings onto a newly created sprint.
      */
     public static function applyToSprint(int $templateId, int $sprintId): void
     {
@@ -206,9 +205,8 @@ class SprintTemplate extends CommonDBTM
             return;
         }
 
-        // Backfill goal/comment on the sprint if the user did not override
-        // them (e.g. when JavaScript pre-fill did not run). This is a safety
-        // net for the JS pre-fill in Sprint::showTemplateLoadScript().
+        // Safety net for the JS pre-fill (Sprint::showTemplateLoadScript):
+        // backfill goal/comment only when the user left them empty.
         $sprint = new Sprint();
         if ($sprint->getFromDB($sprintId)) {
             $updates = ['id' => $sprintId];
@@ -223,7 +221,6 @@ class SprintTemplate extends CommonDBTM
             }
         }
 
-        // Copy template members to sprint members
         $tmplMember = new SprintTemplateMember();
         $members = $tmplMember->find(['plugin_sprint_sprinttemplates_id' => $templateId]);
         foreach ($members as $row) {
@@ -237,7 +234,6 @@ class SprintTemplate extends CommonDBTM
             ]);
         }
 
-        // Copy template items to sprint items
         $tmplItem = new SprintTemplateItem();
         $items = $tmplItem->find(
             ['plugin_sprint_sprinttemplates_id' => $templateId],
@@ -256,7 +252,6 @@ class SprintTemplate extends CommonDBTM
             ]);
         }
 
-        // Generate meetings from template schedule
         SprintTemplateMeeting::applyToSprint($templateId, $sprintId);
     }
 }

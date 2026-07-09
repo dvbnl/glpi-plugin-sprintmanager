@@ -1,11 +1,8 @@
 <?php
 
 /**
- * SprintFastlaneMember form handler
- *
- * Add / update / purge fastlane member assignments. Same flat handler
- * pattern as the other plugin form pages — CommonDBTM does CSRF checking
- * inside add/update/delete.
+ * SprintFastlaneMember form handler (add / update / purge).
+ * CSRF is checked by CommonDBTM inside add/update/delete.
  */
 
 if (!defined('GLPI_ROOT')) {

@@ -1,12 +1,11 @@
 <?php
 
 /**
- * Soft close model: 'resolve' flips is_resolved = 1 (capacity freed, row
- * kept for audit); 'reopen' flips it back; 'purge' hard-deletes.
+ * Soft close: 'resolve' sets is_resolved=1 (frees capacity, keeps row),
+ * 'reopen' reverts, 'purge' hard-deletes.
  *
- * No explicit Session::checkCSRF() — CommonDBTM add/update/delete already
- * validates the same token, calling it here would consume the token and
- * cause the downstream check to fail with 403.
+ * No Session::checkCSRF() here — CommonDBTM add/update/delete validates the
+ * token; calling it again would consume it and 403 the real check.
  */
 
 if (!defined('GLPI_ROOT')) {

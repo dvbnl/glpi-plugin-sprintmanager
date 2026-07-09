@@ -49,6 +49,8 @@ class SprintDashboard extends CommonGLPI
         $ID        = $sprint->getID();
         $currentUserId = (int)Session::getLoginUserID();
 
+        Sprint::renderHeaderBar($sprint);
+
         // Collect all items once
         $allItems      = self::getAllLinkedItems($ID);
         $personalItems = array_filter($allItems, function ($row) use ($currentUserId) {
@@ -57,6 +59,20 @@ class SprintDashboard extends CommonGLPI
 
         $globalStats   = self::computeStats($allItems);
         $personalStats = self::computeStats($personalItems);
+
+        // The personal dependency card must also count items where the current
+        // user is helper on an open dependency — being assigned by someone
+        // else counts too, not only owning an item in dependency status.
+        $helperDepIds = [];
+        foreach (SprintItemDependency::getOpenItemsForHelper($ID, $currentUserId) as $dep) {
+            $helperDepIds[(int)$dep['item_id']] = true;
+        }
+        foreach ($personalItems as $row) {
+            if ($row['raw_status'] === SprintItem::STATUS_DEPENDENCY) {
+                unset($helperDepIds[(int)$row['item_id']]);
+            }
+        }
+        $personalStats['dependency_items'] += count($helperDepIds);
 
         // === View toggle buttons ===
         echo "<div style='display:flex;justify-content:center;gap:8px;padding:12px 0 4px;'>";
@@ -69,6 +85,9 @@ class SprintDashboard extends CommonGLPI
         // === Global view ===
         echo "<div id='sprint_view_global'>";
         self::renderStatsAndProgress($globalStats);
+        self::showAtRiskWidget($sprint);
+        self::showBurndownChart($sprint);
+        self::showVelocityChart($sprint);
         self::showMemberActivityChart($ID);
         self::showFastlaneItems($ID, null, 'global');
         self::showDependencyItems($ID, null, 'global');
@@ -125,29 +144,47 @@ class SprintDashboard extends CommonGLPI
             'blocked_items'    => 0,
             'total_points'     => 0,
             'done_points'      => 0,
+            // Allocated capacity (%) per status — drives the progress bar so a
+            // single heavy item weighs more than a trivial one. See {@see renderStatsAndProgress()}.
+            'todo_cap'         => 0,
+            'in_progress_cap'  => 0,
+            'review_cap'       => 0,
+            'dependency_cap'   => 0,
+            'done_cap'         => 0,
+            'blocked_cap'      => 0,
         ];
 
         foreach ($items as $row) {
             $stats['total_points'] += (int)$row['story_points'];
+            // Min weight 1 per item: a zero-capacity (unestimated) item still
+            // earns its own slice in the bar instead of vanishing, while items
+            // with real capacity dominate proportionally.
+            $capWeight = max((int)($row['capacity'] ?? 0), 1);
             switch ($row['raw_status']) {
                 case SprintItem::STATUS_TODO:
                     $stats['todo_items']++;
+                    $stats['todo_cap'] += $capWeight;
                     break;
                 case SprintItem::STATUS_IN_PROGRESS:
                     $stats['in_progress']++;
+                    $stats['in_progress_cap'] += $capWeight;
                     break;
                 case SprintItem::STATUS_REVIEW:
                     $stats['review_items']++;
+                    $stats['review_cap'] += $capWeight;
                     break;
                 case SprintItem::STATUS_DEPENDENCY:
                     $stats['dependency_items']++;
+                    $stats['dependency_cap'] += $capWeight;
                     break;
                 case SprintItem::STATUS_DONE:
                     $stats['done_items']++;
                     $stats['done_points'] += (int)$row['story_points'];
+                    $stats['done_cap'] += $capWeight;
                     break;
                 case SprintItem::STATUS_BLOCKED:
                     $stats['blocked_items']++;
+                    $stats['blocked_cap'] += $capWeight;
                     break;
             }
         }
@@ -161,35 +198,49 @@ class SprintDashboard extends CommonGLPI
     private static function renderStatsAndProgress(array $stats): void
     {
         // === Stats cards ===
-        echo "<div style='display:flex;flex-wrap:wrap;gap:14px;padding:16px 0 20px;justify-content:center;'>";
+        echo "<div class='sprint-stat-cards'>";
 
         $cards = [
-            ['label' => __('Total Items', 'sprint'),  'value' => $stats['total_items'],     'icon' => 'fas fa-list-ul',       'color' => '#6c757d', 'bg' => '#f8f9fa', 'accent' => '#6c757d'],
-            ['label' => __('Done', 'sprint'),          'value' => $stats['done_items'],      'icon' => 'fas fa-check-circle',   'color' => '#198754', 'bg' => '#d1e7dd', 'accent' => '#198754'],
-            ['label' => __('In Progress', 'sprint'),   'value' => $stats['in_progress'],     'icon' => 'fas fa-circle-notch',   'color' => '#0d6efd', 'bg' => '#cfe2ff', 'accent' => '#0d6efd'],
-            ['label' => __('In Review', 'sprint'),     'value' => $stats['review_items'],    'icon' => 'fas fa-search',         'color' => '#6f42c1', 'bg' => '#e9d7f7', 'accent' => '#6f42c1'],
-            ['label' => __('Dependency', 'sprint'),    'value' => $stats['dependency_items'],'icon' => 'fas fa-link',           'color' => '#20c997', 'bg' => '#d1f2ea', 'accent' => '#20c997'],
-            ['label' => __('Blocked', 'sprint'),       'value' => $stats['blocked_items'],   'icon' => 'fas fa-hand-paper',     'color' => '#dc3545', 'bg' => '#f8d7da', 'accent' => '#dc3545'],
-            ['label' => __('Story Points', 'sprint'),  'value' => $stats['done_points'] . ' / ' . $stats['total_points'], 'icon' => 'fas fa-star', 'color' => '#d68a00', 'bg' => '#fff3cd', 'accent' => '#d68a00'],
+            ['label' => __('Total Items', 'sprint'),  'value' => $stats['total_items'],     'icon' => 'fas fa-list-ul',      'accent' => '#6c757d'],
+            ['label' => __('Done', 'sprint'),          'value' => $stats['done_items'],      'icon' => 'fas fa-check-circle', 'accent' => '#198754'],
+            ['label' => __('In Progress', 'sprint'),   'value' => $stats['in_progress'],     'icon' => 'fas fa-circle-notch', 'accent' => '#0d6efd'],
+            ['label' => __('In Review', 'sprint'),     'value' => $stats['review_items'],    'icon' => 'fas fa-search',       'accent' => '#6f42c1'],
+            ['label' => __('Dependency', 'sprint'),    'value' => $stats['dependency_items'],'icon' => 'fas fa-link',         'accent' => '#20c997'],
+            ['label' => __('Blocked', 'sprint'),       'value' => $stats['blocked_items'],   'icon' => 'fas fa-hand-paper',   'accent' => '#dc3545'],
+            ['label' => __('Story Points', 'sprint'),  'value' => $stats['done_points'] . ' / ' . $stats['total_points'], 'icon' => 'fas fa-star', 'accent' => '#d68a00'],
         ];
 
         foreach ($cards as $c) {
-            echo "<div style='background:{$c['bg']};border:1px solid {$c['accent']}22;border-radius:10px;padding:16px 22px;min-width:130px;text-align:center;position:relative;overflow:hidden;transition:box-shadow 0.2s,transform 0.2s;border-top:3px solid {$c['accent']};'>";
-            echo "<div style='font-size:1.3em;color:{$c['color']};margin-bottom:6px;opacity:0.85;'><i class='{$c['icon']}'></i></div>";
-            echo "<div style='font-size:1.6em;font-weight:700;color:{$c['color']};line-height:1.2;'>{$c['value']}</div>";
-            echo "<div style='font-size:0.78em;color:#6c757d;margin-top:3px;text-transform:uppercase;letter-spacing:0.03em;'>{$c['label']}</div>";
+            echo "<div class='sprint-stat-card' style='--stat-accent:{$c['accent']};'>";
+            echo "<div class='sprint-stat-icon'><i class='{$c['icon']}'></i></div>";
+            echo "<div class='sprint-stat-text'>";
+            echo "<div class='sprint-stat-value'>{$c['value']}</div>";
+            echo "<div class='sprint-stat-label'>{$c['label']}</div>";
+            echo "</div>";
             echo "</div>";
         }
         echo "</div>";
 
         // === Progress bar ===
-        $total = max($stats['total_items'], 1);
-        $donePct       = round(($stats['done_items'] / $total) * 100, 1);
-        $progressPct   = round(($stats['in_progress'] / $total) * 100, 1);
-        $reviewPct     = round(($stats['review_items'] / $total) * 100, 1);
-        $dependencyPct = round((($stats['dependency_items'] ?? 0) / $total) * 100, 1);
-        $blockedPct    = round(($stats['blocked_items'] / $total) * 100, 1);
-        $todoPct       = round(($stats['todo_items'] / $total) * 100, 1);
+        // Weighted by allocated capacity (%) so the bar reflects effort, not a
+        // raw item headcount — a blocked item using 25% capacity dominates a 2%
+        // one. Each item carries a minimum weight of 1 (see computeStats), so a
+        // sprint with no capacities set degrades cleanly to an even item split.
+        $weights = [
+            'done'       => (int)($stats['done_cap'] ?? 0),
+            'progress'   => (int)($stats['in_progress_cap'] ?? 0),
+            'review'     => (int)($stats['review_cap'] ?? 0),
+            'dependency' => (int)($stats['dependency_cap'] ?? 0),
+            'blocked'    => (int)($stats['blocked_cap'] ?? 0),
+            'todo'       => (int)($stats['todo_cap'] ?? 0),
+        ];
+        $total = max(array_sum($weights), 1);
+        $donePct       = round(($weights['done'] / $total) * 100, 1);
+        $progressPct   = round(($weights['progress'] / $total) * 100, 1);
+        $reviewPct     = round(($weights['review'] / $total) * 100, 1);
+        $dependencyPct = round(($weights['dependency'] / $total) * 100, 1);
+        $blockedPct    = round(($weights['blocked'] / $total) * 100, 1);
+        $todoPct       = round(($weights['todo'] / $total) * 100, 1);
 
         echo "<div style='margin:0 0 24px;'>";
         echo "<div style='display:flex;gap:18px;justify-content:center;margin-bottom:8px;font-size:0.82em;color:#6c757d;flex-wrap:wrap;'>";
@@ -200,13 +251,15 @@ class SprintDashboard extends CommonGLPI
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc3545;margin-right:4px;vertical-align:middle;'></span>" . __('Blocked', 'sprint') . " {$blockedPct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#d5d8dc;margin-right:4px;vertical-align:middle;'></span>" . __('To Do', 'sprint') . " {$todoPct}%</span>";
         echo "</div>";
+        // min-width keeps a tiny (e.g. single unestimated item) slice visible.
+        $segStyle = "height:100%;transition:width 0.4s;min-width:6px;";
         echo "<div style='width:100%;height:20px;background:#e9ecef;border-radius:10px;overflow:hidden;display:flex;'>";
-        if ($donePct > 0)       echo "<div style='width:{$donePct}%;height:100%;background:#198754;transition:width 0.4s;' title='" . __('Done', 'sprint') . "'></div>";
-        if ($progressPct > 0)   echo "<div style='width:{$progressPct}%;height:100%;background:#0d6efd;transition:width 0.4s;' title='" . __('In Progress', 'sprint') . "'></div>";
-        if ($reviewPct > 0)     echo "<div style='width:{$reviewPct}%;height:100%;background:#6f42c1;transition:width 0.4s;' title='" . __('In Review', 'sprint') . "'></div>";
-        if ($dependencyPct > 0) echo "<div style='width:{$dependencyPct}%;height:100%;background:#20c997;transition:width 0.4s;' title='" . __('Dependency', 'sprint') . "'></div>";
-        if ($blockedPct > 0)    echo "<div style='width:{$blockedPct}%;height:100%;background:#dc3545;transition:width 0.4s;' title='" . __('Blocked', 'sprint') . "'></div>";
-        if ($todoPct > 0)       echo "<div style='width:{$todoPct}%;height:100%;background:#d5d8dc;transition:width 0.4s;' title='" . __('To Do', 'sprint') . "'></div>";
+        if ($donePct > 0)       echo "<div style='width:{$donePct}%;{$segStyle}background:#198754;' title='" . __('Done', 'sprint') . "'></div>";
+        if ($progressPct > 0)   echo "<div style='width:{$progressPct}%;{$segStyle}background:#0d6efd;' title='" . __('In Progress', 'sprint') . "'></div>";
+        if ($reviewPct > 0)     echo "<div style='width:{$reviewPct}%;{$segStyle}background:#6f42c1;' title='" . __('In Review', 'sprint') . "'></div>";
+        if ($dependencyPct > 0) echo "<div style='width:{$dependencyPct}%;{$segStyle}background:#20c997;' title='" . __('Dependency', 'sprint') . "'></div>";
+        if ($blockedPct > 0)    echo "<div style='width:{$blockedPct}%;{$segStyle}background:#dc3545;' title='" . __('Blocked', 'sprint') . "'></div>";
+        if ($todoPct > 0)       echo "<div style='width:{$todoPct}%;{$segStyle}background:#d5d8dc;' title='" . __('To Do', 'sprint') . "'></div>";
         echo "</div>";
         echo "</div>";
     }
@@ -216,9 +269,7 @@ class SprintDashboard extends CommonGLPI
      *
      * @param array  $items
      * @param string $emptyMessage
-     * @param string $tableSelector  CSS class used to scope filter/sort JS to
-     *                               this specific table (so global & personal
-     *                               views operate independently).
+     * @param string $tableSelector  CSS class scoping filter/sort JS so global & personal views stay independent.
      */
     private static function renderItemsTable(array $items, string $emptyMessage, string $tableSelector = 'sprint-dashboard-items', int $sprintId = 0, string $viewKey = 'global'): void
     {
@@ -228,8 +279,7 @@ class SprintDashboard extends CommonGLPI
             4 => __('High'), 5 => __('Very high'),
         ];
 
-        // Collapsible wrapper — remembered per sprint + view so global and
-        // personal views keep independent expand/collapse state.
+        // Collapse state persisted per sprint + view (global/personal independent).
         $collapseKey = 'dash-items-' . (int)$sprintId . '-' . $viewKey;
         echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
         echo "<div class='sprint-collapsible-header'>";
@@ -277,9 +327,7 @@ class SprintDashboard extends CommonGLPI
             $typeFilter   = $itemtypeCode === '' ? 'Manual' : $itemtypeCode;
             $ownerNameRaw = $row['member_name'] ?? '';
 
-            // Lay down every data-* attr the quick-edit modal and client-side
-            // filter/sort logic need on the row itself, so JS can read them
-            // without traversing into cells.
+            // Expose data-* attrs on the row so quick-edit + filter/sort JS read them without traversing cells.
             $rowTags = $tagsById[(int)$row['item_id']] ?? [];
 
             $dataAttrs = 'class="tab_bg_1 sprint-row sprint-dashboard-row sprint-filterable-row"'
@@ -300,9 +348,14 @@ class SprintDashboard extends CommonGLPI
                 . ' data-note="' . htmlescape((string)($row['note'] ?? '')) . '"';
 
             $rowDeps = $depsById[(int)$row['item_id']] ?? [];
+            $linkedOpenBadge = SprintItem::renderLinkedItemOpenBadge([
+                'status'   => $row['raw_status'] ?? '',
+                'itemtype' => $row['itemtype'] ?? ($row['itemtype_code'] ?? ''),
+                'items_id' => (int)($row['items_id'] ?? 0),
+            ]);
             echo "<tr {$dataAttrs}>";
             echo "<td style='white-space:nowrap;'><i class='{$row['icon']}' style='color:{$row['color']};margin-right:5px;opacity:0.85;'></i>{$row['type_label']}</td>";
-            echo "<td class='sprint-cell-name'><a href='{$row['url']}'>" . htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
+            echo "<td class='sprint-cell-name'><a href='{$row['url']}'>" . htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . $linkedOpenBadge . "</td>";
             echo "<td>{$linkedDisplay}</td>";
             echo "<td class='sprint-cell-status'>{$row['status']}</td>";
             echo "<td class='sprint-cell-priority'>{$row['priority']}</td>";
@@ -321,9 +374,7 @@ class SprintDashboard extends CommonGLPI
     }
 
     /**
-     * Show member capacity overview, broken down by Regular vs Fastlane
-     * categories so the team can see how much sprint capacity is going
-     * to fastlane work.
+     * Member capacity overview, split Regular vs Fastlane vs Dependency.
      */
     private static function showMemberCapacity(int $sprintId): void
     {
@@ -399,9 +450,14 @@ class SprintDashboard extends CommonGLPI
                 $remainColor = '#e67e22';
             }
 
-            $overload = ($total - $used < 0)
-                ? ' <span style="color:#dc3545;font-weight:700;">(' . __('overloaded', 'sprint') . ')</span>'
-                : '';
+            // Show the overflow amount instead of clamping "Available" to 0%.
+            $overflow = max($used - $total, 0);
+            if ($overflow > 0) {
+                $availableDisplay = '-' . $overflow . '% <span style="font-weight:600;">('
+                    . sprintf(__('%d%% overflow', 'sprint'), $overflow) . ')</span>';
+            } else {
+                $availableDisplay = $remaining . '%';
+            }
 
             echo "<tr class='tab_bg_1'>";
             echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($uid)) . "</td>";
@@ -415,7 +471,7 @@ class SprintDashboard extends CommonGLPI
                 ? "<strong style='color:#20c997;'>{$dependency}%</strong>"
                 : "{$dependency}%") . "</td>";
             echo "<td class='center'>{$used}%</td>";
-            echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$remaining}%{$overload}</td>";
+            echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$availableDisplay}</td>";
             echo "<td style='min-width:180px;'>";
             echo SprintMember::renderCapacityBar($total, $regular, $fastlane, $dependency, 16, '8px');
             echo "</td>";
@@ -426,9 +482,7 @@ class SprintDashboard extends CommonGLPI
     }
 
     /**
-     * Render fastlane items table on the dashboard, between regular sprint
-     * items and the team capacity overview. Optionally restricted to items
-     * the given user is a fastlane member of.
+     * Render the dashboard fastlane items table. $forUserId restricts to items the user is a fastlane member of.
      */
     private static function showFastlaneItems(int $sprintId, ?int $forUserId = null, string $viewKey = 'global'): void
     {
@@ -472,6 +526,13 @@ class SprintDashboard extends CommonGLPI
 
         $sprintFastlaneTotal = SprintFastlaneMember::getTotalFastlaneCapacityForSprint($sprintId);
 
+        // Optional per-sprint hard cap: display total vs. cap plus the overflow.
+        $fastlaneCap = 0;
+        $sprintObj   = new Sprint();
+        if ($sprintObj->getFromDB($sprintId)) {
+            $fastlaneCap = (int)($sprintObj->fields['fastlane_capacity'] ?? 0);
+        }
+
         // Count how many items will be shown (personal view filters by user)
         $visibleCount = 0;
         foreach ($items as $row) {
@@ -492,10 +553,18 @@ class SprintDashboard extends CommonGLPI
         echo "<div class='sprint-collapsible-header'>";
         echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
         echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-left:2px;'></i>";
+        $capText = ($fastlaneCap > 0)
+            ? sprintf(__('Total capacity: %1$d%% / %2$d%%', 'sprint'), $sprintFastlaneTotal, $fastlaneCap)
+            : sprintf(__('Total capacity: %d%%', 'sprint'), $sprintFastlaneTotal);
         echo "<span>" . __('Fastlane', 'sprint') .
             " <span class='text-muted' style='font-weight:400;'>(" . $visibleCount . ")</span>" .
-            " &mdash; " . sprintf(__('Total capacity: %d%%', 'sprint'), $sprintFastlaneTotal) .
-            "</span>";
+            " &mdash; " . $capText;
+        if ($fastlaneCap > 0 && $sprintFastlaneTotal > $fastlaneCap) {
+            echo " <span class='badge bg-danger' style='margin-left:4px;'>"
+                . sprintf(__('+%d%% overflow', 'sprint'), $sprintFastlaneTotal - $fastlaneCap)
+                . "</span>";
+        }
+        echo "</span>";
         echo "</div>";
         echo "<div class='sprint-collapsible-body'>";
 
@@ -745,10 +814,7 @@ class SprintDashboard extends CommonGLPI
 
             $linkedName = '';
             $linkedUrl  = '';
-            // Delegate the linked-item rendering (name, icon, parent project
-            // suffix for ProjectTask, and the inline quick-edit ✎ button) to
-            // SprintItem::getLinkedItemDisplay() so the dashboard table stays
-            // consistent with the sprint items tab and meeting review.
+            // Delegate linked-item rendering so the dashboard stays consistent with the items tab and meeting review.
             $tmp = new SprintItem();
             $tmp->fields = $row;
             $linkedDisplayHtml = $tmp->getLinkedItemDisplay();
@@ -764,9 +830,7 @@ class SprintDashboard extends CommonGLPI
 
             $statusClass = 'sprint-status-' . str_replace('_', '-', $row['status']);
 
-            // Inline background color so the badge stays readable even if
-            // the plugin's CSS variables (var(--sprint-todo) etc.) are not
-            // resolved in the current rendering context.
+            // Inline bg color so badges stay readable when the plugin's CSS vars aren't resolved.
             $statusBgColors = [
                 SprintItem::STATUS_TODO        => '#6c757d',
                 SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
@@ -780,6 +844,8 @@ class SprintDashboard extends CommonGLPI
             $items[] = [
                 'item_id'        => (int)$row['id'],
                 'itemtype_code'  => $itemtype,
+                'itemtype'       => $itemtype,
+                'items_id'       => $itemsId,
                 'type_label'     => $typeInfo[2],
                 'icon'           => $typeInfo[0],
                 'color'          => $typeInfo[1],
@@ -847,9 +913,14 @@ class SprintDashboard extends CommonGLPI
             $remainColor = '#e67e22';
         }
 
-        $overload = ($total - $usedCapacity < 0)
-            ? ' <span style="color:#dc3545;font-weight:700;">(' . __('overloaded', 'sprint') . ')</span>'
-            : '';
+        // Show overflow (e.g. "-26%") instead of clamping "Available" to 0% — mirrors the member summary card.
+        $overflow = max($usedCapacity - $total, 0);
+        if ($overflow > 0) {
+            $availableDisplay = '-' . $overflow . '% <span style="font-weight:600;">('
+                . sprintf(__('%d%% overflow', 'sprint'), $overflow) . ')</span>';
+        } else {
+            $availableDisplay = $remaining . '%';
+        }
 
         echo "<div style='margin-top:20px;'>";
         echo "<table class='tab_cadre_fixe'>";
@@ -880,7 +951,7 @@ class SprintDashboard extends CommonGLPI
             ? "<strong style='color:#20c997;'>{$dependencyUsed}%</strong>"
             : "{$dependencyUsed}%") . "</td>";
         echo "<td class='center'>{$usedCapacity}%</td>";
-        echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$remaining}%{$overload}</td>";
+        echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$availableDisplay}</td>";
         echo "<td style='min-width:180px;'>";
         echo SprintMember::renderCapacityBar($total, $regularUsed, $fastlaneUsed, $dependencyUsed, 16, '8px');
         echo "</td>";
@@ -898,12 +969,523 @@ class SprintDashboard extends CommonGLPI
     }
 
     /**
-     * Render a per-member activity line chart driven by audit-log data.
-     * Gives scrum masters a quick visual for spotting spikes (one-day
-     * blitz followed by silence) without opening the full audit tab.
-     *
-     * Pure inline SVG — no Chart.js dependency, no external assets.
+     * "At-risk" widget: blocked items, Review/Done items whose linked ticket
+     * is still open, and items with open cross-member dependencies.
      */
+    private static function showAtRiskWidget(Sprint $sprint): void
+    {
+        $sprintId = (int)$sprint->getID();
+        $items    = (new SprintItem())->find(['plugin_sprint_sprints_id' => $sprintId]);
+        $depsById = SprintItemDependency::getOpenSummariesForItems(
+            array_map(fn($r) => (int)$r['id'], $items)
+        );
+
+        $risks = [];
+        foreach ($items as $row) {
+            $id      = (int)$row['id'];
+            $status  = (string)($row['status'] ?? '');
+            $reasons = [];
+
+            if ($status === SprintItem::STATUS_BLOCKED) {
+                $reasons[] = ['#dc3545', __('Blocked', 'sprint')];
+            }
+
+            if (!empty($row['itemtype']) && (int)$row['items_id'] > 0
+                && in_array($status, [SprintItem::STATUS_REVIEW, SprintItem::STATUS_DONE], true)) {
+                $tmp = new SprintItem();
+                $tmp->fields = $row;
+                if (!$tmp->isLinkedItemClosed()) {
+                    $reasons[] = ['#f0ad4e', __('Linked item open', 'sprint')];
+                }
+            }
+
+            $openDeps = $depsById[$id] ?? [];
+            if (count($openDeps) > 0) {
+                $reasons[] = ['#20c997', sprintf(_n('%d open dependency', '%d open dependencies', count($openDeps), 'sprint'), count($openDeps))];
+            }
+
+            if (!empty($reasons)) {
+                $risks[] = [
+                    'name'    => (string)$row['name'],
+                    'url'     => SprintItem::getFormURLWithID($id),
+                    'reasons' => $reasons,
+                    'project' => SprintItem::getParentProjectName(
+                        (string)($row['itemtype'] ?? ''),
+                        (int)($row['items_id'] ?? 0)
+                    ),
+                    'owner'   => ((int)($row['users_id'] ?? 0) > 0)
+                        ? getUserName((int)$row['users_id'])
+                        : '',
+                ];
+            }
+        }
+
+        $collapseKey = 'dash-atrisk-' . $sprintId;
+        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
+        echo "<div class='sprint-collapsible-header'>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-triangle-exclamation' style='margin-left:2px;color:" . (count($risks) > 0 ? '#dc3545' : '#198754') . ";'></i>";
+        echo "<span>" . __('At risk', 'sprint') . " <span class='badge " . (count($risks) > 0 ? 'bg-danger' : 'bg-success') . "'>" . count($risks) . "</span></span>";
+        echo "</div>";
+        echo "<div class='sprint-collapsible-body'>";
+
+        if (count($risks) === 0) {
+            echo "<div style='padding:12px;color:#198754;'><i class='fas fa-check-circle' style='margin-right:6px;'></i>"
+                . __('Nothing at risk right now.', 'sprint') . "</div>";
+        } else {
+            echo "<div class='sprint-atrisk-list'>";
+            foreach ($risks as $r) {
+                echo "<div class='sprint-atrisk-row'>";
+                echo "<div class='sprint-atrisk-main'>";
+                echo "<a href='" . $r['url'] . "' class='sprint-atrisk-name'>" . htmlescape($r['name']) . "</a>";
+                if ($r['project'] !== '' || $r['owner'] !== '') {
+                    echo "<span class='sprint-atrisk-meta'>";
+                    if ($r['project'] !== '') {
+                        echo "<span class='sprint-atrisk-project'><i class='fas fa-diagram-project'></i> "
+                            . htmlescape($r['project']) . "</span>";
+                    }
+                    if ($r['owner'] !== '') {
+                        echo "<span class='sprint-atrisk-owner'><i class='fas fa-user'></i> "
+                            . htmlescape($r['owner']) . "</span>";
+                    }
+                    echo "</span>";
+                }
+                echo "</div>";
+                echo "<span class='sprint-atrisk-chips'>";
+                foreach ($r['reasons'] as $rsn) {
+                    echo "<span class='sprint-atrisk-chip' style='background:" . htmlescape($rsn[0]) . ";'>" . htmlescape($rsn[1]) . "</span>";
+                }
+                echo "</span>";
+                echo "</div>";
+            }
+            echo "</div>";
+        }
+
+        echo "</div></div>";
+    }
+
+    /**
+     * Velocity chart (inline SVG): completed story points per recent sprint, with an average line.
+     */
+    private static function showVelocityChart(Sprint $sprint): void
+    {
+        $collapseKey = 'dash-velocity-' . (int)$sprint->getID();
+        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
+        echo "<div class='sprint-collapsible-header'>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-chart-column' style='margin-left:2px;color:#0d6efd;'></i>";
+        echo "<span>" . __('Velocity', 'sprint') . "</span>";
+        echo "</div>";
+        echo "<div class='sprint-collapsible-body'>";
+        self::renderVelocityChartBody($sprint);
+        echo "</div></div>";
+    }
+
+    /**
+     * Velocity chart body without the collapsible wrapper, so the export can reuse it. See {@see showVelocityChart()}.
+     */
+    public static function renderVelocityChartBody(Sprint $sprint): void
+    {
+        $completed = array_values((new Sprint())->find(['status' => Sprint::STATUS_COMPLETED], ['date_start ASC']));
+        if (count($completed) > 8) {
+            $completed = array_slice($completed, -8);
+        }
+
+        if (count($completed) === 0) {
+            echo "<div style='padding:16px;text-align:center;color:#6c757d;'>"
+                . __('Velocity will appear once you have at least one completed sprint.', 'sprint')
+                . "</div>";
+            return;
+        }
+
+        // Per sprint: completed story points (regular throughput), plus two
+        // fastlane metrics — completed item count and total allocated capacity %
+        // — since fastlane work carries no story points.
+        $bars     = [];
+        $sum      = 0;
+        $flMember = new SprintFastlaneMember();
+        foreach ($completed as $sp) {
+            $sid  = (int)$sp['id'];
+            $rows = (new SprintItem())->find([
+                'plugin_sprint_sprints_id' => $sid,
+                'status'                   => SprintItem::STATUS_DONE,
+            ]);
+            $pts = 0;
+            foreach ($rows as $r) { $pts += (int)($r['story_points'] ?? 0); }
+
+            $flItems = (new SprintItem())->find([
+                'plugin_sprint_sprints_id' => $sid,
+                'is_fastlane'              => 1,
+            ]);
+            $flDone = 0;
+            $flIds  = [];
+            foreach ($flItems as $fr) {
+                $flIds[] = (int)$fr['id'];
+                if (($fr['status'] ?? '') === SprintItem::STATUS_DONE) { $flDone++; }
+            }
+            $flCap = 0;
+            if (!empty($flIds)) {
+                foreach ($flMember->find(['plugin_sprint_sprintitems_id' => $flIds]) as $a) {
+                    $flCap += (int)($a['capacity'] ?? 0);
+                }
+            }
+
+            $bars[] = ['label' => (string)$sp['name'], 'pts' => $pts, 'fl' => $flDone, 'cap' => $flCap];
+            $sum += $pts;
+        }
+        $avg = count($bars) > 0 ? $sum / count($bars) : 0;
+
+        $width = 820; $height = 220;
+        $padL = 40; $padR = 20; $padT = 16; $padB = 44;
+        $plotW = $width - $padL - $padR;
+        $plotH = $height - $padT - $padB;
+
+        // Left axis spans points and fastlane item counts (comparable integer
+        // throughput); the capacity line rides its own 0..capMax scale.
+        $maxLeft = 1;
+        $maxCap  = 0;
+        foreach ($bars as $b) {
+            $maxLeft = max($maxLeft, $b['pts'], $b['fl']);
+            $maxCap  = max($maxCap, $b['cap']);
+        }
+        $yTickStep = (int)max(1, ceil($maxLeft / 4));
+        $yMax      = $yTickStep * 4;
+        $capMax    = max(20, (int)(ceil($maxCap / 20) * 20));
+
+        $n    = count($bars);
+        $slot = $plotW / max(1, $n);
+        $barW = min(26, $slot * 0.28);
+        $gap  = 4;
+        $yAt    = fn(float $v) => $padT + $plotH - ($plotH * ($v / $yMax));
+        $yCapAt = fn(float $v) => $padT + $plotH - ($plotH * ($v / $capMax));
+
+        echo "<div style='font-size:0.85em;color:#6c757d;margin-bottom:6px;'>"
+            . __('Per sprint: completed story points and fastlane items (bars), with total fastlane capacity % (line).', 'sprint') . "</div>";
+        echo "<div style='overflow-x:auto;'>";
+        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "style='width:100%;height:auto;max-width:{$width}px;font-family:sans-serif;font-size:11px;'>";
+
+        for ($t = 0; $t <= 4; $t++) {
+            $yv = (int)round($yMax * $t / 4);
+            $y  = number_format($yAt($yv), 2, '.', '');
+            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($padL + $plotW) . "' y2='{$y}' stroke='#e9ecef' stroke-width='1' />";
+            echo "<text x='" . ($padL - 6) . "' y='" . number_format($yAt($yv) + 3, 2, '.', '') . "' text-anchor='end' fill='#6c757d'>{$yv}</text>";
+        }
+
+        // Same halo as the capacity-% labels: keeps bar values readable where
+        // the capacity line crosses them.
+        $barLblStyle = "paint-order:stroke;stroke:var(--tblr-bg-surface,#fff);stroke-width:3.5px;stroke-linejoin:round;";
+
+        $capPts = [];
+        foreach ($bars as $i => $b) {
+            $cx = $padL + ($slot * $i) + ($slot / 2);
+            $bw = number_format($barW, 2, '.', '');
+
+            // Story-points bar (left).
+            $ptsX = number_format($cx - $barW - $gap / 2, 2, '.', '');
+            $ptsY = number_format($yAt($b['pts']), 2, '.', '');
+            $ptsH = number_format($plotH - ($yAt($b['pts']) - $padT), 2, '.', '');
+            echo "<rect x='{$ptsX}' y='{$ptsY}' width='{$bw}' height='{$ptsH}' rx='2' fill='#0d6efd'><title>"
+                . htmlescape($b['label'] . ' — ' . sprintf(__('%d points', 'sprint'), $b['pts'])) . "</title></rect>";
+            echo "<text x='" . number_format($cx - $barW / 2 - $gap / 2, 2, '.', '') . "' y='" . number_format($yAt($b['pts']) - 4, 2, '.', '') . "' "
+                . "text-anchor='middle' fill='#495057' font-weight='600' style='{$barLblStyle}'>" . (int)$b['pts'] . "</text>";
+
+            // Fastlane item-count bar (right).
+            $flX = number_format($cx + $gap / 2, 2, '.', '');
+            $flY = number_format($yAt($b['fl']), 2, '.', '');
+            $flH = number_format($plotH - ($yAt($b['fl']) - $padT), 2, '.', '');
+            echo "<rect x='{$flX}' y='{$flY}' width='{$bw}' height='{$flH}' rx='2' fill='#fd7e14'><title>"
+                . htmlescape($b['label'] . ' — ' . sprintf(__('%d fastlane items', 'sprint'), $b['fl'])) . "</title></rect>";
+            echo "<text x='" . number_format($cx + $barW / 2 + $gap / 2, 2, '.', '') . "' y='" . number_format($yAt($b['fl']) - 4, 2, '.', '') . "' "
+                . "text-anchor='middle' fill='#b35900' font-weight='600' style='{$barLblStyle}'>" . (int)$b['fl'] . "</text>";
+
+            $lbl = mb_strlen($b['label']) > 12 ? (mb_substr($b['label'], 0, 11) . '…') : $b['label'];
+            echo "<text x='" . number_format($cx, 2, '.', '') . "' y='" . ($padT + $plotH + 16) . "' "
+                . "text-anchor='middle' fill='#6c757d'>" . htmlescape($lbl) . "</text>";
+
+            $capPts[] = ['x' => $cx, 'y' => $yCapAt((float)$b['cap']), 'cap' => (int)$b['cap']];
+        }
+
+        // Story-points average reference line.
+        $ay = number_format($yAt($avg), 2, '.', '');
+        echo "<line x1='{$padL}' y1='{$ay}' x2='" . ($padL + $plotW) . "' y2='{$ay}' stroke='#0d6efd' stroke-width='1.2' stroke-dasharray='5,4' opacity='0.6' />";
+
+        // Fastlane capacity % line (own 0..capMax scale).
+        if (count($capPts) > 0) {
+            $poly = [];
+            foreach ($capPts as $p) {
+                $poly[] = number_format($p['x'], 2, '.', '') . ',' . number_format($p['y'], 2, '.', '');
+            }
+            echo "<polyline points='" . implode(' ', $poly) . "' fill='none' stroke='#fd7e14' stroke-width='2' stroke-linejoin='round' />";
+            // Halo behind the % labels so they stay readable over bars and the
+            // line itself; resolves to white in the print/PDF export.
+            $capLblStyle = "paint-order:stroke;stroke:var(--tblr-bg-surface,#fff);stroke-width:3.5px;stroke-linejoin:round;";
+            foreach ($capPts as $i => $p) {
+                $px = number_format($p['x'], 2, '.', '');
+                $py = number_format($p['y'], 2, '.', '');
+                echo "<circle cx='{$px}' cy='{$py}' r='2.8' fill='#fd7e14'><title>"
+                    . htmlescape(sprintf(__('Fastlane capacity: %d%%', 'sprint'), $p['cap'])) . "</title></circle>";
+
+                // Above the point by default; flip below when that would sit on
+                // a bar value label or run off the top of the plot.
+                $labelY  = $p['y'] - 8;
+                $ptsLblY = $yAt((float)$bars[$i]['pts']) - 4;
+                $flLblY  = $yAt((float)$bars[$i]['fl']) - 4;
+                if ($labelY < $padT + 10 || abs($labelY - $ptsLblY) < 12 || abs($labelY - $flLblY) < 12) {
+                    $labelY = min($p['y'] + 16, $padT + $plotH - 2);
+                }
+                $labelX = min(max($p['x'], $padL + 16), $padL + $plotW - 16);
+                echo "<text x='" . number_format($labelX, 2, '.', '') . "' y='" . number_format($labelY, 2, '.', '') . "' "
+                    . "text-anchor='middle' fill='#b35900' font-weight='600' style='{$capLblStyle}'>" . $p['cap'] . "%</text>";
+            }
+        }
+
+        echo "</svg></div>";
+        echo "<div style='display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;font-size:0.85em;color:#6c757d;'>";
+        echo "<span><span style='display:inline-block;width:14px;height:10px;background:#0d6efd;border-radius:2px;vertical-align:middle;'></span> "
+            . __('Completed points', 'sprint') . "</span>";
+        echo "<span><span style='display:inline-block;width:14px;height:10px;background:#fd7e14;border-radius:2px;vertical-align:middle;'></span> "
+            . __('Completed fastlane items', 'sprint') . "</span>";
+        echo "<span><span style='display:inline-block;width:16px;height:0;border-top:2px solid #fd7e14;vertical-align:middle;'></span> "
+            . __('Fastlane capacity %', 'sprint') . "</span>";
+        echo "<span><span style='display:inline-block;width:16px;height:0;border-top:2px dashed #0d6efd;vertical-align:middle;opacity:0.6;'></span> "
+            . sprintf(__('Avg points: %s', 'sprint'), number_format($avg, 1)) . "</span>";
+        echo "</div>";
+    }
+
+    /**
+     * Sprint burndown chart: ideal line vs. actual remaining points per day.
+     * Actuals are reconstructed from the audit log (item counts as remaining
+     * if its end-of-day status wasn't Done); future days have no data point.
+     */
+    private static function showBurndownChart(Sprint $sprint): void
+    {
+        $sprintId = (int)$sprint->getID();
+
+        $collapseKey = 'dash-burndown-' . $sprintId;
+        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
+        echo "<div class='sprint-collapsible-header'>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-chart-area' style='margin-left:2px;color:#0d6efd;'></i>";
+        echo "<span>" . __('Burndown', 'sprint') . "</span>";
+        echo "</div>";
+        echo "<div class='sprint-collapsible-body'>";
+        self::renderBurndownChartBody($sprint);
+        echo "</div></div>";
+    }
+
+    /**
+     * Burndown chart body without the collapsible wrapper, so the export can reuse it. See {@see showBurndownChart()}.
+     */
+    public static function renderBurndownChartBody(Sprint $sprint): void
+    {
+        $sprintId = (int)$sprint->getID();
+        $startRaw = (string)($sprint->fields['date_start'] ?? '');
+        $endRaw   = (string)($sprint->fields['date_end'] ?? '');
+        if ($startRaw === '' || $endRaw === '') {
+            echo "<div style='padding:16px;text-align:center;color:#6c757d;background:var(--tblr-bg-surface-secondary,#f8f9fa);border:1px dashed var(--tblr-border-color,#dee2e6);border-radius:6px;'>"
+                . "<i class='fas fa-info-circle' style='margin-right:6px;'></i>"
+                . __('Set the sprint start and end date to see the burndown.', 'sprint')
+                . "</div>";
+            return;
+        }
+
+        try {
+            $start = new \DateTimeImmutable(substr($startRaw, 0, 10));
+            $end   = new \DateTimeImmutable(substr($endRaw, 0, 10));
+        } catch (\Exception $e) {
+            return;
+        }
+        if ($end < $start) {
+            [$start, $end] = [$end, $start];
+        }
+
+        // Day list, capped so a misconfigured range can't loop forever.
+        $days = [];
+        $cursor = $start;
+        $guard  = 0;
+        while ($cursor <= $end && $guard < 120) {
+            $days[] = $cursor;
+            $cursor = $cursor->modify('+1 day');
+            $guard++;
+        }
+        if (count($days) < 2) {
+            echo "<div style='padding:16px;text-align:center;color:#6c757d;'>"
+                . __('The sprint window is too short to plot a burndown.', 'sprint')
+                . "</div>";
+            return;
+        }
+
+        $si    = new SprintItem();
+        $items = $si->find(['plugin_sprint_sprints_id' => $sprintId]);
+
+        $points          = [];   // id => story points
+        $currentStatuses = [];   // id => status
+        $scope = 0;
+        foreach ($items as $row) {
+            $id = (int)$row['id'];
+            $p  = (int)($row['story_points'] ?? 0);
+            $points[$id]          = $p;
+            $currentStatuses[$id] = (string)($row['status'] ?? '');
+            $scope += $p;
+        }
+        $itemIds = array_keys($points);
+
+        if ($scope <= 0 || count($itemIds) === 0) {
+            echo "<div style='padding:16px;text-align:center;color:#6c757d;'>"
+                . __('No story points in this sprint yet to burn down.', 'sprint')
+                . "</div>";
+            return;
+        }
+
+        // What counts as "done" — match both the stored key and its label,
+        // since GLPI's history can log either depending on the field type.
+        $statuses      = SprintItem::getAllStatuses();
+        $doneTokens    = [SprintItem::STATUS_DONE, (string)($statuses[SprintItem::STATUS_DONE] ?? '')];
+        $blockedTokens = [SprintItem::STATUS_BLOCKED, (string)($statuses[SprintItem::STATUS_BLOCKED] ?? '')];
+        $today         = new \DateTimeImmutable('today');
+
+        $nDays   = count($days);
+        $actual  = [];   // index => remaining points (or null for future days)
+        $blocked = [];   // index => points sitting in blocked status that day
+        foreach ($days as $i => $day) {
+            if ($day > $today) {
+                $actual[$i]  = null;
+                $blocked[$i] = null;
+                continue;
+            }
+            $eod        = $day->format('Y-m-d') . ' 23:59:59';
+            $statusAt   = SprintAudit::getItemStatusAtTimestamp($itemIds, $eod, $currentStatuses);
+            $remaining  = 0;
+            $blockedPts = 0;
+            foreach ($itemIds as $id) {
+                $st = (string)($statusAt[$id] ?? $currentStatuses[$id]);
+                if (!in_array($st, $doneTokens, true)) {
+                    $remaining += $points[$id];
+                    if (in_array($st, $blockedTokens, true)) {
+                        $blockedPts += $points[$id];
+                    }
+                }
+            }
+            $actual[$i]  = $remaining;
+            $blocked[$i] = $blockedPts;
+        }
+
+        // === SVG geometry (mirrors the activity chart) ===
+        $width = 820; $height = 220;
+        $padL = 40; $padR = 20; $padT = 16; $padB = 36;
+        $plotW = $width - $padL - $padR;
+        $plotH = $height - $padT - $padB;
+
+        $yMaxRaw   = max(1, $scope);
+        $yTickStep = (int)max(1, ceil($yMaxRaw / 4));
+        $yMax      = $yTickStep * 4;
+
+        $xStep = ($nDays > 1) ? $plotW / ($nDays - 1) : 0;
+        $xAt = fn(int $i) => $padL + ($xStep * $i);
+        $yAt = fn(float $v) => $padT + $plotH - ($plotH * ($v / $yMax));
+
+        echo "<div style='font-size:0.85em;color:#6c757d;margin-bottom:6px;'>"
+            . __('Remaining story points vs. the ideal line across the sprint.', 'sprint') . "</div>";
+        echo "<div style='overflow-x:auto;'>";
+        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "style='width:100%;height:auto;max-width:{$width}px;font-family:sans-serif;font-size:11px;'>";
+
+        // Horizontal grid + y labels
+        for ($t = 0; $t <= 4; $t++) {
+            $yv = (int)round($yMax * $t / 4);
+            $y  = number_format($yAt($yv), 2, '.', '');
+            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($padL + $plotW) . "' y2='{$y}' stroke='#e9ecef' stroke-width='1' />";
+            echo "<text x='" . ($padL - 6) . "' y='" . number_format($yAt($yv) + 3, 2, '.', '') . "' text-anchor='end' fill='#6c757d'>{$yv}</text>";
+        }
+
+        // X labels (thinned)
+        $labelEvery = max(1, (int)ceil($nDays / 10));
+        for ($i = 0; $i < $nDays; $i++) {
+            if ($i % $labelEvery !== 0 && $i !== $nDays - 1) { continue; }
+            $x = number_format($xAt($i), 2, '.', '');
+            echo "<text x='{$x}' y='" . ($padT + $plotH + 16) . "' text-anchor='middle' fill='#6c757d'>"
+                . htmlescape($days[$i]->format('d/m')) . "</text>";
+        }
+
+        // Axes
+        echo "<line x1='{$padL}' y1='{$padT}' x2='{$padL}' y2='" . ($padT + $plotH) . "' stroke='#adb5bd' stroke-width='1' />";
+        echo "<line x1='{$padL}' y1='" . ($padT + $plotH) . "' x2='" . ($padL + $plotW) . "' y2='" . ($padT + $plotH) . "' stroke='#adb5bd' stroke-width='1' />";
+
+        // Ideal line (scope → 0), dashed grey
+        $idealPts = [];
+        for ($i = 0; $i < $nDays; $i++) {
+            $iv = $scope - ($scope * $i / ($nDays - 1));
+            $idealPts[] = number_format($xAt($i), 2, '.', '') . ',' . number_format($yAt($iv), 2, '.', '');
+        }
+        echo "<polyline points='" . implode(' ', $idealPts) . "' fill='none' stroke='#adb5bd' "
+            . "stroke-width='1.5' stroke-dasharray='5,4' />";
+
+        // Blocked overlay: points stuck in blocked status never burn, so the
+        // remaining line can't reach the ideal. A second line shows what's
+        // left when blocked points are excluded ("workable remaining"), with
+        // the gap shaded red so the blocked share is visible per day.
+        $hasBlocked = false;
+        foreach ($blocked as $v) {
+            if ($v !== null && $v > 0) { $hasBlocked = true; break; }
+        }
+        if ($hasBlocked) {
+            $actualLinePts = [];
+            $adjLinePts    = [];
+            foreach ($actual as $i => $v) {
+                if ($v === null) { continue; }
+                $x = number_format($xAt($i), 2, '.', '');
+                $actualLinePts[] = $x . ',' . number_format($yAt((float)$v), 2, '.', '');
+                $adjLinePts[]    = $x . ',' . number_format($yAt((float)max($v - (int)$blocked[$i], 0)), 2, '.', '');
+            }
+            if (count($adjLinePts) > 1) {
+                echo "<polygon points='" . implode(' ', array_merge($actualLinePts, array_reverse($adjLinePts)))
+                    . "' fill='#dc3545' fill-opacity='0.10' stroke='none' />";
+                echo "<polyline points='" . implode(' ', $adjLinePts) . "' fill='none' stroke='#20c997' "
+                    . "stroke-width='2' stroke-dasharray='4,3' stroke-linejoin='round' stroke-linecap='round' />";
+            }
+        }
+
+        // Actual line (only days up to today)
+        $actualPts = [];
+        foreach ($actual as $i => $v) {
+            if ($v === null) { continue; }
+            $actualPts[] = number_format($xAt($i), 2, '.', '') . ',' . number_format($yAt((float)$v), 2, '.', '');
+        }
+        if (count($actualPts) > 0) {
+            echo "<polyline points='" . implode(' ', $actualPts) . "' fill='none' stroke='#0d6efd' "
+                . "stroke-width='2.5' stroke-linejoin='round' stroke-linecap='round' />";
+            foreach ($actual as $i => $v) {
+                if ($v === null) { continue; }
+                $cx = number_format($xAt($i), 2, '.', '');
+                $cy = number_format($yAt((float)$v), 2, '.', '');
+                $title = $days[$i]->format('Y-m-d') . ': ' . $v . ' ' . __('points remaining', 'sprint');
+                if (($blocked[$i] ?? 0) > 0) {
+                    $title .= ' — ' . sprintf(__('%d blocked', 'sprint'), (int)$blocked[$i]);
+                }
+                echo "<circle cx='{$cx}' cy='{$cy}' r='2.8' fill='#0d6efd'><title>" . htmlescape($title) . "</title></circle>";
+            }
+        }
+
+        echo "</svg>";
+        echo "</div>"; // overflow
+
+        // Legend
+        echo "<div style='display:flex;gap:16px;margin-top:8px;font-size:0.85em;color:#6c757d;flex-wrap:wrap;'>";
+        echo "<span><span style='display:inline-block;width:16px;height:3px;background:#0d6efd;border-radius:2px;vertical-align:middle;'></span> "
+            . __('Remaining', 'sprint') . "</span>";
+        if ($hasBlocked) {
+            echo "<span><span style='display:inline-block;width:16px;height:0;border-top:2px dashed #20c997;vertical-align:middle;'></span> "
+                . __('Remaining excl. blocked', 'sprint') . "</span>";
+            echo "<span><span style='display:inline-block;width:16px;height:10px;background:#dc354519;border:1px solid #dc354566;border-radius:2px;vertical-align:middle;'></span> "
+                . __('Blocked share', 'sprint') . "</span>";
+        }
+        echo "<span><span style='display:inline-block;width:16px;height:0;border-top:2px dashed #adb5bd;vertical-align:middle;'></span> "
+            . __('Ideal', 'sprint') . "</span>";
+        echo "<span class='text-muted'>" . sprintf(__('Scope: %d points', 'sprint'), $scope) . "</span>";
+        echo "</div>";
+    }
+
     private static function showMemberActivityChart(int $sprintId): void
     {
         $collapseKey = 'dash-activity-' . (int)$sprintId;
@@ -940,10 +1522,7 @@ class SprintDashboard extends CommonGLPI
         self::renderActivityRangePicker($sprintId, $dates, $overrideFrom, $overrideTo);
 
         if (count($dates) < 1 || count($members) === 0) {
-            // Diagnose why the chart is empty so users (especially on
-            // existing/older sprints, where activity may be outside the
-            // retention window) understand the feature is present and why
-            // there's nothing to plot yet.
+            // Explain the empty state (no members, past retention window, no logged actions yet).
             $reason = self::diagnoseActivityEmptyReason($sprintId, $dates, $members);
             echo "<div style='padding:18px;text-align:center;color:#6c757d;background:#f8f9fa;border:1px dashed #dee2e6;border-radius:6px;'>"
                 . "<i class='fas fa-info-circle' style='margin-right:6px;'></i>"
@@ -1057,33 +1636,6 @@ class SprintDashboard extends CommonGLPI
 
         echo "</div>"; // .sprint-member-activity
     }
-
-    /**
-     * Returns [from, to] DateTimeImmutable or null when the user hasn't
-     * narrowed the range. Invalid or out-of-retention dates fall back to
-     * null so the default sprint-window logic kicks in.
-     */
-    private static function parseActivityRangeFromRequest(): array
-    {
-        $parse = function ($v): ?\DateTimeImmutable {
-            $v = trim((string)$v);
-            if ($v === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
-                return null;
-            }
-            try {
-                return new \DateTimeImmutable($v);
-            } catch (\Exception $e) {
-                return null;
-            }
-        };
-        $from = $parse($_GET['activity_from'] ?? '');
-        $to   = $parse($_GET['activity_to']   ?? '');
-        if ($from && $to && $from > $to) {
-            [$from, $to] = [$to, $from];
-        }
-        return [$from, $to];
-    }
-
     /**
      * Date-range picker above the activity chart. Submits as GET to the
      * sprint form with `forcetab` so the user lands back on this dashboard.
@@ -1138,11 +1690,8 @@ class SprintDashboard extends CommonGLPI
     }
 
     /**
-     * Build a human-friendly explanation for why the team activity chart
-     * has nothing to plot. Helps users distinguish "feature missing on this
-     * sprint" (which it isn't — the chart is now always rendered) from
-     * legitimate empty states (no members, sprint already past the
-     * retention window, no logged actions yet).
+     * Explain why the activity chart has nothing to plot: no members, past
+     * the retention window, or no logged actions yet.
      */
     private static function diagnoseActivityEmptyReason(int $sprintId, array $dates, array $members): string
     {
@@ -1169,8 +1718,7 @@ class SprintDashboard extends CommonGLPI
             return __('No tracked activity yet for this sprint.', 'sprint');
         }
 
-        // Dates exist, but no member crossed the threshold of having any
-        // logged action in range.
+        // Dates exist, but no member has a logged action in range.
         return __('No tracked activity yet for this sprint — make a change in any sprint item, member or meeting and it will show up here.', 'sprint');
     }
 }

@@ -6,15 +6,9 @@ use CommonGLPI;
 use Session;
 
 /**
- * SprintFastlane - Sprint tab listing fastlane items.
- *
- * Mirrors the Backlog pattern: not a CommonDBTM, just a virtual collection
- * over SprintItem rows where is_fastlane = 1 AND
- * plugin_sprint_sprints_id = $sprintId.
- *
- * Registered as a tab on Sprint via setup.php. Each entry links back to
- * the SprintItem edit form, where the "Fastlane Members" tab lets users
- * assign sprint members + capacity.
+ * Sprint tab listing fastlane items. Like Backlog, not a CommonDBTM but a
+ * virtual view over SprintItem rows with is_fastlane = 1. Each entry links
+ * to the SprintItem form where members + capacity are assigned.
  */
 class SprintFastlane extends CommonGLPI
 {
@@ -62,6 +56,8 @@ class SprintFastlane extends CommonGLPI
         $sprintId = $sprint->getID();
         $canedit  = SprintItem::canUpdate()
             || Session::haveRight(SprintItem::$rightname, Profile::RIGHT_OWN_ITEMS);
+
+        Sprint::renderHeaderBar($sprint);
 
         $si    = new SprintItem();
         $items = $si->find(
@@ -155,9 +151,8 @@ class SprintFastlane extends CommonGLPI
 
         echo "</table></div>";
 
-        // Mount the modal + JS that powers the pencil "quick edit linked item"
-        // buttons rendered by SprintItem::getLinkedItemDisplay(). Without this
-        // the buttons appear but clicking them is a no-op.
+        // Mount the modal + JS for the "quick edit linked item" buttons;
+        // without it those buttons render but do nothing.
         SprintItem::renderLinkedQuickEditUI();
     }
 }

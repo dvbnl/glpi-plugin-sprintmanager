@@ -33,6 +33,7 @@ function plugin_sprint_install(): bool
             `date_start`      TIMESTAMP NULL DEFAULT NULL,
             `date_end`        TIMESTAMP NULL DEFAULT NULL,
             `duration_weeks`  INT UNSIGNED NOT NULL DEFAULT 2,
+            `fastlane_capacity` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Fastlane capacity cap in %, 0 = no cap',
             `users_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master',
             `projects_id`     INT UNSIGNED NOT NULL DEFAULT 0,
             `comment`         TEXT,
@@ -52,6 +53,16 @@ function plugin_sprint_install(): bool
         $DB->doQueryOrDie($query, $DB->error());
     }
 
+    // Migration: per-sprint fastlane hard cap (display-only overflow guard)
+    if ($DB->tableExists('glpi_plugin_sprint_sprints')) {
+        $migration->addField(
+            'glpi_plugin_sprint_sprints',
+            'fastlane_capacity',
+            'integer',
+            ['value' => 0, 'after' => 'duration_weeks']
+        );
+    }
+
     // =========================================================================
     // Table: glpi_plugin_sprint_sprintitems (sprint backlog items)
     // =========================================================================
@@ -59,6 +70,7 @@ function plugin_sprint_install(): bool
         $query = "CREATE TABLE `glpi_plugin_sprint_sprintitems` (
             `id`                       INT UNSIGNED NOT NULL AUTO_INCREMENT,
             `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `proposed_sprints_id`      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Sprint pre-selected on the backlog, awaiting Scrum Master assignment',
             `name`                     VARCHAR(255) NOT NULL DEFAULT '',
             `description`              TEXT,
             `itemtype`                 VARCHAR(100) NOT NULL DEFAULT '' COMMENT 'Linked GLPI item type (Ticket, Change, Problem, ProjectTask)',
@@ -74,6 +86,7 @@ function plugin_sprint_install(): bool
             `date_mod`                 TIMESTAMP NULL DEFAULT NULL,
             PRIMARY KEY (`id`),
             KEY `plugin_sprint_sprints_id` (`plugin_sprint_sprints_id`),
+            KEY `proposed_sprints_id` (`proposed_sprints_id`),
             KEY `item` (`itemtype`, `items_id`),
             KEY `status` (`status`),
             KEY `users_id` (`users_id`),
@@ -84,6 +97,15 @@ function plugin_sprint_install(): bool
 
     // Migration: add itemtype/items_id to existing sprintitems table
     if ($DB->tableExists('glpi_plugin_sprint_sprintitems')) {
+        // Backlog items can pre-select a target sprint that only the Scrum
+        // Master of that sprint may actually assign.
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitems',
+            'proposed_sprints_id',
+            'integer',
+            ['value' => 0, 'after' => 'plugin_sprint_sprints_id']
+        );
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'proposed_sprints_id');
         $migration->addField(
             'glpi_plugin_sprint_sprintitems',
             'itemtype',
@@ -527,11 +549,9 @@ function plugin_sprint_install(): bool
 
     // =========================================================================
     // Table: glpi_plugin_sprint_meetingblockedsnapshots
-    // Records which SprintItems were blocked "as of" each meeting (captured
-    // when the meeting is viewed). The next meeting compares against the
-    // previous meeting's recorded set so an item that was already blocked at
-    // the previous meeting isn't re-flagged as newly blocked — independent of
-    // the meetings' scheduled dates.
+    // Records which SprintItems were blocked as of each meeting. The next
+    // meeting compares against this set so already-blocked items aren't
+    // re-flagged — independent of the meetings' scheduled dates.
     // =========================================================================
     if (!$DB->tableExists('glpi_plugin_sprint_meetingblockedsnapshots')) {
         $query = "CREATE TABLE `glpi_plugin_sprint_meetingblockedsnapshots` (
@@ -546,11 +566,10 @@ function plugin_sprint_install(): bool
         $DB->doQueryOrDie($query, $DB->error());
     }
 
-    // One-time cleanup: remove duplicate SprintItem rows that point at the
-    // same linked GLPI item. The plugin pre-1.0.9 had paths that could
-    // create two SprintItems for one (sprint, ticket/change/project_task)
-    // pair — and a backlog row could coexist with the sprint version.
-    // Dedup once on every install/upgrade (cheap when there are no dupes).
+    // Cleanup: remove duplicate SprintItem rows for the same linked GLPI
+    // item. Pre-1.0.9 paths could create two SprintItems per (sprint, item)
+    // pair, and a backlog row could coexist with the sprint version.
+    // Runs on every install/upgrade (cheap when there are no dupes).
     if ($DB->tableExists('glpi_plugin_sprint_sprintitems')) {
         // Delete duplicates within the same sprint, keeping the lowest id.
         $dupeQuery = "DELETE si FROM `glpi_plugin_sprint_sprintitems` si
@@ -674,6 +693,9 @@ function plugin_sprint_uninstall(): bool
     $pref->deleteByCriteria([
         'itemtype' => ['LIKE', 'GlpiPlugin\\\\Sprint\\\\%'],
     ]);
+
+    // Remove the plugin's profile rights
+    GlpiPlugin\Sprint\Profile::uninstallRights();
 
     return true;
 }

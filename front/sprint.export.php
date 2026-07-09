@@ -1,12 +1,8 @@
 <?php
 
 /**
- * Sprint export — printable end-of-sprint report.
- *
- * Renders a self-contained HTML report (summary stats, member workload,
- * team activity chart, item breakdown). The toolbar offers a "Print /
- * Save as PDF" button that delegates to the browser's print pipeline,
- * so no server-side PDF library is required.
+ * Sprint export — printable end-of-sprint HTML report (printed/saved as PDF
+ * via the browser, so no server-side PDF library is required).
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -23,6 +19,12 @@ if ($sprintId <= 0) {
 $sprint = new GlpiPlugin\Sprint\Sprint();
 if (!$sprint->getFromDB($sprintId)) {
     Html::displayErrorAndDie(__('Sprint not found', 'sprint'));
+}
+
+// CSV download — must run before any HTML chrome is emitted.
+if (($_GET['format'] ?? '') === 'csv') {
+    GlpiPlugin\Sprint\SprintExport::streamCsv($sprint);
+    exit;
 }
 
 $title = sprintf(__('Sprint report — %s', 'sprint'), (string)$sprint->fields['name']);

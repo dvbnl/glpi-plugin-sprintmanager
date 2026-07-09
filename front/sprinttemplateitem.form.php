@@ -1,9 +1,5 @@
 <?php
 
-/**
- * SprintTemplateItem form (add/remove)
- */
-
 if (!defined('GLPI_ROOT')) {
     include(dirname(__DIR__, 3) . '/inc/includes.php');
 }

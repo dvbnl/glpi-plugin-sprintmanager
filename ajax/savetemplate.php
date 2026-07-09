@@ -36,7 +36,6 @@ if (empty($templateName)) {
     $templateName = $sprint->fields['name'] . ' - Template';
 }
 
-// Create the template
 $template = new GlpiPlugin\Sprint\SprintTemplate();
 $templateId = $template->add([
     'name'           => $templateName,
@@ -54,7 +53,6 @@ if (!$templateId) {
     return;
 }
 
-// Copy sprint members to template members
 $memberObj = new GlpiPlugin\Sprint\SprintMember();
 $members = $memberObj->find(['plugin_sprint_sprints_id' => $sprintId]);
 foreach ($members as $row) {
@@ -68,7 +66,6 @@ foreach ($members as $row) {
     ]);
 }
 
-// Copy sprint items to template items
 $itemObj = new GlpiPlugin\Sprint\SprintItem();
 $items = $itemObj->find(
     ['plugin_sprint_sprints_id' => $sprintId],
@@ -86,7 +83,7 @@ foreach ($items as $row) {
     ]);
 }
 
-// Analyze sprint meetings and create template meeting schedule
+// Derive a recurring meeting schedule from the sprint's actual meetings.
 $meetingObj = new GlpiPlugin\Sprint\SprintMeeting();
 $meetings = $meetingObj->find(
     ['plugin_sprint_sprints_id' => $sprintId],

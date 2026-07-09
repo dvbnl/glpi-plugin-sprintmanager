@@ -28,8 +28,6 @@ class Profile extends CommonDBTM
     const RIGHT_OWN_ITEMS = 256;
 
     /**
-     * Get rights definition for the plugin
-     *
      * @return array
      */
     public static function getAllRights(): array
@@ -95,9 +93,6 @@ class Profile extends CommonDBTM
         }
     }
 
-    /**
-     * Uninstall profile rights
-     */
     public static function uninstallRights(): void
     {
         global $DB;
@@ -110,9 +105,6 @@ class Profile extends CommonDBTM
         }
     }
 
-    /**
-     * Show the profile form tab with sprint icon
-     */
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0): string
     {
         if ($item instanceof GlpiProfile) {
@@ -135,9 +127,6 @@ class Profile extends CommonDBTM
         return false;
     }
 
-    /**
-     * Show rights configuration form for a profile
-     */
     public static function showForProfile(GlpiProfile $profile): void
     {
         global $DB;

@@ -64,6 +64,19 @@
         })
     ) }}
 
+    {{ fields.dropdownNumberField(
+        'fastlane_capacity',
+        item.fields['fastlane_capacity'],
+        __('Fastlane capacity cap (%)', 'sprint'),
+        field_options|merge({
+            'min': 0,
+            'max': 100,
+            'step': 5,
+            'unit': '%',
+            'helper': __('0 = no cap; exceeding it shows as overflow on the fastlane', 'sprint'),
+        })
+    ) }}
+
     {% if can_reassign_scrum_master|default(true) %}
     {{ fields.dropdownField(
         'User',

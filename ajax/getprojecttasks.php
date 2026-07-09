@@ -1,8 +1,7 @@
 <?php
 
 /**
- * AJAX handler to get project tasks for a specific project
- * Returns HTML for a select dropdown
+ * AJAX handler returning a project's tasks as JSON for a select dropdown.
  */
 
 if (!defined('GLPI_ROOT')) {

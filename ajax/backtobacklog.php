@@ -1,10 +1,8 @@
 <?php
 
 /**
- * AJAX handler that moves a SprintItem back to the backlog from inside the
- * sprint meeting view. Mirrors front/backlog.form.php's `back_to_backlog`
- * branch but returns JSON so the row can be removed in place instead of
- * triggering a full page reload.
+ * AJAX handler that moves a SprintItem back to the backlog from the sprint
+ * meeting view. JSON variant of front/backlog.form.php's `back_to_backlog`.
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -41,19 +39,10 @@ if (!$hasFullUpdate && !($hasOwnOnly && $isOwner)) {
     return;
 }
 
-$wasBlocked = ($item->fields['status'] ?? '') === GlpiPlugin\Sprint\SprintItem::STATUS_BLOCKED
-    || (int)($item->fields['is_blocked'] ?? 0) === 1;
+$reason           = (string)($_POST['reason'] ?? '');
+$removeFromSprint = (int)($_POST['remove_from_sprint'] ?? 0) === 1;
 
-$update = [
-    'id'                       => $id,
-    'plugin_sprint_sprints_id' => 0,
-    'is_fastlane'              => 0,
-];
-if ($wasBlocked) {
-    $update['is_blocked'] = 1;
-}
-
-$result = $item->update($update);
+$outcome = GlpiPlugin\Sprint\SprintItem::backToBacklog($id, $reason, $removeFromSprint);
 
 $messages = [];
 if (isset($_SESSION['MESSAGE_AFTER_REDIRECT']) && is_array($_SESSION['MESSAGE_AFTER_REDIRECT'])) {
@@ -67,18 +56,24 @@ if (isset($_SESSION['MESSAGE_AFTER_REDIRECT']) && is_array($_SESSION['MESSAGE_AF
     $_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
 }
 
-if (!$result) {
+if (!$outcome['ok']) {
     echo json_encode([
         'success' => false,
-        'message' => $messages ? implode("\n", $messages) : __('Could not move item back to backlog', 'sprint'),
+        'message' => ($outcome['message'] ?? '') !== ''
+            ? $outcome['message']
+            : ($messages ? implode("\n", $messages) : __('Could not move item back to backlog', 'sprint')),
     ]);
     return;
 }
 
-GlpiPlugin\Sprint\SprintItemDependency::purgeForItem($id);
-
+// `stayed`: linked item decoupled but the sprint item remains (keep the meeting
+// row). Otherwise the whole row left the sprint and should be removed.
 echo json_encode([
-    'success' => true,
-    'message' => __('Item moved back to backlog', 'sprint'),
-    'item_id' => $id,
+    'success'    => true,
+    'message'    => $outcome['stayed']
+        ? __('Underlying item moved to backlog; the sprint item stays for capacity.', 'sprint')
+        : __('Item moved back to backlog', 'sprint'),
+    'item_id'    => $id,
+    'stayed'     => $outcome['stayed'],
+    'backlog_id' => $outcome['backlog_id'],
 ]);

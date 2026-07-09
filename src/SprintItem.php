@@ -13,10 +13,7 @@ use Change;
 use ProjectTask;
 
 /**
- * SprintItem - Backlog items within a sprint
- *
- * Can optionally link to a GLPI item (Ticket, Change, ProjectTask)
- * via the itemtype + items_id fields.
+ * SprintItem - backlog item; may link a GLPI item via itemtype + items_id.
  */
 class SprintItem extends CommonDBTM
 {
@@ -24,11 +21,9 @@ class SprintItem extends CommonDBTM
     public $dohistory        = true;
 
     /**
-     * Cascade purge: fastlane member rows, plus any legacy relation rows
-     * in SprintTicket / SprintChange / SprintProjectTask that pointed at
-     * the same (sprint, linked item) pair. SprintItem is the single source
-     * of truth for the reverse "Sprints" tab, but those legacy tables may
-     * still contain rows from earlier add flows and must stay in sync.
+     * Cascade purge. SprintItem is the source of truth for the reverse
+     * "Sprints" tab, but legacy SprintTicket/Change/ProjectTask rows from
+     * older add flows may still point at the same pair and must stay in sync.
      */
     public function cleanDBonPurge()
     {
@@ -82,17 +77,12 @@ class SprintItem extends CommonDBTM
     const STATUS_BLOCKED     = 'blocked';
     const STATUS_DEPENDENCY  = 'dependency';
 
-    /**
-     * Check if the current user owns this item
-     */
     private function isOwnItem(): bool
     {
         return (int)($this->fields['users_id'] ?? 0) === (int)Session::getLoginUserID();
     }
 
-    /**
-     * Check if user has only the "own items" right (not full rights)
-     */
+    /** True when the user has only the "own items" right, not full rights. */
     private static function hasOnlyOwnRight(int $rightFlag): bool
     {
         return !Session::haveRight(self::$rightname, $rightFlag)
@@ -101,7 +91,7 @@ class SprintItem extends CommonDBTM
 
     public function canCreateItem(): bool
     {
-        // Users with OWN_ITEMS right can create items (they'll be assigned to themselves)
+        // OWN_ITEMS right lets users create (assigned to themselves).
         if (self::hasOnlyOwnRight(CREATE)) {
             return true;
         }
@@ -138,12 +128,9 @@ class SprintItem extends CommonDBTM
     }
 
     /**
-     * Declare search options for every field we want the history tracker
-     * to label. GLPI's `CommonDBTM::post_updateItem()` writes one log
-     * row per changed field, and looks up the field label via search
-     * option id — fields without an entry here end up with `id_search_option = 0`
-     * and no label, which is why capacity / story_points / status changes
-     * weren't visible on the audit tab.
+     * Search options for every field the history tracker must label. GLPI looks
+     * up each changed field's label by search-option id; fields missing here get
+     * id_search_option = 0 and no label on the audit tab.
      */
     public function rawSearchOptions(): array
     {
@@ -234,9 +221,6 @@ class SprintItem extends CommonDBTM
         ];
     }
 
-    /**
-     * Get the supported linked item types
-     */
     public static function getLinkedItemTypes(): array
     {
         return [
@@ -274,10 +258,8 @@ class SprintItem extends CommonDBTM
     }
 
     /**
-     * Get the display name for a linked GLPI item.
-     *
-     * For ProjectTask, the parent project name is appended in parentheses
-     * because task names are often duplicated across projects.
+     * Display name for a linked GLPI item. For ProjectTask the parent project
+     * name is appended, since task names often repeat across projects.
      */
     public function getLinkedItemDisplay(): string
     {
@@ -310,8 +292,7 @@ class SprintItem extends CommonDBTM
         $url  = $itemtype::getFormURLWithID($itemsId);
         $name = htmlescape($linkedItem->fields['name'] ?? '');
 
-        // For project tasks, append the parent project name so users can
-        // distinguish tasks with identical names across projects.
+        // Append parent project name to disambiguate same-named tasks.
         $suffix = '';
         if ($itemtype === 'ProjectTask') {
             $projectId = (int)($linkedItem->fields['projects_id'] ?? 0);
@@ -324,8 +305,7 @@ class SprintItem extends CommonDBTM
             }
         }
 
-        // Quick-edit button — only when the user is allowed to update the
-        // source item. Rights are delegated to GLPI's own ACL via canUpdate()
+        // Quick-edit button only when GLPI's own ACL (canUpdate) allows it,
         // so entity / technician / assignee-only restrictions are honored.
         $quickEditBtn = '';
         if ($linkedItem->canUpdateItem()) {
@@ -352,15 +332,366 @@ class SprintItem extends CommonDBTM
     }
 
     /**
-     * Show sprint items list and add form
+     * Parent project name for a ProjectTask-linked item, or '' for any other
+     * type. Task names often repeat across projects, so list/dashboard
+     * renderers show this subtly to disambiguate. See {@see getLinkedItemDisplay()}.
      */
+    public static function getParentProjectName(string $itemtype, int $itemsId): string
+    {
+        if ($itemtype !== 'ProjectTask' || $itemsId <= 0 || !class_exists('ProjectTask')) {
+            return '';
+        }
+
+        $task = new ProjectTask();
+        if (!$task->getFromDB($itemsId)) {
+            return '';
+        }
+
+        $projectId = (int)($task->fields['projects_id'] ?? 0);
+        if ($projectId <= 0) {
+            return '';
+        }
+
+        $project = new \Project();
+        if (!$project->getFromDB($projectId)) {
+            return '';
+        }
+
+        return (string)($project->fields['name'] ?? '');
+    }
+
+    /**
+     * True when the linked GLPI item is closed/solved/done. Used to warn when
+     * an item is moved to "In Review" while its underlying item is still open.
+     * Manual items and vanished links count as "closed" (never warn).
+     */
+    public function isLinkedItemClosed(): bool
+    {
+        return self::linkedItemClosedFor(
+            (string)($this->fields['itemtype'] ?? ''),
+            (int)($this->fields['items_id'] ?? 0)
+        );
+    }
+
+    /**
+     * Static counterpart to isLinkedItemClosed() so list/board/dashboard
+     * renderers can flag a plain DB row without instantiating SprintItem.
+     * Manual items and vanished links count as "closed".
+     */
+    public static function linkedItemClosedFor(string $itemtype, int $itemsId): bool
+    {
+        if ($itemtype === '' || $itemsId <= 0 || !class_exists($itemtype)) {
+            return true;
+        }
+
+        $linked = new $itemtype();
+        if (!$linked->getFromDB($itemsId)) {
+            return true;
+        }
+
+        if ($itemtype === 'ProjectTask') {
+            // Closed only when BOTH fully complete AND in a finished project
+            // state (GLPI ProjectState->is_finished, e.g. a Closed/Done state).
+            // Either condition on its own still counts as open.
+            $fullyDone = (int)($linked->fields['percent_done'] ?? 0) >= 100;
+            $stateId   = (int)($linked->fields['projectstates_id'] ?? 0);
+            $stateDone = $stateId > 0 && self::isProjectStateFinished($stateId);
+            return $fullyDone && $stateDone;
+        }
+
+        if (in_array($itemtype, ['Ticket', 'Change', 'Problem'], true)) {
+            $status = (int)($linked->fields['status'] ?? 0);
+            $closed = array_map('intval', array_merge(
+                $itemtype::getSolvedStatusArray(),
+                $itemtype::getClosedStatusArray()
+            ));
+            return in_array($status, $closed, true);
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether a GLPI ProjectState marks completion (its is_finished flag).
+     * Result is cached per request since closed-checks run per item in loops.
+     * A missing flag/state counts as "not finished" (falls back to percent).
+     */
+    private static function isProjectStateFinished(int $stateId): bool
+    {
+        static $cache = [];
+        if (array_key_exists($stateId, $cache)) {
+            return $cache[$stateId];
+        }
+
+        $finished = false;
+        if ($stateId > 0 && class_exists('ProjectState')) {
+            $state = new \ProjectState();
+            if ($state->getFromDB($stateId)) {
+                $finished = (int)($state->fields['is_finished'] ?? 0) === 1;
+            }
+        }
+
+        return $cache[$stateId] = $finished;
+    }
+
+    /**
+     * Inline "Linked item open" warning badge: item is In Review/Done while
+     * its underlying GLPI item is still open. Returns '' when not applicable.
+     *
+     * @param array<string,mixed> $row  must carry status, itemtype, items_id
+     */
+    public static function renderLinkedItemOpenBadge(array $row): string
+    {
+        if (!self::isLinkedItemOpenForRow($row)) {
+            return '';
+        }
+        return " <span class='sprint-review-unclosed-badge' title='"
+            . htmlescape(__('The linked ticket/change is not closed/solved yet', 'sprint')) . "'>"
+            . "<i class='fas fa-exclamation-triangle'></i> "
+            . __('Linked item open', 'sprint') . "</span>";
+    }
+
+    /**
+     * True when a row should carry the "Linked item open" flag: In Review/Done
+     * with its underlying GLPI item still open.
+     *
+     * @param array<string,mixed> $row  must carry status, itemtype, items_id
+     */
+    public static function isLinkedItemOpenForRow(array $row): bool
+    {
+        $status = (string)($row['status'] ?? '');
+        if ($status !== self::STATUS_REVIEW && $status !== self::STATUS_DONE) {
+            return false;
+        }
+        return !self::linkedItemClosedFor(
+            (string)($row['itemtype'] ?? ''),
+            (int)($row['items_id'] ?? 0)
+        );
+    }
+
+    /**
+     * Move a sprint item "back to the backlog".
+     *
+     * Default: a linked item stays in the sprint as a manual placeholder (so
+     * booked capacity keeps counting) and only the underlying GLPI item is
+     * decoupled into a fresh backlog row. With $removeFromSprint the whole item
+     * leaves the sprint instead. The optional reason is stamped into the note.
+     *
+     * @return array{ok:bool, stayed:bool, backlog_id:int}
+     */
+    public static function backToBacklog(int $id, string $reason = '', bool $removeFromSprint = false): array
+    {
+        $result = ['ok' => false, 'stayed' => false, 'backlog_id' => 0, 'message' => ''];
+
+        $item = new self();
+        if ($id <= 0 || !$item->getFromDB($id)) {
+            return $result;
+        }
+
+        $itemtype = (string)($item->fields['itemtype'] ?? '');
+        $itemsId  = (int)($item->fields['items_id'] ?? 0);
+        $hasLink  = $itemtype !== '' && $itemsId > 0;
+
+        // A coupled item must exist exactly once across backlog + sprints.
+        // Manual items are capacity placeholders with no coupling, so returning
+        // one to the backlog would only create meaningless duplicate rows.
+        if (!$hasLink) {
+            $result['message'] = __('Manual items cannot be sent back to the backlog — they stay in their sprint.', 'sprint');
+            return $result;
+        }
+
+        $srcFields  = $item->fields;
+        $wasBlocked = ($item->fields['status'] ?? '') === self::STATUS_BLOCKED
+            || (int)($item->fields['is_blocked'] ?? 0) === 1;
+        $srcNote    = (string)($item->fields['note'] ?? '');
+        $stamp      = self::buildBacklogReasonNote($reason);
+
+        if (!$removeFromSprint) {
+            // KEEP: item stays as a manual placeholder (capacity preserved);
+            // the coupling returns to the backlog as a single row.
+            $manualUpdate = [
+                'id'       => $id,
+                'itemtype' => '',
+                'items_id' => 0,
+            ];
+            if ($stamp !== '') {
+                $manualUpdate['note'] = self::appendNote($srcNote, $stamp);
+            }
+            $item->update($manualUpdate);
+
+            $result['ok']         = true;
+            $result['stayed']     = true;
+            $result['backlog_id'] = self::placeCouplingOnBacklog($itemtype, $itemsId, $srcFields, $stamp, $wasBlocked);
+            return $result;
+        }
+
+        // REMOVE: the whole item leaves the sprint for the backlog. If a
+        // backlog row already exists for this coupling, fold into it and drop
+        // this one to avoid a duplicate.
+        $existingBacklogId = self::findBacklogRowId($itemtype, $itemsId);
+        if ($existingBacklogId > 0) {
+            if ($stamp !== '') {
+                $cur = new self();
+                $cur->getFromDB($existingBacklogId);
+                (new self())->update([
+                    'id'   => $existingBacklogId,
+                    'note' => self::appendNote((string)($cur->fields['note'] ?? ''), $stamp),
+                ]);
+            }
+            SprintItemDependency::purgeForItem($id);
+            $item->delete(['id' => $id], 1);
+            $result['ok']         = true;
+            $result['backlog_id'] = $existingBacklogId;
+            return $result;
+        }
+
+        $update = [
+            'id'                       => $id,
+            'plugin_sprint_sprints_id' => 0,
+            'is_fastlane'              => 0,
+        ];
+        if ($wasBlocked) {
+            $update['is_blocked'] = 1;
+        }
+        if ($stamp !== '') {
+            $update['note'] = self::appendNote($srcNote, $stamp);
+        }
+        if ($item->update($update)) {
+            SprintItemDependency::purgeForItem($id);
+            $result['ok']         = true;
+            $result['backlog_id'] = $id;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Place a coupling on the backlog as a single row: reuse an existing row,
+     * skip when it already lives in a real sprint, else create a fresh row.
+     * Returns the backlog row id, or 0 when nothing was added.
+     */
+    private static function placeCouplingOnBacklog(
+        string $itemtype,
+        int $itemsId,
+        array $source,
+        string $stamp,
+        bool $wasBlocked
+    ): int {
+        $existingId = self::findBacklogRowId($itemtype, $itemsId);
+        if ($existingId > 0) {
+            if ($stamp !== '') {
+                $cur = new self();
+                $cur->getFromDB($existingId);
+                (new self())->update([
+                    'id'   => $existingId,
+                    'note' => self::appendNote((string)($cur->fields['note'] ?? ''), $stamp),
+                ]);
+            }
+            return $existingId;
+        }
+
+        // Coupling already active in a sprint → don't create a backlog duplicate.
+        if (self::couplingInSprint($itemtype, $itemsId)) {
+            return 0;
+        }
+
+        return (int)(new self())->add([
+            'plugin_sprint_sprints_id' => 0,
+            'name'                     => (string)($source['name'] ?? ($itemtype . ' #' . $itemsId)),
+            'description'              => (string)($source['description'] ?? ''),
+            'itemtype'                 => $itemtype,
+            'items_id'                 => $itemsId,
+            'status'                   => self::STATUS_TODO,
+            'priority'                 => (int)($source['priority'] ?? 3),
+            'story_points'             => (int)($source['story_points'] ?? 1),
+            'users_id'                 => 0,
+            'capacity'                 => 0,
+            'is_blocked'               => $wasBlocked ? 1 : 0,
+            'note'                     => $stamp,
+        ]);
+    }
+
+    /**
+     * Id of the (single) backlog row carrying this coupling, or 0 if none.
+     */
+    private static function findBacklogRowId(string $itemtype, int $itemsId): int
+    {
+        if ($itemtype === '' || $itemsId <= 0) {
+            return 0;
+        }
+        $rows = (new self())->find([
+            'plugin_sprint_sprints_id' => 0,
+            'itemtype'                 => $itemtype,
+            'items_id'                 => $itemsId,
+        ]);
+        return count($rows) > 0 ? (int)reset($rows)['id'] : 0;
+    }
+
+    /**
+     * True when this coupling is currently active in a real sprint.
+     */
+    private static function couplingInSprint(string $itemtype, int $itemsId): bool
+    {
+        if ($itemtype === '' || $itemsId <= 0) {
+            return false;
+        }
+        return countElementsInTable(self::getTable(), [
+            'itemtype' => $itemtype,
+            'items_id' => $itemsId,
+            ['NOT' => ['plugin_sprint_sprints_id' => 0]],
+        ]) > 0;
+    }
+
+    /**
+     * Drop leftover backlog rows for a coupling (keeping $exceptId), called
+     * after assigning a coupled backlog item into a sprint.
+     */
+    public static function purgeBacklogCoupling(string $itemtype, int $itemsId, int $exceptId = 0): void
+    {
+        if ($itemtype === '' || $itemsId <= 0) {
+            return;
+        }
+        $rows = (new self())->find([
+            'plugin_sprint_sprints_id' => 0,
+            'itemtype'                 => $itemtype,
+            'items_id'                 => $itemsId,
+        ]);
+        foreach ($rows as $r) {
+            if ((int)$r['id'] === $exceptId) {
+                continue;
+            }
+            (new self())->delete(['id' => (int)$r['id']], 1);
+        }
+    }
+
+    /**
+     * Build the stamped "back to backlog" note line, or '' when no reason.
+     */
+    private static function buildBacklogReasonNote(string $reason): string
+    {
+        $reason = trim($reason);
+        if ($reason === '') {
+            return '';
+        }
+        $who = getUserName((int)Session::getLoginUserID());
+        return '[' . date('Y-m-d') . ' — ' . $who . '] '
+            . __('Back to backlog', 'sprint') . ': ' . $reason;
+    }
+
+    private static function appendNote(string $existing, string $line): string
+    {
+        return $existing !== '' ? ($existing . "\n" . $line) : $line;
+    }
+
+    /** Render the sprint items list and the add form. */
     public static function showForSprint(Sprint $sprint): void
     {
         $ID      = $sprint->getID();
         $canedit = self::canUpdate()
             || Session::haveRight(self::$rightname, Profile::RIGHT_OWN_ITEMS);
 
-        // Add form
+        Sprint::renderHeaderBar($sprint);
+
         if ($canedit) {
             $memberOptions = SprintMember::getSprintMemberOptions($ID);
             $rand = mt_rand();
@@ -383,14 +714,12 @@ class SprintItem extends CommonDBTM
                 'rand'  => $rand,
             ]);
             echo "</td>";
-            // Label changes dynamically
             echo "<td><span id='sprint_label_{$rand}'>" . __('Name') . "</span></td>";
             echo "<td colspan='3'>";
-            // Manual name input (shown by default)
             echo "<div id='sprint_manual_name_{$rand}'>";
             echo Html::input('name', ['size' => 40]);
             echo "</div>";
-            // Container for AJAX-loaded item dropdown
+            // Container for the AJAX-loaded item dropdown.
             echo "<div id='sprint_item_container_{$rand}' style='display:none;'></div>";
             echo "</td></tr>";
 
@@ -479,8 +808,7 @@ class SprintItem extends CommonDBTM
             echo "</div>";
         }
 
-        // List existing items (fastlane items are excluded — they live in
-        // the dedicated Fastlane tab).
+        // Fastlane items are excluded — they live in the dedicated Fastlane tab.
         $item  = new self();
         $items = $item->find(
             [
@@ -535,7 +863,6 @@ class SprintItem extends CommonDBTM
             $statusLabel = $statuses[$row['status']] ?? $row['status'];
             $ownerName   = ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : '';
 
-            // Build linked item display
             $linkedDisplay = '<span style="color:#ccc;">-</span>';
             if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
                 $tmpItem = new self();
@@ -549,8 +876,9 @@ class SprintItem extends CommonDBTM
             $rowDeps = $depsById[(int)$row['id']] ?? [];
             echo "<tr class='tab_bg_1 sprint-row sprint-filterable-row' {$dataAttrs}>";
             echo "<td class='sprint-cell-name'><a href='" . static::getFormURLWithID($row['id']) . "'>" .
-                htmlescape($row['name']) . "</a>" . self::renderTagPills($rowTags) . self::renderDependencyBadge($rowDeps) . "</td>";
-            echo "<td>" . $linkedDisplay . "</td>";
+                htmlescape($row['name']) . "</a>" . self::renderTagPills($rowTags) . self::renderDependencyBadge($rowDeps)
+                . self::renderLinkedItemOpenBadge($row) . "</td>";
+            echo "<td class='sprint-row-linked'>" . $linkedDisplay . "</td>";
             echo "<td class='sprint-cell-status'><span class='sprint-badge {$statusClass}'>" .
                 $statusLabel . "</span></td>";
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
@@ -566,21 +894,20 @@ class SprintItem extends CommonDBTM
 
                 echo "<td class='center' style='white-space:nowrap;'>";
                 if ($canEditRow) {
-                    // Quick-edit covers everything that used to live on the
-                    // full item form — the explicit "Edit" link was redundant
-                    // and has been removed.
+                    // Quick-edit covers the full item form; the explicit "Edit"
+                    // link was redundant and removed.
                     echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-quick-edit-btn me-1' "
                         . "title='" . __('Quick edit', 'sprint') . "' data-item-id='" . (int)$row['id'] . "'>"
                         . "<i class='fas fa-pen'></i></button> ";
-                    // Back to backlog button
-                    echo "<form method='post' action='" . Backlog::getFormURL() . "' style='display:inline;'>";
-                    echo Html::hidden('id', ['value' => $row['id']]);
-                    echo "<button type='submit' name='back_to_backlog' class='btn btn-sm btn-outline-warning' "
-                        . "title='" . __('Back to backlog', 'sprint') . "' "
-                        . "onclick=\"return confirm('" . __('Move this item back to the backlog?', 'sprint') . "');\">"
-                        . "<i class='fas fa-undo'></i></button>";
-                    Html::closeForm();
-                    echo " ";
+                    // Back-to-backlog only for coupled items (manual placeholders
+                    // stay to avoid duplicates). Opens the reason + keep/remove
+                    // modal and posts to ajax/backtobacklog.php.
+                    if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
+                        echo "<button type='button' class='btn btn-sm btn-outline-warning sprint-backlog-btn' "
+                            . "title='" . __('Back to backlog', 'sprint') . "' "
+                            . "data-backlog-id='" . (int)$row['id'] . "'>"
+                            . "<i class='fas fa-undo'></i></button> ";
+                    }
                 }
                 if ($canDeleteRow) {
                     echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline;'>";
@@ -601,15 +928,150 @@ class SprintItem extends CommonDBTM
 
         if ($canedit) {
             self::renderQuickEditUI($ID);
+            self::renderBackToBacklogUI();
         }
         self::renderLinkedQuickEditUI();
     }
 
     /**
-     * Build a set of data-* attributes describing a sprint item row. Used
-     * by the quick-edit JS to pre-populate the modal without an extra
-     * round-trip.
+     * Modal + JS for the "Back to backlog" button. The user enters a reason
+     * (stored in the note) and chooses to keep the item as a manual placeholder
+     * (default) or move the whole item back. Posts to ajax/backtobacklog.php.
      */
+    public static function renderBackToBacklogUI(): void
+    {
+        $endpoint = \Plugin::getWebDir('sprint') . '/ajax/backtobacklog.php';
+        $tokenUrl = \Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
+
+        $title        = __('Back to backlog', 'sprint');
+        $lblReason    = __('Reason', 'sprint');
+        $phReason     = __('Why is this going back to the backlog?', 'sprint');
+        $errReason    = __('Please enter a reason.', 'sprint');
+        $lblChoice    = __('What should happen to the sprint item?', 'sprint');
+        $optKeep      = __('Keep it in the sprint (capacity preserved); only the linked item returns to the backlog', 'sprint');
+        $optRemove    = __('Also remove the item from the current sprint (move the whole item to the backlog)', 'sprint');
+        $lblCancel    = __('Cancel');
+        $movedLabel   = __('Moved to backlog', 'sprint');
+
+        echo <<<HTML
+<div class="modal fade" id="sprint-backlog-reason-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-undo me-1"></i> {$title}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label fw-bold">{$lblReason}</label>
+        <textarea name="reason" class="form-control" rows="3" placeholder="{$phReason}"></textarea>
+        <div class="text-danger small mt-1 sprint-backlog-reason-error" style="display:none;">{$errReason}</div>
+        <div class="mt-3">
+          <label class="form-label fw-bold d-block">{$lblChoice}</label>
+          <label class="form-check">
+            <input class="form-check-input" type="radio" name="remove_from_sprint" value="0" checked>
+            <span class="form-check-label">{$optKeep}</span>
+          </label>
+          <label class="form-check">
+            <input class="form-check-input" type="radio" name="remove_from_sprint" value="1">
+            <span class="form-check-label">{$optRemove}</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$lblCancel}</button>
+        <button type="button" class="btn btn-warning sprint-backlog-reason-confirm">
+          <i class="fas fa-undo me-1"></i> {$title}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+    if (typeof jQuery === 'undefined') { return; }
+    var endpoint = "{$endpoint}";
+    var tokenUrl = "{$tokenUrl}";
+    var \$modal;
+
+    jQuery(function(){
+        \$modal = jQuery('#sprint-backlog-reason-modal');
+        if (\$modal.length === 0) { return; }
+        \$modal = \$modal.detach().appendTo('body');
+    });
+
+    jQuery(document).on('click', '.sprint-backlog-btn', function(){
+        var \$btn = jQuery(this);
+        var itemId = parseInt(\$btn.data('backlog-id'), 10) || 0;
+        if (itemId <= 0) { return; }
+        \$modal.find('textarea[name=reason]').val('');
+        \$modal.find('.sprint-backlog-reason-error').hide();
+        \$modal.find('input[name=remove_from_sprint][value="0"]').prop('checked', true);
+        \$modal.data('target-item', itemId);
+        \$modal.data('target-btn', \$btn);
+        bootstrap.Modal.getOrCreateInstance(\$modal[0]).show();
+        setTimeout(function(){ \$modal.find('textarea[name=reason]').trigger('focus'); }, 200);
+    });
+
+    jQuery(document).on('click', '.sprint-backlog-reason-confirm', function(){
+        var reason = (\$modal.find('textarea[name=reason]').val() || '').trim();
+        if (reason === '') { \$modal.find('.sprint-backlog-reason-error').show(); return; }
+        var itemId = parseInt(\$modal.data('target-item'), 10) || 0;
+        var \$btn   = \$modal.data('target-btn');
+        var removeFromSprint = \$modal.find('input[name=remove_from_sprint]:checked').val() === '1';
+        bootstrap.Modal.getOrCreateInstance(\$modal[0]).hide();
+        if (\$btn) { \$btn.prop('disabled', true); }
+
+        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
+        .then(function(tok){
+            return jQuery.ajax({
+                url: endpoint, type: 'POST', dataType: 'json',
+                data: {
+                    id: itemId,
+                    reason: reason,
+                    remove_from_sprint: removeFromSprint ? 1 : 0,
+                    _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                }
+            });
+        }).done(function(resp){
+            if (resp && resp.success) {
+                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message); }
+                var \$row = jQuery('tr.sprint-row[data-item-id="' + itemId + '"]');
+                if (resp.stayed) {
+                    \$row.find('.sprint-row-linked').html('<span class="text-muted fst-italic">{$movedLabel}</span>');
+                    \$row.css('transition','background-color 0.3s').css('background-color','#fff3cd');
+                    setTimeout(function(){ \$row.css('background-color',''); }, 800);
+                    if (\$btn) { \$btn.prop('disabled', false); }
+                } else {
+                    \$row.fadeOut(150, function(){ jQuery(this).remove(); });
+                }
+            } else {
+                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
+                else { alert((resp && resp.message) || 'Failed'); }
+                if (\$btn) { \$btn.prop('disabled', false); }
+            }
+        }).fail(function(){
+            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+            if (\$btn) { \$btn.prop('disabled', false); }
+        });
+    });
+})();
+</script>
+HTML;
+    }
+
+    /**
+     * Public helper building the quick-edit data-* attribute string from raw
+     * fields (computes status label + owner name itself). Lets Kanban cards
+     * open the shared quick-edit modal just like table rows.
+     */
+    public static function buildItemDataAttrs(array $row, array $tags = []): string
+    {
+        $statuses    = self::getAllStatuses();
+        $statusLabel = $statuses[$row['status'] ?? ''] ?? (string)($row['status'] ?? '');
+        $ownerName   = ((int)($row['users_id'] ?? 0) > 0) ? getUserName((int)$row['users_id']) : '';
+        return self::buildRowDataAttrs($row, $statusLabel, $ownerName, $tags);
+    }
+
     private static function buildRowDataAttrs(array $row, string $statusLabel, string $ownerName, array $tags = []): string
     {
         $attrs = [
@@ -634,9 +1096,7 @@ class SprintItem extends CommonDBTM
         return implode(' ', $parts);
     }
 
-    /**
-     * Inline tag-pill markup appended to the name cell.
-     */
+    /** Inline tag-pill markup appended to the name cell. */
     public static function renderTagPills(array $tags): string
     {
         if (empty($tags)) {
@@ -651,8 +1111,8 @@ class SprintItem extends CommonDBTM
     }
 
     /**
-     * Inline pill rendered next to an item name showing how many open
-     * dependencies it has, with helper names + % in the tooltip.
+     * Inline pill showing how many open dependencies an item has, with helper
+     * names + % in the tooltip.
      *
      * @param array<int,array{users_id:int,name:string,capacity:int}> $openSummaries
      */
@@ -684,10 +1144,8 @@ class SprintItem extends CommonDBTM
     }
 
     /**
-     * Render a shared filter bar for any sprint item table: text search
-     * + single-select status + single-select owner + reset. Emits an
-     * inline <script> right after the markup so the wiring happens
-     * immediately, regardless of tab-load timing or jQuery delegation.
+     * Render a shared filter bar (text search + status + owner + reset) for
+     * any sprint item table.
      *
      * @param string $tableClass  CSS class on the target <table>.
      * @param array<string,mixed> $options {
@@ -708,10 +1166,8 @@ class SprintItem extends CommonDBTM
         echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
             . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
 
-        // Events are handled by sprint.js via capture-phase delegation on
-        // document. No inline handlers — that way a CSP that forbids
-        // inline script (`script-src` without `'unsafe-inline'`) still
-        // leaves filter + reset fully functional.
+        // Events are delegated from sprint.js (no inline handlers) so a CSP
+        // without 'unsafe-inline' still leaves filter + reset functional.
         echo "<input type='search' class='form-control form-control-sm sf-text' "
             . "style='max-width:220px;' placeholder='" . __('Search name...', 'sprint') . "'>";
 
@@ -753,8 +1209,7 @@ class SprintItem extends CommonDBTM
 
     /**
      * Attribute fragment for a sortable <th>. Uses data-sprint-action so
-     * the click is handled by sprint.js via delegated capture-phase
-     * listeners — CSP-safe, no inline `onclick` needed.
+     * sprint.js handles the click via delegation — CSP-safe, no inline onclick.
      */
     public static function sortClickAttr(string $tableClass = ''): string
     {
@@ -762,10 +1217,9 @@ class SprintItem extends CommonDBTM
     }
 
     /**
-     * Render the shared quick-edit modal + JS bindings for sprint item
-     * rows. Designed to be called on any page that lists sprint items
-     * with the `.sprint-quick-edit-btn` button and rows carrying the data
-     * attributes produced by {@see buildRowDataAttrs()}.
+     * Render the shared quick-edit modal + JS bindings. Works on any page with
+     * .sprint-quick-edit-btn buttons and rows carrying the data-* attributes
+     * from {@see buildRowDataAttrs()}.
      */
     public static function renderQuickEditUI(int $sprintId = 0): void
     {
@@ -779,9 +1233,8 @@ class SprintItem extends CommonDBTM
         $moveTargets    = $sprintId > 0 ? Sprint::getMoveTargetOptions($sprintId) : [];
         $definedTags    = Config::getDefinedTags();
 
-        // Capacity lock: if the plugin is configured to restrict capacity
-        // edits to the Scrum Master, disable the capacity control in the
-        // modal for other users (regular items only — fastlane always free).
+        // Capacity lock: when restricted to the Scrum Master, disable the modal
+        // capacity control for others (regular items only — fastlane stays free).
         $capacityLocked = Config::isScrumMasterOnlyCapacity()
             && $sprintId > 0
             && !Config::isCurrentUserScrumMaster($sprintId);
@@ -869,6 +1322,8 @@ class SprintItem extends CommonDBTM
             . "<i class='fas fa-link' style='color:#20c997;margin-right:4px;'></i>"
             . __('Dependencies', 'sprint') . "</label>";
         echo "<div class='alert alert-info py-1 small sprint-qe-dep-status mb-2' style='display:none;'></div>";
+        // Live dependency list (loaded on open); each row edits % or removes.
+        echo "<div class='sprint-qe-dep-list small mb-2'></div>";
         echo "<div class='d-flex flex-wrap gap-2 align-items-center'>";
         echo "<select class='form-select form-select-sm sprint-qe-dep-user' style='max-width:240px;'>";
         echo "<option value='0'>" . htmlescape(__('Select sprint member', 'sprint')) . "</option>";
@@ -902,6 +1357,16 @@ class SprintItem extends CommonDBTM
 
         $labelUnassigned = addslashes(__('Unassigned', 'sprint'));
 
+        // Capacity <option> list (non-zero) for editing existing dependencies.
+        $depCapOptions = '';
+        foreach (SprintMember::getCapacityChoices(false) as $cv => $cl) {
+            $depCapOptions .= "<option value='" . (int)$cv . "'>" . htmlescape((string)$cl) . "</option>";
+        }
+        $depNoneLabel    = addslashes(__('No dependencies yet', 'sprint'));
+        $depResolvedTxt  = addslashes(__('resolved', 'sprint'));
+        $depRemoveTxt    = addslashes(__('Remove dependency', 'sprint'));
+        $depRemoveConfirm = addslashes(__('Remove this dependency?', 'sprint'));
+
         echo <<<JS
 <script>
 $(function() {
@@ -920,7 +1385,12 @@ $(function() {
     var \$modal = \$('#sprint-quickedit-modal');
 
     \$(document).on('click', '.sprint-quick-edit-btn', function() {
-        var \$row       = \$(this).closest('tr');
+        // Works for table rows (tr[data-item-id]) and Kanban cards
+        // (.sprint-kanban-card[data-item-id]) alike. Match the row/card
+        // container explicitly — the table buttons themselves carry a
+        // data-item-id, so a bare closest('[data-item-id]') would resolve to
+        // the button (which has none of the data-* fields), wiping the item.
+        var \$row       = \$(this).closest('tr, .sprint-kanban-card');
         var itemId     = \$row.data('item-id');
         var itemName   = \$row.data('item-name') || '';
         var status     = \$row.data('item-status') || '';
@@ -951,6 +1421,7 @@ $(function() {
                 '&forcetab=' + encodeURIComponent('GlpiPlugin\\\\Sprint\\\\SprintItemDependency') + '\$1'
         );
         \$modal.data('deps-added', 0);
+        loadQeDeps(itemId);
 
         // Populate tag checkboxes from the row's `|tag1|tag2|` lowercased blob.
         var tagBlob = String(\$row.attr('data-item-tags') || '|').toLowerCase();
@@ -1181,6 +1652,7 @@ $(function() {
                     .text(resp.message).show();
                 \$modal.find('.sprint-qe-dep-user').val('0');
                 \$modal.data('deps-added', (parseInt(\$modal.data('deps-added'), 10) || 0) + 1);
+                loadQeDeps(\$modal.find('input[name=id]').val());
             } else {
                 \$status.removeClass('alert-info alert-success').addClass('alert-danger')
                     .text(resp && resp.message ? resp.message : 'Could not add dependency').show();
@@ -1197,6 +1669,118 @@ $(function() {
         runDepAdd(false).done(onDepResp).fail(onDepFail).always(onDepAlways);
     });
 
+    // ---- Existing dependencies: live list + inline edit/remove ----
+    var depCapOptions = "{$depCapOptions}";
+
+    function qeEscapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+        });
+    }
+
+    function loadQeDeps(itemId) {
+        var \$list = \$modal.find('.sprint-qe-dep-list');
+        if (!\$list.length || !itemId) { return; }
+        \$list.html('<span class="text-muted">…</span>');
+        \$.ajax({
+            url: {$cfgRoot} + '/plugins/sprint/ajax/dependencies.php',
+            type: 'GET', dataType: 'json', cache: false,
+            data: { action: 'list', plugin_sprint_sprintitems_id: itemId }
+        }).done(function(resp) {
+            if (!resp || !resp.success || !resp.deps || !resp.deps.length) {
+                \$list.html('<span class="text-muted fst-italic">{$depNoneLabel}</span>');
+                return;
+            }
+            var html = '';
+            resp.deps.forEach(function(d) {
+                html += '<div class="d-flex align-items-center gap-2 mb-1" data-dep-row="' + d.id + '">'
+                    + '<span class="flex-grow-1"><i class="fas fa-link" style="color:#20c997;"></i> '
+                    + qeEscapeHtml(d.name)
+                    + (d.is_resolved ? ' <span class="badge bg-secondary">{$depResolvedTxt}</span>' : '')
+                    + '</span>'
+                    + '<select class="form-select form-select-sm sprint-qe-dep-edit-cap" data-dep-id="' + d.id + '"'
+                    + (d.is_resolved ? ' disabled' : '') + ' style="max-width:90px;">' + depCapOptions + '</select>'
+                    + '<button type="button" class="btn btn-sm btn-outline-danger sprint-qe-dep-remove" '
+                    + 'data-dep-id="' + d.id + '" title="{$depRemoveTxt}"><i class="fas fa-trash"></i></button>'
+                    + '</div>';
+            });
+            \$list.html(html);
+            resp.deps.forEach(function(d) {
+                \$list.find('select.sprint-qe-dep-edit-cap[data-dep-id="' + d.id + '"]').val(String(d.capacity));
+            });
+        }).fail(function() {
+            \$list.html('<span class="text-danger">Network error</span>');
+        });
+    }
+
+    \$(document).on('change', '.sprint-qe-dep-edit-cap', function() {
+        var \$sel  = \$(this);
+        var depId  = parseInt(\$sel.data('dep-id'), 10) || 0;
+        var cap    = parseInt(\$sel.val(), 10) || 0;
+        var itemId = \$modal.find('input[name=id]').val();
+        var \$status = \$modal.find('.sprint-qe-dep-status');
+        if (depId <= 0 || cap <= 0) { return; }
+        \$sel.prop('disabled', true);
+        \$.ajax({
+            url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
+            type: 'GET', dataType: 'json', cache: false
+        }).then(function(tok) {
+            return \$.ajax({
+                url: {$cfgRoot} + '/plugins/sprint/ajax/dependencies.php',
+                type: 'POST', dataType: 'json',
+                data: {
+                    action: 'update', plugin_sprint_sprintitems_id: itemId, id: depId,
+                    capacity: cap, _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                \$status.removeClass('alert-info alert-danger').addClass('alert-success')
+                    .text((resp.warning ? (resp.message + ' — ' + resp.warning) : resp.message)).show();
+                \$modal.data('deps-added', (parseInt(\$modal.data('deps-added'), 10) || 0) + 1);
+            } else {
+                \$status.removeClass('alert-info alert-success').addClass('alert-danger')
+                    .text(resp && resp.message ? resp.message : 'Could not update dependency').show();
+            }
+        }).fail(function() {
+            \$status.removeClass('alert-info alert-success').addClass('alert-danger').text('Network error').show();
+        }).always(function() {
+            \$sel.prop('disabled', false);
+        });
+    });
+
+    \$(document).on('click', '.sprint-qe-dep-remove', function() {
+        var depId  = parseInt(\$(this).data('dep-id'), 10) || 0;
+        var itemId = \$modal.find('input[name=id]').val();
+        if (depId <= 0) { return; }
+        if (!window.confirm("{$depRemoveConfirm}")) { return; }
+        var \$status = \$modal.find('.sprint-qe-dep-status');
+        \$.ajax({
+            url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
+            type: 'GET', dataType: 'json', cache: false
+        }).then(function(tok) {
+            return \$.ajax({
+                url: {$cfgRoot} + '/plugins/sprint/ajax/dependencies.php',
+                type: 'POST', dataType: 'json',
+                data: {
+                    action: 'remove', plugin_sprint_sprintitems_id: itemId, id: depId,
+                    _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                \$status.removeClass('alert-info alert-danger').addClass('alert-success').text(resp.message).show();
+                \$modal.data('deps-added', (parseInt(\$modal.data('deps-added'), 10) || 0) + 1);
+                loadQeDeps(itemId);
+            } else {
+                \$status.removeClass('alert-info alert-success').addClass('alert-danger')
+                    .text(resp && resp.message ? resp.message : 'Could not remove dependency').show();
+            }
+        }).fail(function() {
+            \$status.removeClass('alert-info alert-success').addClass('alert-danger').text('Network error').show();
+        });
+    });
+
     \$modal.on('hidden.bs.modal', function() {
         var added = parseInt(\$modal.data('deps-added'), 10) || 0;
         if (added > 0) {
@@ -1210,15 +1794,13 @@ JS;
     }
 
     /**
-     * Render the "quick edit linked item" modal + JS once per page. Handles
-     * quick status (and ProjectTask percent-done) updates of the Ticket /
-     * Change / ProjectTask that a SprintItem is linked to, so users can
-     * tweak the source item without navigating away from the sprint view.
+     * Render the "quick edit linked item" modal + JS once per page, so users
+     * can change the linked Ticket/Change/Problem/ProjectTask status (and
+     * ProjectTask percent-done) without leaving the sprint view.
      */
     public static function renderLinkedQuickEditUI(): void
     {
-        // One instance per page is enough — the modal attaches to document
-        // level and is re-used for every click.
+        // One instance per page; the modal attaches to document and is reused.
         static $rendered = false;
         if ($rendered) {
             return;
@@ -1234,7 +1816,7 @@ JS;
         foreach ($ps->find([], ['name ASC']) as $r) {
             $projectStates[(int)$r['id']] = (string)$r['name'];
         }
-        // Provide an explicit "none" option for ProjectTask (0 = no state)
+        // Explicit "none" option for ProjectTask (0 = no state).
         $projectStates = [0 => '-----'] + $projectStates;
 
         echo "<div class='modal fade' id='sprint-linked-quickedit-modal' tabindex='-1' aria-hidden='true'>";
@@ -1252,7 +1834,6 @@ JS;
         echo "<input type='hidden' name='itemtype'>";
         echo "<input type='hidden' name='id'>";
 
-        // Ticket status
         echo "<div class='mb-3 sprint-lqe-ticket-status' style='display:none;'>";
         echo "<label class='form-label'>" . __('Status') . "</label>";
         echo "<select class='form-select' name='ticket_status'>";
@@ -1261,7 +1842,6 @@ JS;
         }
         echo "</select></div>";
 
-        // Change status
         echo "<div class='mb-3 sprint-lqe-change-status' style='display:none;'>";
         echo "<label class='form-label'>" . __('Status') . "</label>";
         echo "<select class='form-select' name='change_status'>";
@@ -1270,7 +1850,6 @@ JS;
         }
         echo "</select></div>";
 
-        // Problem status
         echo "<div class='mb-3 sprint-lqe-problem-status' style='display:none;'>";
         echo "<label class='form-label'>" . __('Status') . "</label>";
         echo "<select class='form-select' name='problem_status'>";
@@ -1279,7 +1858,6 @@ JS;
         }
         echo "</select></div>";
 
-        // ProjectTask status + percent done
         echo "<div class='mb-3 sprint-lqe-ptask-status' style='display:none;'>";
         echo "<label class='form-label'>" . __('Status') . "</label>";
         echo "<select class='form-select' name='projectstates_id'>";
@@ -1293,7 +1871,7 @@ JS;
         echo "<input type='number' class='form-control' name='percent_done' min='0' max='100' step='1' value='0'>";
         echo "</div>";
 
-        echo "</div>"; // modal-body
+        echo "</div>";
         echo "<div class='modal-footer'>";
         echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __('Cancel') . "</button>";
         echo "<button type='button' class='btn btn-primary sprint-lqe-save'>"
@@ -1454,10 +2032,9 @@ JS;
         $input = self::sanitizeInput($input);
         $input = $this->resolveLinkedItem($input);
 
-        // Enforce plugin setting: only the sprint's Scrum Master may edit
-        // capacity on regular (non-fastlane) sprint items when the guard is
-        // enabled. Silently drop the field for others so validation of the
-        // rest of the update still goes through.
+        // When the guard is on, only the Scrum Master may edit capacity on
+        // regular items; silently drop the field for others so the rest of the
+        // update still validates.
         $isFastlane = (int)($this->fields['is_fastlane'] ?? 0) === 1;
         if (
             !$isFastlane
@@ -1470,10 +2047,28 @@ JS;
             }
         }
 
-        // Updates often only carry the changed field (e.g. just sprints_id
-        // when assigning a backlog item). Fill in itemtype/items_id from
-        // the persisted row so validateNoDuplicateLink can still detect a
-        // duplicate move into an already-linked sprint.
+        // Backlog → sprint: optionally seed story points from the estimated
+        // capacity (1% = 1 SP). Only when the plugin setting is on and the item
+        // still carries the default estimate (≤1), so an explicitly estimated
+        // item never gets clobbered.
+        $wasBacklog  = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0) === 0;
+        $newSprintId = (int)($input['plugin_sprint_sprints_id'] ?? 0);
+        if (
+            $wasBacklog
+            && $newSprintId > 0
+            && !array_key_exists('story_points', $input)
+            && (int)($this->fields['story_points'] ?? 0) <= 1
+            && Config::isBacklogCapacityToStoryPoints()
+        ) {
+            $estimatedCap = (int)($input['capacity'] ?? $this->fields['capacity'] ?? 0);
+            if ($estimatedCap > 0) {
+                $input['story_points'] = $estimatedCap;
+            }
+        }
+
+        // Updates often carry only the changed field, so fill itemtype/items_id
+        // from the persisted row — otherwise validateNoDuplicateLink can't catch
+        // a duplicate move into an already-linked sprint.
         $validationInput = $input;
         if (!isset($validationInput['itemtype'])) {
             $validationInput['itemtype'] = (string)($this->fields['itemtype'] ?? '');
@@ -1495,12 +2090,9 @@ JS;
     }
 
     /**
-     * Drop backlog (sprints_id = 0) rows that point at the same linked
-     * GLPI item — a SprintItem in a real sprint and a backlog row for the
-     * same Ticket/Change/ProjectTask should not coexist.
-     *
-     * Manual items (empty itemtype) have no stable identity so this is a
-     * no-op for them.
+     * Drop backlog rows pointing at the same linked GLPI item: a SprintItem in
+     * a real sprint and a backlog row for the same item must not coexist.
+     * No-op for manual items (no stable identity).
      *
      * @return int Number of backlog rows removed.
      */
@@ -1554,7 +2146,7 @@ JS;
     }
 
     /**
-     * Tags currently assigned to a sprint item, in admin-defined order.
+     * Tags assigned to an item, in admin-defined order.
      *
      * @return string[]
      */
@@ -1630,9 +2222,9 @@ JS;
     }
 
     /**
-     * Replace the tag set for an item with the intersection of the input
-     * and the admin-defined pool. Tags outside the pool are silently
-     * dropped so a stale form submission can't smuggle in unknown labels.
+     * Replace an item's tags with the intersection of input and the admin
+     * pool — tags outside the pool are dropped, so a stale form submission
+     * can't smuggle in unknown labels.
      */
     public static function setTagsForItem(int $itemId, array $tags): void
     {
@@ -1665,11 +2257,9 @@ JS;
     }
 
     /**
-     * Reject creating a second SprintItem row for the same
-     * (sprint, itemtype, items_id) triple. Manual items (empty itemtype
-     * or items_id == 0) and backlog rows (sprint id == 0) are skipped —
-     * Backlog has its own de-duplication and manual items can legitimately
-     * repeat.
+     * Reject a second row for the same (sprint, itemtype, items_id) triple.
+     * Manual items and backlog rows (sprint id 0) are skipped — backlog has its
+     * own de-duplication and manual items may legitimately repeat.
      */
     private static function validateNoDuplicateLink(array $input, int $excludeId = 0): bool
     {
@@ -1700,14 +2290,9 @@ JS;
     }
 
     /**
-     * Check whether a linked item (Ticket/Change/ProjectTask) is already
-     * attached to a given sprint via a SprintItem row.
-     */
-    /**
-     * Carry an item over to another sprint: create a fresh copy in the
-     * target sprint while leaving the source row intact, so items that
-     * didn't finish stay visible in the current sprint's review and
-     * continue in the next sprint as a new planning entry.
+     * Carry an item over to another sprint: create a fresh copy in the target
+     * while leaving the source intact, so unfinished items stay in the current
+     * sprint's review and continue in the next as a new planning entry.
      */
     public static function carryOverTo(int $sourceItemId, int $targetSprintId): int
     {
@@ -1733,8 +2318,8 @@ JS;
         $itemtype = (string)($source->fields['itemtype'] ?? '');
         $itemsId  = (int)($source->fields['items_id'] ?? 0);
 
-        // Reuse an existing row in the target sprint if the same GLPI item
-        // is already linked there — manual items have no stable identity.
+        // Reuse an existing row if the same GLPI item is already linked in the
+        // target — manual items have no stable identity.
         if ($itemtype !== '' && $itemsId > 0) {
             $existing = (new self())->find([
                 'plugin_sprint_sprints_id' => $targetSprintId,
@@ -1789,19 +2374,15 @@ JS;
         return countElementsInTable(self::getTable(), $criteria) > 0;
     }
 
-    /**
-     * Whitelist allowed fields and validate itemtype
-     */
+    /** Validate itemtype against the allowlist and cast numeric fields. */
     private static function sanitizeInput(array $input): array
     {
-        // Validate itemtype against allowlist
         $allowedTypes = array_keys(self::getLinkedItemTypes());
         if (isset($input['itemtype']) && !in_array($input['itemtype'], $allowedTypes, true)) {
             $input['itemtype'] = '';
             $input['items_id'] = 0;
         }
 
-        // Cast numeric fields
         if (isset($input['items_id']))    $input['items_id']    = (int)$input['items_id'];
         if (isset($input['users_id']))    $input['users_id']    = (int)$input['users_id'];
         if (isset($input['story_points'])) $input['story_points'] = max(0, (int)$input['story_points']);
@@ -1814,8 +2395,7 @@ JS;
     }
 
     /**
-     * Check that assigning capacity to an owner does not exceed their
-     * available capacity. Defers to SprintMember::checkCapacityForUser so
+     * Validate owner capacity. Defers to SprintMember::checkCapacityForUser so
      * regular items and fastlane allocations are counted together.
      *
      * @param array $input    The input data
@@ -1824,9 +2404,8 @@ JS;
      */
     private function validateCapacity(array $input, int $excludeId = 0): bool
     {
-        // Fastlane items distribute capacity through the
-        // SprintFastlaneMember junction, so the regular per-row capacity
-        // field is irrelevant for them.
+        // Fastlane items distribute capacity via SprintFastlaneMember, so the
+        // per-row capacity field is irrelevant for them.
         $isFastlane = (int)($input['is_fastlane'] ?? $this->fields['is_fastlane'] ?? 0) === 1;
         if ($isFastlane) {
             return true;
@@ -1836,11 +2415,9 @@ JS;
         $userId   = (int)($input['users_id'] ?? 0);
         $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? $this->fields['plugin_sprint_sprints_id'] ?? 0);
 
-        // Regular items no longer hard-block on overflow: a member can be
-        // pushed past 100% (e.g. when fastlane / dependency work already
-        // filled their budget) and only gets a WARNING. The AJAX modal asks
-        // for explicit confirmation first via SprintMember::overflowInfo();
-        // this keeps the no-JS form path and any other caller non-blocking.
+        // Overflow only warns, never hard-blocks: a member can be pushed past
+        // 100% and the AJAX modal confirms first via SprintMember::overflowInfo().
+        // Keeping it non-blocking preserves the no-JS form path.
         return SprintMember::checkCapacityForUser(
             $sprintId,
             $userId,
@@ -1853,8 +2430,8 @@ JS;
     }
 
     /**
-     * If a linked item type is selected, set the itemtype/items_id
-     * and auto-fill the name from the linked item
+     * When a linked item type is selected, set items_id and auto-fill the name
+     * from the linked item.
      */
     private function resolveLinkedItem(array $input): array
     {
@@ -1889,9 +2466,7 @@ JS;
         return $input;
     }
 
-    /**
-     * Show the item edit form
-     */
+    /** Render the item edit form. */
     public function showForm($ID, array $options = []): bool
     {
         $this->initForm($ID, $options);
@@ -1912,7 +2487,6 @@ JS;
 
         $this->showFormHeader($options);
 
-        // Name
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Name') . "</td>";
         echo "<td>" . Html::input('name', ['value' => $this->fields['name'] ?? '', 'size' => 40]) . "</td>";
@@ -1941,7 +2515,6 @@ JS;
         echo "</label>";
         echo "</td></tr>";
 
-        // Linked item
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Linked item type', 'sprint') . "</td><td>";
         $currentType = $this->fields['itemtype'] ?? '';
@@ -1959,8 +2532,8 @@ JS;
         }
         echo "</td></tr>";
 
-        // Priority (+ Story Points for non-fastlane items only: story points
-        // on fastlane items don't count towards sprint velocity).
+        // Story Points only for non-fastlane items — fastlane points don't
+        // count towards sprint velocity.
         echo "<tr class='tab_bg_1'>";
         if ($isFastlane) {
             echo Html::hidden('story_points', ['value' => $this->fields['story_points'] ?? 0]);
@@ -1984,9 +2557,9 @@ JS;
         }
         echo "</tr>";
 
-        // Capacity + Owner — irrelevant for Fastlane items, where capacity
-        // is distributed across multiple members via the Fastlane Members
-        // tab. Hidden inputs preserve existing values.
+        // Capacity + Owner are irrelevant for Fastlane items (capacity is split
+        // across members via the Fastlane Members tab); hidden inputs preserve
+        // existing values.
         if ($isFastlane) {
             echo Html::hidden('capacity', ['value' => $this->fields['capacity'] ?? 0]);
             echo Html::hidden('users_id', ['value' => $this->fields['users_id'] ?? 0]);
@@ -2008,13 +2581,11 @@ JS;
             echo "</td></tr>";
         }
 
-        // Sprint
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Sprint') . "</td><td>";
         Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $sprintId]);
         echo "</td><td colspan='2'></td></tr>";
 
-        // Description
         echo "<tr class='tab_bg_1'><td>" . __('Description') . "</td>";
         echo "<td colspan='3'><textarea name='description' rows='6' cols='80'>" .
             htmlescape($this->fields['description'] ?? '') . "</textarea></td></tr>";

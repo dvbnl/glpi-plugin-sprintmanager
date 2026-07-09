@@ -40,12 +40,10 @@ if (!$hasFullUpdate && !($hasOwnOnly && $isOwner)) {
 
 $update = ['id' => (int)$_POST['id']];
 
-$allowed = ['name', 'status', 'priority', 'users_id', 'story_points', 'capacity', 'note'];
+$allowed = ['name', 'status', 'priority', 'users_id', 'story_points', 'capacity', 'note', 'proposed_sprints_id'];
 
-// If the plugin is configured to restrict capacity edits to the sprint's
-// Scrum Master, drop the capacity field for everyone else. Fastlane items
-// are exempt — their capacity is allocated via SprintFastlaneMember and
-// must remain editable by every team member.
+// When capacity edits are restricted to the Scrum Master, drop the capacity
+// field for others. Fastlane items are exempt (allocated via SprintFastlaneMember).
 $isFastlane = (int)($item->fields['is_fastlane'] ?? 0) === 1;
 if (
     !$isFastlane
@@ -68,9 +66,8 @@ if (array_key_exists('_tags_json', $_POST)) {
     $update['_tags'] = is_array($decoded) ? $decoded : [];
 }
 
-// Quick-edits fired from a meeting view send the active meeting id; tag
-// the resulting log rows as meeting-sourced so the activity chart skips
-// them and the audit log shows a "via Meeting" badge.
+// Meeting-view edits send the active meeting id; tag the resulting log rows
+// as meeting-sourced (activity chart skips them, audit shows a "via Meeting" badge).
 $meetingId = (int)($_POST['meeting_id'] ?? 0);
 if ($meetingId > 0) {
     $meeting = new GlpiPlugin\Sprint\SprintMeeting();
@@ -83,11 +80,9 @@ if ($meetingId > 0) {
     }
 }
 
-// Capacity overflow confirmation gate. Regular items no longer hard-block,
-// but if this edit would push the (new) owner past their sprint capacity we
-// ask the client to confirm once before committing. Only prompt when the
-// change actually *increases* that owner's load — editing the name/notes of
-// an item whose owner is already over capacity must not nag.
+// Capacity overflow gate: ask the client to confirm once if this edit pushes
+// the owner past capacity. Only prompt when the change *increases* their load,
+// so editing name/notes of an already-over-capacity item doesn't nag.
 $confirmOverflow = (int)($_POST['confirm_overflow'] ?? 0) === 1;
 if (!$confirmOverflow && !$isFastlane) {
     $sprintId   = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
@@ -95,8 +90,7 @@ if (!$confirmOverflow && !$isFastlane) {
         ? (int)$update['users_id'] : (int)$item->fields['users_id'];
     $targetCap  = array_key_exists('capacity', $update)
         ? (int)$update['capacity'] : (int)($item->fields['capacity'] ?? 0);
-    // The owner's current contribution from *this* item, so an increase can
-    // be told apart from a no-op / decrease.
+    // This item's existing contribution, so an increase can be told apart from a no-op/decrease.
     $priorContribution = ((int)$item->fields['users_id'] === $targetUser)
         ? (int)($item->fields['capacity'] ?? 0) : 0;
 
@@ -132,9 +126,8 @@ if ($meetingId > 0) {
     );
 }
 
-// Drain any messages that SprintItem::validateCapacity (and similar) may
-// have queued via Session::addMessageAfterRedirect so we can surface them
-// back to the client instead of them stacking up for the next page load.
+// Drain messages queued via addMessageAfterRedirect so we relay them to the
+// client instead of stacking them up for the next page load.
 $messages = [];
 if (isset($_SESSION['MESSAGE_AFTER_REDIRECT']) && is_array($_SESSION['MESSAGE_AFTER_REDIRECT'])) {
     foreach ($_SESSION['MESSAGE_AFTER_REDIRECT'] as $level => $msgs) {
@@ -166,7 +159,8 @@ if ($carryOverSprintId > 0) {
         $carryOverSprintId = 0;
     } else {
         $sprint = new GlpiPlugin\Sprint\Sprint();
-        if ($sprint->getFromDB($carryOverSprintId)) {
+        if ($sprint->getFromDB($carryOverSprintId)
+            && Session::haveAccessToEntity($sprint->fields['entities_id'] ?? 0)) {
             $carryOverId = GlpiPlugin\Sprint\SprintItem::carryOverTo(
                 (int)$_POST['id'],
                 $carryOverSprintId

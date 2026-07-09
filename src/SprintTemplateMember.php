@@ -86,7 +86,6 @@ class SprintTemplateMember extends CommonDBRelation
             echo "</div>";
         }
 
-        // List members
         $member  = new self();
         $members = $member->find(['plugin_sprint_sprinttemplates_id' => $ID], ['role ASC']);
 

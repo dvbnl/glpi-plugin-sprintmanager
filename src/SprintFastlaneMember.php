@@ -10,14 +10,8 @@ use User;
 use Dropdown;
 
 /**
- * SprintFastlaneMember - Junction linking a Fastlane SprintItem to multiple
- * sprint members, each with their own assigned capacity %.
- *
- * Registered as a tab on SprintItem (only displayed when the parent item
- * has is_fastlane = 1). Allocations made here count against the member's
- * total sprint capacity, just like regular SprintItem.capacity, and are
- * surfaced in the dashboard under the "Fastlane" category so the team can
- * steer how much of the sprint goes to fastlane work.
+ * Junction linking a Fastlane SprintItem to sprint members with per-member
+ * capacity %. Allocations count against the member's total sprint capacity.
  */
 class SprintFastlaneMember extends CommonDBRelation
 {
@@ -87,9 +81,8 @@ class SprintFastlaneMember extends CommonDBRelation
     }
 
     /**
-     * Make sure assigning capacity to this user does not exceed their
-     * remaining sprint capacity (after counting both regular SprintItems
-     * and other Fastlane allocations).
+     * Ensure the user's total allocation (regular + fastlane) stays within
+     * their remaining sprint capacity.
      */
     private function validateCapacity(array $input, int $excludeId = 0): bool
     {

@@ -210,12 +210,8 @@ class SprintMeeting extends CommonDBTM
     }
 
     /**
-     * Show the meeting detail form with notes + embedded standup entries
-     */
-    /**
-     * The meeting that chronologically precedes this one within the same
-     * sprint, or null when this is the first. Ordered by date_meeting then
-     * id so meetings sharing a timestamp still have a deterministic order.
+     * The meeting chronologically before this one in the sprint, or null.
+     * Ordered by date_meeting then id for deterministic tie-breaking.
      */
     private function getPreviousMeeting(): ?self
     {
@@ -250,10 +246,9 @@ class SprintMeeting extends CommonDBTM
     }
 
     /**
-     * Replace this meeting's blocked-item snapshot with the given set,
-     * captured when the meeting is viewed. A sentinel row (item 0) marks
-     * that the meeting was snapshotted at all, so an empty blocked-set is
-     * distinguishable from "never viewed".
+     * Replace this meeting's blocked-item snapshot. A sentinel row (item 0)
+     * marks the meeting as snapshotted, so an empty set is distinguishable
+     * from "never viewed".
      *
      * @param int[] $blockedItemIds
      */
@@ -283,9 +278,8 @@ class SprintMeeting extends CommonDBTM
     }
 
     /**
-     * Item IDs that were blocked as of the last time this meeting was
-     * viewed, or null when the meeting has never been snapshotted (caller
-     * should then fall back to audit-log reconstruction).
+     * Item IDs blocked as of this meeting's last view, or null when never
+     * snapshotted (caller then falls back to audit-log reconstruction).
      *
      * @return int[]|null
      */
@@ -346,12 +340,10 @@ class SprintMeeting extends CommonDBTM
             $tagsByItem = SprintItem::getTagsForItems($rowItemIds);
             $depsByItem = SprintItemDependency::getOpenSummariesForItems($rowItemIds);
 
-            // Highlight items that became blocked since the previous meeting.
-            // The baseline is what the previous meeting recorded as blocked
-            // when it was last viewed (a per-meeting snapshot). For meetings
-            // that predate this feature (no snapshot yet) we fall back to
-            // reconstructing the status from the audit log at the previous
-            // meeting's scheduled date.
+            // Highlight items newly blocked since the previous meeting.
+            // Baseline = previous meeting's recorded snapshot; for meetings
+            // predating this feature, reconstruct from the audit log at the
+            // previous meeting's date.
             $prevBlockedSet   = [];      // [itemId => true]
             $havePrevBaseline = false;
             $prevMeeting      = $this->getPreviousMeeting();
@@ -389,12 +381,22 @@ class SprintMeeting extends CommonDBTM
                 }
                 $newlyBlocked  = $havePrevBaseline && $isBlockedNow && empty($prevBlockedSet[$itemId]);
                 $linkedDisplay = '';
+                $reviewUnclosed = false;
                 $itemtype = $row['itemtype'] ?? '';
                 $allowedTypes = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
                 if (!empty($itemtype) && (int)$row['items_id'] > 0 && in_array($itemtype, $allowedTypes, true) && class_exists($itemtype)) {
                     $tmpItem = new SprintItem();
                     $tmpItem->fields = $row;
                     $linkedDisplay = $tmpItem->getLinkedItemDisplay();
+                    // Keep "In Review"/"Done" rows highlighted while their
+                    // linked ticket/change is still open.
+                    $rowStatus = (string)($row['status'] ?? '');
+                    if (
+                        ($rowStatus === SprintItem::STATUS_REVIEW || $rowStatus === SprintItem::STATUS_DONE)
+                        && !$tmpItem->isLinkedItemClosed()
+                    ) {
+                        $reviewUnclosed = true;
+                    }
                 }
 
                 // Resolve parent project name for ProjectTask items
@@ -412,11 +414,9 @@ class SprintMeeting extends CommonDBTM
                     }
                 }
 
-                // Fastlane items have multi-member allocations via the
-                // SprintFastlaneMember junction (single users_id is not
-                // authoritative for them). Resolve allocations so the
-                // meeting review can render the same per-user list the
-                // dashboard fastlane block already shows.
+                // Fastlane items allocate capacity across members via the
+                // SprintFastlaneMember junction (users_id alone isn't
+                // authoritative), so resolve the per-user list here.
                 $fastlaneAllocations = [];
                 $fastlaneTotal       = 0;
                 if ((int)($row['is_fastlane'] ?? 0) === 1) {
@@ -457,12 +457,12 @@ class SprintMeeting extends CommonDBTM
                     'deps_open'            => $rowDeps,
                     'deps_open_count'      => count($rowDeps),
                     'newly_blocked'        => $newlyBlocked,
+                    'review_unclosed'      => $reviewUnclosed,
                 ];
             }
 
-            // Capture what this meeting saw as blocked, so the next meeting
-            // compares against this baseline instead of re-flagging items
-            // that were already blocked here.
+            // Record this meeting's blocked set as the next meeting's
+            // baseline, so already-blocked items aren't re-flagged.
             self::recordBlockedSnapshot((int)$ID, $currentBlockedIds);
         }
 
@@ -560,9 +560,8 @@ class SprintMeeting extends CommonDBTM
     }
 
     /**
-     * Show sprint items review table embedded in the meeting form.
-     * Uses array field names _sprintitems[id][field] so the main
-     * meeting save button processes all changes at once.
+     * Embedded sprint-items review table. Field names _sprintitems[id][field]
+     * let the meeting save button process all changes at once.
      */
     public static function showSprintItemsReview(int $sprintId, int $meetingId = 0): void
     {
@@ -695,9 +694,6 @@ class SprintMeeting extends CommonDBTM
         echo "</table></div>";
     }
 
-    /**
-     * Define tabs for meeting detail view
-     */
     public function prepareInputForUpdate($input)
     {
         // Process sprint item changes before the meeting update
@@ -723,10 +719,9 @@ class SprintMeeting extends CommonDBTM
                     $update['note'] = $fields['note'];
                 }
 
-                // Bracket the update with the highest log id so the rows
-                // GLPI writes here can be attributed to this meeting.
-                // Log::history() bypasses CommonDBTM hooks, so we can't
-                // catch them post-insert any other way.
+                // Bracket the update by max log id to attribute GLPI's log
+                // rows to this meeting: Log::history() bypasses CommonDBTM
+                // hooks, so they can't be caught post-insert.
                 $beforeLogId = SprintAudit::snapshotMaxLogId();
                 $si->update($update);
                 SprintAudit::tagNewLogsAsMeetingSourced($beforeLogId, $itemId, $meetingId);

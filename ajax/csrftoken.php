@@ -1,12 +1,9 @@
 <?php
 
 /**
- * Mint a fresh one-shot CSRF token for AJAX calls.
- *
- * GLPI 11 CSRF tokens are single-use: the token rendered into a page form
- * is consumed by the first successful Session::checkCSRF() call. Modals
- * that post multiple times per page load therefore need to fetch a new
- * token before every POST — which is what this endpoint is for.
+ * Mint a fresh one-shot CSRF token for AJAX calls. GLPI 11 tokens are
+ * single-use, so modals posting multiple times per page must fetch a new one
+ * before each POST. checkCSRF is intentionally not called here — this mints.
  */
 
 if (!defined('GLPI_ROOT')) {

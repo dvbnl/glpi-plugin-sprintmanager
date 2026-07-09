@@ -1,10 +1,8 @@
 <?php
 
 /**
- * AJAX handler that adds an open dependency on a sprint item from inside
- * the quick-edit modal. Validates capacity server-side; on overload returns
- * the error message produced by SprintMember::checkCapacityForUser so the
- * modal can show it inline without a page reload.
+ * AJAX handler that adds an open dependency on a sprint item from the
+ * quick-edit modal. Validates capacity server-side and returns inline errors.
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -46,21 +44,41 @@ if (!$hasFullUpdate && !($hasOwnOnly && $isOwner)) {
     return;
 }
 
-if ((int)($item->fields['plugin_sprint_sprints_id'] ?? 0) <= 0) {
+// Dependencies are sprint-scoped: use the item's sprint, or for backlog items
+// (sprints_id = 0) the pre-selected proposed_sprints_id.
+$sprintId  = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
+$isBacklog = $sprintId <= 0;
+if ($isBacklog) {
+    $sprintId = (int)($item->fields['proposed_sprints_id'] ?? 0);
+}
+
+if ($sprintId <= 0) {
     echo json_encode([
         'success' => false,
-        'message' => __('Dependencies are sprint-scoped — assign this item to a sprint first.', 'sprint'),
+        'message' => __('Dependencies are sprint-scoped — assign this item to a sprint (or pre-select a sprint on the backlog) first.', 'sprint'),
     ]);
     return;
 }
 
-// Coupling a helper always adds to their load, so ask for confirmation once
-// when it would push them past their sprint capacity. The allocation still
-// goes through on confirm (dependencies may overflow) — this is just a guard
-// rail so the over-commit is a deliberate choice.
+// From the backlog, the helper must already be a member of the pre-selected sprint.
+if ($isBacklog) {
+    $isMember = countElementsInTable(
+        GlpiPlugin\Sprint\SprintMember::getTable(),
+        ['plugin_sprint_sprints_id' => $sprintId, 'users_id' => $userId]
+    ) > 0;
+    if (!$isMember) {
+        echo json_encode([
+            'success' => false,
+            'message' => __('You can only add a dependency on a member of the pre-selected sprint.', 'sprint'),
+        ]);
+        return;
+    }
+}
+
+// Confirm once before over-committing a helper past sprint capacity. The
+// allocation still goes through on confirm — this is a guard rail, not a block.
 $confirmOverflow = (int)($_POST['confirm_overflow'] ?? 0) === 1;
 if (!$confirmOverflow) {
-    $sprintId = (int)$item->fields['plugin_sprint_sprints_id'];
     $info = GlpiPlugin\Sprint\SprintMember::overflowInfo($sprintId, $userId, $capacity);
     if ($info !== null) {
         echo json_encode([

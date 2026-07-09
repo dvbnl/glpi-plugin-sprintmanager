@@ -56,9 +56,6 @@ class SprintProjectTask extends CommonDBRelation
         return false;
     }
 
-    /**
-     * Show linked project tasks for a sprint
-     */
     public static function showForSprint(Sprint $sprint): void
     {
         $ID      = $sprint->getID();
@@ -156,39 +153,14 @@ class SprintProjectTask extends CommonDBRelation
         echo "</table></div>";
     }
 
-    /**
-     * Show linked sprints on a project task's tab
-     */
     public static function showForProjectTask(ProjectTask $task): void
     {
         $taskID  = $task->getID();
         $canedit = Sprint::canUpdate();
 
-        if ($canedit) {
-            echo "<div class='center'>";
-            echo "<form method='post' action='" . static::getFormURL() . "'>";
-            echo Html::hidden('projecttasks_id', ['value' => $taskID]);
-
-            echo "<table class='tab_cadre_fixe'>";
-            echo "<tr class='tab_bg_2'><th colspan='3'>" .
-                __('Link to a sprint', 'sprint') . "</th></tr>";
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('Sprint', 'sprint') . "</td>";
-            echo "<td>";
-            Sprint::dropdown([
-                'name'      => 'plugin_sprint_sprints_id',
-                'condition' => ['status' => [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE]],
-            ]);
-            echo "</td>";
-            echo "<td>";
-            echo Html::submit(__('Link'), ['name' => 'add', 'class' => 'btn btn-primary']);
-            echo "</td></tr>";
-            echo "</table>";
-            Html::closeForm();
-            echo "</div>";
-
-            Backlog::showAddToBacklogButton('ProjectTask', $taskID);
-        }
+        // Add-to-backlog only: items reach a sprint via the backlog (and the
+        // Scrum Master), not by direct linking. Linked sprints shown read-only below.
+        Backlog::showAddToBacklogButton('ProjectTask', $taskID);
 
         // Source of truth is SprintItem — see SprintTicket::showForTicket.
         $si    = new SprintItem();
@@ -210,14 +182,10 @@ class SprintProjectTask extends CommonDBRelation
         echo "<th>" . __('Sprint', 'sprint') . "</th>";
         echo "<th>" . __('Status') . "</th>";
         echo "<th>" . __('Period', 'sprint') . "</th>";
-        if ($canedit) {
-            echo "<th>" . __('Actions') . "</th>";
-        }
         echo "</tr>";
 
         if (count($links) === 0) {
-            $cols = $canedit ? 4 : 3;
-            echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
+            echo "<tr class='tab_bg_1'><td colspan='3' class='center'>" .
                 __('Not linked to any sprint', 'sprint') . "</td></tr>";
         }
 
@@ -233,19 +201,6 @@ class SprintProjectTask extends CommonDBRelation
             echo "<td>" . ($statuses[$sprint->fields['status']] ?? '') . "</td>";
             echo "<td>" . Html::convDateTime($sprint->fields['date_start']) .
                 " - " . Html::convDateTime($sprint->fields['date_end']) . "</td>";
-            if ($canedit) {
-                echo "<td class='center'>";
-                echo "<form method='post' action='" . SprintItem::getFormURL() .
-                    "' style='display:inline;'>";
-                echo Html::hidden('id', ['value' => $row['id']]);
-                echo Html::submit(__('Unlink', 'sprint'), [
-                    'name'    => 'purge',
-                    'class'   => 'btn btn-sm btn-outline-danger',
-                    'confirm' => __('Remove this link?', 'sprint'),
-                ]);
-                Html::closeForm();
-                echo "</td>";
-            }
             echo "</tr>";
         }
 

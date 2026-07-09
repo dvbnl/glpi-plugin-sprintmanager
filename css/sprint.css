@@ -27,6 +27,63 @@
     --sprint-bg-subtle: #f8fafc;
 }
 
+/* === Dashboard stat cards ================================================
+   Compact horizontal chips: tinted icon square + value/label stack. The
+   per-status color arrives via the --stat-accent custom property set inline
+   on each card. Uses Tabler surface vars so dark mode keeps working. */
+.sprint-stat-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    padding: 14px 0 16px;
+}
+.sprint-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px 8px 10px;
+    background: var(--tblr-bg-surface, #fff);
+    border: 1px solid var(--tblr-border-color, var(--sprint-border));
+    border-left: 3px solid var(--stat-accent, var(--sprint-muted));
+    border-radius: var(--sprint-radius);
+    box-shadow: var(--sprint-shadow);
+    transition: box-shadow var(--sprint-transition), transform var(--sprint-transition);
+}
+.sprint-stat-card:hover {
+    box-shadow: var(--sprint-shadow-hover);
+    transform: translateY(-1px);
+}
+.sprint-stat-icon {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--sprint-radius-sm);
+    font-size: 0.9em;
+    color: var(--stat-accent, var(--sprint-muted));
+    background: color-mix(in srgb, var(--stat-accent, var(--sprint-muted)) 14%, transparent);
+}
+.sprint-stat-value {
+    font-size: 1.2em;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--tblr-body-color, #1e293b);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.sprint-stat-label {
+    font-size: 0.68em;
+    font-weight: 600;
+    color: var(--sprint-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 1px;
+    white-space: nowrap;
+}
+
 /* === Newly-blocked highlight (meeting review) === */
 /* An item that wasn't blocked at the previous meeting but is now: the row
    gets a soft red wash + left accent so the Scrum Master spots fresh
@@ -52,6 +109,28 @@
 @keyframes sprint-newly-blocked-pulse {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.55; }
+}
+
+/* === In-review-but-linked-item-open highlight (meeting review) === */
+/* The sprint item was moved to "In Review" but its underlying ticket/change
+   isn't closed/solved yet: a soft amber wash + left accent so the Scrum
+   Master sees the underlying work is still open. */
+.sprint-review-row.sprint-review-unclosed > td {
+    background-color: #fff8e6 !important;
+    box-shadow: inset 3px 0 0 0 var(--sprint-review, #f0ad4e);
+}
+.sprint-review-unclosed-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 8px;
+    border-radius: var(--sprint-radius-pill);
+    background: #f0ad4e;
+    color: #663c00;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 
 /* === Status badges === */
@@ -124,161 +203,9 @@
     margin-right: 3px;
 }
 
-/* Stats cards */
-.sprint-stats-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-    padding: 0 0 20px;
-    justify-content: center;
-}
-
-.sprint-stat-card {
-    background: var(--tblr-bg-surface, #fff);
-    color: var(--tblr-body-color, inherit);
-    border: 1px solid var(--tblr-border-color, var(--sprint-border));
-    border-radius: var(--sprint-radius);
-    padding: 16px 22px;
-    min-width: 130px;
-    text-align: center;
-    transition: box-shadow var(--sprint-transition), transform var(--sprint-transition);
-    position: relative;
-    overflow: hidden;
-}
-
-.sprint-stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: var(--sprint-card-accent, var(--sprint-muted));
-}
-
-.sprint-stat-card:hover {
-    box-shadow: var(--sprint-shadow-hover);
-    transform: translateY(-2px);
-}
-
-.sprint-stat-card .stat-icon {
-    font-size: 1.3em;
-    margin-bottom: 6px;
-    opacity: 0.85;
-}
-
-.sprint-stat-card .stat-value {
-    font-size: 1.6em;
-    font-weight: 700;
-    line-height: 1.2;
-}
-
-.sprint-stat-card .stat-label {
-    font-size: 0.78em;
-    color: var(--sprint-muted);
-    margin-top: 3px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-/* Card accent colors */
-.sprint-stat-card.card-total   { --sprint-card-accent: var(--sprint-muted); }
-.sprint-stat-card.card-done    { --sprint-card-accent: var(--sprint-done); }
-.sprint-stat-card.card-progress { --sprint-card-accent: var(--sprint-progress); }
-.sprint-stat-card.card-blocked { --sprint-card-accent: var(--sprint-blocked); }
-.sprint-stat-card.card-points  { --sprint-card-accent: var(--sprint-points); }
-
-/* Progress bar */
-.sprint-progress-container {
-    margin: 0 0 24px;
-}
-
-.sprint-progress-legend {
-    display: flex;
-    gap: 18px;
-    justify-content: center;
-    margin-bottom: 8px;
-    font-size: 0.82em;
-    color: var(--sprint-muted);
-}
-
-.sprint-progress-legend .legend-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 4px;
-    vertical-align: middle;
-}
-
-.sprint-progress-bar {
-    width: 100%;
-    height: 20px;
-    background: var(--tblr-bg-surface-secondary, #e9ecef);
-    border-radius: 10px;
-    overflow: hidden;
-    display: flex;
-}
-
-.sprint-progress-bar .bar-segment {
-    height: 100%;
-    transition: width 0.4s ease;
-    position: relative;
-}
-
-.sprint-progress-bar .bar-segment:first-child {
-    border-radius: 10px 0 0 10px;
-}
-
-.sprint-progress-bar .bar-segment:last-child {
-    border-radius: 0 10px 10px 0;
-}
-
-.sprint-progress-bar .bar-done       { background: var(--sprint-done); }
-.sprint-progress-bar .bar-in-progress { background: var(--sprint-progress); }
-.sprint-progress-bar .bar-review     { background: var(--sprint-review); }
-.sprint-progress-bar .bar-blocked    { background: var(--sprint-blocked); }
-.sprint-progress-bar .bar-todo       { background: #d5d8dc; }
-
-/* Overload indicator */
-.sprint-overloaded {
-    color: var(--sprint-blocked);
-    font-weight: 700;
-}
-
-/* Capacity remaining colors */
-.sprint-capacity-ok      { color: var(--sprint-done); font-weight: 700; }
-.sprint-capacity-warning { color: #e67e22; font-weight: 700; }
-.sprint-capacity-danger  { color: var(--sprint-blocked); font-weight: 700; }
-
-/* Member row */
-.sprint-member-name {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.sprint-unassigned {
-    color: #adb5bd;
-    font-style: italic;
-}
-
-/* === Template meeting schedule === */
-.sprint-schedule-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
 /* === Tables polish === */
 .tab_cadre_fixe th {
     white-space: nowrap;
-}
-
-/* Type icon in table cells */
-.sprint-type-icon {
-    margin-right: 5px;
-    opacity: 0.85;
 }
 
 /* === Mobile/responsive support ===
@@ -328,18 +255,7 @@
 .sprint-table-scroll > table.tab_cadre_fixe td    { display: table-cell      !important; white-space: normal; }
 
 @media (max-width: 768px) {
-    .sprint-stats-row {
-        gap: 8px;
-    }
-    .sprint-stat-card {
-        min-width: 100px;
-        padding: 12px 14px;
-    }
-    .sprint-stat-card .stat-value { font-size: 1.35em; }
-    .sprint-stat-card .stat-icon  { font-size: 1.1em; }
-
-    .sprint-progress-legend {
-        flex-wrap: wrap;
+    .sprint-stat-cards {
         gap: 8px;
     }
 
@@ -374,7 +290,6 @@
     }
 
     /* Plugin page headings */
-    .sprint-page h2,
     [class*="sprint-"] h2 {
         font-size: 1.25rem;
     }
@@ -382,13 +297,11 @@
 
 /* Even tighter rules for the smallest phones */
 @media (max-width: 480px) {
-    .sprint-stats-row {
+    .sprint-stat-cards {
         gap: 6px;
     }
     .sprint-stat-card {
-        min-width: calc(50% - 6px);
         flex: 1 1 calc(50% - 6px);
-        padding: 10px;
     }
     .sprint-backlog-filter {
         flex-direction: column;
@@ -484,3 +397,192 @@
 .sprint-member-activity .sprint-activity-legend.is-focus span:last-child {
     font-weight: 700;
 }
+
+/* === Kanban board (Sprint > Board tab) === */
+.sprint-kanban {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    overflow-x: auto;
+    padding: 4px 2px 12px;
+}
+.sprint-kanban-col {
+    flex: 0 0 260px;
+    max-width: 260px;
+    background: var(--tblr-bg-surface-secondary, #f1f3f5);
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-top: 3px solid var(--sk-accent, #6c757d);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+}
+.sprint-kanban-col-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    font-weight: 700;
+    color: var(--tblr-body-color, #343a40);
+}
+.sprint-kanban-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+.sprint-kanban-col-title { flex: 1; }
+.sprint-kanban-count {
+    background: var(--sk-accent, #6c757d);
+    color: #fff;
+    border-radius: var(--sprint-radius-pill, 999px);
+    font-size: 0.78em;
+    padding: 1px 8px;
+    min-width: 22px;
+    text-align: center;
+}
+.sprint-kanban-body {
+    min-height: 60px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    transition: background-color 0.12s;
+}
+.sprint-kanban-body.sk-drag-over {
+    background: color-mix(in srgb, var(--sk-accent, #6c757d) 14%, transparent);
+    outline: 2px dashed var(--sk-accent, #6c757d);
+    outline-offset: -4px;
+    border-radius: 6px;
+}
+.sprint-kanban-card {
+    background: var(--tblr-bg-surface, #fff);
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    padding: 8px 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    font-size: 0.88em;
+    cursor: default;
+}
+.sprint-kanban-card[draggable="true"] { cursor: grab; }
+.sprint-kanban-card[draggable="true"]:active { cursor: grabbing; }
+.sprint-kanban-card[data-locked="1"] { opacity: 0.85; }
+.sprint-kanban-card.sk-dragging { opacity: 0.45; }
+.sprint-kanban-card .sk-card-title { font-weight: 600; margin-bottom: 4px; }
+.sprint-kanban-card .sk-card-title a { color: var(--tblr-body-color, inherit); }
+.sprint-kanban-card .sk-card-linked { font-size: 0.92em; margin-bottom: 4px; }
+.sprint-kanban-card .sk-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px;
+    align-items: center;
+    color: var(--tblr-secondary, #6c757d);
+    font-size: 0.92em;
+    margin-top: 2px;
+}
+.sprint-kanban-card .sk-card-stats { white-space: nowrap; }
+.sprint-kanban-card .sk-card-stats i { margin-right: 2px; }
+@media (max-width: 700px) {
+    .sprint-kanban-col { flex-basis: 78vw; max-width: 78vw; }
+}
+
+/* === Sprint header bar (top of every sprint tab) === */
+.sprint-header-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+    padding: 10px 14px;
+    margin: 6px 0 14px;
+    background: var(--tblr-bg-surface-secondary, #f1f3f5);
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-radius: 8px;
+}
+.sprint-header-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sprint-header-status {
+    color: #fff;
+    font-size: 0.72em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 10px;
+    border-radius: var(--sprint-radius-pill, 20px);
+}
+.sprint-header-name { font-weight: 700; font-size: 1.05em; color: var(--tblr-body-color, inherit); }
+.sprint-header-dates, .sprint-header-days { font-size: 0.85em; color: var(--tblr-secondary, #6c757d); }
+.sprint-header-days { font-weight: 600; }
+.sprint-header-goal {
+    flex-basis: 100%;
+    font-style: italic;
+    color: var(--tblr-secondary, #6c757d);
+    font-size: 0.9em;
+}
+.sprint-header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sprint-header-progress { display: flex; align-items: center; gap: 8px; min-width: 160px; }
+.sprint-header-progress-bar {
+    flex: 1;
+    height: 8px;
+    min-width: 90px;
+    background: var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.sprint-header-progress-bar span { display: block; height: 100%; background: var(--sprint-done, #198754); transition: width 0.4s ease; }
+.sprint-header-progress-label { font-size: 0.82em; color: var(--tblr-secondary, #6c757d); white-space: nowrap; }
+@media (max-width: 700px) {
+    .sprint-header-right { margin-left: 0; flex-basis: 100%; }
+}
+
+/* === At-risk widget (dashboard) === */
+.sprint-atrisk-list { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; }
+.sprint-atrisk-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    background: var(--tblr-bg-surface, #fff);
+    border: 1px solid var(--tblr-border-color, #e9ecef);
+    border-left: 3px solid #dc3545;
+    border-radius: 6px;
+}
+.sprint-atrisk-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sprint-atrisk-name { font-weight: 600; color: var(--tblr-body-color, inherit); }
+.sprint-atrisk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.78em; color: var(--tblr-secondary, #6c757d); }
+.sprint-atrisk-meta i { font-size: 0.9em; margin-right: 3px; opacity: 0.75; }
+.sprint-atrisk-owner { font-weight: 600; }
+.sprint-atrisk-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.sprint-atrisk-chip {
+    color: #fff;
+    font-size: 0.72em;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: var(--sprint-radius-pill, 20px);
+    white-space: nowrap;
+}
+
+/* Kanban card quick-edit button + soft WIP warning */
+.sprint-kanban-card { position: relative; }
+.sk-card-edit { position: absolute; top: 6px; right: 6px; color: var(--tblr-secondary, #6c757d); line-height: 1; }
+.sprint-kanban-card .sk-card-title { padding-right: 18px; }
+.sprint-kanban-col.sk-over-wip { border-top-color: #fd7e14; }
+
+/* Backlog "ready to assign" badge */
+.sprint-ready-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: var(--sprint-radius-pill, 20px);
+    background: #d1e7dd;
+    color: #0f5132;
+    font-size: 0.72em;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.sprint-ready-badge i { margin-right: 3px; }
+
+/* Backlog drag-to-reorder */
+.sprint-backlog-row.sprint-row-dragging { opacity: 0.45; }
+.sprint-backlog-grip:active { cursor: grabbing; }

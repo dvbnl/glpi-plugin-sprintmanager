@@ -124,9 +124,6 @@ msgstr "Geblokkeerd"
 msgid "Story Points"
 msgstr "Story Points"
 
-msgid "Assignee"
-msgstr "Toegewezen aan"
-
 msgid "Owner"
 msgstr "Eigenaar"
 
@@ -147,9 +144,6 @@ msgstr "Gekoppeld item"
 
 msgid "Linked item type"
 msgstr "Gekoppeld item type"
-
-msgid "Linked Items"
-msgstr "Gekoppelde Items"
 
 msgid "Item not found"
 msgstr "Item niet gevonden"
@@ -175,14 +169,8 @@ msgstr "Vanuit sjabloon"
 msgid "Name pattern"
 msgstr "Naampatroon"
 
-msgid "e.g. Sprint {{number}} - {{project}}"
-msgstr "bijv. Sprint {{number}} - {{project}}"
-
 msgid "Sprint Kickoff"
 msgstr "Sprint Kickoff"
-
-msgid "Standup"
-msgstr "Standup"
 
 msgid "Sprint Review"
 msgstr "Sprint Review"
@@ -205,14 +193,8 @@ msgstr "Meeting plannen"
 msgid "Sprint Items Review"
 msgstr "Sprint Items Doorloop"
 
-msgid "Treated"
-msgstr "Behandeld"
-
 msgid "Note"
 msgstr "Notitie"
-
-msgid "Add note..."
-msgstr "Notitie toevoegen..."
 
 msgid "Done yesterday"
 msgstr "Gisteren gedaan"
@@ -274,9 +256,6 @@ msgstr "Wijziging koppelen"
 msgid "Link a project task"
 msgstr "Projecttaak koppelen"
 
-msgid "Link to a sprint"
-msgstr "Koppelen aan een sprint"
-
 msgid "No items found"
 msgstr "Geen items gevonden"
 
@@ -316,9 +295,6 @@ msgstr "Niet gekoppeld aan een sprint"
 msgid "Period"
 msgstr "Periode"
 
-msgid "Standups"
-msgstr "Standups"
-
 msgid "Add a sprint item"
 msgstr "Sprint item toevoegen"
 
@@ -355,145 +331,17 @@ msgstr "Beschikbaar"
 msgid "Used"
 msgstr "Gebruikt"
 
-msgid "overloaded"
-msgstr "overbelast"
-
 msgid "Member"
 msgstr "Lid"
 
 msgid "Total Items"
 msgstr "Totaal items"
 
-msgid "Total"
-msgstr "Totaal"
-
-msgid "General"
-msgstr "Algemeen"
-
-msgid "Points"
-msgstr "Punten"
-
-msgid "%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%."
-msgstr "%s heeft nog maar %d%% capaciteit beschikbaar (totaal: %d%%, gebruikt: %d%%). Kan %d%% niet toewijzen."
-
-msgid "Sprint items"
-msgstr "Sprint items"
-
-msgid "Manage own items only"
-msgstr "Alleen eigen items beheren"
-
-msgid "Save as template"
-msgstr "Opslaan als sjabloon"
-
-msgid "Template name"
-msgstr "Sjabloonnaam"
-
-msgid "Saving..."
-msgstr "Opslaan..."
-
-msgid "Template created successfully!"
-msgstr "Sjabloon succesvol aangemaakt!"
-
-msgid "Open template"
-msgstr "Sjabloon openen"
-
-msgid "An error occurred"
-msgstr "Er is een fout opgetreden"
-
-msgid "Create sprint from template"
-msgstr "Sprint aanmaken vanuit sjabloon"
-
-msgid "Template"
-msgstr "Sjabloon"
-
-msgid "Template details"
-msgstr "Sjabloondetails"
-
-msgid "Sprint name"
-msgstr "Sprint naam"
-
-msgid "Create sprint"
-msgstr "Sprint aanmaken"
-
 msgid "Duration"
 msgstr "Duur"
 
-msgid "Goal"
-msgstr "Doel"
-
-msgid "weeks"
-msgstr "weken"
-
-msgid "Please select a template"
-msgstr "Selecteer een sjabloon"
-
-msgid "Template not found"
-msgstr "Sjabloon niet gevonden"
-
-msgid "Failed to create sprint"
-msgstr "Sprint aanmaken mislukt"
-
-msgid "Template Meeting"
-msgid_plural "Template Meetings"
-msgstr[0] "Sjabloon Meeting"
-msgstr[1] "Sjabloon Meetings"
-
-msgid "First day of sprint"
-msgstr "Eerste dag van de sprint"
-
-msgid "Last day of sprint"
-msgstr "Laatste dag van de sprint"
-
-msgid "Day before end"
-msgstr "Dag voor het einde"
-
-msgid "Recurring interval"
-msgstr "Terugkerend interval"
-
-msgid "Ceremony"
-msgstr "Ceremonie"
-
-msgid "Schedule"
-msgstr "Planning"
-
-msgid "Interval"
-msgstr "Interval"
-
-msgid "Interval (days)"
-msgstr "Interval (dagen)"
-
-msgid "Every %d days"
-msgstr "Elke %d dagen"
-
-msgid "Optional"
-msgstr "Optioneel"
-
-msgid "Add a meeting to the schedule"
-msgstr "Meeting toevoegen aan planning"
-
-msgid "Skip weekends"
-msgstr "Weekenden overslaan"
-
-msgid "SprintManager"
-msgstr "SprintManager"
-
-msgid "Rights saved successfully"
-msgstr "Rechten succesvol opgeslagen"
-
-msgid "Special"
-msgstr "Speciaal"
-
-msgid "No meetings in schedule"
-msgstr "Geen meetings in de planning"
-
-msgid "Remove this meeting?"
-msgstr "Deze meeting verwijderen?"
-
-msgid "A Scrum Master is required to create a sprint"
-msgstr "Een Scrum Master is vereist om een sprint aan te maken"
-
-msgid "Description"
-msgstr "Beschrijving"
+msgid "Status"
+msgstr "Status"
 
 msgid "Global View"
 msgstr "Globale weergave"
@@ -543,12 +391,6 @@ msgstr "Toewijzen"
 msgid "Search by name"
 msgstr "Zoeken op naam"
 
-msgid "Newest first"
-msgstr "Nieuwste eerst"
-
-msgid "Oldest first"
-msgstr "Oudste eerst"
-
 msgid "Filter"
 msgstr "Filteren"
 
@@ -586,9 +428,6 @@ msgstr "Sprintlid"
 
 msgid "No members assigned yet"
 msgstr "Nog geen leden toegewezen"
-
-msgid "Items flagged as fastlane will be assigned to a sprint via the dedicated Fastlane tab."
-msgstr "Items die als fastlane zijn gemarkeerd, worden via het speciale Fastlane-tabblad aan een sprint toegewezen."
 
 msgid "Is Fastlane"
 msgstr "Is Fastlane"
@@ -630,13 +469,7 @@ msgstr "Dit item terug verplaatsen naar de backlog?"
 msgid "Item moved back to backlog"
 msgstr "Item terug verplaatst naar backlog"
 
-# === Back to sprint navigation ===
-msgid "Back to Sprint"
-msgstr "Terug naar Sprint"
-
-
 # === v1.0.6: filter bar, plugin settings, audit log, team dashboard ===
-
 # --- Filter bar (Dashboard / Sprint items / Meeting tab / Audit) ---
 msgid "Search name..."
 msgstr "Zoek naam..."
@@ -666,17 +499,8 @@ msgstr "SprintManager instellingen opgeslagen"
 msgid "Only Scrum Master can edit capacity on sprint items"
 msgstr "Alleen de Scrum Master mag capaciteit op sprint items wijzigen"
 
-msgid ""
-"When enabled, only the sprint's Scrum Master may change the capacity % on "
-"regular sprint items. Fastlane item capacity remains editable by every "
-"sprint member."
-msgstr ""
-"Indien aan, mag alleen de Scrum Master van de sprint het capaciteits-% op "
-"reguliere sprint items wijzigen. Fastlane capaciteit blijft bewerkbaar voor "
-"alle sprintleden."
-
-msgid "Enable"
-msgstr "Inschakelen"
+msgid "When enabled, only the sprint's Scrum Master may change the capacity % on regular sprint items. Fastlane item capacity remains editable by every sprint member."
+msgstr "Indien aan, mag alleen de Scrum Master van de sprint het capaciteits-% op reguliere sprint items wijzigen. Fastlane capaciteit blijft bewerkbaar voor alle sprintleden."
 
 msgid "Only the current Scrum Master can reassign this role."
 msgstr "Alleen de huidige Scrum Master kan deze rol opnieuw toewijzen."
@@ -721,45 +545,6 @@ msgstr "Nog geen audit regels"
 msgid "Modified"
 msgstr "Gewijzigd"
 
-msgid "Relation added"
-msgstr "Relatie toegevoegd"
-
-msgid "Relation updated"
-msgstr "Relatie gewijzigd"
-
-msgid "Relation removed"
-msgstr "Relatie verwijderd"
-
-msgid "Document added"
-msgstr "Document toegevoegd"
-
-msgid "Document removed"
-msgstr "Document verwijderd"
-
-msgid "Problem added"
-msgstr "Probleem toegevoegd"
-
-msgid "Problem removed"
-msgstr "Probleem verwijderd"
-
-msgid "Linked to item"
-msgstr "Gekoppeld aan item"
-
-msgid "Unlinked from item"
-msgstr "Ontkoppeld van item"
-
-msgid "User added"
-msgstr "Gebruiker toegevoegd"
-
-msgid "User removed"
-msgstr "Gebruiker verwijderd"
-
-msgid "Group added"
-msgstr "Groep toegevoegd"
-
-msgid "Group removed"
-msgstr "Groep verwijderd"
-
 msgid "Created"
 msgstr "Aangemaakt"
 
@@ -803,11 +588,8 @@ msgstr "Snelle bewerking"
 msgid "Quick edit linked item"
 msgstr "Snel gekoppeld item bewerken"
 
-msgid "Percent done"
-msgstr "Percentage voltooid"
-
-msgid "Project task"
-msgstr "Projecttaak"
+msgid "Sprint items"
+msgstr "Sprint items"
 
 msgid "Team activity"
 msgstr "Teamactiviteit"
@@ -815,54 +597,12 @@ msgstr "Teamactiviteit"
 msgid "Audit-log events per member per day — spot uneven workloads."
 msgstr "Audit-log events per lid per dag — signaleer ongelijke werklasten."
 
-# === Strings previously missed ===
-
-msgid "Meetings"
-msgstr "Meetings"
-
-msgid "No items assigned"
-msgstr "Geen items toegewezen"
-
-msgid "Please select a sprint and a change."
-msgstr "Selecteer een sprint en een wijziging."
-
-msgid "Please select a sprint and a project task."
-msgstr "Selecteer een sprint en een projecttaak."
-
-msgid "Please select a sprint and a ticket."
-msgstr "Selecteer een sprint en een ticket."
-
-msgid "Regular"
-msgstr "Regulier"
-
-msgid "Remove"
-msgstr "Verwijderen"
-
-msgid "Sprints"
-msgstr "Sprints"
-
-msgid "This %1$s (#%2$d) is already linked to this sprint."
-msgstr "Deze %1$s (#%2$d) is al gekoppeld aan deze sprint."
-
-msgid "This change (#%d) is already linked to this sprint."
-msgstr "Deze wijziging (#%d) is al gekoppeld aan deze sprint."
-
-msgid "This project task (#%d) is already linked to this sprint."
-msgstr "Deze projecttaak (#%d) is al gekoppeld aan deze sprint."
-
-msgid "This ticket (#%d) is already linked to this sprint."
-msgstr "Deze ticket (#%d) is al gekoppeld aan deze sprint."
-
 # ===== 1.0.8 — Is Blocked, backlog visibility on ticket, move-to-sprint =====
-
 msgid "Is Blocked"
 msgstr "Geblokkeerd"
 
 msgid "Mark this item as blocked (surfaces in the dedicated Blocked section on the backlog for Scrum Master review)."
 msgstr "Markeer dit item als geblokkeerd (verschijnt in de aparte Geblokkeerd-sectie op de backlog voor review door de Scrum Master)."
-
-msgid "Items flagged as blocked are surfaced in the Blocked section above for Scrum Master review."
-msgstr "Items met de markering Geblokkeerd verschijnen in de Geblokkeerd-sectie hierboven voor review door de Scrum Master."
 
 msgid "Blocked items"
 msgstr "Geblokkeerde items"
@@ -885,20 +625,8 @@ msgstr "Item gemarkeerd als geblokkeerd"
 msgid "Blocked flag removed"
 msgstr "Geblokkeerd-markering verwijderd"
 
-msgid "All (blocked in section above)"
-msgstr "Alle (geblokkeerd in sectie hierboven)"
-
-msgid "Only blocked"
-msgstr "Alleen geblokkeerd"
-
-msgid "Hide blocked"
-msgstr "Geblokkeerd verbergen"
-
 msgid "Backlog items"
 msgstr "Backlog items"
-
-msgid "Blocked items only"
-msgstr "Alleen geblokkeerde items"
 
 msgid "On backlog"
 msgstr "Op backlog"
@@ -909,14 +637,8 @@ msgstr "Backlog item"
 msgid "Open backlog"
 msgstr "Backlog openen"
 
-msgid "Carry over to another sprint"
-msgstr "Doortrekken naar andere sprint"
-
 msgid "Carry over to sprint"
 msgstr "Doortrekken naar sprint"
-
-msgid "Carry this item over to: %s ? The original stays in the current sprint."
-msgstr "Dit item doortrekken naar: %s? Het origineel blijft in de huidige sprint."
 
 msgid "Do not carry over"
 msgstr "Niet doortrekken"
@@ -931,7 +653,6 @@ msgid "Could not carry the item over to the target sprint"
 msgstr "Kon het item niet doortrekken naar de doelsprint"
 
 # ===== 1.0.9 — backlog visibility on Change/ProjectTask, unassigned filter, team-activity empty states =====
-
 msgid "Unassigned only"
 msgstr "Alleen zonder eigenaar"
 
@@ -940,9 +661,6 @@ msgstr "Nog geen activiteit om weer te geven."
 
 msgid "Add team members to start tracking team activity."
 msgstr "Voeg teamleden toe om teamactiviteit bij te houden."
-
-msgid "This sprint ended more than %d days ago — activity data is outside the retention window."
-msgstr "Deze sprint is meer dan %d dagen geleden geëindigd — de activiteitsgegevens vallen buiten de bewaarperiode."
 
 msgid "Sprint has not started yet — activity will appear here once team members make changes."
 msgstr "Sprint is nog niet gestart — activiteit verschijnt hier zodra teamleden wijzigingen maken."
@@ -967,11 +685,6 @@ msgstr "Kon item niet toewijzen aan sprint"
 
 msgid "Export report"
 msgstr "Rapport exporteren"
-
-msgid "Open a printable report — use the browser's print dialog to save as PDF."
-msgstr "Open een printbaar rapport — gebruik het printvenster van de browser om op te slaan als PDF."
-
-
 
 msgid "Sprint report"
 msgstr "Sprintrapport"
@@ -1024,12 +737,6 @@ msgstr "Geen toewijzingen"
 msgid "Fastlane capacity per member"
 msgstr "Fastlane capaciteit per teamlid"
 
-msgid "Manage fastlane members"
-msgstr "Fastlane-teamleden beheren"
-
-msgid "Fastlane allocations"
-msgstr "Fastlane toewijzingen"
-
 msgid "Report logo URL"
 msgstr "Rapport logo URL"
 
@@ -1037,12 +744,10 @@ msgid "Optional. Absolute URL or path relative to the GLPI install (e.g. \"front
 msgstr "Optioneel. Absolute URL of pad relatief aan de GLPI-installatie (bijv. \"front/pics/logo.png\", \"https://voorbeeld.nl/logo.svg\") voor de header van het sprintrapport. Laat leeg om automatisch te detecteren via het centrale logo of je custom CSS."
 
 # ===== 1.0.10 — meeting-source attribution for audit log + team activity chart =====
-
 msgid "via"
 msgstr "via"
 
 # ===== 1.1.0 — tags, danger zone, activity range picker, Problem itemtype =====
-
 msgid "Sprint item tags"
 msgstr "Sprint item tags"
 
@@ -1078,9 +783,6 @@ msgstr "Tot"
 
 msgid "Reset to sprint range"
 msgstr "Terug naar sprintbereik"
-
-msgid "Audit retention: last %d days"
-msgstr "Audit-bewaartermijn: laatste %d dagen"
 
 msgid "Linked Problem"
 msgid_plural "Linked Problems"
@@ -1162,6 +864,202 @@ msgstr "Afhankelijkheid heropend"
 msgid "Dependency allocation"
 msgstr "Afhankelijkheids-allocatie"
 
+msgid "%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%."
+msgstr "%s heeft nog maar %d%% capaciteit beschikbaar (totaal: %d%%, gebruikt: %d%%). Kan %d%% niet toewijzen."
+
+msgid "A Scrum Master is required to create a sprint"
+msgstr "Een Scrum Master is vereist om een sprint aan te maken"
+
+msgid "Add a meeting to the schedule"
+msgstr "Meeting toevoegen aan planning"
+
+msgid "An error occurred"
+msgstr "Er is een fout opgetreden"
+
+# === Back to sprint navigation ===
+msgid "Back to Sprint"
+msgstr "Terug naar Sprint"
+
+msgid "Ceremony"
+msgstr "Ceremonie"
+
+msgid "Create sprint from template"
+msgstr "Sprint aanmaken vanuit sjabloon"
+
+msgid "Create sprint"
+msgstr "Sprint aanmaken"
+
+msgid "Day before end"
+msgstr "Dag voor het einde"
+
+msgid "Description"
+msgstr "Beschrijving"
+
+msgid "Document added"
+msgstr "Document toegevoegd"
+
+msgid "Document removed"
+msgstr "Document verwijderd"
+
+msgid "Every %d days"
+msgstr "Elke %d dagen"
+
+msgid "Failed to create sprint"
+msgstr "Sprint aanmaken mislukt"
+
+msgid "First day of sprint"
+msgstr "Eerste dag van de sprint"
+
+msgid "General"
+msgstr "Algemeen"
+
+msgid "Goal"
+msgstr "Doel"
+
+msgid "Group added"
+msgstr "Groep toegevoegd"
+
+msgid "Group removed"
+msgstr "Groep verwijderd"
+
+msgid "Interval (days)"
+msgstr "Interval (dagen)"
+
+msgid "Interval"
+msgstr "Interval"
+
+msgid "Last day of sprint"
+msgstr "Laatste dag van de sprint"
+
+msgid "Linked to item"
+msgstr "Gekoppeld aan item"
+
+msgid "Manage own items only"
+msgstr "Alleen eigen items beheren"
+
+msgid "No items assigned"
+msgstr "Geen items toegewezen"
+
+msgid "No meetings in schedule"
+msgstr "Geen meetings in de planning"
+
+msgid "Open template"
+msgstr "Sjabloon openen"
+
+msgid "Optional"
+msgstr "Optioneel"
+
+msgid "Please select a sprint and a change."
+msgstr "Selecteer een sprint en een wijziging."
+
+msgid "Please select a sprint and a project task."
+msgstr "Selecteer een sprint en een projecttaak."
+
+msgid "Please select a sprint and a ticket."
+msgstr "Selecteer een sprint en een ticket."
+
+msgid "Please select a template"
+msgstr "Selecteer een sjabloon"
+
+msgid "Problem added"
+msgstr "Probleem toegevoegd"
+
+msgid "Problem removed"
+msgstr "Probleem verwijderd"
+
+msgid "Recurring interval"
+msgstr "Terugkerend interval"
+
+msgid "Regular"
+msgstr "Regulier"
+
+msgid "Relation added"
+msgstr "Relatie toegevoegd"
+
+msgid "Relation removed"
+msgstr "Relatie verwijderd"
+
+msgid "Relation updated"
+msgstr "Relatie gewijzigd"
+
+msgid "Remove this meeting?"
+msgstr "Deze meeting verwijderen?"
+
+msgid "Remove"
+msgstr "Verwijderen"
+
+msgid "Rights saved successfully"
+msgstr "Rechten succesvol opgeslagen"
+
+msgid "Save as template"
+msgstr "Opslaan als sjabloon"
+
+msgid "Saving..."
+msgstr "Opslaan..."
+
+msgid "Schedule"
+msgstr "Planning"
+
+msgid "Skip weekends"
+msgstr "Weekenden overslaan"
+
+msgid "Special"
+msgstr "Speciaal"
+
+msgid "Sprint name"
+msgstr "Sprint naam"
+
+msgid "SprintManager"
+msgstr "SprintManager"
+
+msgid "Standup"
+msgstr "Standup"
+
+msgid "Template Meeting"
+msgstr "Sjabloon Meeting"
+
+msgid "Template created successfully!"
+msgstr "Sjabloon succesvol aangemaakt!"
+
+msgid "Template details"
+msgstr "Sjabloondetails"
+
+msgid "Template name"
+msgstr "Sjabloonnaam"
+
+msgid "Template not found"
+msgstr "Sjabloon niet gevonden"
+
+msgid "Template"
+msgstr "Sjabloon"
+
+msgid "This %1$s (#%2$d) is already linked to this sprint."
+msgstr "Deze %1$s (#%2$d) is al gekoppeld aan deze sprint."
+
+msgid "This change (#%d) is already linked to this sprint."
+msgstr "Deze wijziging (#%d) is al gekoppeld aan deze sprint."
+
+msgid "This project task (#%d) is already linked to this sprint."
+msgstr "Deze projecttaak (#%d) is al gekoppeld aan deze sprint."
+
+msgid "This ticket (#%d) is already linked to this sprint."
+msgstr "Deze ticket (#%d) is al gekoppeld aan deze sprint."
+
+msgid "Total"
+msgstr "Totaal"
+
+msgid "Unlinked from item"
+msgstr "Ontkoppeld van item"
+
+msgid "User added"
+msgstr "Gebruiker toegevoegd"
+
+msgid "User removed"
+msgstr "Gebruiker verwijderd"
+
+msgid "weeks"
+msgstr "weken"
+
 msgid "Waiting on"
 msgstr "Wacht op"
 
@@ -1216,11 +1114,375 @@ msgstr "Activiteitsbereik volgt het sprintvenster."
 msgid "Could not move item back to backlog"
 msgstr "Kon item niet terug naar backlog verplaatsen"
 
-msgid "Newly blocked"
-msgstr "Nieuw geblokkeerd"
-
-msgid "Became blocked since the previous meeting"
-msgstr "Geblokkeerd geraakt sinds de vorige meeting"
-
 msgid "This member is already a dependency on this item — adjust the existing one instead."
 msgstr "Dit lid is al een afhankelijkheid op dit item — pas de bestaande aan."
+
+# --- v1.1.3 additions ---
+msgid "Add"
+msgstr "Toevoegen"
+
+msgid "Add dependency"
+msgstr "Afhankelijkheid toevoegen"
+
+msgid "Add dependency (only members of the selected sprint)"
+msgstr "Afhankelijkheid toevoegen (alleen leden van de geselecteerde sprint)"
+
+msgid "Also remove the item from the current sprint (move the whole item to the backlog)"
+msgstr "Verwijder het item ook uit de huidige sprint (verplaats het hele item naar de backlog)"
+
+msgid "Capacity must be greater than 0"
+msgstr "Capaciteit moet groter zijn dan 0"
+
+msgid "Dependencies are sprint-scoped — assign this item to a sprint (or pre-select a sprint on the backlog) first."
+msgstr "Afhankelijkheden zijn sprint-gebonden — wijs dit item eerst toe aan een sprint (of selecteer een sprint in de backlog)."
+
+msgid "Dependency removed"
+msgstr "Afhankelijkheid verwijderd"
+
+msgid "Dependency updated to %d%%"
+msgstr "Afhankelijkheid bijgewerkt naar %d%%"
+
+msgid "Keep it in the sprint (capacity preserved); only the linked item returns to the backlog"
+msgstr "Houd het in de sprint (capaciteit behouden); alleen het gekoppelde item gaat terug naar de backlog"
+
+msgid "Linked item open"
+msgstr "Gekoppeld item open"
+
+msgid "Manual items cannot be sent back to the backlog — they stay in their sprint."
+msgstr "Handmatige items kunnen niet terug naar de backlog — ze blijven in hun sprint."
+
+msgid "Moved to backlog"
+msgstr "Naar backlog verplaatst"
+
+msgid "Only members of the pre-selected sprint can be added."
+msgstr "Alleen leden van de voorgeselecteerde sprint kunnen worden toegevoegd."
+
+msgid "Only the Scrum Master of %s can assign items to it."
+msgstr "Alleen de Scrum Master van %s kan items eraan toewijzen."
+
+msgid "Only the Scrum Master of the selected sprint can assign it"
+msgstr "Alleen de Scrum Master van de geselecteerde sprint kan het toewijzen"
+
+msgid "Only the Scrum Master of the selected sprint can assign items to it."
+msgstr "Alleen de Scrum Master van de geselecteerde sprint kan er items aan toewijzen."
+
+msgid "Please enter a reason."
+msgstr "Geef een reden op."
+
+msgid "Pre-select a sprint for this item first."
+msgstr "Selecteer eerst een sprint voor dit item."
+
+msgid "Reason"
+msgstr "Reden"
+
+msgid "Remove dependency"
+msgstr "Afhankelijkheid verwijderen"
+
+msgid "Remove this dependency?"
+msgstr "Deze afhankelijkheid verwijderen?"
+
+msgid "The linked ticket/change is not closed/solved yet"
+msgstr "Het gekoppelde ticket/wijziging is nog niet gesloten/opgelost"
+
+msgid "The selected sprint has no members yet."
+msgstr "De geselecteerde sprint heeft nog geen leden."
+
+msgid "Underlying item moved to backlog; the sprint item stays for capacity."
+msgstr "Onderliggend item naar backlog verplaatst; het sprint-item blijft voor de capaciteit."
+
+msgid "What should happen to the sprint item?"
+msgstr "Wat moet er met het sprint-item gebeuren?"
+
+msgid "Why is this going back to the backlog?"
+msgstr "Waarom gaat dit terug naar de backlog?"
+
+msgid "You can only add a dependency on a member of the pre-selected sprint."
+msgstr "Je kunt alleen een afhankelijkheid toevoegen op een lid van de voorgeselecteerde sprint."
+
+msgid "resolved"
+msgstr "opgelost"
+
+# --- v1.1.3 board/burndown additions ---
+msgid "Burndown"
+msgstr "Burndown"
+
+msgid "Could not change the status — you can only move your own items."
+msgstr "Kon de status niet wijzigen — je kunt alleen je eigen items verplaatsen."
+
+msgid "Drag a card to another column to change its status."
+msgstr "Sleep een kaart naar een andere kolom om de status te wijzigen."
+
+msgid "Ideal"
+msgstr "Ideaal"
+
+msgid "No story points in this sprint yet to burn down."
+msgstr "Nog geen story points in deze sprint om af te branden."
+
+msgid "Remaining"
+msgstr "Resterend"
+
+msgid "Remaining story points vs. the ideal line across the sprint."
+msgstr "Resterende story points versus de ideale lijn gedurende de sprint."
+
+msgid "Scope: %d points"
+msgstr "Omvang: %d punten"
+
+msgid "Set the sprint start and end date to see the burndown."
+msgstr "Stel de start- en einddatum van de sprint in om de burndown te zien."
+
+msgid "Sprint items grouped by status."
+msgstr "Sprint-items gegroepeerd op status."
+
+msgid "The sprint window is too short to plot a burndown."
+msgstr "Het sprintvenster is te kort om een burndown te tekenen."
+
+msgid "points remaining"
+msgstr "punten resterend"
+
+msgid "Board"
+msgid_plural "Board"
+msgstr[0] "Bord"
+msgstr[1] "Bord"
+
+# --- v1.1.3 UX wave additions ---
+msgid "%1$d of %2$d items done"
+msgstr "%1$d van %2$d items klaar"
+
+msgid "%d skipped (not the Scrum Master of the target sprint)"
+msgstr "%d overgeslagen (niet de Scrum Master van de doelsprint)"
+
+msgid "Assign all backlog items that have a pre-selected sprint? Only the ones you are Scrum Master of will be assigned."
+msgstr "Alle backlog-items met een voorgeselecteerde sprint toewijzen? Alleen die waarvan jij Scrum Master bent worden toegewezen."
+
+msgid "Assign all ready (%d)"
+msgstr "Wijs alle gereed toe (%d)"
+
+msgid "At risk"
+msgstr "Risico"
+
+msgid "Completed points"
+msgstr "Voltooide punten"
+
+msgid "Drag to reorder"
+msgstr "Sleep om te herordenen"
+
+msgid "Last day"
+msgstr "Laatste dag"
+
+msgid "More items in progress (%1$d) than team members (%2$d)"
+msgstr "Meer items in uitvoering (%1$d) dan teamleden (%2$d)"
+
+msgid "No items were ready to assign."
+msgstr "Geen items klaar om toe te wijzen."
+
+msgid "Nothing at risk right now."
+msgstr "Op dit moment niets met risico."
+
+msgid "Order saved"
+msgstr "Volgorde opgeslagen"
+
+msgid "Owner, capacity and sprint set — ready for the Scrum Master to assign"
+msgstr "Eigenaar, capaciteit en sprint ingesteld — klaar voor de Scrum Master om toe te wijzen"
+
+msgid "Ready"
+msgstr "Gereed"
+
+msgid "Switch sprint"
+msgstr "Sprint wisselen"
+
+msgid "Velocity"
+msgstr "Velocity"
+
+msgid "Velocity will appear once you have at least one completed sprint."
+msgstr "Velocity verschijnt zodra je minstens één voltooide sprint hebt."
+
+msgid "%d day left"
+msgid_plural "%d days left"
+msgstr[0] "%d dag resterend"
+msgstr[1] "%d dagen resterend"
+
+msgid "%d day overdue"
+msgid_plural "%d days overdue"
+msgstr[0] "%d dag te laat"
+msgstr[1] "%d dagen te laat"
+
+msgid "%d item assigned"
+msgid_plural "%d items assigned"
+msgstr[0] "%d item toegewezen"
+msgstr[1] "%d items toegewezen"
+
+msgid "%d open dependency"
+msgid_plural "%d open dependencies"
+msgstr[0] "%d open afhankelijkheid"
+msgstr[1] "%d open afhankelijkheden"
+
+msgid "Sprint completed with %d unfinished item — carry it over to another sprint or send it back to the backlog."
+msgid_plural "Sprint completed with %d unfinished items — carry them over to another sprint or send them back to the backlog."
+msgstr[0] "Sprint voltooid met %d onafgerond item — trek het door naar een andere sprint of zet het terug op de backlog."
+msgstr[1] "Sprint voltooid met %d onafgeronde items — trek ze door naar een andere sprint of zet ze terug op de backlog."
+
+msgid "%d fastlane items"
+msgstr "%d fastlane-items"
+
+msgid "%d points"
+msgstr "%d punten"
+
+msgid "Avg points: %s"
+msgstr "Gem. punten: %s"
+
+msgid "Click to isolate — hover to preview"
+msgstr "Klik om te isoleren — beweeg voor voorbeeld"
+
+msgid "Completed fastlane items"
+msgstr "Voltooide fastlane-items"
+
+msgid "Download CSV"
+msgstr "CSV downloaden"
+
+msgid "Fastlane capacity %"
+msgstr "Fastlane-capaciteit %"
+
+msgid "Fastlane capacity: %d%%"
+msgstr "Fastlane-capaciteit: %d%%"
+
+msgid "Fastlane item — anyone can assign it to a sprint"
+msgstr "Fastlane-item — iedereen kan het aan een sprint toewijzen"
+
+# === Strings previously missed ===
+msgid "Meetings"
+msgstr "Meetings"
+
+msgid "Per sprint: completed story points and fastlane items (bars), with total fastlane capacity % (line)."
+msgstr "Per sprint: voltooide story points en fastlane-items (balken), met totale fastlane-capaciteit % (lijn)."
+
+msgid "Sprints"
+msgstr "Sprints"
+
+#~ msgid "Assignee"
+#~ msgstr "Toegewezen aan"
+
+#~ msgid "Linked Items"
+#~ msgstr "Gekoppelde Items"
+
+#~ msgid "e.g. Sprint {{number}} - {{project}}"
+#~ msgstr "bijv. Sprint {{number}} - {{project}}"
+
+#~ msgid "Treated"
+#~ msgstr "Behandeld"
+
+#~ msgid "Add note..."
+#~ msgstr "Notitie toevoegen..."
+
+#~ msgid "Link to a sprint"
+#~ msgstr "Koppelen aan een sprint"
+
+#~ msgid "Standups"
+#~ msgstr "Standups"
+
+#~ msgid "overloaded"
+#~ msgstr "overbelast"
+
+#~ msgid "Points"
+#~ msgstr "Punten"
+
+#~ msgid "Newest first"
+#~ msgstr "Nieuwste eerst"
+
+#~ msgid "Oldest first"
+#~ msgstr "Oudste eerst"
+
+#~ msgid "Items flagged as fastlane will be assigned to a sprint via the dedicated Fastlane tab."
+#~ msgstr "Items die als fastlane zijn gemarkeerd, worden via het speciale Fastlane-tabblad aan een sprint toegewezen."
+
+#~ msgid "Enable"
+#~ msgstr "Inschakelen"
+
+#~ msgid "Percent done"
+#~ msgstr "Percentage voltooid"
+
+#~ msgid "Project task"
+#~ msgstr "Projecttaak"
+
+#~ msgid "Items flagged as blocked are surfaced in the Blocked section above for Scrum Master review."
+#~ msgstr "Items met de markering Geblokkeerd verschijnen in de Geblokkeerd-sectie hierboven voor review door de Scrum Master."
+
+#~ msgid "All (blocked in section above)"
+#~ msgstr "Alle (geblokkeerd in sectie hierboven)"
+
+#~ msgid "Only blocked"
+#~ msgstr "Alleen geblokkeerd"
+
+#~ msgid "Hide blocked"
+#~ msgstr "Geblokkeerd verbergen"
+
+#~ msgid "Blocked items only"
+#~ msgstr "Alleen geblokkeerde items"
+
+#~ msgid "Carry over to another sprint"
+#~ msgstr "Doortrekken naar andere sprint"
+
+#~ msgid "Carry this item over to: %s ? The original stays in the current sprint."
+#~ msgstr "Dit item doortrekken naar: %s? Het origineel blijft in de huidige sprint."
+
+#~ msgid "This sprint ended more than %d days ago — activity data is outside the retention window."
+#~ msgstr "Deze sprint is meer dan %d dagen geleden geëindigd — de activiteitsgegevens vallen buiten de bewaarperiode."
+
+#~ msgid "Open a printable report — use the browser's print dialog to save as PDF."
+#~ msgstr "Open een printbaar rapport — gebruik het printvenster van de browser om op te slaan als PDF."
+
+#~ msgid "Manage fastlane members"
+#~ msgstr "Fastlane-teamleden beheren"
+
+#~ msgid "Fastlane allocations"
+#~ msgstr "Fastlane toewijzingen"
+
+#~ msgid "Audit retention: last %d days"
+#~ msgstr "Audit-bewaartermijn: laatste %d dagen"
+
+#~ msgid "Newly blocked"
+#~ msgstr "Nieuw geblokkeerd"
+
+#~ msgid "Became blocked since the previous meeting"
+#~ msgstr "Geblokkeerd geraakt sinds de vorige meeting"
+
+#~ msgid "Average: %s"
+#~ msgstr "Gemiddelde: %s"
+
+#~ msgid "Completed story points per sprint."
+#~ msgstr "Voltooide story points per sprint."
+
+msgid "Helpers"
+msgstr "Helpers"
+
+msgid "Remaining excl. blocked"
+msgstr "Resterend excl. geblokkeerd"
+
+msgid "Blocked share"
+msgstr "Geblokkeerd aandeel"
+
+#, php-format
+msgid "%d blocked"
+msgstr "%d geblokkeerd"
+
+msgid "Convert backlog capacity to story points on sprint assignment"
+msgstr "Backlog-capaciteit omzetten naar story points bij sprint-toewijzing"
+
+msgid "When enabled, assigning a backlog item with an estimated capacity % to a sprint automatically sets its story points to that capacity (1% = 1 story point). An explicitly estimated item keeps its own story points."
+msgstr "Indien ingeschakeld krijgt een backlog-item met een geschatte capaciteit % bij toewijzing aan een sprint automatisch dat aantal story points (1% = 1 story point). Een item met een eigen schatting behoudt zijn story points."
+
+msgid "Fastlane capacity cap (%)"
+msgstr "Fastlane capaciteitslimiet (%)"
+
+msgid "0 = no cap; exceeding it shows as overflow on the fastlane"
+msgstr "0 = geen limiet; erboven wordt het als overflow op de fastlane getoond"
+
+#, php-format
+msgid "Total capacity: %1$d%% / %2$d%%"
+msgstr "Totale capaciteit: %1$d%% / %2$d%%"
+
+#, php-format
+msgid "+%d%% overflow"
+msgstr "+%d%% overflow"
+
+msgid "No dependencies in this sprint."
+msgstr "Geen afhankelijkheden in deze sprint."
