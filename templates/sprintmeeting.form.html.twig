@@ -639,7 +639,7 @@
                     } else {
                         var total = 0;
                         allocs.forEach(function(a) {
-                            total += parseInt(a.capacity, 10) || 0;
+                            total += parseFloat(a.capacity) || 0;
                             $list.append(
                                 $('<div></div>').css({display: 'flex', justifyContent: 'space-between', padding: '2px 0'})
                                     .append($('<span></span>').html('<i class="fas fa-bolt text-warning me-1" style="font-size:0.78em;"></i>').append(document.createTextNode(a.name || '')))
@@ -772,7 +772,7 @@
                 var $btn   = $(this);
                 var itemId = $modal.find('input[name=id]').val();
                 var userId = parseInt($modal.find('.sprint-qe-dep-user').val(), 10) || 0;
-                var cap    = parseInt($modal.find('.sprint-qe-dep-cap').val(), 10) || 0;
+                var cap    = parseFloat($modal.find('.sprint-qe-dep-cap').val()) || 0;
                 var $status = $modal.find('.sprint-qe-dep-status');
 
                 if (!itemId || userId <= 0 || cap <= 0) {

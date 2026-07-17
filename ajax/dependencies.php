@@ -47,7 +47,7 @@ if ($action === 'list') {
             'id'          => (int)$r['id'],
             'users_id'    => $uid,
             'name'        => $uid > 0 ? getUserName($uid) : '',
-            'capacity'    => (int)$r['capacity'],
+            'capacity'    => GlpiPlugin\Sprint\SprintMember::formatCapacity($r['capacity']),
             'is_resolved' => (int)$r['is_resolved'],
         ];
     }
@@ -70,7 +70,7 @@ if (
 }
 
 if ($action === 'update') {
-    $capacity = (int)($_POST['capacity'] ?? 0);
+    $capacity = GlpiPlugin\Sprint\SprintMember::normalizeCapacity($_POST['capacity'] ?? 0);
     if ($capacity <= 0) {
         echo json_encode(['success' => false, 'message' => __('Capacity must be greater than 0', 'sprint')]);
         return;
@@ -93,7 +93,7 @@ if ($action === 'update') {
 
     echo json_encode([
         'success' => true,
-        'message' => sprintf(__('Dependency updated to %d%%', 'sprint'), $capacity),
+        'message' => sprintf(__('Dependency updated to %s%%', 'sprint'), GlpiPlugin\Sprint\SprintMember::formatCapacity($capacity)),
         'warning' => $warnings ? implode("\n", $warnings) : '',
     ]);
     return;

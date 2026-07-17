@@ -172,7 +172,7 @@ class SprintBoard extends CommonGLPI
         $ownerId   = (int)($row['users_id'] ?? 0);
         $ownerName = $ownerId > 0 ? getUserName($ownerId) : '';
         $points    = (int)($row['story_points'] ?? 0);
-        $capacity  = (int)($row['capacity'] ?? 0);
+        $capacity  = (float)($row['capacity'] ?? 0);
         $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
 
         // Quick-edit data-* attrs (includes data-item-id — don't duplicate it).
@@ -209,7 +209,7 @@ class SprintBoard extends CommonGLPI
         echo "<span class='sk-card-stats'>";
         echo "<span title='" . __('Story Points', 'sprint') . "'><i class='fas fa-bullseye'></i> " . $points . "</span>";
         if ($capacity > 0) {
-            echo " <span title='" . __('Capacity (%)', 'sprint') . "'><i class='fas fa-gauge-high'></i> " . $capacity . "%</span>";
+            echo " <span title='" . __('Capacity (%)', 'sprint') . "'><i class='fas fa-gauge-high'></i> " . SprintMember::formatCapacity($capacity) . "%</span>";
         }
         echo "</span>";
         echo "</div>";

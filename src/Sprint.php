@@ -658,7 +658,7 @@ class Sprint extends CommonDBTM
             echo "<td>";
             Dropdown::showNumber('fastlane_capacity', [
                 'value' => $this->fields['fastlane_capacity'] ?? 0,
-                'min'   => 0, 'max' => 100, 'step' => 5,
+                'min'   => 0, 'max' => 100, 'step' => 0.5,
                 'unit'  => '%',
             ]);
             echo "</td></tr>";

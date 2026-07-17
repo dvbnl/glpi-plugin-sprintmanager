@@ -33,7 +33,7 @@ function plugin_sprint_install(): bool
             `date_start`      TIMESTAMP NULL DEFAULT NULL,
             `date_end`        TIMESTAMP NULL DEFAULT NULL,
             `duration_weeks`  INT UNSIGNED NOT NULL DEFAULT 2,
-            `fastlane_capacity` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Fastlane capacity cap in %, 0 = no cap',
+            `fastlane_capacity` DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Fastlane capacity cap in %, 0 = no cap',
             `users_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master',
             `projects_id`     INT UNSIGNED NOT NULL DEFAULT 0,
             `comment`         TEXT,
@@ -80,7 +80,7 @@ function plugin_sprint_install(): bool
             `story_points`             INT UNSIGNED NOT NULL DEFAULT 1,
             `users_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owner/Assignee',
             `sort_order`               INT NOT NULL DEFAULT 0,
-            `capacity`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Capacity usage in %',
+            `capacity`                 DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Capacity usage in %',
             `note`                     TEXT COMMENT 'Standup note',
             `date_creation`            TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                 TIMESTAMP NULL DEFAULT NULL,
@@ -178,7 +178,7 @@ function plugin_sprint_install(): bool
             `id`                            INT UNSIGNED NOT NULL AUTO_INCREMENT,
             `plugin_sprint_sprintitems_id`  INT UNSIGNED NOT NULL DEFAULT 0,
             `users_id`                      INT UNSIGNED NOT NULL DEFAULT 0,
-            `capacity`                      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Capacity allocated to this user for this fastlane item, in %',
+            `capacity`                      DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Capacity allocated to this user for this fastlane item, in %',
             `comment`                       TEXT,
             `date_creation`                 TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                      TIMESTAMP NULL DEFAULT NULL,
@@ -200,7 +200,7 @@ function plugin_sprint_install(): bool
             `id`                            INT UNSIGNED NOT NULL AUTO_INCREMENT,
             `plugin_sprint_sprintitems_id`  INT UNSIGNED NOT NULL DEFAULT 0,
             `users_id`                      INT UNSIGNED NOT NULL DEFAULT 0,
-            `capacity`                      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Capacity allocated to this dependency, in %',
+            `capacity`                      DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Capacity allocated to this dependency, in %',
             `is_resolved`                   TINYINT NOT NULL DEFAULT 0,
             `comment`                       TEXT,
             `date_creation`                 TIMESTAMP NULL DEFAULT NULL,
@@ -283,7 +283,7 @@ function plugin_sprint_install(): bool
             `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0,
             `users_id`                 INT UNSIGNED NOT NULL DEFAULT 0,
             `role`                     VARCHAR(50) NOT NULL DEFAULT 'developer',
-            `capacity_percent`         INT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Beschikbaarheid in %',
+            `capacity_percent`         DECIMAL(5,1) NOT NULL DEFAULT 100 COMMENT 'Beschikbaarheid in %',
             `comment`                  TEXT,
             `date_creation`            TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                 TIMESTAMP NULL DEFAULT NULL,
@@ -458,7 +458,7 @@ function plugin_sprint_install(): bool
             `plugin_sprint_sprinttemplates_id`  INT UNSIGNED NOT NULL DEFAULT 0,
             `users_id`                         INT UNSIGNED NOT NULL DEFAULT 0,
             `role`                             VARCHAR(50) NOT NULL DEFAULT 'developer',
-            `capacity_percent`                 INT UNSIGNED NOT NULL DEFAULT 100,
+            `capacity_percent`                 DECIMAL(5,1) NOT NULL DEFAULT 100,
             `comment`                          TEXT,
             `date_creation`                    TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                         TIMESTAMP NULL DEFAULT NULL,
@@ -564,6 +564,33 @@ function plugin_sprint_install(): bool
             KEY `meeting` (`plugin_sprint_sprintmeetings_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
         $DB->doQueryOrDie($query, $DB->error());
+    }
+
+    // Migration: capacity columns INT -> DECIMAL(5,1) for 0.5% granularity.
+    $capacityColumns = [
+        'glpi_plugin_sprint_sprints'               => ['fastlane_capacity' => '0'],
+        'glpi_plugin_sprint_sprintitems'           => ['capacity' => '0'],
+        'glpi_plugin_sprint_sprintfastlanemembers' => ['capacity' => '0'],
+        'glpi_plugin_sprint_sprintitemdependencies' => ['capacity' => '0'],
+        'glpi_plugin_sprint_sprintmembers'         => ['capacity_percent' => '100'],
+        'glpi_plugin_sprint_sprinttemplatemembers' => ['capacity_percent' => '100'],
+    ];
+    foreach ($capacityColumns as $table => $columns) {
+        if (!$DB->tableExists($table)) {
+            continue;
+        }
+        $tableFields = $DB->listFields($table);
+        foreach ($columns as $column => $default) {
+            $fieldType = $tableFields[$column]['Type'] ?? '';
+            if ($fieldType !== '' && stripos($fieldType, 'decimal') === false) {
+                $migration->changeField(
+                    $table,
+                    $column,
+                    $column,
+                    "DECIMAL(5,1) NOT NULL DEFAULT '{$default}'"
+                );
+            }
+        }
     }
 
     // Cleanup: remove duplicate SprintItem rows for the same linked GLPI

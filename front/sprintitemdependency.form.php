@@ -27,9 +27,16 @@ if (isset($_POST['add'])) {
     Html::back();
 
 } elseif (isset($_POST['resolve'])) {
-    $rel->check($_POST['id'], UPDATE);
+    $depId = (int)($_POST['id'] ?? 0);
+    if (!$rel->getFromDB($depId)) {
+        Html::displayNotFoundError();
+    }
+    // Helpers may resolve their own dependency; anyone else needs UPDATE.
+    if ((int)($rel->fields['users_id'] ?? 0) !== (int)Session::getLoginUserID()) {
+        $rel->check($depId, UPDATE);
+    }
     $rel->update([
-        'id'          => (int)$_POST['id'],
+        'id'          => $depId,
         'is_resolved' => 1,
     ]);
     GlpiPlugin\Sprint\SprintItemDependency::maybeUnblockParent(

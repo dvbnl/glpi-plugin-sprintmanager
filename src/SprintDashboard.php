@@ -159,7 +159,7 @@ class SprintDashboard extends CommonGLPI
             // Min weight 1 per item: a zero-capacity (unestimated) item still
             // earns its own slice in the bar instead of vanishing, while items
             // with real capacity dominate proportionally.
-            $capWeight = max((int)($row['capacity'] ?? 0), 1);
+            $capWeight = max((float)($row['capacity'] ?? 0), 1);
             switch ($row['raw_status']) {
                 case SprintItem::STATUS_TODO:
                     $stats['todo_items']++;
@@ -227,12 +227,12 @@ class SprintDashboard extends CommonGLPI
         // one. Each item carries a minimum weight of 1 (see computeStats), so a
         // sprint with no capacities set degrades cleanly to an even item split.
         $weights = [
-            'done'       => (int)($stats['done_cap'] ?? 0),
-            'progress'   => (int)($stats['in_progress_cap'] ?? 0),
-            'review'     => (int)($stats['review_cap'] ?? 0),
-            'dependency' => (int)($stats['dependency_cap'] ?? 0),
-            'blocked'    => (int)($stats['blocked_cap'] ?? 0),
-            'todo'       => (int)($stats['todo_cap'] ?? 0),
+            'done'       => (float)($stats['done_cap'] ?? 0),
+            'progress'   => (float)($stats['in_progress_cap'] ?? 0),
+            'review'     => (float)($stats['review_cap'] ?? 0),
+            'dependency' => (float)($stats['dependency_cap'] ?? 0),
+            'blocked'    => (float)($stats['blocked_cap'] ?? 0),
+            'todo'       => (float)($stats['todo_cap'] ?? 0),
         ];
         $total = max(array_sum($weights), 1);
         $donePct       = round(($weights['done'] / $total) * 100, 1);
@@ -342,7 +342,7 @@ class SprintDashboard extends CommonGLPI
                 . ' data-users-id="' . (int)$row['users_id'] . '"'
                 . ' data-owner-name="' . htmlescape($ownerNameRaw) . '"'
                 . ' data-story-points="' . (int)$row['story_points'] . '"'
-                . ' data-capacity="' . (int)($row['capacity'] ?? 0) . '"'
+                . ' data-capacity="' . SprintMember::formatCapacity($row['capacity'] ?? 0) . '"'
                 . ' data-is-fastlane="0"'
                 . ' data-item-tags="' . htmlescape(SprintItem::tagsToBlob($rowTags)) . '"'
                 . ' data-note="' . htmlescape((string)($row['note'] ?? '')) . '"';
@@ -394,7 +394,7 @@ class SprintDashboard extends CommonGLPI
         ]) as $row) {
             $uid = (int)$row['users_id'];
             if ($uid > 0) {
-                $regularUsed[$uid] = ($regularUsed[$uid] ?? 0) + (int)($row['capacity'] ?? 0);
+                $regularUsed[$uid] = ($regularUsed[$uid] ?? 0) + (float)($row['capacity'] ?? 0);
             }
         }
 
@@ -416,9 +416,9 @@ class SprintDashboard extends CommonGLPI
             "<i class='fas fa-users' style='margin-right:6px;'></i>" .
             __('Team Capacity', 'sprint') .
             " &mdash; <i class='fas fa-bolt' style='color:#fd7e14;'></i> " .
-            sprintf(__('Fastlane total: %d%%', 'sprint'), $sprintFastlaneTotal) .
+            sprintf(__('Fastlane total: %s%%', 'sprint'), SprintMember::formatCapacity($sprintFastlaneTotal)) .
             " &mdash; <i class='fas fa-link' style='color:#20c997;'></i> " .
-            sprintf(__('Dependency total: %d%%', 'sprint'), $sprintDependencyTotal) .
+            sprintf(__('Dependency total: %s%%', 'sprint'), SprintMember::formatCapacity($sprintDependencyTotal)) .
             "</th></tr>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Member', 'sprint') . "</th>";
@@ -434,7 +434,7 @@ class SprintDashboard extends CommonGLPI
 
         foreach ($members as $row) {
             $uid        = (int)$row['users_id'];
-            $total      = (int)$row['capacity_percent'];
+            $total      = SprintMember::normalizeCapacity($row['capacity_percent']);
             $regular    = $regularUsed[$uid] ?? 0;
             $fastlane   = $fastlaneUsed[$uid] ?? 0;
             $dependency = $dependencyUsed[$uid] ?? 0;
@@ -453,24 +453,30 @@ class SprintDashboard extends CommonGLPI
             // Show the overflow amount instead of clamping "Available" to 0%.
             $overflow = max($used - $total, 0);
             if ($overflow > 0) {
-                $availableDisplay = '-' . $overflow . '% <span style="font-weight:600;">('
-                    . sprintf(__('%d%% overflow', 'sprint'), $overflow) . ')</span>';
+                $availableDisplay = '-' . SprintMember::formatCapacity($overflow) . '% <span style="font-weight:600;">('
+                    . sprintf(__('%s%% overflow', 'sprint'), SprintMember::formatCapacity($overflow)) . ')</span>';
             } else {
-                $availableDisplay = $remaining . '%';
+                $availableDisplay = SprintMember::formatCapacity($remaining) . '%';
             }
+
+            $totalLabel      = SprintMember::formatCapacity($total);
+            $regularLabel    = SprintMember::formatCapacity($regular);
+            $fastlaneLabel   = SprintMember::formatCapacity($fastlane);
+            $dependencyLabel = SprintMember::formatCapacity($dependency);
+            $usedLabel       = SprintMember::formatCapacity($used);
 
             echo "<tr class='tab_bg_1'>";
             echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($uid)) . "</td>";
             echo "<td>" . $roleName . "</td>";
-            echo "<td class='center'>{$total}%</td>";
-            echo "<td class='center'>{$regular}%</td>";
+            echo "<td class='center'>{$totalLabel}%</td>";
+            echo "<td class='center'>{$regularLabel}%</td>";
             echo "<td class='center'>" . ($fastlane > 0
-                ? "<strong style='color:#fd7e14;'>{$fastlane}%</strong>"
-                : "{$fastlane}%") . "</td>";
+                ? "<strong style='color:#fd7e14;'>{$fastlaneLabel}%</strong>"
+                : "{$fastlaneLabel}%") . "</td>";
             echo "<td class='center'>" . ($dependency > 0
-                ? "<strong style='color:#20c997;'>{$dependency}%</strong>"
-                : "{$dependency}%") . "</td>";
-            echo "<td class='center'>{$used}%</td>";
+                ? "<strong style='color:#20c997;'>{$dependencyLabel}%</strong>"
+                : "{$dependencyLabel}%") . "</td>";
+            echo "<td class='center'>{$usedLabel}%</td>";
             echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$availableDisplay}</td>";
             echo "<td style='min-width:180px;'>";
             echo SprintMember::renderCapacityBar($total, $regular, $fastlane, $dependency, 16, '8px');
@@ -527,10 +533,10 @@ class SprintDashboard extends CommonGLPI
         $sprintFastlaneTotal = SprintFastlaneMember::getTotalFastlaneCapacityForSprint($sprintId);
 
         // Optional per-sprint hard cap: display total vs. cap plus the overflow.
-        $fastlaneCap = 0;
+        $fastlaneCap = 0.0;
         $sprintObj   = new Sprint();
         if ($sprintObj->getFromDB($sprintId)) {
-            $fastlaneCap = (int)($sprintObj->fields['fastlane_capacity'] ?? 0);
+            $fastlaneCap = (float)($sprintObj->fields['fastlane_capacity'] ?? 0);
         }
 
         // Count how many items will be shown (personal view filters by user)
@@ -554,14 +560,14 @@ class SprintDashboard extends CommonGLPI
         echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
         echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-left:2px;'></i>";
         $capText = ($fastlaneCap > 0)
-            ? sprintf(__('Total capacity: %1$d%% / %2$d%%', 'sprint'), $sprintFastlaneTotal, $fastlaneCap)
-            : sprintf(__('Total capacity: %d%%', 'sprint'), $sprintFastlaneTotal);
+            ? sprintf(__('Total capacity: %1$s%% / %2$s%%', 'sprint'), SprintMember::formatCapacity($sprintFastlaneTotal), SprintMember::formatCapacity($fastlaneCap))
+            : sprintf(__('Total capacity: %s%%', 'sprint'), SprintMember::formatCapacity($sprintFastlaneTotal));
         echo "<span>" . __('Fastlane', 'sprint') .
             " <span class='text-muted' style='font-weight:400;'>(" . $visibleCount . ")</span>" .
             " &mdash; " . $capText;
         if ($fastlaneCap > 0 && $sprintFastlaneTotal > $fastlaneCap) {
             echo " <span class='badge bg-danger' style='margin-left:4px;'>"
-                . sprintf(__('+%d%% overflow', 'sprint'), $sprintFastlaneTotal - $fastlaneCap)
+                . sprintf(__('+%s%% overflow', 'sprint'), SprintMember::formatCapacity($sprintFastlaneTotal - $fastlaneCap))
                 . "</span>";
         }
         echo "</span>";
@@ -596,12 +602,12 @@ class SprintDashboard extends CommonGLPI
                 }
             }
 
-            $totalCap = 0;
+            $totalCap = 0.0;
             $memberLines = [];
             foreach ($relRows as $r) {
-                $cap = (int)$r['capacity'];
+                $cap = (float)$r['capacity'];
                 $totalCap += $cap;
-                $memberLines[] = htmlescape(getUserName((int)$r['users_id'])) . " ({$cap}%)";
+                $memberLines[] = htmlescape(getUserName((int)$r['users_id'])) . " (" . SprintMember::formatCapacity($cap) . "%)";
             }
 
             $linkedDisplay = '<span style="color:#ccc;">-</span>';
@@ -626,7 +632,7 @@ class SprintDashboard extends CommonGLPI
                 $statusLabel . "</span></td>";
             echo "<td>" . (count($memberLines) > 0 ? implode('<br>', $memberLines) :
                 "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
-            echo "<td class='center'><strong>{$totalCap}%</strong></td>";
+            echo "<td class='center'><strong>" . SprintMember::formatCapacity($totalCap) . "%</strong></td>";
             echo "</tr>";
             $rendered++;
         }
@@ -686,12 +692,13 @@ class SprintDashboard extends CommonGLPI
 
         $sprintDependencyTotal = SprintItemDependency::getTotalOpenDependencyCapacityForSprint($sprintId);
 
+        // Personal view keeps resolved rows visible with a badge + quick-resolve.
         $visibleCount = 0;
         foreach ($relRowsByItem as $itemId => $relRows) {
             if ($forUserId !== null) {
                 $hasUser = false;
                 foreach ($relRows as $r) {
-                    if ((int)$r['users_id'] === $forUserId && (int)($r['is_resolved'] ?? 0) === 0) {
+                    if ((int)$r['users_id'] === $forUserId) {
                         $hasUser = true;
                         break;
                     }
@@ -711,7 +718,7 @@ class SprintDashboard extends CommonGLPI
         echo "<i class='fas fa-link' style='color:#20c997;margin-left:2px;'></i>";
         echo "<span>" . __('Dependencies', 'sprint') .
             " <span class='text-muted' style='font-weight:400;'>(" . $visibleCount . ")</span>" .
-            " &mdash; " . sprintf(__('Open capacity: %d%%', 'sprint'), $sprintDependencyTotal) .
+            " &mdash; " . sprintf(__('Open capacity: %s%%', 'sprint'), SprintMember::formatCapacity($sprintDependencyTotal)) .
             "</span>";
         echo "</div>";
         echo "<div class='sprint-collapsible-body'>";
@@ -723,35 +730,39 @@ class SprintDashboard extends CommonGLPI
         echo "<th>" . __('Status') . "</th>";
         echo "<th>" . __('Helpers (open)', 'sprint') . "</th>";
         echo "<th>" . __('Open total', 'sprint') . "</th>";
+        if ($forUserId !== null) {
+            echo "<th>" . __('Your dependency', 'sprint') . "</th>";
+        }
         echo "</tr>";
 
         foreach ($relRowsByItem as $itemId => $relRows) {
+            $ownRow = null;
             if ($forUserId !== null) {
-                $hasUser = false;
                 foreach ($relRows as $r) {
-                    if ((int)$r['users_id'] === $forUserId && (int)($r['is_resolved'] ?? 0) === 0) {
-                        $hasUser = true;
+                    if ((int)$r['users_id'] === $forUserId) {
+                        $ownRow = $r;
                         break;
                     }
                 }
-                if (!$hasUser) {
+                if ($ownRow === null) {
                     continue;
                 }
             }
 
             $row = $sprintItems[$itemId];
 
-            $openCap     = 0;
+            $openCap     = 0.0;
             $helperLines = [];
             foreach ($relRows as $r) {
                 $resolved = (int)($r['is_resolved'] ?? 0) === 1;
-                $cap      = (int)$r['capacity'];
+                $cap      = (float)$r['capacity'];
+                $capLabel = SprintMember::formatCapacity($cap);
                 $name     = htmlescape(getUserName((int)$r['users_id']));
                 if ($resolved) {
-                    $helperLines[] = "<span class='text-muted' style='text-decoration:line-through;'>{$name} ({$cap}%)</span>";
+                    $helperLines[] = "<span class='text-muted' style='text-decoration:line-through;'>{$name} ({$capLabel}%)</span>";
                 } else {
                     $openCap      += $cap;
-                    $helperLines[] = "{$name} ({$cap}%)";
+                    $helperLines[] = "{$name} ({$capLabel}%)";
                 }
             }
 
@@ -771,7 +782,26 @@ class SprintDashboard extends CommonGLPI
                 $statusLabel . "</span></td>";
             echo "<td>" . (count($helperLines) > 0 ? implode('<br>', $helperLines) :
                 "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
-            echo "<td class='center'><strong>{$openCap}%</strong></td>";
+            echo "<td class='center'><strong>" . SprintMember::formatCapacity($openCap) . "%</strong></td>";
+            if ($forUserId !== null && $ownRow !== null) {
+                $ownResolved = (int)($ownRow['is_resolved'] ?? 0) === 1;
+                echo "<td class='center' style='white-space:nowrap;'>";
+                if ($ownResolved) {
+                    echo "<span class='sprint-badge' style='background:#198754;color:#fff;padding:2px 10px;border-radius:10px;font-size:0.78em;'>"
+                        . "<i class='fas fa-check'></i> " . __('Resolved', 'sprint') . "</span>";
+                } else {
+                    echo "<span class='sprint-badge' style='background:#dc3545;color:#fff;padding:2px 10px;border-radius:10px;font-size:0.78em;'>"
+                        . "<i class='fas fa-link'></i> " . __('Open', 'sprint') . "</span>";
+                    echo "<form method='post' action='" . SprintItemDependency::getFormURL() . "' style='display:inline;margin-left:6px;'>";
+                    echo Html::hidden('id', ['value' => (int)$ownRow['id']]);
+                    echo Html::submit(__('Resolve', 'sprint'), [
+                        'name'  => 'resolve',
+                        'class' => 'btn btn-sm btn-outline-success',
+                    ]);
+                    Html::closeForm();
+                }
+                echo "</td>";
+            }
             echo "</tr>";
         }
 
@@ -857,7 +887,7 @@ class SprintDashboard extends CommonGLPI
                 'raw_status'    => $row['status'],
                 'raw_priority'  => (int)($row['priority'] ?? 3),
                 'story_points'  => (int)$row['story_points'],
-                'capacity'      => (int)($row['capacity'] ?? 0),
+                'capacity'      => (float)($row['capacity'] ?? 0),
                 'users_id'      => (int)$row['users_id'],
                 'note'          => (string)($row['note'] ?? ''),
                 'member_name'   => ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : '',
@@ -887,13 +917,13 @@ class SprintDashboard extends CommonGLPI
         }
 
         $si = new SprintItem();
-        $regularUsed = 0;
+        $regularUsed = 0.0;
         foreach ($si->find([
             'plugin_sprint_sprints_id' => $sprintId,
             'users_id'                 => $userId,
             'is_fastlane'              => 0,
         ]) as $row) {
-            $regularUsed += (int)($row['capacity'] ?? 0);
+            $regularUsed += (float)($row['capacity'] ?? 0);
         }
         $fastlaneUsed   = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
         $dependencyUsed = SprintItemDependency::getUsedDependencyCapacityForUser($sprintId, $userId);
@@ -901,7 +931,7 @@ class SprintDashboard extends CommonGLPI
 
         $roles = SprintMember::getAllRoles();
         $memberData = reset($members);
-        $total      = (int)$memberData['capacity_percent'];
+        $total      = SprintMember::normalizeCapacity($memberData['capacity_percent']);
         $remaining  = max($total - $usedCapacity, 0);
         $pctUsed    = ($total > 0) ? round(($usedCapacity / $total) * 100) : 0;
         $roleName   = $roles[$memberData['role']] ?? $memberData['role'];
@@ -916,10 +946,10 @@ class SprintDashboard extends CommonGLPI
         // Show overflow (e.g. "-26%") instead of clamping "Available" to 0% — mirrors the member summary card.
         $overflow = max($usedCapacity - $total, 0);
         if ($overflow > 0) {
-            $availableDisplay = '-' . $overflow . '% <span style="font-weight:600;">('
-                . sprintf(__('%d%% overflow', 'sprint'), $overflow) . ')</span>';
+            $availableDisplay = '-' . SprintMember::formatCapacity($overflow) . '% <span style="font-weight:600;">('
+                . sprintf(__('%s%% overflow', 'sprint'), SprintMember::formatCapacity($overflow)) . ')</span>';
         } else {
-            $availableDisplay = $remaining . '%';
+            $availableDisplay = SprintMember::formatCapacity($remaining) . '%';
         }
 
         echo "<div style='margin-top:20px;'>";
@@ -941,16 +971,21 @@ class SprintDashboard extends CommonGLPI
 
         echo "<tr class='tab_bg_1'>";
         echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($userId)) . "</td>";
+        $totalLabel      = SprintMember::formatCapacity($total);
+        $regularLabel    = SprintMember::formatCapacity($regularUsed);
+        $fastlaneLabel   = SprintMember::formatCapacity($fastlaneUsed);
+        $dependencyLabel = SprintMember::formatCapacity($dependencyUsed);
+        $usedLabel       = SprintMember::formatCapacity($usedCapacity);
         echo "<td>" . $roleName . "</td>";
-        echo "<td class='center'>{$total}%</td>";
-        echo "<td class='center'>{$regularUsed}%</td>";
+        echo "<td class='center'>{$totalLabel}%</td>";
+        echo "<td class='center'>{$regularLabel}%</td>";
         echo "<td class='center'>" . ($fastlaneUsed > 0
-            ? "<strong style='color:#fd7e14;'>{$fastlaneUsed}%</strong>"
-            : "{$fastlaneUsed}%") . "</td>";
+            ? "<strong style='color:#fd7e14;'>{$fastlaneLabel}%</strong>"
+            : "{$fastlaneLabel}%") . "</td>";
         echo "<td class='center'>" . ($dependencyUsed > 0
-            ? "<strong style='color:#20c997;'>{$dependencyUsed}%</strong>"
-            : "{$dependencyUsed}%") . "</td>";
-        echo "<td class='center'>{$usedCapacity}%</td>";
+            ? "<strong style='color:#20c997;'>{$dependencyLabel}%</strong>"
+            : "{$dependencyLabel}%") . "</td>";
+        echo "<td class='center'>{$usedLabel}%</td>";
         echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$availableDisplay}</td>";
         echo "<td style='min-width:180px;'>";
         echo SprintMember::renderCapacityBar($total, $regularUsed, $fastlaneUsed, $dependencyUsed, 16, '8px');
@@ -1005,6 +1040,13 @@ class SprintDashboard extends CommonGLPI
             }
 
             if (!empty($reasons)) {
+                // The item waits on its dependency helpers, not its owner.
+                $helperNames = [];
+                foreach ($openDeps as $dep) {
+                    $helperNames[] = ($dep['name'] ?: '?')
+                        . ' (' . SprintMember::formatCapacity($dep['capacity']) . '%)';
+                }
+
                 $risks[] = [
                     'name'    => (string)$row['name'],
                     'url'     => SprintItem::getFormURLWithID($id),
@@ -1016,6 +1058,7 @@ class SprintDashboard extends CommonGLPI
                     'owner'   => ((int)($row['users_id'] ?? 0) > 0)
                         ? getUserName((int)$row['users_id'])
                         : '',
+                    'helpers' => $helperNames,
                 ];
             }
         }
@@ -1038,7 +1081,7 @@ class SprintDashboard extends CommonGLPI
                 echo "<div class='sprint-atrisk-row'>";
                 echo "<div class='sprint-atrisk-main'>";
                 echo "<a href='" . $r['url'] . "' class='sprint-atrisk-name'>" . htmlescape($r['name']) . "</a>";
-                if ($r['project'] !== '' || $r['owner'] !== '') {
+                if ($r['project'] !== '' || $r['owner'] !== '' || !empty($r['helpers'])) {
                     echo "<span class='sprint-atrisk-meta'>";
                     if ($r['project'] !== '') {
                         echo "<span class='sprint-atrisk-project'><i class='fas fa-diagram-project'></i> "
@@ -1047,6 +1090,13 @@ class SprintDashboard extends CommonGLPI
                     if ($r['owner'] !== '') {
                         echo "<span class='sprint-atrisk-owner'><i class='fas fa-user'></i> "
                             . htmlescape($r['owner']) . "</span>";
+                    }
+                    if (!empty($r['helpers'])) {
+                        echo "<span class='sprint-atrisk-owner' style='color:#20c997;' title='"
+                            . htmlescape(__('Waiting on', 'sprint')) . "'>"
+                            . "<i class='fas fa-link'></i> "
+                            . htmlescape(__('Waiting on', 'sprint') . ': ' . implode(', ', $r['helpers']))
+                            . "</span>";
                     }
                     echo "</span>";
                 }
@@ -1123,10 +1173,10 @@ class SprintDashboard extends CommonGLPI
                 $flIds[] = (int)$fr['id'];
                 if (($fr['status'] ?? '') === SprintItem::STATUS_DONE) { $flDone++; }
             }
-            $flCap = 0;
+            $flCap = 0.0;
             if (!empty($flIds)) {
                 foreach ($flMember->find(['plugin_sprint_sprintitems_id' => $flIds]) as $a) {
-                    $flCap += (int)($a['capacity'] ?? 0);
+                    $flCap += (float)($a['capacity'] ?? 0);
                 }
             }
 
@@ -1224,7 +1274,7 @@ class SprintDashboard extends CommonGLPI
                 $px = number_format($p['x'], 2, '.', '');
                 $py = number_format($p['y'], 2, '.', '');
                 echo "<circle cx='{$px}' cy='{$py}' r='2.8' fill='#fd7e14'><title>"
-                    . htmlescape(sprintf(__('Fastlane capacity: %d%%', 'sprint'), $p['cap'])) . "</title></circle>";
+                    . htmlescape(sprintf(__('Fastlane capacity: %s%%', 'sprint'), SprintMember::formatCapacity($p['cap']))) . "</title></circle>";
 
                 // Above the point by default; flip below when that would sit on
                 // a bar value label or run off the top of the plot.

@@ -418,12 +418,12 @@ class SprintMeeting extends CommonDBTM
                 // SprintFastlaneMember junction (users_id alone isn't
                 // authoritative), so resolve the per-user list here.
                 $fastlaneAllocations = [];
-                $fastlaneTotal       = 0;
+                $fastlaneTotal       = 0.0;
                 if ((int)($row['is_fastlane'] ?? 0) === 1) {
                     $rel = new SprintFastlaneMember();
                     foreach ($rel->find(['plugin_sprint_sprintitems_id' => (int)$row['id']]) as $alloc) {
                         $uid = (int)$alloc['users_id'];
-                        $cap = (int)$alloc['capacity'];
+                        $cap = (float)$alloc['capacity'];
                         $fastlaneTotal += $cap;
                         $fastlaneAllocations[] = [
                             'users_id' => $uid,
@@ -443,7 +443,7 @@ class SprintMeeting extends CommonDBTM
                     'status'               => $row['status'],
                     'users_id'             => (int)$row['users_id'],
                     'story_points'         => (int)$row['story_points'],
-                    'capacity'             => (int)($row['capacity'] ?? 0),
+                    'capacity'             => (float)($row['capacity'] ?? 0),
                     'priority'             => (int)($row['priority'] ?? 3),
                     'note'                 => $row['note'] ?? '',
                     'itemtype'             => $itemtype,

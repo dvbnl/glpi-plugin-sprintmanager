@@ -109,12 +109,12 @@ class SprintFastlane extends CommonGLPI
             $rels   = $rel->find(['plugin_sprint_sprintitems_id' => $itemId]);
 
             $memberNames = [];
-            $totalCap    = 0;
+            $totalCap    = 0.0;
             foreach ($rels as $r) {
                 $uid = (int)$r['users_id'];
-                $cap = (int)$r['capacity'];
+                $cap = (float)$r['capacity'];
                 $totalCap += $cap;
-                $memberNames[] = htmlescape(getUserName($uid)) . " ({$cap}%)";
+                $memberNames[] = htmlescape(getUserName($uid)) . " (" . SprintMember::formatCapacity($cap) . "%)";
             }
 
             $statusLabel = $statuses[$row['status']] ?? $row['status'];
@@ -138,7 +138,7 @@ class SprintFastlane extends CommonGLPI
             echo "<td>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td>" . (count($memberNames) > 0 ? implode('<br>', $memberNames) :
                 "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
-            echo "<td class='center'><strong>{$totalCap}%</strong></td>";
+            echo "<td class='center'><strong>" . SprintMember::formatCapacity($totalCap) . "%</strong></td>";
             if ($canedit) {
                 echo "<td class='center' style='white-space:nowrap;'>";
                 echo "<a href='" . SprintItem::getFormURLWithID($itemId) .

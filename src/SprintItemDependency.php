@@ -74,7 +74,7 @@ class SprintItemDependency extends CommonDBRelation
     {
         if (isset($input['users_id']))                     $input['users_id']                     = (int)$input['users_id'];
         if (isset($input['plugin_sprint_sprintitems_id'])) $input['plugin_sprint_sprintitems_id'] = (int)$input['plugin_sprint_sprintitems_id'];
-        if (isset($input['capacity']))                     $input['capacity']                     = max(0, min(100, (int)$input['capacity']));
+        if (isset($input['capacity']))                     $input['capacity']                     = SprintMember::normalizeCapacity($input['capacity']);
         if (isset($input['is_resolved']))                  $input['is_resolved']                  = (int)(bool)$input['is_resolved'];
 
         // One dependency row per (item, member) — table has a UNIQUE index.
@@ -104,7 +104,7 @@ class SprintItemDependency extends CommonDBRelation
 
     public function prepareInputForUpdate($input)
     {
-        if (isset($input['capacity']))     $input['capacity']    = max(0, min(100, (int)$input['capacity']));
+        if (isset($input['capacity']))     $input['capacity']    = SprintMember::normalizeCapacity($input['capacity']);
         if (isset($input['users_id']))     $input['users_id']    = (int)$input['users_id'];
         if (isset($input['is_resolved']))  $input['is_resolved'] = (int)(bool)$input['is_resolved'];
 
@@ -116,7 +116,7 @@ class SprintItemDependency extends CommonDBRelation
 
     private function validateCapacity(array $input, int $excludeId = 0): bool
     {
-        $capacity = (int)($input['capacity'] ?? 0);
+        $capacity = (float)($input['capacity'] ?? 0);
         $userId   = (int)($input['users_id'] ?? $this->fields['users_id'] ?? 0);
         $itemId   = (int)($input['plugin_sprint_sprintitems_id'] ?? $this->fields['plugin_sprint_sprintitems_id'] ?? 0);
 
@@ -207,11 +207,12 @@ class SprintItemDependency extends CommonDBRelation
                 __('No dependencies yet', 'sprint') . "</td></tr>";
         }
 
-        $openCap     = 0;
-        $resolvedCap = 0;
+        $openCap     = 0.0;
+        $resolvedCap = 0.0;
         foreach ($rows as $row) {
             $uid        = (int)$row['users_id'];
-            $cap        = (int)$row['capacity'];
+            $cap        = (float)$row['capacity'];
+            $capLabel   = SprintMember::formatCapacity($cap);
             $isResolved = (int)($row['is_resolved'] ?? 0) === 1;
             if ($isResolved) {
                 $resolvedCap += $cap;
@@ -222,7 +223,7 @@ class SprintItemDependency extends CommonDBRelation
             $rowStyle = $isResolved ? "opacity:0.55;" : "";
             echo "<tr class='tab_bg_1' style='{$rowStyle}'>";
             echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($uid)) . "</td>";
-            echo "<td class='center'>{$cap}%</td>";
+            echo "<td class='center'>{$capLabel}%</td>";
             echo "<td class='center'>";
             if ($isResolved) {
                 echo "<span class='sprint-badge' style='background:#198754;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.78em;'>"
@@ -238,7 +239,7 @@ class SprintItemDependency extends CommonDBRelation
                     echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline-flex;gap:4px;align-items:center;margin-right:6px;'>";
                     echo Html::hidden('id', ['value' => $row['id']]);
                     Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
-                        'value' => $cap,
+                        'value' => SprintMember::capacityKey($cap),
                     ]);
                     echo "<button type='submit' name='update' value='1' class='btn btn-sm btn-outline-primary' title='" . __('Update') . "'><i class='fas fa-save'></i></button>";
                     Html::closeForm();
@@ -273,8 +274,8 @@ class SprintItemDependency extends CommonDBRelation
 
         echo "<tr class='tab_bg_2'>";
         echo "<th class='right'>" . __('Open dependency capacity', 'sprint') . "</th>";
-        echo "<th class='center'>{$openCap}%</th>";
-        echo "<th class='center'><span class='text-muted'>" . sprintf(__('Resolved: %d%%', 'sprint'), $resolvedCap) . "</span></th>";
+        echo "<th class='center'>" . SprintMember::formatCapacity($openCap) . "%</th>";
+        echo "<th class='center'><span class='text-muted'>" . sprintf(__('Resolved: %s%%', 'sprint'), SprintMember::formatCapacity($resolvedCap)) . "</span></th>";
         if ($canedit) {
             echo "<th></th>";
         }
@@ -300,15 +301,15 @@ class SprintItemDependency extends CommonDBRelation
      * Resolved rows still count: the helper already spent that capacity, so
      * freeing it would make the sprint capacity bar understate real spend.
      */
-    public static function getUsedDependencyCapacityForUser(int $sprintId, int $userId, int $excludeId = 0): int
+    public static function getUsedDependencyCapacityForUser(int $sprintId, int $userId, int $excludeId = 0): float
     {
         if (!self::isTableReady()) {
-            return 0;
+            return 0.0;
         }
 
         $itemIds = self::getItemIdsForSprint($sprintId);
         if (count($itemIds) === 0) {
-            return 0;
+            return 0.0;
         }
 
         $criteria = [
@@ -320,28 +321,28 @@ class SprintItemDependency extends CommonDBRelation
         }
 
         $rel   = new self();
-        $total = 0;
+        $total = 0.0;
         foreach ($rel->find($criteria) as $row) {
-            $total += (int)$row['capacity'];
+            $total += (float)$row['capacity'];
         }
         return $total;
     }
 
-    public static function getTotalOpenDependencyCapacityForSprint(int $sprintId): int
+    public static function getTotalOpenDependencyCapacityForSprint(int $sprintId): float
     {
         if (!self::isTableReady()) {
-            return 0;
+            return 0.0;
         }
 
         $itemIds = self::getItemIdsForSprint($sprintId);
         if (count($itemIds) === 0) {
-            return 0;
+            return 0.0;
         }
 
         $rel   = new self();
-        $total = 0;
+        $total = 0.0;
         foreach ($rel->find(['plugin_sprint_sprintitems_id' => $itemIds, 'is_resolved' => 0]) as $row) {
-            $total += (int)$row['capacity'];
+            $total += (float)$row['capacity'];
         }
         return $total;
     }
@@ -373,7 +374,7 @@ class SprintItemDependency extends CommonDBRelation
 
     /**
      * @param int[] $itemIds
-     * @return array<int, array{users_id:int,name:string,capacity:int}[]>
+     * @return array<int, array{users_id:int,name:string,capacity:float}[]>
      */
     public static function getOpenSummariesForItems(array $itemIds): array
     {
@@ -392,7 +393,7 @@ class SprintItemDependency extends CommonDBRelation
             $out[$itemId][] = [
                 'users_id' => $uid,
                 'name'     => $uid > 0 ? getUserName($uid) : '',
-                'capacity' => (int)$r['capacity'],
+                'capacity' => (float)$r['capacity'],
             ];
         }
         return $out;
@@ -402,7 +403,7 @@ class SprintItemDependency extends CommonDBRelation
      * Sprint items where $userId is helper on an open dependency, with the
      * parent owner's name. Renders "Helpt op:" on the member card.
      *
-     * @return array<int, array{item_id:int,name:string,owner_id:int,owner_name:string,capacity:int}>
+     * @return array<int, array{item_id:int,name:string,owner_id:int,owner_name:string,capacity:float}>
      */
     public static function getOpenItemsForHelper(int $sprintId, int $userId): array
     {
@@ -439,7 +440,7 @@ class SprintItemDependency extends CommonDBRelation
                 'name'       => (string)($item['name'] ?? ''),
                 'owner_id'   => $ownerId,
                 'owner_name' => $ownerId > 0 ? getUserName($ownerId) : '',
-                'capacity'   => (int)$r['capacity'],
+                'capacity'   => (float)$r['capacity'],
             ];
         }
         return $out;

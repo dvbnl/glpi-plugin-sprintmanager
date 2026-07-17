@@ -18,7 +18,7 @@ $response = ['success' => false, 'message' => 'Request failed'];
 
 $itemId   = (int)($_POST['plugin_sprint_sprintitems_id'] ?? 0);
 $userId   = (int)($_POST['users_id'] ?? 0);
-$capacity = (int)($_POST['capacity'] ?? 0);
+$capacity = GlpiPlugin\Sprint\SprintMember::normalizeCapacity($_POST['capacity'] ?? 0);
 
 if ($itemId <= 0 || $userId <= 0 || $capacity <= 0) {
     echo json_encode([
@@ -127,7 +127,11 @@ $summaries = GlpiPlugin\Sprint\SprintItemDependency::getOpenSummariesForItems([$
 $openDeps  = $summaries[$itemId] ?? [];
 $openCount = count($openDeps);
 
-$baseMessage = sprintf(__('Dependency added: %s (%d%%)', 'sprint'), getUserName($userId), $capacity);
+$baseMessage = sprintf(
+    __('Dependency added: %s (%s%%)', 'sprint'),
+    getUserName($userId),
+    GlpiPlugin\Sprint\SprintMember::formatCapacity($capacity)
+);
 
 echo json_encode([
     'success'    => true,

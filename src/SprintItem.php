@@ -883,7 +883,7 @@ class SprintItem extends CommonDBTM
                 $statusLabel . "</span></td>";
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td class='center sprint-cell-story-points'>" . (int)$row['story_points'] . "</td>";
-            echo "<td class='center sprint-cell-capacity'>" . (int)($row['capacity'] ?? 0) . "%</td>";
+            echo "<td class='center sprint-cell-capacity'>" . SprintMember::formatCapacity($row['capacity'] ?? 0) . "%</td>";
             echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? htmlescape(getUserName($row['users_id'])) :
                 '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
             if ($canedit) {
@@ -1083,7 +1083,7 @@ HTML;
             'data-users-id'          => (int)($row['users_id'] ?? 0),
             'data-owner-name'        => $ownerName,
             'data-story-points'      => (int)($row['story_points'] ?? 0),
-            'data-capacity'          => (int)($row['capacity'] ?? 0),
+            'data-capacity'          => SprintMember::formatCapacity($row['capacity'] ?? 0),
             'data-is-fastlane'       => (int)($row['is_fastlane'] ?? 0),
             'data-note'              => (string)($row['note'] ?? ''),
             'data-item-tags'         => self::tagsToBlob($tags),
@@ -1114,7 +1114,7 @@ HTML;
      * Inline pill showing how many open dependencies an item has, with helper
      * names + % in the tooltip.
      *
-     * @param array<int,array{users_id:int,name:string,capacity:int}> $openSummaries
+     * @param array<int,array{users_id:int,name:string,capacity:float}> $openSummaries
      */
     public static function renderDependencyBadge(array $openSummaries): string
     {
@@ -1124,7 +1124,7 @@ HTML;
         $count = count($openSummaries);
         $parts = [];
         foreach ($openSummaries as $s) {
-            $parts[] = ($s['name'] ?: '?') . ' (' . (int)$s['capacity'] . '%)';
+            $parts[] = ($s['name'] ?: '?') . ' (' . SprintMember::formatCapacity($s['capacity']) . '%)';
         }
         $tooltip = __('Waiting on', 'sprint') . ': ' . implode(', ', $parts);
         return " <span class='sprint-dep-pill' title='" . htmlescape($tooltip) . "'>"
@@ -1284,7 +1284,7 @@ HTML;
         echo "<div class='col-md-3 mb-3 sprint-qe-capacity'><label class='form-label'>" . __('Capacity (%)', 'sprint') . "</label>";
         echo "<select name='capacity' class='form-select'>";
         foreach ($capacityChoices as $val => $label) {
-            echo "<option value='" . (int)$val . "'>" . htmlescape((string)$label) . "</option>";
+            echo "<option value='" . htmlescape((string)$val) . "'>" . htmlescape((string)$label) . "</option>";
         }
         echo "</select></div>";
         echo "</div>";
@@ -1335,7 +1335,7 @@ HTML;
         echo "</select>";
         echo "<select class='form-select form-select-sm sprint-qe-dep-cap' style='max-width:120px;'>";
         foreach ($capacityChoices as $val => $label) {
-            echo "<option value='" . (int)$val . "'" . ((int)$val === 5 ? ' selected' : '') . ">" . htmlescape((string)$label) . "</option>";
+            echo "<option value='" . htmlescape((string)$val) . "'" . ((string)$val === '5' ? ' selected' : '') . ">" . htmlescape((string)$label) . "</option>";
         }
         echo "</select>";
         echo "<button type='button' class='btn btn-sm btn-outline-success sprint-qe-dep-add'>"
@@ -1360,7 +1360,7 @@ HTML;
         // Capacity <option> list (non-zero) for editing existing dependencies.
         $depCapOptions = '';
         foreach (SprintMember::getCapacityChoices(false) as $cv => $cl) {
-            $depCapOptions .= "<option value='" . (int)$cv . "'>" . htmlescape((string)$cl) . "</option>";
+            $depCapOptions .= "<option value='" . htmlescape((string)$cv) . "'>" . htmlescape((string)$cl) . "</option>";
         }
         $depNoneLabel    = addslashes(__('No dependencies yet', 'sprint'));
         $depResolvedTxt  = addslashes(__('resolved', 'sprint'));
@@ -1610,7 +1610,7 @@ $(function() {
         var \$btn   = \$(this);
         var itemId = \$modal.find('input[name=id]').val();
         var userId = parseInt(\$modal.find('.sprint-qe-dep-user').val(), 10) || 0;
-        var cap    = parseInt(\$modal.find('.sprint-qe-dep-cap').val(), 10) || 0;
+        var cap    = parseFloat(\$modal.find('.sprint-qe-dep-cap').val()) || 0;
         var \$status = \$modal.find('.sprint-qe-dep-status');
 
         if (!itemId || userId <= 0 || cap <= 0) {
@@ -1716,7 +1716,7 @@ $(function() {
     \$(document).on('change', '.sprint-qe-dep-edit-cap', function() {
         var \$sel  = \$(this);
         var depId  = parseInt(\$sel.data('dep-id'), 10) || 0;
-        var cap    = parseInt(\$sel.val(), 10) || 0;
+        var cap    = parseFloat(\$sel.val()) || 0;
         var itemId = \$modal.find('input[name=id]').val();
         var \$status = \$modal.find('.sprint-qe-dep-status');
         if (depId <= 0 || cap <= 0) { return; }
@@ -2060,9 +2060,10 @@ JS;
             && (int)($this->fields['story_points'] ?? 0) <= 1
             && Config::isBacklogCapacityToStoryPoints()
         ) {
-            $estimatedCap = (int)($input['capacity'] ?? $this->fields['capacity'] ?? 0);
+            // Story points stay whole: 0.5% rounds up to 1 SP.
+            $estimatedCap = (float)($input['capacity'] ?? $this->fields['capacity'] ?? 0);
             if ($estimatedCap > 0) {
-                $input['story_points'] = $estimatedCap;
+                $input['story_points'] = (int)ceil($estimatedCap);
             }
         }
 
@@ -2128,6 +2129,7 @@ JS;
         if (array_key_exists('_tags', $this->input)) {
             self::setTagsForItem((int)$this->getID(), (array)$this->input['_tags']);
         }
+        $this->seedFastlaneOwnerAsMember();
         parent::post_addItem();
     }
 
@@ -2142,7 +2144,41 @@ JS;
         if (array_key_exists('_tags', $this->input)) {
             self::setTagsForItem((int)$this->getID(), (array)$this->input['_tags']);
         }
+        // Only on sprint-assign or fastlane-flag transitions, so a deliberately
+        // emptied member list isn't refilled on unrelated edits.
+        if (
+            array_key_exists('plugin_sprint_sprints_id', $this->oldvalues ?? [])
+            || array_key_exists('is_fastlane', $this->oldvalues ?? [])
+        ) {
+            $this->seedFastlaneOwnerAsMember();
+        }
         parent::post_updateItem($history);
+    }
+
+    /**
+     * A fastlane item in a sprint distributes capacity via fastlane members;
+     * without any it books nothing. Seed the owner as first member (with the
+     * item's estimated capacity) so a backlog assign never lands memberless.
+     */
+    private function seedFastlaneOwnerAsMember(): void
+    {
+        $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        $ownerId  = (int)($this->fields['users_id'] ?? 0);
+        if ($sprintId <= 0 || $ownerId <= 0 || (int)($this->fields['is_fastlane'] ?? 0) !== 1) {
+            return;
+        }
+        $existing = countElementsInTable(
+            SprintFastlaneMember::getTable(),
+            ['plugin_sprint_sprintitems_id' => (int)$this->getID()]
+        );
+        if ($existing > 0) {
+            return;
+        }
+        (new SprintFastlaneMember())->add([
+            'plugin_sprint_sprintitems_id' => (int)$this->getID(),
+            'users_id'                     => $ownerId,
+            'capacity'                     => (float)($this->fields['capacity'] ?? 0),
+        ]);
     }
 
     /**
@@ -2386,7 +2422,7 @@ JS;
         if (isset($input['items_id']))    $input['items_id']    = (int)$input['items_id'];
         if (isset($input['users_id']))    $input['users_id']    = (int)$input['users_id'];
         if (isset($input['story_points'])) $input['story_points'] = max(0, (int)$input['story_points']);
-        if (isset($input['capacity']))    $input['capacity']    = max(0, min(100, (int)$input['capacity']));
+        if (isset($input['capacity']))    $input['capacity']    = SprintMember::normalizeCapacity($input['capacity']);
         if (isset($input['priority']))    $input['priority']    = max(1, min(5, (int)$input['priority']));
         if (isset($input['plugin_sprint_sprints_id'])) $input['plugin_sprint_sprints_id'] = (int)$input['plugin_sprint_sprints_id'];
         if (isset($input['is_fastlane']))  $input['is_fastlane'] = (int)(bool)$input['is_fastlane'];
@@ -2411,7 +2447,7 @@ JS;
             return true;
         }
 
-        $capacity = (int)($input['capacity'] ?? 0);
+        $capacity = (float)($input['capacity'] ?? 0);
         $userId   = (int)($input['users_id'] ?? 0);
         $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? $this->fields['plugin_sprint_sprints_id'] ?? 0);
 
@@ -2572,7 +2608,7 @@ JS;
             echo "<tr class='tab_bg_1'>";
             echo "<td>" . __('Capacity (%)', 'sprint') . "</td><td>";
             Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
-                'value' => $this->fields['capacity'] ?? 0,
+                'value' => SprintMember::capacityKey($this->fields['capacity'] ?? 0),
             ]);
             echo "</td><td>" . __('Owner', 'sprint') . "</td><td>";
             Dropdown::showFromArray('users_id', $memberOptions, [

@@ -327,7 +327,7 @@
             case 'owner':        return (row.getAttribute('data-owner-name')        || '').toLowerCase();
             case 'type':         return (row.getAttribute('data-item-type-label')   || '').toLowerCase();
             case 'priority':     return parseInt(row.getAttribute('data-item-priority'),  10) || 0;
-            case 'capacity':     return parseInt(row.getAttribute('data-capacity'),      10) || 0;
+            case 'capacity':     return parseFloat(row.getAttribute('data-capacity')) || 0;
             case 'story_points': return parseInt(row.getAttribute('data-story-points'),  10) || 0;
             default: return '';
         }

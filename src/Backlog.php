@@ -247,7 +247,7 @@ class Backlog
 
         $capacityOptions = '';
         foreach (SprintMember::getCapacityChoices(false) as $val => $label) {
-            $capacityOptions .= "<option value='" . (int)$val . "'>" . htmlescape($label) . "</option>";
+            $capacityOptions .= "<option value='" . htmlescape((string)$val) . "'>" . htmlescape($label) . "</option>";
         }
 
         $titleAdd      = __('Add dependency', 'sprint');
@@ -373,7 +373,7 @@ class Backlog
     jQuery(document).on('click', '.sprint-deps-add', function(){
         var itemId   = parseInt(\$modal.data('item-id'), 10) || 0;
         var userId   = parseInt(\$modal.find('.sprint-deps-member').val(), 10) || 0;
-        var capacity = parseInt(\$modal.find('.sprint-deps-capacity').val(), 10) || 0;
+        var capacity = parseFloat(\$modal.find('.sprint-deps-capacity').val()) || 0;
         if (itemId <= 0 || userId <= 0 || capacity <= 0) {
             if (window.glpi_toast_warning) { window.glpi_toast_warning('Select a member and capacity'); }
             return;
@@ -455,7 +455,7 @@ HTML;
         var \$sel = jQuery(this);
         var itemId = parseInt(\$sel.closest('.sprint-backlog-capacity-wrap').data('item-id'), 10) || 0;
         if (itemId > 0) {
-            postUpdate(itemId, 'capacity', parseInt(\$sel.val(), 10) || 0, \$sel);
+            postUpdate(itemId, 'capacity', parseFloat(\$sel.val()) || 0, \$sel);
         }
     });
 
@@ -640,7 +640,7 @@ HTML;
 
         $isReady = (int)($row['proposed_sprints_id'] ?? 0) > 0
             && (int)($row['users_id'] ?? 0) > 0
-            && (int)($row['capacity'] ?? 0) > 0;
+            && (float)($row['capacity'] ?? 0) > 0;
         echo "<td><a href='" . SprintItem::getFormURLWithID($row['id']) . "'>"
             . htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags);
         if ($isReady) {
@@ -688,7 +688,7 @@ HTML;
         echo "</td>";
 
         $ownerId       = (int)($row['users_id'] ?? 0);
-        $estCapacity   = (int)($row['capacity'] ?? 0);
+        $estCapacity   = (float)($row['capacity'] ?? 0);
 
         echo "<td class='center'>";
         if ($canedit) {
@@ -713,14 +713,14 @@ HTML;
         if ($canedit) {
             echo "<span class='sprint-backlog-capacity-wrap' data-item-id='" . (int)$row['id'] . "'>";
             Dropdown::showFromArray('_backlog_capacity_' . (int)$row['id'], SprintMember::getCapacityChoices(), [
-                'value'    => $estCapacity,
+                'value'    => SprintMember::capacityKey($estCapacity),
                 'rand'     => (int)$row['id'],
                 'width'    => '90px',
             ]);
             echo "</span>";
         } else {
             echo $estCapacity > 0
-                ? $estCapacity . '%'
+                ? SprintMember::formatCapacity($estCapacity) . '%'
                 : "<span class='text-muted'>-</span>";
         }
         echo "</td>";

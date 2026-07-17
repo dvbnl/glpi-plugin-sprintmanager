@@ -61,7 +61,7 @@ class SprintFastlaneMember extends CommonDBRelation
     {
         if (isset($input['users_id']))                    $input['users_id']                    = (int)$input['users_id'];
         if (isset($input['plugin_sprint_sprintitems_id'])) $input['plugin_sprint_sprintitems_id'] = (int)$input['plugin_sprint_sprintitems_id'];
-        if (isset($input['capacity']))                    $input['capacity']                    = max(0, min(100, (int)$input['capacity']));
+        if (isset($input['capacity']))                    $input['capacity']                    = SprintMember::normalizeCapacity($input['capacity']);
 
         if (!$this->validateCapacity($input)) {
             return false;
@@ -71,7 +71,7 @@ class SprintFastlaneMember extends CommonDBRelation
 
     public function prepareInputForUpdate($input)
     {
-        if (isset($input['capacity'])) $input['capacity'] = max(0, min(100, (int)$input['capacity']));
+        if (isset($input['capacity'])) $input['capacity'] = SprintMember::normalizeCapacity($input['capacity']);
         if (isset($input['users_id'])) $input['users_id'] = (int)$input['users_id'];
 
         if (!$this->validateCapacity($input, (int)($input['id'] ?? 0))) {
@@ -86,7 +86,7 @@ class SprintFastlaneMember extends CommonDBRelation
      */
     private function validateCapacity(array $input, int $excludeId = 0): bool
     {
-        $capacity = (int)($input['capacity'] ?? 0);
+        $capacity = (float)($input['capacity'] ?? 0);
         $userId   = (int)($input['users_id'] ?? $this->fields['users_id'] ?? 0);
         $itemId   = (int)($input['plugin_sprint_sprintitems_id'] ?? $this->fields['plugin_sprint_sprintitems_id'] ?? 0);
 
@@ -177,22 +177,23 @@ class SprintFastlaneMember extends CommonDBRelation
                 __('No members assigned yet', 'sprint') . "</td></tr>";
         }
 
-        $totalCap = 0;
+        $totalCap = 0.0;
         foreach ($rows as $row) {
             $uid      = (int)$row['users_id'];
-            $cap      = (int)$row['capacity'];
+            $cap      = (float)$row['capacity'];
+            $capLabel = SprintMember::formatCapacity($cap);
             $totalCap += $cap;
 
             echo "<tr class='tab_bg_1'>";
             echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($uid)) . "</td>";
-            echo "<td class='center'>{$cap}%</td>";
+            echo "<td class='center'>{$capLabel}%</td>";
             if ($canedit) {
                 echo "<td class='center' style='white-space:nowrap;'>";
                 // Inline capacity update form
                 echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline-flex;gap:4px;align-items:center;margin-right:6px;'>";
                 echo Html::hidden('id', ['value' => $row['id']]);
                 Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
-                    'value' => $cap,
+                    'value' => SprintMember::capacityKey($cap),
                 ]);
                 echo "<button type='submit' name='update' value='1' class='btn btn-sm btn-outline-primary' title='" . __('Update') . "'><i class='fas fa-save'></i></button>";
                 Html::closeForm();
@@ -212,7 +213,7 @@ class SprintFastlaneMember extends CommonDBRelation
 
         echo "<tr class='tab_bg_2'>";
         echo "<th class='right'>" . __('Total Fastlane capacity', 'sprint') . "</th>";
-        echo "<th class='center'>{$totalCap}%</th>";
+        echo "<th class='center'>" . SprintMember::formatCapacity($totalCap) . "%</th>";
         if ($canedit) {
             echo "<th></th>";
         }
@@ -243,11 +244,11 @@ class SprintFastlaneMember extends CommonDBRelation
      * Sum the fastlane capacity assigned to a given user across all
      * fastlane items of a sprint.
      */
-    public static function getUsedFastlaneCapacityForUser(int $sprintId, int $userId, int $excludeId = 0): int
+    public static function getUsedFastlaneCapacityForUser(int $sprintId, int $userId, int $excludeId = 0): float
     {
         $itemIds = self::getFastlaneItemIdsForSprint($sprintId);
         if (count($itemIds) === 0) {
-            return 0;
+            return 0.0;
         }
 
         $criteria = [
@@ -259,9 +260,9 @@ class SprintFastlaneMember extends CommonDBRelation
         }
 
         $rel   = new self();
-        $total = 0;
+        $total = 0.0;
         foreach ($rel->find($criteria) as $row) {
-            $total += (int)$row['capacity'];
+            $total += (float)$row['capacity'];
         }
         return $total;
     }
@@ -270,17 +271,17 @@ class SprintFastlaneMember extends CommonDBRelation
      * Sum the total fastlane capacity allocated across the whole sprint
      * (all members, all fastlane items).
      */
-    public static function getTotalFastlaneCapacityForSprint(int $sprintId): int
+    public static function getTotalFastlaneCapacityForSprint(int $sprintId): float
     {
         $itemIds = self::getFastlaneItemIdsForSprint($sprintId);
         if (count($itemIds) === 0) {
-            return 0;
+            return 0.0;
         }
 
         $rel   = new self();
-        $total = 0;
+        $total = 0.0;
         foreach ($rel->find(['plugin_sprint_sprintitems_id' => $itemIds]) as $row) {
-            $total += (int)$row['capacity'];
+            $total += (float)$row['capacity'];
         }
         return $total;
     }

@@ -89,10 +89,10 @@ if (!$confirmOverflow && !$isFastlane) {
     $targetUser = array_key_exists('users_id', $update)
         ? (int)$update['users_id'] : (int)$item->fields['users_id'];
     $targetCap  = array_key_exists('capacity', $update)
-        ? (int)$update['capacity'] : (int)($item->fields['capacity'] ?? 0);
+        ? (float)$update['capacity'] : (float)($item->fields['capacity'] ?? 0);
     // This item's existing contribution, so an increase can be told apart from a no-op/decrease.
     $priorContribution = ((int)$item->fields['users_id'] === $targetUser)
-        ? (int)($item->fields['capacity'] ?? 0) : 0;
+        ? (float)($item->fields['capacity'] ?? 0) : 0.0;
 
     if ($sprintId > 0 && $targetUser > 0 && $targetCap > $priorContribution) {
         $info = GlpiPlugin\Sprint\SprintMember::overflowInfo(
@@ -185,7 +185,7 @@ echo json_encode([
     'priority'             => (int)$item->fields['priority'],
     'users_id'             => (int)$item->fields['users_id'],
     'story_points'         => (int)$item->fields['story_points'],
-    'capacity'             => (int)($item->fields['capacity'] ?? 0),
+    'capacity'             => GlpiPlugin\Sprint\SprintMember::formatCapacity($item->fields['capacity'] ?? 0),
     'note'                 => (string)($item->fields['note'] ?? ''),
     'tags'                 => $updatedTags,
     'tags_blob'            => GlpiPlugin\Sprint\SprintItem::tagsToBlob($updatedTags),

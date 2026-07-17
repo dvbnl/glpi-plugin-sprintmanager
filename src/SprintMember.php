@@ -41,12 +41,38 @@ class SprintMember extends CommonDBRelation
         return 'fas fa-user-friends';
     }
 
+    /** Clamp to 0..100 and snap to 0.5% steps. */
+    public static function normalizeCapacity($value): float
+    {
+        $v = round((float)$value * 2) / 2;
+        return max(0.0, min(100.0, $v));
+    }
+
+    /** Display form: "5" for whole numbers, "0.5" for halves. */
+    public static function formatCapacity($value): string
+    {
+        $v = self::normalizeCapacity($value);
+        return ($v === floor($v)) ? (string)(int)$v : number_format($v, 1, '.', '');
+    }
+
     /**
-     * Capacity-percent dropdown choices. Granular 1..5 so tiny allocations
-     * (e.g. a 1% Fastlane slot) are expressible, then per-5 to keep it short.
+     * Canonical dropdown key so DECIMAL values ("5.0") match
+     * getCapacityChoices() keys.
+     *
+     * @return int|string
+     */
+    public static function capacityKey($value)
+    {
+        $v = self::normalizeCapacity($value);
+        return ($v === floor($v)) ? (int)$v : number_format($v, 1, '.', '');
+    }
+
+    /**
+     * Capacity-percent dropdown choices: 0.5 and 1..10 for tiny allocations,
+     * then per-5.
      *
      * @param bool $includeZero If true, prepends a 0% option.
-     * @return array<int,string> [value => label]
+     * @return array<int|string,string> [value => label]
      */
     public static function getCapacityChoices(bool $includeZero = true): array
     {
@@ -54,10 +80,11 @@ class SprintMember extends CommonDBRelation
         if ($includeZero) {
             $values[] = 0;
         }
-        for ($i = 1; $i <= 5; $i++) {
+        $values[] = '0.5';
+        for ($i = 1; $i <= 10; $i++) {
             $values[] = $i;
         }
-        for ($i = 10; $i <= 100; $i += 5) {
+        for ($i = 15; $i <= 100; $i += 5) {
             $values[] = $i;
         }
         $out = [];
@@ -73,10 +100,10 @@ class SprintMember extends CommonDBRelation
      * striped red overflow band with a 100% marker line.
      */
     public static function renderCapacityBar(
-        int $total,
-        int $regularUsed,
-        int $fastlaneUsed,
-        int $dependencyUsed,
+        float $total,
+        float $regularUsed,
+        float $fastlaneUsed,
+        float $dependencyUsed,
         int $height = 10,
         string $borderRadius = '5px'
     ): string {
@@ -94,17 +121,17 @@ class SprintMember extends CommonDBRelation
 
         $html = "<div style='position:relative;display:flex;height:{$height}px;background:#e9ecef;border-radius:{$borderRadius};overflow:hidden;'>";
         if ($regularW > 0) {
-            $html .= "<div style='width:{$regularW}%;height:100%;background:{$regularColor};' title='" . __('Regular', 'sprint') . " {$regularUsed}%'></div>";
+            $html .= "<div style='width:{$regularW}%;height:100%;background:{$regularColor};' title='" . __('Regular', 'sprint') . " " . self::formatCapacity($regularUsed) . "%'></div>";
         }
         if ($fastlaneW > 0) {
-            $html .= "<div style='width:{$fastlaneW}%;height:100%;background:#fd7e14;' title='" . __('Fastlane', 'sprint') . " {$fastlaneUsed}%'></div>";
+            $html .= "<div style='width:{$fastlaneW}%;height:100%;background:#fd7e14;' title='" . __('Fastlane', 'sprint') . " " . self::formatCapacity($fastlaneUsed) . "%'></div>";
         }
         if ($dependencyW > 0) {
-            $html .= "<div style='width:{$dependencyW}%;height:100%;background:#20c997;' title='" . __('Dependencies', 'sprint') . " {$dependencyUsed}%'></div>";
+            $html .= "<div style='width:{$dependencyW}%;height:100%;background:#20c997;' title='" . __('Dependencies', 'sprint') . " " . self::formatCapacity($dependencyUsed) . "%'></div>";
         }
         if ($overflowW > 0) {
             $stripe = 'repeating-linear-gradient(45deg,#dc3545,#dc3545 4px,#a71d2a 4px,#a71d2a 8px)';
-            $html .= "<div style='width:{$overflowW}%;height:100%;background:{$stripe};' title='" . sprintf(__('Overflow %d%%', 'sprint'), $overflow) . "'></div>";
+            $html .= "<div style='width:{$overflowW}%;height:100%;background:{$stripe};' title='" . sprintf(__('Overflow %s%%', 'sprint'), self::formatCapacity($overflow)) . "'></div>";
             $html .= "<div style='position:absolute;top:-2px;bottom:-2px;left:{$totalMarkerLeft}%;width:2px;background:#212529;' title='100%'></div>";
         }
         $html .= "</div>";
@@ -150,11 +177,19 @@ class SprintMember extends CommonDBRelation
     {
         if (isset($input['users_id']))                 $input['users_id']                 = (int)$input['users_id'];
         if (isset($input['plugin_sprint_sprints_id'])) $input['plugin_sprint_sprints_id'] = (int)$input['plugin_sprint_sprints_id'];
-        if (isset($input['capacity_percent']))          $input['capacity_percent']          = max(0, min(100, (int)$input['capacity_percent']));
+        if (isset($input['capacity_percent']))          $input['capacity_percent']          = self::normalizeCapacity($input['capacity_percent']);
         if (isset($input['role']) && !array_key_exists($input['role'], self::getAllRoles())) {
             $input['role'] = self::ROLE_DEVELOPER;
         }
         return parent::prepareInputForAdd($input);
+    }
+
+    public function prepareInputForUpdate($input)
+    {
+        if (isset($input['capacity_percent'])) {
+            $input['capacity_percent'] = self::normalizeCapacity($input['capacity_percent']);
+        }
+        return parent::prepareInputForUpdate($input);
     }
 
     /** Show members list + add form for a sprint. */
@@ -259,13 +294,14 @@ class SprintMember extends CommonDBRelation
             echo "<td><i class='fas fa-user'></i> " . htmlescape(getUserName($userId)) . "</td>";
             echo "<td><i class='{$icon}'></i> {$roleName}</td>";
             echo "<td class='center'>";
-            $pct = (int)$row['capacity_percent'];
+            $pct      = self::normalizeCapacity($row['capacity_percent']);
+            $pctLabel = self::formatCapacity($pct);
             $barColor = $pct >= 80 ? '#198754' : ($pct >= 50 ? '#ffc107' : '#dc3545');
             echo "<div style='display:flex;align-items:center;gap:8px;'>";
             echo "<div style='width:80px;height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;'>";
             echo "<div style='width:{$pct}%;height:100%;background:{$barColor};'></div>";
             echo "</div>";
-            echo "<span>{$pct}%</span>";
+            echo "<span>{$pctLabel}%</span>";
             echo "</div>";
             echo "</td>";
 
@@ -323,17 +359,17 @@ class SprintMember extends CommonDBRelation
         $si = new SprintItem();
         foreach ($members as $row) {
             $userId   = (int)$row['users_id'];
-            $totalCap = (int)$row['capacity_percent'];
+            $totalCap = self::normalizeCapacity($row['capacity_percent']);
             $roleName = $roles[$row['role']] ?? $row['role'];
             $roleIcon = $roleIcons[$row['role']] ?? 'fas fa-user';
 
-            $regularUsed = 0;
+            $regularUsed = 0.0;
             foreach ($si->find([
                 'plugin_sprint_sprints_id' => $sprintId,
                 'users_id'                 => $userId,
                 'is_fastlane'              => 0,
             ]) as $r) {
-                $regularUsed += (int)($r['capacity'] ?? 0);
+                $regularUsed += (float)($r['capacity'] ?? 0);
             }
             $fastlaneUsed   = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
             $dependencyUsed = SprintItemDependency::getUsedDependencyCapacityForUser($sprintId, $userId);
@@ -382,19 +418,21 @@ class SprintMember extends CommonDBRelation
             echo "</div>";
             echo "</div>";
 
-            $overflowCap = max($usedCap - $totalCap, 0);
+            $overflowCap   = max($usedCap - $totalCap, 0);
+            $usedCapLabel  = self::formatCapacity($usedCap);
+            $totalCapLabel = self::formatCapacity($totalCap);
             echo "<div style='margin-bottom:10px;'>";
             echo "<div style='display:flex;justify-content:space-between;font-size:0.78em;color:#6c757d;margin-bottom:3px;'>";
             echo "<span>" . __('Capacity used', 'sprint') . "</span>";
             if ($overflowCap > 0) {
-                echo "<span><strong style='color:#dc3545;'>{$usedCap}%</strong> / {$totalCap}% &mdash; "
+                echo "<span><strong style='color:#dc3545;'>{$usedCapLabel}%</strong> / {$totalCapLabel}% &mdash; "
                     . "<span style='color:#dc3545;font-weight:600;'>"
                     . "<i class='fas fa-exclamation-triangle' style='margin-right:2px;'></i>"
-                    . sprintf(__('%d%% overflow', 'sprint'), $overflowCap)
+                    . sprintf(__('%s%% overflow', 'sprint'), self::formatCapacity($overflowCap))
                     . "</span></span>";
             } else {
-                echo "<span><strong>{$usedCap}%</strong> / {$totalCap}% &mdash; "
-                    . sprintf(__('%d%% free', 'sprint'), $remaining) . "</span>";
+                echo "<span><strong>{$usedCapLabel}%</strong> / {$totalCapLabel}% &mdash; "
+                    . sprintf(__('%s%% free', 'sprint'), self::formatCapacity($remaining)) . "</span>";
             }
             echo "</div>";
             echo self::renderCapacityBar($totalCap, $regularUsed, $fastlaneUsed, $dependencyUsed);
@@ -420,7 +458,7 @@ class SprintMember extends CommonDBRelation
                     $itemUrl = SprintItem::getFormURLWithID($h['item_id']);
                     echo "<div style='font-size:0.82em;line-height:1.3;'>"
                         . "<a href='" . htmlescape($itemUrl) . "'>" . htmlescape($h['name']) . "</a> "
-                        . "<span class='text-muted'>({$h['capacity']}%";
+                        . "<span class='text-muted'>(" . self::formatCapacity($h['capacity']) . "%";
                     if ($h['owner_name'] !== '') {
                         echo " — " . htmlescape($h['owner_name']);
                     }
@@ -613,6 +651,7 @@ class SprintMember extends CommonDBRelation
                     'params'           => $options,
                     'roles'            => self::getAllRoles(),
                     'capacity_choices' => self::getCapacityChoices(),
+                    'capacity_value'   => self::capacityKey($this->fields['capacity_percent'] ?? 100),
                 ]
             );
         } else {
@@ -627,7 +666,7 @@ class SprintMember extends CommonDBRelation
 
             echo "<tr class='tab_bg_1'><td>" . __('Capacity (%)', 'sprint') . "</td><td>";
             Dropdown::showFromArray('capacity_percent', self::getCapacityChoices(), [
-                'value' => $this->fields['capacity_percent'] ?? 100,
+                'value' => self::capacityKey($this->fields['capacity_percent'] ?? 100),
             ]);
             echo "</td><td>" . __('Sprint') . "</td><td>";
             Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $this->fields['plugin_sprint_sprints_id'] ?? 0]);
@@ -651,7 +690,7 @@ class SprintMember extends CommonDBRelation
      * @param int $excludeRegularItemId      SprintItem id to exclude
      * @param int $excludeFastlaneMemberId   SprintFastlaneMember id to exclude
      * @param int $excludeDependencyId       SprintItemDependency id to exclude
-     * @return int  Used capacity %
+     * @return float  Used capacity %
      */
     public static function getUsedCapacityForUser(
         int $sprintId,
@@ -659,7 +698,7 @@ class SprintMember extends CommonDBRelation
         int $excludeRegularItemId = 0,
         int $excludeFastlaneMemberId = 0,
         int $excludeDependencyId = 0
-    ): int {
+    ): float {
         // Fastlane items have multiple owners via the junction table, so
         // only sum non-fastlane items the user owns here.
         $si = new SprintItem();
@@ -671,9 +710,9 @@ class SprintMember extends CommonDBRelation
         if ($excludeRegularItemId > 0) {
             $criteria['NOT'] = ['id' => $excludeRegularItemId];
         }
-        $regularUsed = 0;
+        $regularUsed = 0.0;
         foreach ($si->find($criteria) as $row) {
-            $regularUsed += (int)($row['capacity'] ?? 0);
+            $regularUsed += (float)($row['capacity'] ?? 0);
         }
 
         $fastlaneUsed = SprintFastlaneMember::getUsedFastlaneCapacityForUser(
@@ -698,7 +737,7 @@ class SprintMember extends CommonDBRelation
     public static function checkCapacityForUser(
         int $sprintId,
         int $userId,
-        int $additional,
+        float $additional,
         int $excludeRegularItemId = 0,
         int $excludeFastlaneMemberId = 0,
         int $excludeDependencyId = 0,
@@ -717,7 +756,7 @@ class SprintMember extends CommonDBRelation
             return true;
         }
         $row           = reset($members);
-        $totalCapacity = (int)$row['capacity_percent'];
+        $totalCapacity = self::normalizeCapacity($row['capacity_percent']);
 
         $used      = self::getUsedCapacityForUser($sprintId, $userId, $excludeRegularItemId, $excludeFastlaneMemberId, $excludeDependencyId);
         $remaining = $totalCapacity - $used;
@@ -727,11 +766,11 @@ class SprintMember extends CommonDBRelation
                 $newUsed = $used + $additional;
                 Session::addMessageAfterRedirect(
                     sprintf(
-                        __('%s is now over capacity: %d%% used of %d%% (+%d%% overflow).', 'sprint'),
+                        __('%s is now over capacity: %s%% used of %s%% (+%s%% overflow).', 'sprint'),
                         getUserName($userId),
-                        $newUsed,
-                        $totalCapacity,
-                        $newUsed - $totalCapacity
+                        self::formatCapacity($newUsed),
+                        self::formatCapacity($totalCapacity),
+                        self::formatCapacity($newUsed - $totalCapacity)
                     ),
                     false,
                     WARNING
@@ -740,12 +779,12 @@ class SprintMember extends CommonDBRelation
             }
             Session::addMessageAfterRedirect(
                 sprintf(
-                    __('%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%.', 'sprint'),
+                    __('%s has only %s%% capacity remaining (total: %s%%, used: %s%%). Cannot assign %s%%.', 'sprint'),
                     getUserName($userId),
-                    max($remaining, 0),
-                    $totalCapacity,
-                    $used,
-                    $additional
+                    self::formatCapacity(max($remaining, 0)),
+                    self::formatCapacity($totalCapacity),
+                    self::formatCapacity($used),
+                    self::formatCapacity($additional)
                 ),
                 false,
                 ERROR
@@ -766,12 +805,12 @@ class SprintMember extends CommonDBRelation
      * does not increase load, so an already-overflowed member isn't nagged on
      * every unrelated edit.
      *
-     * @return array{used:int,total:int,after:int,overflow:int,name:string}|null
+     * @return array{used:float,total:float,after:float,overflow:float,name:string}|null
      */
     public static function overflowInfo(
         int $sprintId,
         int $userId,
-        int $additional,
+        float $additional,
         int $excludeRegularItemId = 0,
         int $excludeFastlaneMemberId = 0,
         int $excludeDependencyId = 0
@@ -788,7 +827,7 @@ class SprintMember extends CommonDBRelation
         if (count($members) === 0) {
             return null;
         }
-        $total = (int)reset($members)['capacity_percent'];
+        $total = self::normalizeCapacity(reset($members)['capacity_percent']);
         $used  = self::getUsedCapacityForUser($sprintId, $userId, $excludeRegularItemId, $excludeFastlaneMemberId, $excludeDependencyId);
         $after = $used + $additional;
         if ($after <= $total) {
@@ -811,12 +850,12 @@ class SprintMember extends CommonDBRelation
     public static function overflowConfirmMessage(array $info): string
     {
         return sprintf(
-            __('%1$s is already at %2$d%% of %3$d%% capacity. This brings the total to %4$d%% (+%5$d%% over). Assign anyway?', 'sprint'),
+            __('%1$s is already at %2$s%% of %3$s%% capacity. This brings the total to %4$s%% (+%5$s%% over). Assign anyway?', 'sprint'),
             $info['name'],
-            $info['used'],
-            $info['total'],
-            $info['after'],
-            $info['overflow']
+            self::formatCapacity($info['used']),
+            self::formatCapacity($info['total']),
+            self::formatCapacity($info['after']),
+            self::formatCapacity($info['overflow'])
         );
     }
 

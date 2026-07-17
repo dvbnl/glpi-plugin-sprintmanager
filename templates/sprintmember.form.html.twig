@@ -31,7 +31,7 @@
 
     {{ fields.dropdownArrayField(
         'capacity_percent',
-        item.fields['capacity_percent'],
+        capacity_value|default(item.fields['capacity_percent']),
         capacity_choices,
         __('Capacity (%)', 'sprint'),
         field_options

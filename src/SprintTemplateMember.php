@@ -110,7 +110,7 @@ class SprintTemplateMember extends CommonDBRelation
             echo "<tr class='tab_bg_1'>";
             echo "<td><i class='fas fa-user'></i> " . htmlescape(getUserName($row['users_id'])) . "</td>";
             echo "<td>" . $roleName . "</td>";
-            echo "<td class='center'>" . (int)$row['capacity_percent'] . "%</td>";
+            echo "<td class='center'>" . SprintMember::formatCapacity($row['capacity_percent']) . "%</td>";
             if ($canedit) {
                 echo "<td class='center'>";
                 echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline;'>";

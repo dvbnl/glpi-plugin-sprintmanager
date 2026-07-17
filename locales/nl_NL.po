@@ -444,11 +444,11 @@ msgstr "Markeer dit item als fastlane (beheerd via het Fastlane-tabblad op de sp
 msgid "Fastlane item: assign sprint members and capacity from the Fastlane Members tab."
 msgstr "Fastlane item: wijs sprintleden en capaciteit toe via het Fastlane-leden tabblad."
 
-msgid "Fastlane total: %d%%"
-msgstr "Fastlane totaal: %d%%"
+msgid "Fastlane total: %s%%"
+msgstr "Fastlane totaal: %s%%"
 
-msgid "Total capacity: %d%%"
-msgstr "Totale capaciteit: %d%%"
+msgid "Total capacity: %s%%"
+msgstr "Totale capaciteit: %s%%"
 
 msgid "No fastlane items"
 msgstr "Geen fastlane items"
@@ -573,8 +573,8 @@ msgstr "items gereed"
 msgid "Capacity used"
 msgstr "Gebruikte capaciteit"
 
-msgid "%d%% free"
-msgstr "%d%% vrij"
+msgid "%s%% free"
+msgstr "%s%% vrij"
 
 msgid "Fastlane items assigned"
 msgstr "Fastlane items toegewezen"
@@ -837,20 +837,20 @@ msgstr "Voeg een afhankelijkheid op een collega toe aan dit item"
 msgid "Open dependency capacity"
 msgstr "Open afhankelijkheidscapaciteit"
 
-msgid "Resolved: %d%%"
-msgstr "Opgelost: %d%%"
+msgid "Resolved: %s%%"
+msgstr "Opgelost: %s%%"
 
 msgid "Open dependency allocations"
 msgstr "Open afhankelijkheidsallocaties"
 
-msgid "Open capacity: %d%%"
-msgstr "Openstaande capaciteit: %d%%"
+msgid "Open capacity: %s%%"
+msgstr "Openstaande capaciteit: %s%%"
 
 msgid "Open total"
 msgstr "Open totaal"
 
-msgid "Dependency total: %d%%"
-msgstr "Afhankelijkheidstotaal: %d%%"
+msgid "Dependency total: %s%%"
+msgstr "Afhankelijkheidstotaal: %s%%"
 
 msgid "Dependencies are sprint-scoped — assign this item to a sprint first."
 msgstr "Afhankelijkheden gelden binnen een sprint — koppel dit item eerst aan een sprint."
@@ -864,8 +864,8 @@ msgstr "Afhankelijkheid heropend"
 msgid "Dependency allocation"
 msgstr "Afhankelijkheids-allocatie"
 
-msgid "%s has only %d%% capacity remaining (total: %d%%, used: %d%%). Cannot assign %d%%."
-msgstr "%s heeft nog maar %d%% capaciteit beschikbaar (totaal: %d%%, gebruikt: %d%%). Kan %d%% niet toewijzen."
+msgid "%s has only %s%% capacity remaining (total: %s%%, used: %s%%). Cannot assign %s%%."
+msgstr "%s heeft nog maar %s%% capaciteit beschikbaar (totaal: %s%%, gebruikt: %s%%). Kan %s%% niet toewijzen."
 
 msgid "A Scrum Master is required to create a sprint"
 msgstr "Een Scrum Master is vereist om een sprint aan te maken"
@@ -1084,23 +1084,23 @@ msgstr "Koppelt een collega aan dit item met een eigen capaciteits-%. Open 'Behe
 msgid "+ %d more"
 msgstr "+ %d meer"
 
-msgid "Dependency added: %s (%d%%)"
-msgstr "Afhankelijkheid toegevoegd: %s (%d%%)"
+msgid "Dependency added: %s (%s%%)"
+msgstr "Afhankelijkheid toegevoegd: %s (%s%%)"
 
 msgid "Please select a sprint member and a capacity > 0"
 msgstr "Selecteer een sprintlid en een capaciteit > 0"
 
-msgid "%s is now over capacity: %d%% used of %d%% (+%d%% overflow)."
-msgstr "%s zit nu boven capaciteit: %d%% gebruikt van %d%% (+%d%% overflow)."
+msgid "%s is now over capacity: %s%% used of %s%% (+%s%% overflow)."
+msgstr "%s zit nu boven capaciteit: %s%% gebruikt van %s%% (+%s%% overflow)."
 
-msgid "%1$s is already at %2$d%% of %3$d%% capacity. This brings the total to %4$d%% (+%5$d%% over). Assign anyway?"
-msgstr "%1$s zit al op %2$d%% van %3$d%% capaciteit. Dit brengt het totaal op %4$d%% (+%5$d%% over). Toch toewijzen?"
+msgid "%1$s is already at %2$s%% of %3$s%% capacity. This brings the total to %4$s%% (+%5$s%% over). Assign anyway?"
+msgstr "%1$s zit al op %2$s%% van %3$s%% capaciteit. Dit brengt het totaal op %4$s%% (+%5$s%% over). Toch toewijzen?"
 
-msgid "Overflow %d%%"
-msgstr "Overflow %d%%"
+msgid "Overflow %s%%"
+msgstr "Overflow %s%%"
 
-msgid "%d%% overflow"
-msgstr "%d%% overflow"
+msgid "%s%% overflow"
+msgstr "%s%% overflow"
 
 msgid "Est. capacity"
 msgstr "Gesch. capaciteit"
@@ -1139,8 +1139,8 @@ msgstr "Afhankelijkheden zijn sprint-gebonden — wijs dit item eerst toe aan ee
 msgid "Dependency removed"
 msgstr "Afhankelijkheid verwijderd"
 
-msgid "Dependency updated to %d%%"
-msgstr "Afhankelijkheid bijgewerkt naar %d%%"
+msgid "Dependency updated to %s%%"
+msgstr "Afhankelijkheid bijgewerkt naar %s%%"
 
 msgid "Keep it in the sprint (capacity preserved); only the linked item returns to the backlog"
 msgstr "Houd het in de sprint (capaciteit behouden); alleen het gekoppelde item gaat terug naar de backlog"
@@ -1342,8 +1342,8 @@ msgstr "CSV downloaden"
 msgid "Fastlane capacity %"
 msgstr "Fastlane-capaciteit %"
 
-msgid "Fastlane capacity: %d%%"
-msgstr "Fastlane-capaciteit: %d%%"
+msgid "Fastlane capacity: %s%%"
+msgstr "Fastlane-capaciteit: %s%%"
 
 msgid "Fastlane item — anyone can assign it to a sprint"
 msgstr "Fastlane-item — iedereen kan het aan een sprint toewijzen"
@@ -1477,12 +1477,16 @@ msgid "0 = no cap; exceeding it shows as overflow on the fastlane"
 msgstr "0 = geen limiet; erboven wordt het als overflow op de fastlane getoond"
 
 #, php-format
-msgid "Total capacity: %1$d%% / %2$d%%"
-msgstr "Totale capaciteit: %1$d%% / %2$d%%"
+msgid "Total capacity: %1$s%% / %2$s%%"
+msgstr "Totale capaciteit: %1$s%% / %2$s%%"
 
 #, php-format
-msgid "+%d%% overflow"
-msgstr "+%d%% overflow"
+msgid "+%s%% overflow"
+msgstr "+%s%% overflow"
 
 msgid "No dependencies in this sprint."
 msgstr "Geen afhankelijkheden in deze sprint."
+
+#: src/SprintDashboard.php
+msgid "Your dependency"
+msgstr "Jouw afhankelijkheid"

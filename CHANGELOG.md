@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.5] - 2026-07-17
+
+### Added
+- **0.5% capacity granularity**: every capacity field (member capacity, sprint item capacity, fastlane allocations, dependencies, template members and the per-sprint fastlane cap) now accepts half percents. All capacity dropdowns gain a **0.5%** choice and now step per whole percent up to 10% (0.5, 1–10, then per 5 up to 100), the fastlane cap field steps by 0.5, and the six capacity columns were migrated from `INT` to `DECIMAL(5,1)` (existing values are preserved). Totals, capacity bars, overflow warnings/confirmations, the dashboard, the export report and the CSV all render halves as `0.5%` — whole numbers keep rendering without decimals
+- **"Waiting on" in the at-risk widget**: items flagged for open dependencies now list the dependency helper(s) with their capacity % next to the owner, so the risk is attributed to whoever the item is actually waiting on instead of the item's owner
+- **Resolved dependencies stay visible in Personal view**: the personal Dependencies section no longer drops rows once resolved. A new **Your dependency** column shows a green *Resolved* / red *Open* badge plus a one-click **Resolve** button, and helpers can resolve **their own** dependency without needing the full update right (scoped strictly to their own row)
+- **Fastlane owner auto-seed**: assigning a backlog item that is flagged fastlane (and has an owner) to a sprint now automatically adds the owner as the first fastlane member with the item's estimated capacity, so fastlane items no longer land in a sprint without members. Seeding only runs on the sprint-assign / fastlane-flag transition, so a deliberately emptied member list is never refilled by unrelated edits
+
+### Changed
+- **Server-side capacity normalisation**: every capacity write path clamps to 0–100 and snaps to 0.5% steps via the new `SprintMember::normalizeCapacity()` helper; `DECIMAL` columns replace the former `UNSIGNED INT` ones (no `UNSIGNED` on the new columns — deprecated since MySQL 8.0.17, the clamp guarantees non-negative values)
+- **Backlog capacity → story points** seeding now rounds half percents up (a 0.5% estimate becomes 1 story point)
+
+### Internationalisation
+- Updated all capacity format strings (`%d%%` → `%s%%`) and added the new *Your dependency* string across the `en_GB`, `nl_NL`, `fr_FR` and `es_ES` catalogs (and the `sprint.pot` template), and recompiled the `.mo` files
+
 ## [1.1.4] - 2026-07-09
 
 ### Added
