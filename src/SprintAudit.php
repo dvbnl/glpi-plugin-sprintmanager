@@ -71,7 +71,7 @@ class SprintAudit extends CommonGLPI
 
         $barId = 'sprint-audit-filter-' . mt_rand();
         echo "<div id='{$barId}' class='sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2' "
-            . "style='background:#f1f3f5;border-radius:6px;max-width:1200px;margin-left:auto;margin-right:auto;'>";
+            . "style='background:var(--tblr-bg-surface-secondary,#f1f3f5);border-radius:6px;max-width:1200px;margin-left:auto;margin-right:auto;'>";
         echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
             . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
         echo "<input type='search' class='form-control form-control-sm sf-text' "
@@ -89,7 +89,7 @@ class SprintAudit extends CommonGLPI
         echo "<span class='ms-auto text-muted small'>" . count($entries) . " " . __('entries', 'sprint') . "</span>";
         echo "</div>";
 
-        echo "<table class='tab_cadre_fixe sprint-audit-table'>";
+        echo "<table class='tab_cadre_fixe sprint-themed sprint-audit-table'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th style='width:160px;'>" . __('When', 'sprint') . "</th>";
         echo "<th style='width:120px;'>" . __('Area', 'sprint') . "</th>";

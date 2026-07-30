@@ -1016,7 +1016,9 @@ msgid "Standup"
 msgstr "Standup"
 
 msgid "Template Meeting"
-msgstr "Sjabloon Meeting"
+msgid_plural "Template Meetings"
+msgstr[0] "Sjabloon Meeting"
+msgstr[1] "Sjabloon Meetings"
 
 msgid "Template created successfully!"
 msgstr "Sjabloon succesvol aangemaakt!"
@@ -1490,3 +1492,365 @@ msgstr "Geen afhankelijkheden in deze sprint."
 #: src/SprintDashboard.php
 msgid "Your dependency"
 msgstr "Jouw afhankelijkheid"
+
+msgid "Adhoc"
+msgstr "Adhoc"
+
+msgid "Added to the sprint after kick-off"
+msgstr "Na de kick-off aan de sprint toegevoegd"
+
+msgid "Added to the sprint after kick-off (highlights the item)"
+msgstr "Na de kick-off aan de sprint toegevoegd (item wordt gemarkeerd)"
+
+msgid "View"
+msgstr "Weergave"
+
+msgid "Edit"
+msgstr "Bewerken"
+
+msgid "Edit backlog item"
+msgstr "Backlog item bewerken"
+
+msgid "Pre-selecting a sprint marks the item for the Scrum Master to assign at kick-off."
+msgstr "Door een sprint voor te selecteren kan de Scrum Master het item bij de kick-off toewijzen."
+
+msgid "Owner is not a member of the selected sprint"
+msgstr "Eigenaar is geen lid van de geselecteerde sprint"
+
+msgid "Total %total%% — used in sprint %used%%, pending from backlog %pending%%, this item %own%% → %free%% free after assigning"
+msgstr "Totaal %total%% — gebruikt in sprint %used%%, pending vanuit backlog %pending%%, dit item %own%% → %free%% vrij na toewijzen"
+
+msgid "Save failed"
+msgstr "Opslaan mislukt"
+
+msgid "Capacity %1$s: total %2$s%%, used in sprint %3$s%%, pending from backlog %4$s%%, this item %5$s%% → %6$s%% free after assigning"
+msgstr "Capaciteit %1$s: totaal %2$s%%, gebruikt in sprint %3$s%%, pending vanuit backlog %4$s%%, dit item %5$s%% → %6$s%% vrij na toewijzen"
+
+msgid "free"
+msgstr "vrij"
+
+msgid "Pre-select a sprint first (edit the item)"
+msgstr "Selecteer eerst een sprint (bewerk het item)"
+
+msgid "Pre-select a sprint for this item first (edit the item and choose a sprint)."
+msgstr "Selecteer eerst een sprint voor dit item (bewerk het item en kies een sprint)."
+
+msgid "Only the Scrum Master can change this."
+msgstr "Alleen de Scrum Master kan dit wijzigen."
+
+msgid "Per sprint: completed story points, fastlane and adhoc items (bars), with total fastlane capacity % (line)."
+msgstr "Per sprint: voltooide story points, fastlane- en adhoc-items (balken), met totale fastlane-capaciteit % (lijn)."
+
+msgid "%d adhoc items"
+msgstr "%d adhoc-items"
+
+msgid "Adhoc items"
+msgstr "Adhoc-items"
+
+msgid "Sprint request"
+msgid_plural "Sprint requests"
+msgstr[0] "Sprintverzoek"
+msgstr[1] "Sprintverzoeken"
+
+msgid "Requests awaiting your approval"
+msgstr "Verzoeken die op jouw goedkeuring wachten"
+
+msgid "Requested by"
+msgstr "Aangevraagd door"
+
+msgid "Details"
+msgstr "Details"
+
+msgid "Accept"
+msgstr "Accepteren"
+
+msgid "Reject"
+msgstr "Afwijzen"
+
+msgid "Request rejected"
+msgstr "Verzoek afgewezen"
+
+msgid "Request no longer exists"
+msgstr "Verzoek bestaat niet meer"
+
+msgid "Request failed"
+msgstr "Verzoek mislukt"
+
+msgid "Unknown request type"
+msgstr "Onbekend verzoektype"
+
+msgid "Only the Scrum Master of the selected sprint can handle this request."
+msgstr "Alleen de Scrum Master van de geselecteerde sprint kan dit verzoek afhandelen."
+
+msgid "The item behind this request no longer exists."
+msgstr "Het item achter dit verzoek bestaat niet meer."
+
+msgid "The item is no longer on the backlog."
+msgstr "Het item staat niet meer op de backlog."
+
+msgid "The item is no longer part of this sprint."
+msgstr "Het item maakt geen deel meer uit van deze sprint."
+
+msgid "Could not update the capacity"
+msgstr "Kon de capaciteit niet bijwerken"
+
+msgid "Capacity updated to %s%%"
+msgstr "Capaciteit bijgewerkt naar %s%%"
+
+msgid "Capacity change"
+msgstr "Capaciteitswijziging"
+
+msgid "%1$s%% → %2$s%%"
+msgstr "%1$s%% → %2$s%%"
+
+msgid "Assignment requested — the Scrum Master of %s will review it."
+msgstr "Toewijzing aangevraagd — de Scrum Master van %s beoordeelt het verzoek."
+
+msgid "Capacity change to %s%% sent to the Scrum Master for approval."
+msgstr "Capaciteitswijziging naar %s%% ter goedkeuring naar de Scrum Master gestuurd."
+
+msgid "Capacity changes are sent to the Scrum Master for approval."
+msgstr "Capaciteitswijzigingen worden ter goedkeuring naar de Scrum Master gestuurd."
+
+msgid "Assign to the selected sprint"
+msgstr "Toewijzen aan de geselecteerde sprint"
+
+msgid "Ask the Scrum Master to assign this item to the selected sprint"
+msgstr "Vraag de Scrum Master om dit item aan de geselecteerde sprint toe te wijzen"
+
+msgid "Assignment already requested — waiting for the Scrum Master"
+msgstr "Toewijzing al aangevraagd — wachten op de Scrum Master"
+
+msgid "Assign ready backlog items"
+msgstr "Gerede backlog-items toewijzen"
+
+msgid "Assign every ready item, or limit the kick-off to a single sprint — future sprints that are already marked ready stay on the backlog."
+msgstr "Wijs alle gerede items toe, of beperk de kick-off tot één sprint — toekomstige sprints die al gereed staan blijven op de backlog."
+
+msgid "All sprints"
+msgstr "Alle sprints"
+
+msgid "Marks the item as post-kick-off work; the flag travels with it into the sprint."
+msgstr "Markeert het item als werk na de kick-off; de vlag reist mee de sprint in."
+
+msgid "Your capacity: %s%%"
+msgstr "Jouw capaciteit: %s%%"
+
+msgid "Your open capacity: %s%%"
+msgstr "Jouw openstaande capaciteit: %s%%"
+
+msgid "Progress of the linked item"
+msgstr "Voortgang van het gekoppelde item"
+
+msgid "Requests"
+msgstr "Aanvragen"
+
+msgid "No pending requests."
+msgstr "Geen openstaande aanvragen."
+
+msgid "Requests from team members: accepting performs the action (assign to sprint / apply the capacity change)."
+msgstr "Aanvragen van teamleden: accepteren voert de actie direct uit (toewijzen aan sprint / capaciteitswijziging doorvoeren)."
+
+msgid "Pending requests for this sprint — the Scrum Master accepts or rejects them."
+msgstr "Openstaande aanvragen voor deze sprint — de Scrum Master accepteert of wijst ze af."
+
+msgid "The name follows the linked item and cannot be edited here."
+msgstr "De naam volgt het gekoppelde item en is hier niet te bewerken."
+
+msgid "Item"
+msgstr "Item"
+
+msgid "Assigned capacity: %s%%"
+msgstr "Toegekende capaciteit: %s%%"
+
+msgid "Open linked item"
+msgstr "Open gekoppeld item"
+
+msgid "Continue anyway"
+msgstr "Toch doorgaan"
+
+msgid "This item is locked while a request is pending Scrum Master approval."
+msgstr "Dit item is vergrendeld zolang er een verzoek wacht op goedkeuring van de Scrum Master."
+
+msgid "Request approval"
+msgstr "Goedkeuring aanvragen"
+
+msgid "Send request"
+msgstr "Verzoek versturen"
+
+msgid "Why should the Scrum Master approve this?"
+msgstr "Waarom zou de Scrum Master dit moeten goedkeuren?"
+
+msgid "Requested on"
+msgstr "Aangevraagd op"
+
+msgid "%d minute ago"
+msgid_plural "%d minutes ago"
+msgstr[0] "%d minuut geleden"
+msgstr[1] "%d minuten geleden"
+
+msgid "%d hour ago"
+msgid_plural "%d hours ago"
+msgstr[0] "%d uur geleden"
+msgstr[1] "%d uur geleden"
+
+msgid "%d day ago"
+msgid_plural "%d days ago"
+msgstr[0] "%d dag geleden"
+msgstr[1] "%d dagen geleden"
+
+msgid "Only the Scrum Master can assign items to a sprint. The item was placed on the backlog with this sprint pre-selected."
+msgstr "Alleen de Scrum Master kan items aan een sprint toewijzen. Het item staat nu op de backlog met deze sprint voorgeselecteerd."
+
+msgid "Assignment sent to the Scrum Master for approval; the item stays on the backlog until then."
+msgstr "Toewijzing ter goedkeuring naar de Scrum Master gestuurd; tot die tijd blijft het item op de backlog."
+
+msgid "Only the Scrum Master of the target sprint can move this item there."
+msgstr "Alleen de Scrum Master van de doelsprint kan dit item daarheen verplaatsen."
+
+msgid "Picking a sprint you are not Scrum Master of creates an approval request."
+msgstr "Kies je een sprint waarvan je geen Scrum Master bent, dan wordt er een goedkeuringsaanvraag aangemaakt."
+
+msgid "This sprint and the six before it: completed story points, fastlane and adhoc items (bars), with total fastlane capacity % (line)."
+msgstr "Deze sprint en de zes ervoor: voltooide story points, fastlane- en adhoc-items (balken), met totale fastlane-capaciteit % (lijn)."
+
+msgid "Sprint overview"
+msgstr "Sprintoverzicht"
+
+msgid "Overview"
+msgstr "Overzicht"
+
+msgid "Today"
+msgstr "Vandaag"
+
+msgid "This week"
+msgstr "Deze week"
+
+msgid "This month"
+msgstr "Deze maand"
+
+msgid "6 months"
+msgstr "6 maanden"
+
+msgid "This year"
+msgstr "Dit jaar"
+
+msgid "All time"
+msgstr "Alles"
+
+msgid "Trends across completed sprints, filtered on their end date."
+msgstr "Trends over afgeronde sprints, gefilterd op hun einddatum."
+
+msgid "No completed sprints in this period."
+msgstr "Geen afgeronde sprints in deze periode."
+
+msgid "Velocity trend"
+msgstr "Velocity-trend"
+
+msgid "Completed story points per sprint, with predictability % (line)."
+msgstr "Voltooide story points per sprint, met voorspelbaarheid % (lijn)."
+
+msgid "Predictability %"
+msgstr "Voorspelbaarheid %"
+
+msgid "Predictability"
+msgstr "Voorspelbaarheid"
+
+msgid "Planned vs. delivered"
+msgstr "Gepland vs. geleverd"
+
+msgid "Story points taken into the sprint against the points actually completed."
+msgstr "Story points die de sprint in gingen tegenover de punten die daadwerkelijk zijn voltooid."
+
+msgid "Planned points"
+msgstr "Geplande punten"
+
+msgid "Carry-over items"
+msgstr "Doorgeschoven items"
+
+msgid "Fastlane & adhoc"
+msgstr "Fastlane & adhoc"
+
+msgid "Interrupt work per sprint: completed fastlane items, adhoc items and the allocated fastlane capacity % (line)."
+msgstr "Onderbrekend werk per sprint: voltooide fastlane-items, adhoc-items en de toegewezen fastlane-capaciteit % (lijn)."
+
+msgid "Completed points per member"
+msgstr "Voltooide punten per lid"
+
+msgid "Completed items per type"
+msgstr "Voltooide items per type"
+
+msgid "points"
+msgstr "punten"
+
+msgid "items"
+msgstr "items"
+
+msgid "Completed sprints"
+msgstr "Afgeronde sprints"
+
+msgid "Avg velocity per sprint"
+msgstr "Gem. velocity per sprint"
+
+msgid "Items completed"
+msgstr "Items voltooid"
+
+msgid "Velocity consistency"
+msgstr "Velocity-stabiliteit"
+
+msgid "Avg fastlane capacity"
+msgstr "Gem. fastlane-capaciteit"
+
+msgid "unchanged vs. previous period"
+msgstr "gelijk t.o.v. vorige periode"
+
+msgid "vs. previous period"
+msgstr "t.o.v. vorige periode"
+
+msgid "Sprint details"
+msgstr "Sprintdetails"
+
+msgid "Ended"
+msgstr "Beëindigd"
+
+msgid "No data for this period."
+msgstr "Geen gegevens voor deze periode."
+
+msgid "Only the Scrum Master of this sprint can link items to it."
+msgstr "Alleen de Scrum Master van deze sprint kan er items aan koppelen."
+
+msgid "Charts show the last %1$d of %2$d sprints in this period; the tiles cover all of them."
+msgstr "Grafieken tonen de laatste %1$d van %2$d sprints in deze periode; de tegels tellen ze allemaal mee."
+
+msgid "Avg cycle time (days)"
+msgstr "Gem. doorlooptijd (dagen)"
+
+msgid "over %d items"
+msgstr "over %d items"
+
+msgid "Days spent blocked"
+msgstr "Dagen geblokkeerd"
+
+msgid "Rework rate"
+msgstr "Heropend-percentage"
+
+msgid "Avg approval wait (days)"
+msgstr "Gem. wachttijd goedkeuring (dagen)"
+
+msgid "%1$d requests, %2$d%% accepted"
+msgstr "%1$d aanvragen, %2$d%% geaccepteerd"
+
+msgid "Allocated capacity (regular, fastlane and dependencies) against availability, averaged over the sprints each member took part in."
+msgstr "Toegewezen capaciteit (regulier, fastlane en afhankelijkheden) tegenover beschikbaarheid, gemiddeld over de sprints waaraan het lid deelnam."
+
+msgid "Avg load"
+msgstr "Gem. belasting"
+
+msgid "Peak load"
+msgstr "Piekbelasting"
+
+msgid "Sprints over capacity"
+msgstr "Sprints boven capaciteit"
+
+msgid "Only the Scrum Master of this sprint can change the fastlane flag."
+msgstr "Alleen de Scrum Master van deze sprint kan de fastlane-vlag wijzigen."

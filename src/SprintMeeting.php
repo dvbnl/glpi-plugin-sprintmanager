@@ -102,7 +102,7 @@ class SprintMeeting extends CommonDBTM
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprints_id', ['value' => $ID]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='6'>" .
                 __('Schedule a meeting', 'sprint') . "</th></tr>";
 
@@ -163,7 +163,7 @@ class SprintMeeting extends CommonDBTM
             self::TYPE_RETROSPECTIVE => 'fas fa-lightbulb',
         ];
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Title') . "</th>";
         echo "<th>" . __('Type', 'sprint') . "</th>";
@@ -399,20 +399,12 @@ class SprintMeeting extends CommonDBTM
                     }
                 }
 
-                // Resolve parent project name for ProjectTask items
-                $projectName = '';
-                if ($itemtype === 'ProjectTask' && (int)$row['items_id'] > 0) {
-                    $linkedPT = new \ProjectTask();
-                    if ($linkedPT->getFromDB((int)$row['items_id'])) {
-                        $projectId = (int)($linkedPT->fields['projects_id'] ?? 0);
-                        if ($projectId > 0) {
-                            $project = new \Project();
-                            if ($project->getFromDB($projectId)) {
-                                $projectName = $project->fields['name'] ?? '';
-                            }
-                        }
-                    }
-                }
+                // Muted "(project)" suffix for ProjectTask rows, same as the
+                // dashboard/backlog/board renderers.
+                $projectSuffix = SprintItem::renderParentProjectSuffix(
+                    (string)$itemtype,
+                    (int)($row['items_id'] ?? 0)
+                );
 
                 // Fastlane items allocate capacity across members via the
                 // SprintFastlaneMember junction (users_id alone isn't
@@ -447,8 +439,9 @@ class SprintMeeting extends CommonDBTM
                     'priority'             => (int)($row['priority'] ?? 3),
                     'note'                 => $row['note'] ?? '',
                     'itemtype'             => $itemtype,
-                    'project_name'         => $projectName,
+                    'project_suffix_html'  => $projectSuffix,
                     'is_fastlane'          => (int)($row['is_fastlane'] ?? 0),
+                    'is_adhoc'             => (int)($row['is_adhoc'] ?? 0),
                     'fastlane_allocations' => $fastlaneAllocations,
                     'fastlane_total'       => $fastlaneTotal,
                     'fastlane_url'         => SprintItem::getFormURLWithID((int)$row['id']) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintFastlaneMember$1'),
@@ -502,7 +495,8 @@ class SprintMeeting extends CommonDBTM
                     'sprint_id'         => $sprintId,
                     'move_target_sprints' => $carryOverTargetSprints,
                     'capacity_locked'   => \GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
-                        && !\GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId),
+                        && !SprintItem::currentUserIsScrumMasterOf($sprintId),
+                    'is_scrum_master'   => SprintItem::currentUserIsScrumMasterOf($sprintId),
                     'defined_tags'      => \GlpiPlugin\Sprint\Config::getDefinedTags(),
                 ]
             );
@@ -540,7 +534,7 @@ class SprintMeeting extends CommonDBTM
             echo "</td></tr>";
 
             echo "<tr class='tab_bg_1'><td>" . __('Meeting Notes', 'sprint') . "</td>";
-            echo "<td colspan='3'><textarea name='notes' rows='10' cols='100'>" .
+            echo "<td colspan='3'><textarea name='notes' class='form-control' rows='10' cols='100'>" .
                 htmlescape($this->fields['notes'] ?? '') . "</textarea></td></tr>";
 
             // Embed sprint items review inside the form (before buttons)
@@ -549,7 +543,7 @@ class SprintMeeting extends CommonDBTM
                 if ($sprintId > 0) {
                     echo "</table>"; // close the form table temporarily
                     self::showSprintItemsReview($sprintId, $ID);
-                    echo "<table class='tab_cadre_fixe'>"; // re-open for showFormButtons
+                    echo "<table class='tab_cadre_fixe sprint-themed'>"; // re-open for showFormButtons
                 }
             }
 
@@ -606,7 +600,9 @@ class SprintMeeting extends CommonDBTM
             echo "<td class='center'><i class='{$typeInfo[0]}' style='color:{$typeInfo[1]};' title='{$typeInfo[2]}'></i></td>";
             $fastlaneIcon = $isFastlane ? "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" : '';
             echo "<td>{$fastlaneIcon}<a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
-                htmlescape($row['name']) . "</a></td>";
+                htmlescape($row['name']) . "</a>" .
+                SprintItem::renderParentProjectSuffix((string)$itemtype, (int)($row['items_id'] ?? 0)) .
+                SprintItem::renderAdhocBadge((int)($row['is_adhoc'] ?? 0) === 1) . "</td>";
             echo "<td>" . $linkedDisplay . "</td>";
 
             if ($canedit) {
@@ -660,26 +656,39 @@ class SprintMeeting extends CommonDBTM
             echo "</tr>";
         };
 
-        // === Fastlane section ===
+        // === Fastlane section (collapsible, same pattern as dashboard) ===
         if (count($fastlaneItems) > 0) {
-            echo "<div class='center' style='margin-top:20px;'>";
-            echo "<table class='tab_cadre_fixe'>";
-            echo "<tr class='tab_bg_2'><th colspan='7' style='background:#fff3cd;border-bottom:2px solid #fd7e14;'>" .
-                "<i class='fas fa-bolt' style='color:#fd7e14;'></i> " .
-                __('Fastlane', 'sprint') . "</th></tr>";
+            $collapseKey = 'meeting-fastlane-' . (int)$meetingId;
+            echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "' style='margin-top:20px;'>";
+            echo "<div class='sprint-collapsible-header'>";
+            echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+            echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-left:2px;'></i>";
+            echo "<span>" . __('Fastlane', 'sprint') .
+                " <span class='text-muted' style='font-weight:400;'>(" . count($fastlaneItems) . ")</span></span>";
+            echo "</div>";
+            echo "<div class='sprint-collapsible-body'>";
+            echo "<div class='center'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             $tableHeaders();
             foreach ($fastlaneItems as $row) {
                 $renderRow($row, true);
             }
             echo "</table></div>";
+            echo "</div></div>";
         }
 
-        // === Regular items section ===
-        echo "<div class='center' style='margin-top:" . (count($fastlaneItems) > 0 ? '8' : '20') . "px;'>";
-        echo "<table class='tab_cadre_fixe'>";
-        echo "<tr class='tab_bg_2'><th colspan='7'>" .
-            "<i class='fas fa-clipboard-list'></i> " .
-            __('Sprint Items Review', 'sprint') . "</th></tr>";
+        // === Regular items section (collapsible) ===
+        $collapseKey = 'meeting-items-' . (int)$meetingId;
+        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
+        echo "<div class='sprint-collapsible-header'>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-clipboard-list' style='margin-left:2px;'></i>";
+        echo "<span>" . __('Sprint Items Review', 'sprint') .
+            " <span class='text-muted' style='font-weight:400;'>(" . count($regularItems) . ")</span></span>";
+        echo "</div>";
+        echo "<div class='sprint-collapsible-body'>";
+        echo "<div class='center'>";
+        echo "<table class='tab_cadre_fixe sprint-themed'>";
         $tableHeaders();
 
         if (count($regularItems) === 0) {
@@ -692,6 +701,7 @@ class SprintMeeting extends CommonDBTM
         }
 
         echo "</table></div>";
+        echo "</div></div>";
     }
 
     public function prepareInputForUpdate($input)

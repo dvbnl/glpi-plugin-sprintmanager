@@ -1018,7 +1018,9 @@ msgid "Standup"
 msgstr ""
 
 msgid "Template Meeting"
-msgstr ""
+msgid_plural "Template Meetings"
+msgstr[0] ""
+msgstr[1] ""
 
 msgid "Template created successfully!"
 msgstr ""
@@ -1399,4 +1401,366 @@ msgstr ""
 
 #: src/SprintDashboard.php
 msgid "Your dependency"
+msgstr ""
+
+msgid "Adhoc"
+msgstr ""
+
+msgid "Added to the sprint after kick-off"
+msgstr ""
+
+msgid "Added to the sprint after kick-off (highlights the item)"
+msgstr ""
+
+msgid "View"
+msgstr ""
+
+msgid "Edit"
+msgstr ""
+
+msgid "Edit backlog item"
+msgstr ""
+
+msgid "Pre-selecting a sprint marks the item for the Scrum Master to assign at kick-off."
+msgstr ""
+
+msgid "Owner is not a member of the selected sprint"
+msgstr ""
+
+msgid "Total %total%% — used in sprint %used%%, pending from backlog %pending%%, this item %own%% → %free%% free after assigning"
+msgstr ""
+
+msgid "Save failed"
+msgstr ""
+
+msgid "Capacity %1$s: total %2$s%%, used in sprint %3$s%%, pending from backlog %4$s%%, this item %5$s%% → %6$s%% free after assigning"
+msgstr ""
+
+msgid "free"
+msgstr ""
+
+msgid "Pre-select a sprint first (edit the item)"
+msgstr ""
+
+msgid "Pre-select a sprint for this item first (edit the item and choose a sprint)."
+msgstr ""
+
+msgid "Only the Scrum Master can change this."
+msgstr ""
+
+msgid "Per sprint: completed story points, fastlane and adhoc items (bars), with total fastlane capacity % (line)."
+msgstr ""
+
+msgid "%d adhoc items"
+msgstr ""
+
+msgid "Adhoc items"
+msgstr ""
+
+msgid "Assigned capacity: %s%%"
+msgstr ""
+
+msgid "Open linked item"
+msgstr ""
+
+msgid "Continue anyway"
+msgstr ""
+
+msgid "This item is locked while a request is pending Scrum Master approval."
+msgstr ""
+
+msgid "Requests awaiting your approval"
+msgstr ""
+
+msgid "Requested by"
+msgstr ""
+
+msgid "Details"
+msgstr ""
+
+msgid "Accept"
+msgstr ""
+
+msgid "Reject"
+msgstr ""
+
+msgid "Request rejected"
+msgstr ""
+
+msgid "Request no longer exists"
+msgstr ""
+
+msgid "Request failed"
+msgstr ""
+
+msgid "Unknown request type"
+msgstr ""
+
+msgid "Only the Scrum Master of the selected sprint can handle this request."
+msgstr ""
+
+msgid "The item behind this request no longer exists."
+msgstr ""
+
+msgid "The item is no longer on the backlog."
+msgstr ""
+
+msgid "The item is no longer part of this sprint."
+msgstr ""
+
+msgid "Could not update the capacity"
+msgstr ""
+
+msgid "Capacity updated to %s%%"
+msgstr ""
+
+msgid "Capacity change"
+msgstr ""
+
+msgid "%1$s%% → %2$s%%"
+msgstr ""
+
+msgid "Assignment requested — the Scrum Master of %s will review it."
+msgstr ""
+
+msgid "Capacity change to %s%% sent to the Scrum Master for approval."
+msgstr ""
+
+msgid "Capacity changes are sent to the Scrum Master for approval."
+msgstr ""
+
+msgid "Assign to the selected sprint"
+msgstr ""
+
+msgid "Ask the Scrum Master to assign this item to the selected sprint"
+msgstr ""
+
+msgid "Assignment already requested — waiting for the Scrum Master"
+msgstr ""
+
+msgid "Assign ready backlog items"
+msgstr ""
+
+msgid "Assign every ready item, or limit the kick-off to a single sprint — future sprints that are already marked ready stay on the backlog."
+msgstr ""
+
+msgid "All sprints"
+msgstr ""
+
+msgid "Marks the item as post-kick-off work; the flag travels with it into the sprint."
+msgstr ""
+
+msgid "Your capacity: %s%%"
+msgstr ""
+
+msgid "Your open capacity: %s%%"
+msgstr ""
+
+msgid "Progress of the linked item"
+msgstr ""
+
+msgid "Requests"
+msgstr ""
+
+msgid "No pending requests."
+msgstr ""
+
+msgid "Requests from team members: accepting performs the action (assign to sprint / apply the capacity change)."
+msgstr ""
+
+msgid "Pending requests for this sprint — the Scrum Master accepts or rejects them."
+msgstr ""
+
+msgid "The name follows the linked item and cannot be edited here."
+msgstr ""
+
+msgid "Item"
+msgstr ""
+
+msgid "Sprint request"
+msgid_plural "Sprint requests"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Request approval"
+msgstr ""
+
+msgid "Send request"
+msgstr ""
+
+msgid "Why should the Scrum Master approve this?"
+msgstr ""
+
+msgid "Requested on"
+msgstr ""
+
+msgid "%d minute ago"
+msgid_plural "%d minutes ago"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%d hour ago"
+msgid_plural "%d hours ago"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%d day ago"
+msgid_plural "%d days ago"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Only the Scrum Master can assign items to a sprint. The item was placed on the backlog with this sprint pre-selected."
+msgstr ""
+
+msgid "Assignment sent to the Scrum Master for approval; the item stays on the backlog until then."
+msgstr ""
+
+msgid "Only the Scrum Master of the target sprint can move this item there."
+msgstr ""
+
+msgid "Picking a sprint you are not Scrum Master of creates an approval request."
+msgstr ""
+
+msgid "This sprint and the six before it: completed story points, fastlane and adhoc items (bars), with total fastlane capacity % (line)."
+msgstr ""
+
+msgid "Sprint overview"
+msgstr ""
+
+msgid "Overview"
+msgstr ""
+
+msgid "Today"
+msgstr ""
+
+msgid "This week"
+msgstr ""
+
+msgid "This month"
+msgstr ""
+
+msgid "6 months"
+msgstr ""
+
+msgid "This year"
+msgstr ""
+
+msgid "All time"
+msgstr ""
+
+msgid "Trends across completed sprints, filtered on their end date."
+msgstr ""
+
+msgid "No completed sprints in this period."
+msgstr ""
+
+msgid "Velocity trend"
+msgstr ""
+
+msgid "Completed story points per sprint, with predictability % (line)."
+msgstr ""
+
+msgid "Predictability %"
+msgstr ""
+
+msgid "Predictability"
+msgstr ""
+
+msgid "Planned vs. delivered"
+msgstr ""
+
+msgid "Story points taken into the sprint against the points actually completed."
+msgstr ""
+
+msgid "Planned points"
+msgstr ""
+
+msgid "Carry-over items"
+msgstr ""
+
+msgid "Fastlane & adhoc"
+msgstr ""
+
+msgid "Interrupt work per sprint: completed fastlane items, adhoc items and the allocated fastlane capacity % (line)."
+msgstr ""
+
+msgid "Completed points per member"
+msgstr ""
+
+msgid "Completed items per type"
+msgstr ""
+
+msgid "points"
+msgstr ""
+
+msgid "items"
+msgstr ""
+
+msgid "Completed sprints"
+msgstr ""
+
+msgid "Avg velocity per sprint"
+msgstr ""
+
+msgid "Items completed"
+msgstr ""
+
+msgid "Velocity consistency"
+msgstr ""
+
+msgid "Avg fastlane capacity"
+msgstr ""
+
+msgid "unchanged vs. previous period"
+msgstr ""
+
+msgid "vs. previous period"
+msgstr ""
+
+msgid "Sprint details"
+msgstr ""
+
+msgid "Ended"
+msgstr ""
+
+msgid "No data for this period."
+msgstr ""
+
+msgid "Only the Scrum Master of this sprint can link items to it."
+msgstr ""
+
+msgid "Charts show the last %1$d of %2$d sprints in this period; the tiles cover all of them."
+msgstr ""
+
+msgid "Avg cycle time (days)"
+msgstr ""
+
+msgid "over %d items"
+msgstr ""
+
+msgid "Days spent blocked"
+msgstr ""
+
+msgid "Rework rate"
+msgstr ""
+
+msgid "Avg approval wait (days)"
+msgstr ""
+
+msgid "%1$d requests, %2$d%% accepted"
+msgstr ""
+
+msgid "Allocated capacity (regular, fastlane and dependencies) against availability, averaged over the sprints each member took part in."
+msgstr ""
+
+msgid "Avg load"
+msgstr ""
+
+msgid "Peak load"
+msgstr ""
+
+msgid "Sprints over capacity"
+msgstr ""
+
+msgid "Only the Scrum Master of this sprint can change the fastlane flag."
 msgstr ""

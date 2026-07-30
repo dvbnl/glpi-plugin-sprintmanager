@@ -1,8 +1,8 @@
 <?php
 
 /**
- * AJAX handler for the "Assign all ready" backlog action. Assigns every item
- * with a pre-selected sprint (proposed_sprints_id > 0) the user may assign;
+ * AJAX handler for the "Assign all ready" backlog action. Assigns every
+ * complete item (owner + pre-selected sprint + capacity) the user may assign;
  * skips and reports the rest.
  */
 
@@ -15,13 +15,22 @@ header('Content-Type: application/json');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);
 
-$hasFullUpdate = Session::haveRight('plugin_sprint_item', UPDATE);
+// Optional scope: assign only the items pre-selected for this one sprint,
+// so a current sprint can be kicked off while future sprints stay queued.
+$onlySprintId = (int)($_POST['sprint_id'] ?? 0);
 
-$item     = new GlpiPlugin\Sprint\SprintItem();
-$ready    = $item->find([
+$criteria = [
     'plugin_sprint_sprints_id' => 0,
     ['NOT' => ['proposed_sprints_id' => 0]],
-]);
+    ['NOT' => ['users_id' => 0]],
+    ['capacity' => ['>', 0]],
+];
+if ($onlySprintId > 0) {
+    $criteria['proposed_sprints_id'] = $onlySprintId;
+}
+
+$item  = new GlpiPlugin\Sprint\SprintItem();
+$ready = $item->find($criteria);
 
 $assigned = 0;
 $skipped  = 0;
@@ -43,14 +52,12 @@ foreach ($ready as $row) {
         continue;
     }
 
-    $currentUserId = (int)Session::getLoginUserID();
-    // Fastlane items may be assigned by anyone; normal items need a full updater
-    // or the target sprint's Scrum Master.
+    // Fastlane items may be assigned by anyone; normal items only by the
+    // target sprint's Scrum Master — the same rule as the single-item assign
+    // (the generic plugin UPDATE right is intentionally NOT enough).
     $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
-    $canAssign = $hasFullUpdate
-        || $isFastlane
-        || GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId)
-        || GlpiPlugin\Sprint\SprintMember::isScrumMaster($sprintId, $currentUserId);
+    $canAssign = $isFastlane
+        || GlpiPlugin\Sprint\SprintItem::currentUserIsScrumMasterOf($sprintId);
     if (!$canAssign) {
         $skipped++;
         continue;

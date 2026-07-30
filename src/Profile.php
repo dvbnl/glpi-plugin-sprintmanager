@@ -156,7 +156,7 @@ class Profile extends CommonDBTM
             echo Html::hidden('profiles_id', ['value' => $profileId]);
         }
 
-        echo "<table class='tab_cadre_fixe'>";
+        echo "<table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'><th colspan='2'>" .
             '<i class="fas fa-running" style="margin-right:8px;"></i>' .
             __('Sprint plugin rights', 'sprint') . "</th></tr>";

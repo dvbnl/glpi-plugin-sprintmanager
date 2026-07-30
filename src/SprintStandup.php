@@ -83,7 +83,7 @@ class SprintStandup extends CommonDBTM
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprintmeetings_id', ['value' => $meetingID]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='4'>" .
                 __('Add standup entry', 'sprint') . "</th></tr>";
 
@@ -156,7 +156,7 @@ class SprintStandup extends CommonDBTM
             self::STATUS_DONE     => 'fas fa-flag-checkered text-info',
         ];
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Sprint Item', 'sprint') . "</th>";
         echo "<th>" . __('Reporter', 'sprint') . "</th>";

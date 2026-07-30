@@ -239,18 +239,21 @@ class SprintTemplate extends CommonDBTM
             ['plugin_sprint_sprinttemplates_id' => $templateId],
             ['sort_order ASC']
         );
-        foreach ($items as $row) {
-            $item = new SprintItem();
-            $item->add([
-                'plugin_sprint_sprints_id' => $sprintId,
-                'name'                     => $row['name'],
-                'description'              => $row['description'] ?? '',
-                'priority'                 => $row['priority'],
-                'story_points'             => $row['story_points'],
-                'sort_order'               => $row['sort_order'],
-                'status'                   => SprintItem::STATUS_TODO,
-            ]);
-        }
+        // The template author fills the sprint, not necessarily its Scrum Master.
+        SprintItem::withoutAssignGuard(static function () use ($items, $sprintId) {
+            foreach ($items as $row) {
+                $item = new SprintItem();
+                $item->add([
+                    'plugin_sprint_sprints_id' => $sprintId,
+                    'name'                     => $row['name'],
+                    'description'              => $row['description'] ?? '',
+                    'priority'                 => $row['priority'],
+                    'story_points'             => $row['story_points'],
+                    'sort_order'               => $row['sort_order'],
+                    'status'                   => SprintItem::STATUS_TODO,
+                ]);
+            }
+        });
 
         SprintTemplateMeeting::applyToSprint($templateId, $sprintId);
     }

@@ -81,7 +81,7 @@ class SprintFastlane extends CommonGLPI
             __('Items flagged as fastlane in the backlog. Open an entry to assign sprint members and capacity.', 'sprint') .
             "</p>";
 
-        echo "<table class='tab_cadre_fixe'>";
+        echo "<table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Name') . "</th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";

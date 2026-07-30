@@ -201,7 +201,7 @@ class Config extends CommonDBTM
             echo "<form method='post' action='" . \Plugin::getWebDir('sprint') . "/front/config.form.php'>";
         }
 
-        echo "<table class='tab_cadre_fixe'>";
+        echo "<table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'><th colspan='2'>" .
             "<i class='" . self::getIcon() . "' style='margin-right:6px;'></i>" .
             __('SprintManager settings', 'sprint') . "</th></tr>";

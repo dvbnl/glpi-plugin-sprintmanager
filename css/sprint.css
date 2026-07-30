@@ -23,8 +23,8 @@
     --sprint-shadow-hover: 0 4px 12px rgba(0,0,0,0.12);
     --sprint-transition: 0.2s ease;
     --sprint-muted: #6c757d;
-    --sprint-border: #e2e8f0;
-    --sprint-bg-subtle: #f8fafc;
+    --sprint-border: var(--tblr-border-color, #e2e8f0);
+    --sprint-bg-subtle: var(--tblr-bg-surface-secondary, #f8fafc);
 }
 
 /* === Dashboard stat cards ================================================
@@ -89,7 +89,7 @@
    gets a soft red wash + left accent so the Scrum Master spots fresh
    blockers at a glance. */
 .sprint-review-row.sprint-newly-blocked > td {
-    background-color: #fff1f0 !important;
+    background-color: color-mix(in srgb, var(--sprint-blocked) 10%, var(--tblr-bg-surface, #fff)) !important;
     box-shadow: inset 3px 0 0 0 var(--sprint-blocked);
 }
 .sprint-newly-blocked-badge {
@@ -116,7 +116,7 @@
    isn't closed/solved yet: a soft amber wash + left accent so the Scrum
    Master sees the underlying work is still open. */
 .sprint-review-row.sprint-review-unclosed > td {
-    background-color: #fff8e6 !important;
+    background-color: color-mix(in srgb, #f0ad4e 12%, var(--tblr-bg-surface, #fff)) !important;
     box-shadow: inset 3px 0 0 0 var(--sprint-review, #f0ad4e);
 }
 .sprint-review-unclosed-badge {
@@ -126,6 +126,28 @@
     border-radius: var(--sprint-radius-pill);
     background: #f0ad4e;
     color: #663c00;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+/* === Adhoc highlight ===================================================
+   Items flagged by the Scrum Master as having entered the sprint after
+   kick-off: soft violet wash + left accent on the row, and an "Adhoc" pill
+   next to the name. Applies on the dashboard, personal view and meetings. */
+tr.sprint-adhoc > td {
+    background-color: color-mix(in srgb, #d63384 9%, var(--tblr-bg-surface, #fff)) !important;
+    box-shadow: inset 3px 0 0 0 #d63384;
+}
+.sprint-adhoc-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 8px;
+    border-radius: var(--sprint-radius-pill);
+    background: #d63384;
+    color: #ffffff;
     font-size: 0.72em;
     font-weight: 700;
     letter-spacing: 0.01em;
@@ -179,8 +201,8 @@
     display: inline-block;
     padding: 1px 8px;
     border-radius: 10px;
-    background: #e7f1ff;
-    color: #1c5ec3;
+    background: color-mix(in srgb, #0d6efd 14%, var(--tblr-bg-surface, #fff));
+    color: var(--tblr-primary, #1c5ec3);
     font-size: 0.72em;
     font-weight: 600;
     line-height: 1.5;
@@ -191,7 +213,7 @@
     padding: 1px 8px;
     margin-left: 4px;
     border-radius: 10px;
-    background: #d1f2ea;
+    background: color-mix(in srgb, #20c997 16%, var(--tblr-bg-surface, #fff));
     color: #20c997;
     font-size: 0.72em;
     font-weight: 600;
@@ -206,6 +228,32 @@
 /* === Tables polish === */
 .tab_cadre_fixe th {
     white-space: nowrap;
+}
+
+/* GLPI's legacy tab_bg_1/tab_bg_2 row classes are painted light by the core
+   legacy stylesheet regardless of the active theme, which makes plugin
+   tables glare in dark themes. Re-derive their colors from the theme
+   variables — scoped to plugin surfaces only so core pages stay untouched. */
+#sprint_view_global table.tab_cadre_fixe,
+#sprint_view_personal table.tab_cadre_fixe,
+.sprint-collapsible-body table.tab_cadre_fixe,
+.sprint-themed table.tab_cadre_fixe,
+table.tab_cadre_fixe.sprint-themed {
+    background: var(--tblr-bg-surface, transparent) !important;
+}
+#sprint_view_global tr.tab_bg_1 > td, #sprint_view_global tr.tab_bg_1 > th,
+#sprint_view_personal tr.tab_bg_1 > td, #sprint_view_personal tr.tab_bg_1 > th,
+.sprint-collapsible-body tr.tab_bg_1 > td, .sprint-collapsible-body tr.tab_bg_1 > th,
+.sprint-themed tr.tab_bg_1 > td, .sprint-themed tr.tab_bg_1 > th {
+    background: var(--tblr-bg-surface, #fff) !important;
+    color: var(--tblr-body-color, inherit) !important;
+}
+#sprint_view_global tr.tab_bg_2 > td, #sprint_view_global tr.tab_bg_2 > th,
+#sprint_view_personal tr.tab_bg_2 > td, #sprint_view_personal tr.tab_bg_2 > th,
+.sprint-collapsible-body tr.tab_bg_2 > td, .sprint-collapsible-body tr.tab_bg_2 > th,
+.sprint-themed tr.tab_bg_2 > td, .sprint-themed tr.tab_bg_2 > th {
+    background: var(--tblr-bg-surface-secondary, #f8f9fa) !important;
+    color: var(--tblr-body-color, inherit) !important;
 }
 
 /* === Mobile/responsive support ===
@@ -356,6 +404,36 @@
 }
 .sprint-collapsible-body {
     padding: 10px 12px;
+}
+
+/* === Theme-aware surfaces ================================================
+   Shared building blocks that used to carry hardcoded light backgrounds and
+   glared in dark themes. All colors derive from the active GLPI/Tabler
+   theme variables, with light-theme fallbacks. */
+.sprint-filter-bar {
+    background: var(--tblr-bg-surface-secondary, #f1f3f5);
+    border-radius: 6px;
+}
+.sprint-note-display {
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 38px;
+    max-height: 120px;
+    overflow: auto;
+    padding: 6px 8px;
+    background: var(--tblr-bg-surface-secondary, #f8f9fa);
+    border: 1px solid var(--tblr-border-color, #e9ecef);
+    border-radius: 4px;
+    font-size: 0.88em;
+    color: var(--tblr-body-color, #495057);
+}
+.sprint-qe-fastlane-list {
+    border: 1px solid var(--tblr-border-color, #e9ecef);
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: color-mix(in srgb, #fd7e14 12%, var(--tblr-bg-surface, #fff));
+    font-size: 0.9em;
+    min-height: 38px;
 }
 
 /* Member-activity chart: click/hover a legend entry to isolate that
@@ -575,14 +653,89 @@
     margin-left: 6px;
     padding: 1px 8px;
     border-radius: var(--sprint-radius-pill, 20px);
-    background: #d1e7dd;
-    color: #0f5132;
+    background: color-mix(in srgb, #198754 16%, var(--tblr-bg-surface, #fff));
+    color: var(--tblr-success, #0f5132);
     font-size: 0.72em;
     font-weight: 700;
     white-space: nowrap;
 }
 .sprint-ready-badge i { margin-right: 3px; }
 
+/* Backlog capacity chip: remaining capacity for the row's owner in the
+   pre-selected sprint once everything pending is assigned. */
+.sprint-cap-chip {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: var(--sprint-radius-pill, 20px);
+    font-size: 0.72em;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: help;
+}
+.sprint-cap-chip-ok {
+    background: color-mix(in srgb, #198754 16%, var(--tblr-bg-surface, #fff));
+    color: var(--tblr-success, #0f5132);
+}
+.sprint-cap-chip-warn {
+    background: color-mix(in srgb, #fd7e14 18%, var(--tblr-bg-surface, #fff));
+    color: #fd7e14;
+}
+.sprint-cap-chip-over {
+    background: color-mix(in srgb, #dc3545 16%, var(--tblr-bg-surface, #fff));
+    color: var(--tblr-danger, #b02a37);
+}
+
 /* Backlog drag-to-reorder */
 .sprint-backlog-row.sprint-row-dragging { opacity: 0.45; }
 .sprint-backlog-grip:active { cursor: grabbing; }
+
+/* === SprintManager overview page ==========================================
+   Layout, cards and tiles come from Tabler; only the bits it has no class for
+   live here. */
+.sprint-nav-layout .list-group-item {
+    display: flex;
+    align-items: center;
+    border: 0;
+}
+.sprint-nav-layout .list-group-item.active {
+    background: var(--tblr-primary, #0d6efd);
+    border-color: var(--tblr-primary, #0d6efd);
+    color: var(--tblr-primary-fg, #fff);
+}
+.sprint-nav-layout .list-group-item i { font-size: 1.05rem; }
+
+.sprint-overview-tile-content { min-width: 0; }
+
+.sprint-overview-ranked { table-layout: fixed; width: 100%; }
+.sprint-overview-ranked .sprint-overview-ranked-label {
+    width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sprint-overview-ranked .progress { width: 100%; min-width: 0; }
+
+.sprint-overview-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 8px;
+    font-size: 0.85em;
+    color: var(--sprint-muted);
+}
+.sprint-overview-legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+}
+.sprint-overview-legend-line {
+    display: inline-block;
+    width: 16px;
+    height: 0;
+    border-top: 2px solid currentColor;
+    vertical-align: middle;
+}
+.sprint-overview-legend-line.dashed { border-top-style: dashed; opacity: 0.7; }

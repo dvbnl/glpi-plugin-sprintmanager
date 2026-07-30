@@ -40,19 +40,25 @@ if (!$hasFullUpdate && !($hasOwnOnly && $isOwner)) {
 
 $update = ['id' => (int)$_POST['id']];
 
-$allowed = ['name', 'status', 'priority', 'users_id', 'story_points', 'capacity', 'note', 'proposed_sprints_id'];
+// is_adhoc is additionally restricted to the sprint's Scrum Master inside
+// SprintItem::prepareInputForUpdate().
+$allowed = ['name', 'status', 'priority', 'users_id', 'story_points', 'capacity', 'note',
+    'proposed_sprints_id', 'is_fastlane', 'is_blocked', 'is_adhoc'];
 
-// When capacity edits are restricted to the Scrum Master, drop the capacity
-// field for others. Fastlane items are exempt (allocated via SprintFastlaneMember).
+// When capacity edits are restricted to the Scrum Master, a change by someone
+// else is turned into an approval request inside
+// SprintItem::prepareInputForUpdate() — the field is passed through here so
+// that path can see the requested value. Track the guard to skip the overflow
+// prompt (the change is not applied directly for guarded users).
 $isFastlane = (int)($item->fields['is_fastlane'] ?? 0) === 1;
+$capacityGuarded = false;
 if (
     !$isFastlane
     && GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
 ) {
     $sprintId = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
-    if (!GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId)) {
-        $allowed = array_values(array_diff($allowed, ['capacity']));
-    }
+    $capacityGuarded = $sprintId > 0
+        && !GlpiPlugin\Sprint\SprintItem::currentUserIsScrumMasterOf($sprintId);
 }
 
 foreach ($allowed as $field) {
@@ -64,6 +70,12 @@ foreach ($allowed as $field) {
 if (array_key_exists('_tags_json', $_POST)) {
     $decoded = json_decode((string)$_POST['_tags_json'], true);
     $update['_tags'] = is_array($decoded) ? $decoded : [];
+}
+
+// Motivation for a guarded capacity edit; picked up when the change turns
+// into an approval request inside SprintItem::prepareInputForUpdate().
+if (array_key_exists('capacity_reason', $_POST)) {
+    $update['_capacity_request_reason'] = (string)$_POST['capacity_reason'];
 }
 
 // Meeting-view edits send the active meeting id; tag the resulting log rows
@@ -84,7 +96,7 @@ if ($meetingId > 0) {
 // the owner past capacity. Only prompt when the change *increases* their load,
 // so editing name/notes of an already-over-capacity item doesn't nag.
 $confirmOverflow = (int)($_POST['confirm_overflow'] ?? 0) === 1;
-if (!$confirmOverflow && !$isFastlane) {
+if (!$confirmOverflow && !$isFastlane && !$capacityGuarded) {
     $sprintId   = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
     $targetUser = array_key_exists('users_id', $update)
         ? (int)$update['users_id'] : (int)$item->fields['users_id'];
@@ -187,9 +199,13 @@ echo json_encode([
     'story_points'         => (int)$item->fields['story_points'],
     'capacity'             => GlpiPlugin\Sprint\SprintMember::formatCapacity($item->fields['capacity'] ?? 0),
     'note'                 => (string)($item->fields['note'] ?? ''),
+    'is_fastlane'          => (int)($item->fields['is_fastlane'] ?? 0),
+    'is_blocked'           => (int)($item->fields['is_blocked'] ?? 0),
+    'is_adhoc'             => (int)($item->fields['is_adhoc'] ?? 0),
     'tags'                 => $updatedTags,
     'tags_blob'            => GlpiPlugin\Sprint\SprintItem::tagsToBlob($updatedTags),
     'tags_pills_html'      => GlpiPlugin\Sprint\SprintItem::renderTagPills($updatedTags),
+    'linked_open_badge_html' => GlpiPlugin\Sprint\SprintItem::renderLinkedItemOpenBadge($item->fields),
     'carried_over'         => $carryOverId > 0,
     'carried_over_id'      => $carryOverId,
     'carried_over_sprint'  => $carryOverSprintId,

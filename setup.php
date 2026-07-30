@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.1.5');
+define('PLUGIN_SPRINT_VERSION', '1.2.0');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -89,11 +89,10 @@ function plugin_init_sprint(): void
         $PLUGIN_HOOKS['add_javascript']['sprint'] = 'js/sprint.js';
     }
 
-    // Menu entries under Assistance (helpdesk): SprintManager and Backlog.
+    // One entry under Assistance; the other pages hang under it as sub-items.
     $PLUGIN_HOOKS['menu_toadd']['sprint'] = [
         'helpdesk' => [
             'GlpiPlugin\Sprint\Sprint',
-            'GlpiPlugin\Sprint\Backlog',
         ],
     ];
 
@@ -112,6 +111,12 @@ function plugin_init_sprint(): void
     // Register classes
     Plugin::registerClass(
         'GlpiPlugin\Sprint\Sprint',
+        ['addtabon' => []]
+    );
+
+    // Landing page: cross-sprint statistics + side navigation.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintOverview',
         ['addtabon' => []]
     );
 
@@ -150,6 +155,12 @@ function plugin_init_sprint(): void
 
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintMeeting',
+        ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
+    );
+
+    // Requests: approval inbox tab on Sprint (assign / capacity requests).
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintRequest',
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
     );
 
@@ -216,6 +227,15 @@ function plugin_init_sprint(): void
         'Change'      => ['GlpiPlugin\Sprint\SprintChange', 'cleanForItem'],
         'Problem'     => ['GlpiPlugin\Sprint\SprintProblem', 'cleanForItem'],
         'ProjectTask' => ['GlpiPlugin\Sprint\SprintProjectTask', 'cleanForItem'],
+    ];
+
+    // Renaming a linked GLPI item propagates to its sprint items: linked
+    // sprint items always mirror the underlying item's name.
+    $PLUGIN_HOOKS[Hooks::ITEM_UPDATE]['sprint'] = [
+        'Ticket'      => ['GlpiPlugin\Sprint\SprintItem', 'onLinkedItemUpdate'],
+        'Change'      => ['GlpiPlugin\Sprint\SprintItem', 'onLinkedItemUpdate'],
+        'Problem'     => ['GlpiPlugin\Sprint\SprintItem', 'onLinkedItemUpdate'],
+        'ProjectTask' => ['GlpiPlugin\Sprint\SprintItem', 'onLinkedItemUpdate'],
     ];
 
     // Rights

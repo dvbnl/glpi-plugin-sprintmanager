@@ -56,7 +56,7 @@ class SprintTemplateItem extends CommonDBTM
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprinttemplates_id', ['value' => $ID]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='6'>" .
                 __('Add a default item', 'sprint') . "</th></tr>";
 
@@ -90,7 +90,7 @@ class SprintTemplateItem extends CommonDBTM
             ['sort_order ASC', 'priority DESC']
         );
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Name') . "</th>";
         echo "<th>" . __('Priority') . "</th>";

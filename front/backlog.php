@@ -14,9 +14,12 @@ Html::header(
     GlpiPlugin\Sprint\Backlog::getTypeName(2),
     $_SERVER['PHP_SELF'],
     'helpdesk',
-    'GlpiPlugin\Sprint\Backlog'
+    'GlpiPlugin\Sprint\Sprint',
+    'backlog'
 );
 
+GlpiPlugin\Sprint\SprintOverview::navStart('backlog');
 GlpiPlugin\Sprint\Backlog::showBacklog();
+GlpiPlugin\Sprint\SprintOverview::navEnd();
 
 Html::footer();

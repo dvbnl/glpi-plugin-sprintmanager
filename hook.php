@@ -149,6 +149,17 @@ function plugin_sprint_install(): bool
             ['value' => 0, 'after' => 'is_fastlane']
         );
         $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_blocked');
+        // Adhoc flag: work that entered the sprint after kick-off. Only the
+        // sprint's Scrum Master may toggle it (enforced in SprintItem);
+        // flagged rows are highlighted on the dashboard, personal view and
+        // meeting boards.
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitems',
+            'is_adhoc',
+            'bool',
+            ['value' => 0, 'after' => 'is_blocked']
+        );
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_adhoc');
     }
 
     // =========================================================================
@@ -566,6 +577,45 @@ function plugin_sprint_install(): bool
         $DB->doQueryOrDie($query, $DB->error());
     }
 
+    // =========================================================================
+    // Table: glpi_plugin_sprint_sprintrequests
+    // Approval requests from non-Scrum-Masters: assigning a backlog item to a
+    // sprint, or changing an item's capacity % inside a sprint. The target
+    // sprint's Scrum Master accepts (which performs the action) or rejects.
+    // Name must match SprintRequest::getTable() (class SprintRequest).
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_sprintrequests')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_sprintrequests` (
+            `id`                           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity',
+            `plugin_sprint_sprintitems_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `plugin_sprint_sprints_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Target sprint (assign) or the item sprint (capacity)',
+            `users_id`                     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requester',
+            `requested_capacity`           DECIMAL(5,1) NOT NULL DEFAULT 0,
+            `reason`                       TEXT NULL COMMENT 'Requester motivation shown to the Scrum Master',
+            `status`                       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending | accepted | rejected',
+            `users_id_validate`            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master who handled it',
+            `date_creation`                TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`                     TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `item` (`plugin_sprint_sprintitems_id`),
+            KEY `sprint_status` (`plugin_sprint_sprints_id`, `status`),
+            KEY `requester` (`users_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
+    }
+
+    // Migration: requester motivation for approval requests (also applied
+    // lazily by SprintRequest::ensureTable() for running installations).
+    if ($DB->tableExists('glpi_plugin_sprint_sprintrequests')
+        && !$DB->fieldExists('glpi_plugin_sprint_sprintrequests', 'reason')) {
+        $DB->doQueryOrDie(
+            "ALTER TABLE `glpi_plugin_sprint_sprintrequests` ADD COLUMN `reason` TEXT NULL "
+            . "COMMENT 'Requester motivation shown to the Scrum Master'",
+            $DB->error()
+        );
+    }
+
     // Migration: capacity columns INT -> DECIMAL(5,1) for 0.5% granularity.
     $capacityColumns = [
         'glpi_plugin_sprint_sprints'               => ['fastlane_capacity' => '0'],
@@ -685,6 +735,7 @@ function plugin_sprint_uninstall(): bool
     global $DB;
 
     $tables = [
+        'glpi_plugin_sprint_sprintrequests',
         'glpi_plugin_sprint_meetingblockedsnapshots',
         'glpi_plugin_sprint_audit_sources',
         'glpi_plugin_sprint_sprinttemplatemeetings',

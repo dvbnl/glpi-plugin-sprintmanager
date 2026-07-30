@@ -677,7 +677,9 @@
 
             var $form = (typeof window.jQuery === 'function') ? window.jQuery(form) : null;
             var itemId = parseInt(form.getAttribute('data-item-id'), 10) || 0;
-            var sel    = form.querySelector('select[name="plugin_sprint_sprints_id"]');
+            // Compact rows carry the pre-selected sprint as a hidden input;
+            // older markup used an inline select.
+            var sel    = form.querySelector('select[name="plugin_sprint_sprints_id"], input[name="plugin_sprint_sprints_id"]');
             var sprintId = sel ? parseInt(sel.value, 10) || 0 : 0;
             if (itemId <= 0 || sprintId <= 0) {
                 if (window.glpi_toast_warning) { window.glpi_toast_warning('Select a sprint first'); }
@@ -707,6 +709,7 @@
                     }
                     var row = form.closest('tr.sprint-backlog-row');
                     if (row) {
+                        var rowCols = row.cells ? row.cells.length : 7;
                         row.style.transition = 'opacity 0.25s';
                         row.style.opacity = '0';
                         setTimeout(function() {
@@ -723,7 +726,7 @@
                                         var trEmpty = document.createElement('tr');
                                         trEmpty.className = 'tab_bg_1 sprint-backlog-empty';
                                         var td = document.createElement('td');
-                                        td.colSpan = 9;
+                                        td.colSpan = rowCols;
                                         td.className = 'center';
                                         td.textContent = '—';
                                         trEmpty.appendChild(td);

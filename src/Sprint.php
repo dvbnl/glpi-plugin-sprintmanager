@@ -45,9 +45,13 @@ class Sprint extends CommonDBTM
      */
     public static function getMenuContent(): array
     {
+        // Sub-items mirror SprintOverview::navStart().
+        $overviewUrl = self::getSearchURL(false) . '?section=' . SprintOverview::SECTION_OVERVIEW;
+        $listUrl     = self::getSearchURL(false) . '?section=' . SprintOverview::SECTION_LIST;
+
         $menu = [
             'title' => 'SprintManager',
-            'page'  => self::getSearchURL(false),
+            'page'  => $overviewUrl,
             'icon'  => self::getIcon(),
         ];
 
@@ -55,8 +59,32 @@ class Sprint extends CommonDBTM
             $menu['links']['add'] = self::getFormURL(false);
         }
         if (self::canView()) {
-            $menu['links']['search'] = self::getSearchURL(false);
+            $menu['links']['search'] = $listUrl;
             $menu['links']['template'] = SprintTemplate::getSearchURL(false);
+        }
+
+        $menu['options']['overview'] = [
+            'title' => SprintOverview::getTypeName(),
+            'page'  => $overviewUrl,
+            'icon'  => SprintOverview::getIcon(),
+        ];
+
+        $menu['options']['sprint'] = [
+            'title' => self::getTypeName(2),
+            'page'  => $listUrl,
+            'icon'  => self::getIcon(),
+            'links' => [
+                'add'    => self::getFormURL(false),
+                'search' => $listUrl,
+            ],
+        ];
+
+        if (Backlog::canView()) {
+            $menu['options']['backlog'] = [
+                'title' => Backlog::getTypeName(2),
+                'page'  => Backlog::getSearchURL(false),
+                'icon'  => Backlog::getIcon(),
+            ];
         }
 
         $menu['options']['sprinttemplate'] = [
@@ -73,12 +101,11 @@ class Sprint extends CommonDBTM
         if (Session::haveRight('config', READ)) {
             $menu['options']['config'] = [
                 'title' => __('Settings', 'sprint'),
-                'page'  => '/plugins/sprint/front/config.php',
+                // Resolved: the plugin also lives under marketplace/.
+                'page'  => \Plugin::getWebDir('sprint', false) . '/front/config.php',
                 'icon'  => 'fas fa-cog',
             ];
         }
-
-        // Backlog has its own top-level menu entry via setup.php (menu_toadd).
 
         return $menu;
     }
@@ -531,6 +558,7 @@ class Sprint extends CommonDBTM
         $this->addStandardTab('GlpiPlugin\Sprint\SprintBoard', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintFastlane', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintMeeting', $ong, $options);
+        $this->addStandardTab('GlpiPlugin\Sprint\SprintRequest', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintAudit', $ong, $options);
         $this->addStandardTab('Log', $ong, $options);
 
@@ -696,7 +724,7 @@ class Sprint extends CommonDBTM
         $confirm = __('This permanently removes the sprint and all its items, members, meetings and audit history. This cannot be undone. Continue?', 'sprint');
 
         echo "<div class='card mt-3' style='max-width:1200px;margin:18px auto 0;border-color:#dc3545;'>";
-        echo "<div class='card-header' style='background:#f8d7da;color:#842029;'>"
+        echo "<div class='card-header' style='background:color-mix(in srgb,#dc3545 14%,var(--tblr-bg-surface,#fff));color:var(--tblr-danger,#b02a37);'>"
             . "<i class='fas fa-exclamation-triangle me-1'></i>"
             . htmlescape(__('Danger zone', 'sprint'))
             . "</div>";
@@ -722,7 +750,7 @@ class Sprint extends CommonDBTM
         $defaultName = $this->fields['name'] . ' - Template';
 
         echo "<div class='center' style='margin-top:20px;'>";
-        echo "<table class='tab_cadre_fixe'>";
+        echo "<table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'><th colspan='3'>" .
             '<i class="fas fa-clone me-2"></i>' .
             __('Save as template', 'sprint') . "</th></tr>";
@@ -828,6 +856,9 @@ class Sprint extends CommonDBTM
 
     public function prepareInputForAdd($input)
     {
+        if (isset($input['fastlane_capacity'])) {
+            $input['fastlane_capacity'] = SprintMember::normalizeCapacity($input['fastlane_capacity']);
+        }
         if (empty($input['users_id']) || (int)$input['users_id'] <= 0) {
             Session::addMessageAfterRedirect(
                 __('A Scrum Master is required to create a sprint', 'sprint'),
@@ -845,6 +876,9 @@ class Sprint extends CommonDBTM
      */
     public function prepareInputForUpdate($input)
     {
+        if (isset($input['fastlane_capacity'])) {
+            $input['fastlane_capacity'] = SprintMember::normalizeCapacity($input['fastlane_capacity']);
+        }
         if (array_key_exists('users_id', $input)) {
             $currentMaster = (int)($this->fields['users_id'] ?? 0);
             $newMaster     = (int)$input['users_id'];

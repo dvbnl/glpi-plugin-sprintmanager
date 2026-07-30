@@ -20,6 +20,9 @@ class SprintItem extends CommonDBTM
     public static $rightname = 'plugin_sprint_item';
     public $dohistory        = true;
 
+    /** @see withoutAssignGuard() */
+    private static bool $skipAssignGuard = false;
+
     /**
      * Cascade purge. SprintItem is the source of truth for the reverse
      * "Sprints" tab, but legacy SprintTicket/Change/ProjectTask rows from
@@ -32,6 +35,13 @@ class SprintItem extends CommonDBTM
         $rel->deleteByCriteria(['plugin_sprint_sprintitems_id' => $this->getID()], 1);
 
         SprintItemDependency::purgeForItem((int)$this->getID());
+
+        if (SprintRequest::ensureTable()) {
+            (new SprintRequest())->deleteByCriteria(
+                ['plugin_sprint_sprintitems_id' => $this->getID()],
+                1
+            );
+        }
 
         if ($DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
             $DB->delete('glpi_plugin_sprint_sprintitemtags', [
@@ -288,21 +298,38 @@ class SprintItem extends CommonDBTM
             'Problem'     => 'fas fa-exclamation-circle',
             'ProjectTask' => 'fas fa-tasks',
         ];
-        $icon = $icons[$itemtype] ?? 'fas fa-link';
-        $url  = $itemtype::getFormURLWithID($itemsId);
-        $name = htmlescape($linkedItem->fields['name'] ?? '');
+        $typeNames = [
+            'Ticket'      => __('Ticket'),
+            'Change'      => __('Change'),
+            'Problem'     => __('Problem'),
+            'ProjectTask' => __('Project task'),
+        ];
+        $icon      = $icons[$itemtype] ?? 'fas fa-link';
+        $typeLabel = $typeNames[$itemtype] ?? $itemtype;
+        $url       = $itemtype::getFormURLWithID($itemsId);
+        $rawName   = (string)($linkedItem->fields['name'] ?? '');
 
-        // Append parent project name to disambiguate same-named tasks.
-        $suffix = '';
+        // Compact display: the linked item is nearly always named like the
+        // sprint item itself, so show only the type + a go-to link; the full
+        // name (and parent project for tasks) moves to the tooltip.
+        $tooltip = $rawName;
         if ($itemtype === 'ProjectTask') {
             $projectId = (int)($linkedItem->fields['projects_id'] ?? 0);
             if ($projectId > 0) {
                 $project = new \Project();
                 if ($project->getFromDB($projectId)) {
-                    $projectName = htmlescape($project->fields['name'] ?? '');
-                    $suffix = " <span style='color:#6c757d;'>({$projectName})</span>";
+                    $tooltip .= ' (' . (string)($project->fields['name'] ?? '') . ')';
                 }
             }
+        }
+
+        // Progress of the underlying item, where GLPI tracks one (project
+        // tasks); updated live by the linked quick-edit modal.
+        $pctHtml = '';
+        if ($itemtype === 'ProjectTask') {
+            $pct = (int)($linkedItem->fields['percent_done'] ?? 0);
+            $pctHtml = " <span class='sprint-linked-pct badge bg-secondary-lt text-muted' "
+                . "title='" . htmlescape(__('Progress of the linked item', 'sprint')) . "'>{$pct}%</span>";
         }
 
         // Quick-edit button only when GLPI's own ACL (canUpdate) allows it,
@@ -328,7 +355,13 @@ class SprintItem extends CommonDBTM
                 . "<i class='fas fa-pen' style='font-size:0.8em;'></i></button>";
         }
 
-        return "<a href='{$url}'><i class='{$icon}'></i> {$name}</a>{$suffix}{$quickEditBtn}";
+        return "<span class='sprint-linked-compact' style='white-space:nowrap;'>"
+            . "<a href='{$url}' title='" . htmlescape($tooltip) . "'>"
+            . "<i class='{$icon}'></i> " . htmlescape($typeLabel)
+            . " <i class='fas fa-external-link-alt' style='font-size:0.72em;opacity:0.7;'></i></a>"
+            . $pctHtml
+            . $quickEditBtn
+            . "</span>";
     }
 
     /**
@@ -358,6 +391,42 @@ class SprintItem extends CommonDBTM
         }
 
         return (string)($project->fields['name'] ?? '');
+    }
+
+    /**
+     * Muted "(project name)" suffix rendered after the item name for
+     * ProjectTask-linked rows, so same-named tasks from different projects
+     * stay distinguishable now that getLinkedItemDisplay() is compact.
+     * Returns '' for any other type.
+     */
+    public static function renderParentProjectSuffix(string $itemtype, int $itemsId): string
+    {
+        $projectName = self::getParentProjectName($itemtype, $itemsId);
+        if ($projectName === '') {
+            return '';
+        }
+        return " <span class='sprint-parent-project text-muted' style='font-size:0.85em;white-space:nowrap;' "
+            . "title='" . htmlescape(__('Project')) . "'>"
+            . "<i class='fas fa-folder-open' style='opacity:0.7;font-size:0.85em;'></i> "
+            . htmlescape($projectName) . "</span>";
+    }
+
+    /**
+     * Small "Assigned capacity: x%" chip shown after the item name where no
+     * dedicated capacity column exists (dashboard). Returns '' when 0.
+     */
+    public static function renderCapacityChip($capacity): string
+    {
+        $cap = (float)$capacity;
+        if ($cap <= 0) {
+            return '';
+        }
+        return " <span class='sprint-capacity-chip badge bg-secondary-lt text-muted' "
+            . "style='font-size:0.72em;font-weight:normal;vertical-align:middle;'>"
+            . sprintf(
+                htmlescape(__('Assigned capacity: %s%%', 'sprint')),
+                SprintMember::formatCapacity($cap)
+            ) . "</span>";
     }
 
     /**
@@ -700,7 +769,7 @@ class SprintItem extends CommonDBTM
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprints_id', ['value' => $ID]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'>";
             echo "<th colspan='6'>" . __('Add a sprint item', 'sprint') . "</th>";
             echo "</tr>";
@@ -837,7 +906,7 @@ class SprintItem extends CommonDBTM
         $tagsById = self::getTagsForItems($itemIds);
         $depsById = SprintItemDependency::getOpenSummariesForItems($itemIds);
 
-        echo "<table class='tab_cadre_fixe sprint-items-list-table'>";
+        echo "<table class='tab_cadre_fixe sprint-themed sprint-items-list-table'>";
         echo "<tr class='tab_bg_2'>";
         $sc = self::sortClickAttr('sprint-items-list-table');
         echo "<th class='sprint-sortable' data-sort-type='name' style='cursor:pointer;' {$sc}>" . __('Name') . " <i class='fas fa-sort text-muted'></i></th>";
@@ -874,9 +943,12 @@ class SprintItem extends CommonDBTM
             $dataAttrs = self::buildRowDataAttrs($row, $statusLabel, $ownerName, $rowTags);
 
             $rowDeps = $depsById[(int)$row['id']] ?? [];
-            echo "<tr class='tab_bg_1 sprint-row sprint-filterable-row' {$dataAttrs}>";
+            $isAdhoc = (int)($row['is_adhoc'] ?? 0) === 1;
+            echo "<tr class='tab_bg_1 sprint-row sprint-filterable-row" . ($isAdhoc ? ' sprint-adhoc' : '') . "' {$dataAttrs}>";
             echo "<td class='sprint-cell-name'><a href='" . static::getFormURLWithID($row['id']) . "'>" .
-                htmlescape($row['name']) . "</a>" . self::renderTagPills($rowTags) . self::renderDependencyBadge($rowDeps)
+                htmlescape($row['name']) . "</a>"
+                . self::renderParentProjectSuffix((string)($row['itemtype'] ?? ''), (int)($row['items_id'] ?? 0))
+                . self::renderAdhocBadge($isAdhoc) . self::renderTagPills($rowTags) . self::renderDependencyBadge($rowDeps)
                 . self::renderLinkedItemOpenBadge($row) . "</td>";
             echo "<td class='sprint-row-linked'>" . $linkedDisplay . "</td>";
             echo "<td class='sprint-cell-status'><span class='sprint-badge {$statusClass}'>" .
@@ -1085,8 +1157,10 @@ HTML;
             'data-story-points'      => (int)($row['story_points'] ?? 0),
             'data-capacity'          => SprintMember::formatCapacity($row['capacity'] ?? 0),
             'data-is-fastlane'       => (int)($row['is_fastlane'] ?? 0),
+            'data-is-adhoc'          => (int)($row['is_adhoc'] ?? 0),
             'data-note'              => (string)($row['note'] ?? ''),
             'data-item-tags'         => self::tagsToBlob($tags),
+            'data-linked-itemtype'   => (string)($row['itemtype'] ?? ''),
         ];
 
         $parts = [];
@@ -1094,6 +1168,31 @@ HTML;
             $parts[] = $k . '="' . htmlescape((string)$v) . '"';
         }
         return implode(' ', $parts);
+    }
+
+    /**
+     * True when the current user is the Scrum Master of the sprint: either the
+     * sprint owner or a member holding the scrum_master role (same combination
+     * as the backlog assign permission).
+     */
+    public static function currentUserIsScrumMasterOf(int $sprintId): bool
+    {
+        return Config::isCurrentUserScrumMaster($sprintId)
+            || SprintMember::isScrumMaster($sprintId, (int)Session::getLoginUserID());
+    }
+
+    /**
+     * Inline "Adhoc" badge for items flagged by the Scrum Master as having
+     * entered the sprint after kick-off.
+     */
+    public static function renderAdhocBadge(bool $isAdhoc): string
+    {
+        if (!$isAdhoc) {
+            return '';
+        }
+        return " <span class='sprint-adhoc-badge' title='"
+            . htmlescape(__('Added to the sprint after kick-off', 'sprint')) . "'>"
+            . "<i class='fas fa-plus-circle'></i> " . __('Adhoc', 'sprint') . "</span>";
     }
 
     /** Inline tag-pill markup appended to the name cell. */
@@ -1162,7 +1261,7 @@ HTML;
         $tc       = htmlescape($tableClass);
 
         echo "<div id='{$barId}' class='sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2' "
-            . "data-target='{$tc}' style='background:#f1f3f5;border-radius:6px;'>";
+            . "data-target='{$tc}' style='background:var(--tblr-bg-surface-secondary,#f1f3f5);border-radius:6px;'>";
         echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
             . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
 
@@ -1233,12 +1332,15 @@ HTML;
         $moveTargets    = $sprintId > 0 ? Sprint::getMoveTargetOptions($sprintId) : [];
         $definedTags    = Config::getDefinedTags();
 
-        // Capacity lock: when restricted to the Scrum Master, disable the modal
-        // capacity control for others (regular items only — fastlane stays free).
+        // Capacity guard: when restricted to the Scrum Master, others may still
+        // pick a new % — it is sent to the Scrum Master as an approval request
+        // instead of applied directly (regular items only — fastlane stays free).
         $capacityLocked = Config::isScrumMasterOnlyCapacity()
             && $sprintId > 0
-            && !Config::isCurrentUserScrumMaster($sprintId);
+            && !self::currentUserIsScrumMasterOf($sprintId);
         $capacityLockedJs = $capacityLocked ? 'true' : 'false';
+        $capacityRequestHint = __s('Capacity changes are sent to the Scrum Master for approval.', 'sprint');
+        $lblNameFollows = addslashes(__('The name follows the linked item and cannot be edited here.', 'sprint'));
 
         $cfgRoot = 'CFG_GLPI.root_doc';
 
@@ -1256,6 +1358,17 @@ HTML;
 
         echo "<div class='mb-3'><label class='form-label'>" . __('Name') . "</label>";
         echo "<input type='text' name='name' class='form-control' value=''></div>";
+
+        // Adhoc switch: Scrum Master only — others never see or submit it.
+        if ($sprintId > 0 && self::currentUserIsScrumMasterOf($sprintId)) {
+            echo "<div class='mb-3 form-check form-switch'>";
+            echo "<input class='form-check-input' type='checkbox' id='sprint-qe-adhoc' name='is_adhoc'>";
+            echo "<label class='form-check-label' for='sprint-qe-adhoc'>"
+                . "<span class='sprint-adhoc-badge'><i class='fas fa-plus-circle'></i> " . __('Adhoc', 'sprint') . "</span> "
+                . htmlescape(__('Added to the sprint after kick-off (highlights the item)', 'sprint'))
+                . "</label>";
+            echo "</div>";
+        }
 
         echo "<div class='row g-3'>";
         echo "<div class='col-md-6 mb-3'><label class='form-label'>" . __('Status') . "</label>";
@@ -1286,7 +1399,12 @@ HTML;
         foreach ($capacityChoices as $val => $label) {
             echo "<option value='" . htmlescape((string)$val) . "'>" . htmlescape((string)$label) . "</option>";
         }
-        echo "</select></div>";
+        echo "</select>";
+        if ($capacityLocked) {
+            echo "<div class='form-text small text-warning sprint-qe-capacity-hint'>"
+                . "<i class='fas fa-user-shield me-1'></i>{$capacityRequestHint}</div>";
+        }
+        echo "</div>";
         echo "</div>";
 
         echo "<div class='mb-3'><label class='form-label'>" . __('Note', 'sprint') . "</label>";
@@ -1356,6 +1474,7 @@ HTML;
         echo "</div></div></div>";
 
         $labelUnassigned = addslashes(__('Unassigned', 'sprint'));
+        $adhocBadgeJs    = addslashes(self::renderAdhocBadge(true));
 
         // Capacity <option> list (non-zero) for editing existing dependencies.
         $depCapOptions = '';
@@ -1404,15 +1523,39 @@ $(function() {
         \$modal.find('.sprint-qe-title').text(itemName);
         \$modal.find('input[name=id]').val(itemId);
         \$modal.find('input[name=name]').val(itemName);
+        // Linked items mirror the underlying item's name (server-enforced);
+        // only manual items expose an editable name.
+        (function() {
+            var linkedType = String(\$row.attr('data-linked-itemtype') || '');
+            \$modal.find('input[name=name]')
+                .prop('readonly', linkedType !== '')
+                .attr('title', linkedType !== '' ? '{$lblNameFollows}' : '');
+        })();
+        \$modal.find('input[name=is_adhoc]').prop('checked', parseInt(\$row.data('is-adhoc'), 10) === 1);
         \$modal.find('select[name=status]').val(String(status));
         \$modal.find('select[name=priority]').val(String(priority));
         \$modal.find('select[name=users_id]').val(String(usersId));
         \$modal.find('input[name=story_points]').val(points);
-        \$modal.find('select[name=capacity]').val(String(capacity));
+        // Match the capacity option numerically ("0.5"/"5.0"/5 all resolve to
+        // the same option) so decimal formatting never clears the selection.
+        (function() {
+            var \$sel = \$modal.find('select[name=capacity]');
+            var num  = parseFloat(capacity);
+            if (isNaN(num)) { num = 0; }
+            var match = '';
+            \$sel.find('option').each(function() {
+                if (parseFloat(this.value) === num) { match = this.value; return false; }
+            });
+            \$sel.val(match);
+            // Baseline for the guarded-capacity reason dialog on save.
+            \$modal.data('qe-orig-capacity', num);
+        })();
         \$modal.find('textarea[name=note]').val(note);
         \$modal.find('select[name=carry_over_to_sprint_id]').val('0');
         \$modal.find('.sprint-qe-error').hide().text('');
         \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
+        \$modal.data('qe-is-fastlane', isFastlane ? 1 : 0);
+        \$modal.removeData('qe-capacity-reason');
         \$modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
         \$modal.find('.sprint-qe-dep-user').val('0');
         \$modal.find('.sprint-qe-dep-manage').attr(
@@ -1430,10 +1573,11 @@ $(function() {
             \$(this).prop('checked', v !== '' && tagBlob.indexOf('|' + v + '|') !== -1);
         });
 
-        // Lock capacity for non-scrum-master users when the plugin setting
-        // requires it — fastlane items stay editable.
+        // Guarded capacity for non-scrum-master users: the select stays
+        // enabled, but a change is sent to the Scrum Master as an approval
+        // request (see the hint under the select) — fastlane items stay free.
         var capacityLocked = {$capacityLockedJs};
-        \$modal.find('select[name=capacity]').prop('disabled', capacityLocked && !isFastlane);
+        \$modal.find('.sprint-qe-capacity-hint').toggle(capacityLocked && !isFastlane);
 
         var m = new bootstrap.Modal(\$modal[0]);
         m.show();
@@ -1444,6 +1588,27 @@ $(function() {
         var \$btn = \$(this);
         var id = \$modal.find('input[name=id]').val();
         \$modal.find('.sprint-qe-error').hide().text('');
+
+        // Guarded capacity edits become an approval request: collect the
+        // requester's motivation for the Scrum Master first. Dismissing the
+        // dialog aborts the save; fastlane items are exempt like the guard.
+        var capacityGuarded = {$capacityLockedJs};
+        if (capacityGuarded
+            && parseInt(\$modal.data('qe-is-fastlane'), 10) !== 1
+            && !\$modal.data('qe-capacity-reason')
+            && typeof window.sprintRequestReason === 'function') {
+            var origCap = parseFloat(\$modal.data('qe-orig-capacity'));
+            if (isNaN(origCap)) { origCap = 0; }
+            var newCap = parseFloat(\$modal.find('select[name=capacity]').val());
+            if (isNaN(newCap)) { newCap = 0; }
+            if (newCap !== origCap) {
+                window.sprintRequestReason(function(reason){
+                    \$modal.data('qe-capacity-reason', reason);
+                    \$btn.trigger('click');
+                });
+                return;
+            }
+        }
 
         function runSave(confirmOverflow) {
             \$btn.prop('disabled', true);
@@ -1464,6 +1629,11 @@ $(function() {
                 data: {
                     id: id,
                     name: \$modal.find('input[name=name]').val(),
+                    // Adhoc switch only exists in the Scrum Master's modal;
+                    // jQuery drops undefined values for everyone else.
+                    is_adhoc: \$modal.find('input[name=is_adhoc]').length
+                        ? (\$modal.find('input[name=is_adhoc]').is(':checked') ? 1 : 0)
+                        : undefined,
                     status: \$modal.find('select[name=status]').val(),
                     priority: \$modal.find('select[name=priority]').val(),
                     users_id: \$modal.find('select[name=users_id]').val(),
@@ -1471,6 +1641,7 @@ $(function() {
                     capacity: \$modal.find('select[name=capacity]').val(),
                     note: \$modal.find('textarea[name=note]').val(),
                     carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
+                    capacity_reason: \$modal.data('qe-capacity-reason') || undefined,
                     _tags_json: JSON.stringify(tags),
                     confirm_overflow: confirmOverflow ? 1 : 0,
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
@@ -1491,6 +1662,11 @@ $(function() {
             if (resp && resp.success) {
                 if (resp.carried_over && resp.carry_over_message) {
                     try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.carry_over_message); } } catch (e) {}
+                }
+                // Relay server-side notices (e.g. "capacity change sent to the
+                // Scrum Master for approval") that would otherwise be lost.
+                if (resp.message && resp.message !== 'Item updated') {
+                    try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.message); } } catch (e) {}
                 }
                 var \$row = \$('tr.sprint-row[data-item-id="' + id + '"], tr.sprint-review-row[data-item-id="' + id + '"]');
                 var statusSelect   = \$modal.find('select[name=status]');
@@ -1516,9 +1692,43 @@ $(function() {
                 \$row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
                 \$row.attr('data-note', resp.note).data('note', resp.note);
 
+                if (typeof resp.is_adhoc !== 'undefined') {
+                    var adhocOn = parseInt(resp.is_adhoc, 10) === 1;
+                    \$row.attr('data-is-adhoc', adhocOn ? '1' : '0').data('is-adhoc', adhocOn ? 1 : 0);
+                    \$row.toggleClass('sprint-adhoc', adhocOn);
+                    \$row.find('.sprint-adhoc-badge').remove();
+                    if (adhocOn) {
+                        var \$adhocAnchor = \$row.find("a[href*='sprintitem.form.php']").first();
+                        if (\$adhocAnchor.length) {
+                            \$adhocAnchor.after('{$adhocBadgeJs}');
+                        }
+                    }
+                }
+
                 if (typeof resp.tags_blob !== 'undefined') {
                     \$row.attr('data-item-tags', resp.tags_blob).data('item-tags', resp.tags_blob);
                 }
+                // Live "Linked item open" badge: shows/hides with the fresh
+                // status instead of waiting for a page reload.
+                if (typeof resp.linked_open_badge_html !== 'undefined') {
+                    \$row.find('.sprint-cell-name .sprint-review-unclosed-badge').remove();
+                    if (resp.linked_open_badge_html !== '') {
+                        \$row.find('.sprint-cell-name').append(resp.linked_open_badge_html);
+                    }
+                    var \$cardTitle = \$('.sprint-kanban-card[data-item-id="' + id + '"] .sk-card-title');
+                    if (\$cardTitle.length) {
+                        \$cardTitle.find('.sprint-review-unclosed-badge').remove();
+                        if (resp.linked_open_badge_html !== '') {
+                            var \$cardEdit = \$cardTitle.find('.sk-card-edit');
+                            if (\$cardEdit.length) {
+                                \$cardEdit[0].insertAdjacentHTML('beforebegin', resp.linked_open_badge_html);
+                            } else {
+                                \$cardTitle[0].insertAdjacentHTML('beforeend', resp.linked_open_badge_html);
+                            }
+                        }
+                    }
+                }
+
                 if (typeof resp.tags_pills_html !== 'undefined') {
                     \$row.each(function() {
                         var \$r = \$(this);
@@ -1791,6 +2001,8 @@ $(function() {
 });
 </script>
 JS;
+        // Reason dialog for guarded capacity edits (approval requests).
+        SprintRequest::renderReasonModalUI();
     }
 
     /**
@@ -1896,6 +2108,38 @@ JS;
         'ProjectTask': { icon: 'fas fa-tasks',            label: '{$labelPTask}' }
     };
 
+    // Closing/reopening the linked item flips the "Linked item open" warning
+    // on every view showing that sprint item. Patch list rows, meeting review
+    // rows and Kanban cards in place so the badge doesn't linger until the
+    // next page load.
+    function syncLinkedOpenBadge(itemId, html) {
+        var sel = '[data-item-id="' + itemId + '"]';
+        \$('tr' + sel + ', .sprint-kanban-card' + sel).each(function() {
+            var \$el = \$(this);
+            \$el.find('.sprint-review-unclosed-badge').remove();
+            // Meeting review rows tint the whole row while the link is open.
+            \$el.toggleClass('sprint-review-unclosed', html !== '');
+            if (html === '') { return; }
+
+            var \$nameCell = \$el.find('.sprint-cell-name').first();
+            if (\$nameCell.length) { \$nameCell.append(html); return; }
+
+            var \$status = \$el.find('.sprint-review-status').first();
+            if (\$status.length) { \$status.after(html); return; }
+
+            var \$cardTitle = \$el.find('.sk-card-title').first();
+            if (\$cardTitle.length) {
+                var \$cardEdit = \$cardTitle.find('.sk-card-edit');
+                if (\$cardEdit.length) { \$cardEdit[0].insertAdjacentHTML('beforebegin', html); }
+                else { \$cardTitle[0].insertAdjacentHTML('beforeend', html); }
+                return;
+            }
+            // Fallback: after the sprint-item link in the row.
+            var \$anchor = \$el.find("a[href*='sprintitem.form.php']").first();
+            if (\$anchor.length) { \$anchor.after(html); }
+        });
+    }
+
     \$(document).on('click', '.sprint-linked-quick-edit-btn', function(ev) {
         ev.preventDefault();
         ev.stopPropagation();
@@ -1983,9 +2227,18 @@ JS;
                             .data('linked-status', resp.projectstates_id);
                         \$trigger.attr('data-linked-percent', resp.percent_done)
                             .data('linked-percent', resp.percent_done);
+                        // Keep the compact linked-item % badge in sync.
+                        \$trigger.closest('.sprint-linked-compact')
+                            .find('.sprint-linked-pct').text(resp.percent_done + '%');
                     } else {
                         \$trigger.attr('data-linked-status', resp.status)
                             .data('linked-status', resp.status);
+                    }
+                }
+                if (resp.affected_items && resp.affected_items.length) {
+                    for (var i = 0; i < resp.affected_items.length; i++) {
+                        var aff = resp.affected_items[i];
+                        syncLinkedOpenBadge(aff.id, aff.badge_html || '');
                     }
                 }
                 var bsm = \$m.data('bs-instance');
@@ -2012,8 +2265,36 @@ JS;
     {
         $input = self::sanitizeInput($input);
         $input = $this->resolveLinkedItem($input);
+        $input = $this->enforceLinkedItemName($input);
         if (!isset($input['story_points']) || $input['story_points'] === '' || $input['story_points'] === null) {
             $input['story_points'] = 1;
+        }
+        // Adhoc: on backlog items anyone with edit rights may pre-flag it (the
+        // flag travels with the item into the sprint); items entering a real
+        // sprint directly need that sprint's Scrum Master.
+        if (array_key_exists('is_adhoc', $input)) {
+            $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? 0);
+            if ($sprintId > 0 && !self::currentUserIsScrumMasterOf($sprintId)) {
+                unset($input['is_adhoc']);
+            }
+        }
+
+        // Only the Scrum Master creates straight into a sprint; the rest lands
+        // on the backlog with that sprint as a proposal.
+        $targetSprint = (int)($input['plugin_sprint_sprints_id'] ?? 0);
+        if (
+            $targetSprint > 0
+            && !self::$skipAssignGuard
+            && (int)($input['is_fastlane'] ?? 0) !== 1
+            && !self::currentUserIsScrumMasterOf($targetSprint)
+        ) {
+            $input['plugin_sprint_sprints_id'] = 0;
+            $input['proposed_sprints_id']      = $targetSprint;
+            Session::addMessageAfterRedirect(
+                __('Only the Scrum Master can assign items to a sprint. The item was placed on the backlog with this sprint pre-selected.', 'sprint'),
+                false,
+                WARNING
+            );
         }
         if (!$this->validateCapacity($input)) {
             return false;
@@ -2029,12 +2310,100 @@ JS;
      */
     public function prepareInputForUpdate($input)
     {
+        // Approval-queue lock: while any request on this item awaits the Scrum
+        // Master, only the Scrum Master of the request's sprint may change the
+        // item. Without this the queue is bypassable by editing the item form
+        // directly and saving. (Linked-item name sync is unaffected: it writes
+        // through $DB->update, not through this hook.)
+        $pendingReq = SprintRequest::getAnyPendingForItem((int)$this->getID());
+        if ($pendingReq !== null) {
+            $reqSprintId = (int)($pendingReq['plugin_sprint_sprints_id'] ?? 0);
+            if ($reqSprintId > 0 && !self::currentUserIsScrumMasterOf($reqSprintId)) {
+                Session::addMessageAfterRedirect(
+                    __('This item is locked while a request is pending Scrum Master approval.', 'sprint'),
+                    false,
+                    ERROR
+                );
+                return false;
+            }
+        }
+
         $input = self::sanitizeInput($input);
         $input = $this->resolveLinkedItem($input);
+        $input = $this->enforceLinkedItemName($input);
+
+        // Picking a sprint here is the same decision as a backlog assign, so it
+        // goes through the same approval queue.
+        if (array_key_exists('plugin_sprint_sprints_id', $input)) {
+            $currentSprint = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+            $targetSprint  = (int)$input['plugin_sprint_sprints_id'];
+            if (
+                $targetSprint > 0
+                && $targetSprint !== $currentSprint
+                && (int)($this->fields['is_fastlane'] ?? 0) !== 1
+                && !self::currentUserIsScrumMasterOf($targetSprint)
+            ) {
+                unset($input['plugin_sprint_sprints_id']);
+                if ($currentSprint === 0) {
+                    $input['proposed_sprints_id'] = $targetSprint;
+                    SprintRequest::createPending(
+                        SprintRequest::TYPE_ASSIGN,
+                        (int)$this->getID(),
+                        $targetSprint,
+                        0.0,
+                        ''
+                    );
+                    Session::addMessageAfterRedirect(
+                        __('Assignment sent to the Scrum Master for approval; the item stays on the backlog until then.', 'sprint'),
+                        false,
+                        INFO
+                    );
+                } else {
+                    Session::addMessageAfterRedirect(
+                        __('Only the Scrum Master of the target sprint can move this item there.', 'sprint'),
+                        false,
+                        WARNING
+                    );
+                }
+            }
+        }
+
+        // Fastlane is what exempts an item from the assign guard, so inside a
+        // sprint only its Scrum Master may flip it — otherwise a self-assigned
+        // fastlane item could be turned into a regular one after the fact.
+        if (array_key_exists('is_fastlane', $input)) {
+            $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+            if (
+                $sprintId > 0
+                && (int)$input['is_fastlane'] !== (int)($this->fields['is_fastlane'] ?? 0)
+                && !self::currentUserIsScrumMasterOf($sprintId)
+            ) {
+                unset($input['is_fastlane']);
+                Session::addMessageAfterRedirect(
+                    __('Only the Scrum Master of this sprint can change the fastlane flag.', 'sprint'),
+                    false,
+                    WARNING
+                );
+            }
+        }
+
+        // Adhoc: while the item sits on the backlog anyone with edit rights may
+        // toggle the flag (it travels into the sprint on assignment); once the
+        // item is in a sprint only that sprint's Scrum Master may change it.
+        if (array_key_exists('is_adhoc', $input)) {
+            $currentAdhoc = (int)($this->fields['is_adhoc'] ?? 0);
+            if ((int)$input['is_adhoc'] !== $currentAdhoc) {
+                $sprintId = (int)($input['plugin_sprint_sprints_id'] ?? $this->fields['plugin_sprint_sprints_id'] ?? 0);
+                if ($sprintId > 0 && !self::currentUserIsScrumMasterOf($sprintId)) {
+                    unset($input['is_adhoc']);
+                }
+            }
+        }
 
         // When the guard is on, only the Scrum Master may edit capacity on
-        // regular items; silently drop the field for others so the rest of the
-        // update still validates.
+        // regular items inside a sprint. A change by anyone else becomes a
+        // pending SprintRequest for the Scrum Master instead of being applied;
+        // the rest of the update still goes through.
         $isFastlane = (int)($this->fields['is_fastlane'] ?? 0) === 1;
         if (
             !$isFastlane
@@ -2042,7 +2411,25 @@ JS;
             && Config::isScrumMasterOnlyCapacity()
         ) {
             $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? $input['plugin_sprint_sprints_id'] ?? 0);
-            if (!Config::isCurrentUserScrumMaster($sprintId)) {
+            if ($sprintId > 0 && !self::currentUserIsScrumMasterOf($sprintId)) {
+                $requestedCap = SprintMember::normalizeCapacity($input['capacity']);
+                if ($requestedCap != (float)($this->fields['capacity'] ?? 0)) {
+                    SprintRequest::createPending(
+                        SprintRequest::TYPE_CAPACITY,
+                        (int)$this->getID(),
+                        $sprintId,
+                        $requestedCap,
+                        trim((string)($input['_capacity_request_reason'] ?? ''))
+                    );
+                    Session::addMessageAfterRedirect(
+                        sprintf(
+                            __('Capacity change to %s%% sent to the Scrum Master for approval.', 'sprint'),
+                            SprintMember::formatCapacity($requestedCap)
+                        ),
+                        false,
+                        INFO
+                    );
+                }
                 unset($input['capacity']);
             }
         }
@@ -2151,6 +2538,15 @@ JS;
             || array_key_exists('is_fastlane', $this->oldvalues ?? [])
         ) {
             $this->seedFastlaneOwnerAsMember();
+        }
+        // A backlog item that just entered a sprint resolves any pending
+        // assignment request for it, whichever path assigned it.
+        if (
+            array_key_exists('plugin_sprint_sprints_id', $this->oldvalues ?? [])
+            && (int)$this->oldvalues['plugin_sprint_sprints_id'] === 0
+            && $sprintId > 0
+        ) {
+            SprintRequest::closePendingAssignForItem((int)$this->getID(), $sprintId);
         }
         parent::post_updateItem($history);
     }
@@ -2369,23 +2765,34 @@ JS;
         }
 
         $copy = new self();
-        $newId = $copy->add([
-            'plugin_sprint_sprints_id' => $targetSprintId,
-            'name'                     => (string)($source->fields['name'] ?? ''),
-            'description'              => (string)($source->fields['description'] ?? ''),
-            'itemtype'                 => $itemtype,
-            'items_id'                 => $itemsId,
-            'status'                   => self::STATUS_TODO,
-            'priority'                 => (int)($source->fields['priority'] ?? 3),
-            'story_points'             => (int)($source->fields['story_points'] ?? 0),
-            'users_id'                 => 0,
-            'capacity'                 => 0,
-            'is_fastlane'              => (int)($source->fields['is_fastlane'] ?? 0),
-            'is_blocked'               => 0,
-            'note'                     => '',
-        ]);
+        return self::withoutAssignGuard(static function () use ($copy, $targetSprintId, $source, $itemtype, $itemsId) {
+            return (int)$copy->add([
+                'plugin_sprint_sprints_id' => $targetSprintId,
+                'name'                     => (string)($source->fields['name'] ?? ''),
+                'description'              => (string)($source->fields['description'] ?? ''),
+                'itemtype'                 => $itemtype,
+                'items_id'                 => $itemsId,
+                'status'                   => self::STATUS_TODO,
+                'priority'                 => (int)($source->fields['priority'] ?? 3),
+                'story_points'             => (int)($source->fields['story_points'] ?? 0),
+                'users_id'                 => 0,
+                'capacity'                 => 0,
+                'is_fastlane'              => (int)($source->fields['is_fastlane'] ?? 0),
+                'is_blocked'               => 0,
+                'note'                     => '',
+            ]);
+        });
+    }
 
-        return (int)$newId;
+    /** Server-side write that may place items in a sprint without the assign guard. */
+    public static function withoutAssignGuard(callable $callback)
+    {
+        self::$skipAssignGuard = true;
+        try {
+            return $callback();
+        } finally {
+            self::$skipAssignGuard = false;
+        }
     }
 
     public static function isLinkedItemInSprint(
@@ -2426,6 +2833,8 @@ JS;
         if (isset($input['priority']))    $input['priority']    = max(1, min(5, (int)$input['priority']));
         if (isset($input['plugin_sprint_sprints_id'])) $input['plugin_sprint_sprints_id'] = (int)$input['plugin_sprint_sprints_id'];
         if (isset($input['is_fastlane']))  $input['is_fastlane'] = (int)(bool)$input['is_fastlane'];
+        if (isset($input['is_blocked']))   $input['is_blocked']  = (int)(bool)$input['is_blocked'];
+        if (isset($input['is_adhoc']))     $input['is_adhoc']    = (int)(bool)$input['is_adhoc'];
 
         return $input;
     }
@@ -2463,6 +2872,54 @@ JS;
             0,
             true
         );
+    }
+
+    /**
+     * Linked sprint items always mirror the underlying item's name so the UI
+     * never shows diverging duplicates; only manual items keep an editable
+     * name. Complemented by the item_update hook that pushes GLPI-side
+     * renames back onto linked sprint items.
+     */
+    private function enforceLinkedItemName(array $input): array
+    {
+        $itemtype = (string)($input['itemtype'] ?? $this->fields['itemtype'] ?? '');
+        $itemsId  = (int)($input['items_id'] ?? $this->fields['items_id'] ?? 0);
+        if ($itemtype === '' || $itemsId <= 0 || !class_exists($itemtype)) {
+            return $input;
+        }
+        $linked = new $itemtype();
+        if ($linked->getFromDB($itemsId)) {
+            $linkedName = (string)($linked->fields['name'] ?? '');
+            if ($linkedName !== '') {
+                $input['name'] = $linkedName;
+            }
+        }
+        return $input;
+    }
+
+    /**
+     * item_update hook (Ticket/Change/Problem/ProjectTask): a rename of the
+     * underlying item propagates to every sprint item linked to it, so names
+     * never drift apart. Direct DB update: a mirror sync should not re-run
+     * item validation or spam item history.
+     */
+    public static function onLinkedItemUpdate($item): void
+    {
+        global $DB;
+
+        $allowed = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
+        if (!in_array($item->getType(), $allowed, true)
+            || !in_array('name', (array)($item->updates ?? []), true)) {
+            return;
+        }
+        $newName = (string)($item->fields['name'] ?? '');
+        if ($newName === '') {
+            return;
+        }
+        $DB->update(self::getTable(), ['name' => $newName], [
+            'itemtype' => $item->getType(),
+            'items_id' => (int)$item->getID(),
+        ]);
     }
 
     /**
@@ -2509,6 +2966,21 @@ JS;
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         $memberOptions = SprintMember::getSprintMemberOptions($sprintId);
         $isNew = !$this->getID() || $this->isNewItem();
+
+        // Approval-queue lock notice: edits by non-Scrum-Masters are rejected
+        // server-side in prepareInputForUpdate() while a request is pending.
+        if (!$isNew) {
+            $pendingReq = SprintRequest::getAnyPendingForItem((int)$this->getID());
+            if ($pendingReq !== null) {
+                $reqSprintId = (int)($pendingReq['plugin_sprint_sprints_id'] ?? 0);
+                if ($reqSprintId > 0 && !self::currentUserIsScrumMasterOf($reqSprintId)) {
+                    echo "<div class='alert alert-warning d-flex align-items-center' style='margin-bottom:10px;'>"
+                        . "<i class='fas fa-lock me-2'></i>"
+                        . htmlescape(__('This item is locked while a request is pending Scrum Master approval.', 'sprint'))
+                        . "</div>";
+                }
+            }
+        }
         $isFastlane = (int)($this->fields['is_fastlane'] ?? 0) === 1;
         $isBlocked  = (int)($this->fields['is_blocked'] ?? 0) === 1;
 
@@ -2525,7 +2997,16 @@ JS;
 
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Name') . "</td>";
-        echo "<td>" . Html::input('name', ['value' => $this->fields['name'] ?? '', 'size' => 40]) . "</td>";
+        // Linked items mirror the underlying item's name (server-enforced);
+        // only manual items expose an editable name.
+        $isLinkedItem = (string)($this->fields['itemtype'] ?? '') !== ''
+            && (int)($this->fields['items_id'] ?? 0) > 0;
+        $nameOptions = ['value' => $this->fields['name'] ?? '', 'size' => 40];
+        if ($isLinkedItem) {
+            $nameOptions['readonly'] = 'readonly';
+            $nameOptions['title']    = __('The name follows the linked item and cannot be edited here.', 'sprint');
+        }
+        echo "<td>" . Html::input('name', $nameOptions) . "</td>";
         echo "<td>" . __('Status') . "</td><td>";
         Dropdown::showFromArray('status', self::getAllStatuses(), [
             'value' => $this->fields['status'] ?? self::STATUS_TODO,
@@ -2550,6 +3031,27 @@ JS;
         echo "<span class='text-muted'>" . __('Mark this item as blocked (surfaces in the dedicated Blocked section on the backlog for Scrum Master review).', 'sprint') . "</span>";
         echo "</label>";
         echo "</td></tr>";
+
+        // Adhoc: only for items in a sprint; toggle is Scrum Master-only.
+        if ($sprintId > 0) {
+            $isAdhoc = (int)($this->fields['is_adhoc'] ?? 0) === 1;
+            echo "<tr class='tab_bg_1'>";
+            echo "<td>" . __('Adhoc', 'sprint') . "</td><td colspan='3'>";
+            if (self::currentUserIsScrumMasterOf($sprintId)) {
+                echo "<input type='hidden' name='is_adhoc' value='0'>";
+                echo "<label style='display:inline-flex;align-items:center;gap:6px;'>";
+                echo "<input type='checkbox' name='is_adhoc' value='1'" . ($isAdhoc ? ' checked' : '') . ">";
+                echo "<span class='text-muted'>" . __('Added to the sprint after kick-off (highlights the item)', 'sprint') . "</span>";
+                echo "</label>";
+            } else {
+                echo $isAdhoc
+                    ? self::renderAdhocBadge(true)
+                    : "<span class='text-muted'>" . __('No') . "</span>";
+                echo " <span class='text-muted small'>"
+                    . __('Only the Scrum Master can change this.', 'sprint') . "</span>";
+            }
+            echo "</td></tr>";
+        }
 
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Linked item type', 'sprint') . "</td><td>";
@@ -2620,10 +3122,15 @@ JS;
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Sprint') . "</td><td>";
         Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $sprintId]);
+        if (!$isFastlane) {
+            echo "<div class='text-muted small'><i class='fas fa-info-circle me-1'></i>"
+                . htmlescape(__('Picking a sprint you are not Scrum Master of creates an approval request.', 'sprint'))
+                . "</div>";
+        }
         echo "</td><td colspan='2'></td></tr>";
 
         echo "<tr class='tab_bg_1'><td>" . __('Description') . "</td>";
-        echo "<td colspan='3'><textarea name='description' rows='6' cols='80'>" .
+        echo "<td colspan='3'><textarea name='description' class='form-control' rows='6' cols='80'>" .
             htmlescape($this->fields['description'] ?? '') . "</textarea></td></tr>";
 
         $definedTags = Config::getDefinedTags();

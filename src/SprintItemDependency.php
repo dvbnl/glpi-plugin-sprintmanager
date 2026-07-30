@@ -168,7 +168,7 @@ class SprintItemDependency extends CommonDBRelation
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprintitems_id', ['value' => $itemId]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='4'>" .
                 __('Add a dependency on a colleague for this item', 'sprint') . "</th></tr>";
             echo "<tr class='tab_bg_1'>";
@@ -191,7 +191,7 @@ class SprintItemDependency extends CommonDBRelation
         $rel  = new self();
         $rows = $rel->find(['plugin_sprint_sprintitems_id' => $itemId]);
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Helper', 'sprint') . "</th>";
         echo "<th>" . __('Capacity (%)', 'sprint') . "</th>";

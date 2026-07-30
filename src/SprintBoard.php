@@ -197,7 +197,9 @@ class SprintBoard extends CommonGLPI
         echo "</div>";
 
         if ($linkedDisplay !== '') {
-            echo "<div class='sk-card-linked'>" . $linkedDisplay . "</div>";
+            echo "<div class='sk-card-linked'>" . $linkedDisplay
+                . SprintItem::renderParentProjectSuffix((string)($row['itemtype'] ?? ''), (int)($row['items_id'] ?? 0))
+                . "</div>";
         }
 
         echo "<div class='sk-card-meta'>";
@@ -222,6 +224,32 @@ class SprintBoard extends CommonGLPI
         $endpoint = Plugin::getWebDir('sprint') . '/ajax/updatestatus.php';
         $tokenUrl = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
         $errMove  = addslashes(__('Could not change the status — you can only move your own items.', 'sprint'));
+
+        // Confirmation dialog shown when a card moves to Review/Done while its
+        // underlying GLPI item is still open (see ajax/updatestatus.php).
+        $ttlLinkedOpen = htmlescape(__('Linked item open', 'sprint'));
+        $msgLinkedOpen = htmlescape(__('The linked ticket/change is not closed/solved yet', 'sprint'));
+        $btnOpenLinked = htmlescape(__('Open linked item', 'sprint'));
+        $btnContinue   = htmlescape(__('Continue anyway', 'sprint'));
+        $btnCancel     = htmlescape(__('Cancel'));
+        echo "<div class='modal fade' id='sprint-linkedopen-modal' tabindex='-1' aria-hidden='true'>"
+            . "<div class='modal-dialog modal-dialog-centered'>"
+            . "<div class='modal-content'>"
+            . "<div class='modal-header'>"
+            . "<h5 class='modal-title'><i class='fas fa-exclamation-triangle text-warning me-2'></i>{$ttlLinkedOpen}</h5>"
+            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>"
+            . "</div>"
+            . "<div class='modal-body'>"
+            . "<p class='mb-1'>{$msgLinkedOpen}</p>"
+            . "<p class='sprint-lo-name fw-bold mb-0'></p>"
+            . "</div>"
+            . "<div class='modal-footer'>"
+            . "<a href='#' target='_blank' rel='noopener' class='btn btn-outline-primary sprint-lo-open'>"
+            . "<i class='fas fa-external-link-alt me-1'></i>{$btnOpenLinked}</a>"
+            . "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$btnCancel}</button>"
+            . "<button type='button' class='btn btn-warning sprint-lo-continue'>{$btnContinue}</button>"
+            . "</div>"
+            . "</div></div></div>";
 
         echo <<<JS
 <script>
@@ -269,6 +297,80 @@ class SprintBoard extends CommonGLPI
         if (body && !body.contains(e.relatedTarget)) { body.classList.remove('sk-drag-over'); }
     });
 
+    // Context of a move waiting on the "linked item still open" confirmation.
+    var pendingMove = null;
+    var pendingMoveConfirmed = false;
+
+    function revertMove(card, fromBody) {
+        fromBody.appendChild(card);
+        card.setAttribute('data-status', fromBody.getAttribute('data-status'));
+        recount();
+    }
+
+    // Swap the card's "Linked item open" warning badge for the fresh
+    // server-rendered state (empty string removes it).
+    function syncLinkedOpenBadge(card, html) {
+        var title = card.querySelector('.sk-card-title');
+        if (!title) { return; }
+        title.querySelectorAll('.sprint-review-unclosed-badge').forEach(function(b){ b.remove(); });
+        if (html) {
+            var editBtn = title.querySelector('.sk-card-edit');
+            if (editBtn) { editBtn.insertAdjacentHTML('beforebegin', html); }
+            else { title.insertAdjacentHTML('beforeend', html); }
+        }
+    }
+
+    function persistStatus(id, newStatus, card, fromBody, confirmOpen) {
+        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
+        .then(function(tok){
+            return jQuery.ajax({
+                url: endpoint, type: 'POST', dataType: 'json',
+                data: {
+                    id: id, status: newStatus,
+                    confirm_linked_open: confirmOpen ? 1 : 0,
+                    _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                }
+            });
+        }).done(function(resp){
+            if (resp && resp.needs_confirm) {
+                var modalEl = document.getElementById('sprint-linkedopen-modal');
+                if (!modalEl) {
+                    // Modal missing (shouldn't happen): behave like before.
+                    revertMove(card, fromBody);
+                    if (window.glpi_toast_error) { window.glpi_toast_error(resp.message || "{$errMove}"); }
+                    return;
+                }
+                pendingMove = { id: id, newStatus: newStatus, card: card, fromBody: fromBody };
+                pendingMoveConfirmed = false;
+                var nameEl = modalEl.querySelector('.sprint-lo-name');
+                if (nameEl) { nameEl.textContent = resp.linked_name || ''; }
+                var openBtn = modalEl.querySelector('.sprint-lo-open');
+                if (openBtn) {
+                    if (resp.linked_url) {
+                        openBtn.style.display = '';
+                        openBtn.setAttribute('href', resp.linked_url);
+                    } else {
+                        openBtn.style.display = 'none';
+                    }
+                }
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                return;
+            }
+            if (resp && resp.success) {
+                syncLinkedOpenBadge(card, resp.linked_open_badge_html || '');
+                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || 'Status updated'); }
+            } else {
+                revertMove(card, fromBody);
+                var msg = (resp && resp.message && resp.message !== 'Update failed')
+                    ? resp.message : "{$errMove}";
+                if (window.glpi_toast_error) { window.glpi_toast_error(msg); }
+            }
+        }).fail(function(){
+            revertMove(card, fromBody);
+            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+        });
+    }
+
     document.addEventListener('drop', function(e){
         var body = e.target.closest && e.target.closest('.sprint-kanban-body');
         if (!body) { return; }
@@ -288,28 +390,29 @@ class SprintBoard extends CommonGLPI
         card.setAttribute('data-status', newStatus);
         recount();
 
-        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
-        .then(function(tok){
-            return jQuery.ajax({
-                url: endpoint, type: 'POST', dataType: 'json',
-                data: { id: id, status: newStatus, _glpi_csrf_token: tok && tok.token ? tok.token : '' }
-            });
-        }).done(function(resp){
-            if (resp && resp.success) {
-                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || 'Status updated'); }
-            } else {
-                // Revert.
-                fromBody.appendChild(card);
-                card.setAttribute('data-status', fromBody.getAttribute('data-status'));
-                recount();
-                if (window.glpi_toast_error) { window.glpi_toast_error("{$errMove}"); }
-            }
-        }).fail(function(){
-            fromBody.appendChild(card);
-            card.setAttribute('data-status', fromBody.getAttribute('data-status'));
-            recount();
-            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
-        });
+        persistStatus(id, newStatus, card, fromBody, false);
+    });
+
+    // "Continue anyway": retry the move with the confirmation flag set.
+    jQuery(document).on('click', '#sprint-linkedopen-modal .sprint-lo-continue', function(){
+        var modalEl = document.getElementById('sprint-linkedopen-modal');
+        pendingMoveConfirmed = true;
+        var inst = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+        if (inst) { inst.hide(); }
+        if (pendingMove) {
+            var mv = pendingMove;
+            pendingMove = null;
+            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, true);
+        }
+    });
+
+    // Dismissed without confirming (Cancel, X, backdrop): undo the move.
+    jQuery(document).on('hidden.bs.modal', '#sprint-linkedopen-modal', function(){
+        if (pendingMoveConfirmed) { pendingMoveConfirmed = false; return; }
+        if (pendingMove) {
+            revertMove(pendingMove.card, pendingMove.fromBody);
+            pendingMove = null;
+        }
     });
 })();
 </script>

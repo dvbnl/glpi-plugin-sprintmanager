@@ -56,7 +56,8 @@ class SprintProblem extends CommonDBRelation
     public static function showForSprint(Sprint $sprint): void
     {
         $ID      = $sprint->getID();
-        $canedit = Sprint::canUpdate();
+        // Linking work into a sprint is the Scrum Master's call.
+        $canedit = Sprint::canUpdate() && SprintItem::currentUserIsScrumMasterOf($ID);
 
         if ($canedit) {
             $memberOptions = SprintMember::getSprintMemberOptions($ID);
@@ -65,7 +66,7 @@ class SprintProblem extends CommonDBRelation
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprints_id', ['value' => $ID]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='4'>" .
                 __('Link a problem', 'sprint') . "</th></tr>";
             echo "<tr class='tab_bg_1'>";
@@ -91,7 +92,7 @@ class SprintProblem extends CommonDBRelation
         $link  = new self();
         $links = $link->find(['plugin_sprint_sprints_id' => $ID]);
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('ID') . "</th>";
         echo "<th>" . __('Title') . "</th>";
@@ -166,7 +167,7 @@ class SprintProblem extends CommonDBRelation
         ]);
         $statuses = Sprint::getAllStatuses();
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Sprint', 'sprint') . "</th>";
         echo "<th>" . __('Status') . "</th>";
@@ -197,9 +198,9 @@ class SprintProblem extends CommonDBRelation
 
         if (count($backlogRows) > 0) {
             $backlogUrl = Backlog::getSearchURL();
-            echo "<div class='center' style='margin-top:18px;'><table class='tab_cadre_fixe'>";
+            echo "<div class='center' style='margin-top:18px;'><table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'>";
-            echo "<th colspan='" . ($canedit ? 4 : 3) . "' style='background:#e7f1ff;color:#084298;'>"
+            echo "<th colspan='" . ($canedit ? 4 : 3) . "' style='background:color-mix(in srgb,#0d6efd 12%,var(--tblr-bg-surface,#fff));color:var(--tblr-primary,#0d6efd);'>"
                 . "<i class='fas fa-layer-group'></i> "
                 . __('On backlog', 'sprint')
                 . "</th>";
@@ -250,6 +251,15 @@ class SprintProblem extends CommonDBRelation
         if ($sprintId <= 0 || $problemId <= 0) {
             Session::addMessageAfterRedirect(
                 __('Please select a sprint and a problem.', 'sprint'),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        if (!SprintItem::currentUserIsScrumMasterOf($sprintId)) {
+            Session::addMessageAfterRedirect(
+                __('Only the Scrum Master of this sprint can link items to it.', 'sprint'),
                 false,
                 ERROR
             );

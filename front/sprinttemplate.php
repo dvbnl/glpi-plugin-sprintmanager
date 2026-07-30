@@ -10,9 +10,12 @@ Html::header(
     GlpiPlugin\Sprint\SprintTemplate::getTypeName(2),
     $_SERVER['PHP_SELF'],
     'helpdesk',
-    'GlpiPlugin\Sprint\Sprint'
+    'GlpiPlugin\Sprint\Sprint',
+    'sprinttemplate'
 );
 
+GlpiPlugin\Sprint\SprintOverview::navStart('sprinttemplate');
 Search::show('GlpiPlugin\Sprint\SprintTemplate');
+GlpiPlugin\Sprint\SprintOverview::navEnd();
 
 Html::footer();

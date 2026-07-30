@@ -100,6 +100,20 @@ $response = [
     'id'       => $id,
 ];
 
+// Closing (or reopening) the linked item flips the "Linked item open"
+// warning on every sprint item pointing at it, so hand the caller the fresh
+// badge per affected sprint item and let it patch the open views in place
+// instead of requiring a page reload.
+$affected = [];
+$sprintItem = new GlpiPlugin\Sprint\SprintItem();
+foreach ($sprintItem->find(['itemtype' => $itemtype, 'items_id' => $id]) as $siRow) {
+    $affected[] = [
+        'id'         => (int)$siRow['id'],
+        'badge_html' => GlpiPlugin\Sprint\SprintItem::renderLinkedItemOpenBadge($siRow),
+    ];
+}
+$response['affected_items'] = $affected;
+
 if ($itemtype === 'Ticket' || $itemtype === 'Change' || $itemtype === 'Problem') {
     $statuses = $itemtype::getAllStatusArray(true);
     $curStatus = (int)$item->fields['status'];

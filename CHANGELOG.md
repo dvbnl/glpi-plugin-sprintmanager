@@ -2,7 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.5] - 2026-07-17
+## [1.2.0] - 2026-07-30
+
+### Added
+- **SprintManager overview page**: the SprintManager menu now opens a landing page with a side navigation (Overview, Sprints, Backlog, Templates, Settings) instead of the bare search list. The navigation is rendered with GLPI's own Tabler card/list-group markup and wraps the Sprints, Backlog and Templates pages too, so every SprintManager page shares the same shell; the same entries appear as sub-items under the SprintManager menu. The **Overview** section aggregates every completed sprint in the selected period (**Today, This week, This month, 6 months, This year, All time**, filtered on the sprint end date) into ten KPI tiles — completed sprints, completed points, average velocity, predictability, items completed, velocity consistency, average fastlane capacity, adhoc, carry-over and blocked items — each with a **delta against the previous, equally long period**. Below that: a velocity trend chart with a predictability line, a planned-vs-delivered chart including carry-over, a fastlane & adhoc chart with the capacity line, ranked breakdowns per member and per linked item type, and a per-sprint detail table. All charts are inline SVG, so no external assets are needed
+- **Flow metrics from the history log**: the overview reconstructs **average cycle time** (first progress → done), **days spent blocked** and the **rework rate** (items that were done and got reopened) from `glpi_logs`, plus **approval-queue throughput** (requests raised, % accepted, average wait between submission and decision)
+- **Workload per member**: a card ranking every member by allocated capacity — regular items, fastlane allocations and dependency capacity together — against their availability, with the average and peak load and how many sprints they went over capacity
+- **Request submission date**: the approval-request tables (backlog panel and the sprint *Requests* tab) show when each request was submitted, with a relative age underneath ("3 days ago") so requests that have been waiting stand out
+
+### Changed
+- **One menu entry**: *Backlog* no longer sits next to *SprintManager* under Assistance. It is reachable from the SprintManager side navigation and as a sub-item of the SprintManager menu, so the plugin occupies a single menu slot
+- **Velocity chart window**: the sprint dashboard now plots **this sprint and the six before it** (current -6) instead of the last eight completed sprints globally, so the chart always ends at the sprint you are looking at. The current sprint's label is highlighted and the dashed average line is calculated over the **completed** sprints in the window only, so a sprint still in flight no longer drags the reference down
+
+### Fixed
+- **Approval bypass via the sprint item form**: picking a sprint in the item form's *Sprint* dropdown moved the item straight into that sprint, sidestepping the Scrum Master approval queue that the backlog enforces. Assignment is now guarded server-side in `prepareInputForUpdate()`/`prepareInputForAdd()`, so it holds for every write path: a backlog item picked by a non-Scrum-Master creates a pending **assign request** (and keeps the sprint as its proposal) instead of being assigned, moving an item between sprints is rejected with a message, and creating an item directly into a sprint lands it on the backlog with that sprint pre-selected. Fastlane items stay self-service, and server-side carry-over / template application run through a narrow internal bypass so they keep working
+- **Fastlane flag was an escape hatch**: fastlane items may be pulled into a sprint by anyone (interrupt work, by design), but nothing stopped the flag from being cleared afterwards — turning a self-assigned item into a regular sprint item without the Scrum Master. Inside a sprint, only that sprint's Scrum Master can change `is_fastlane` now
+- **Cross-entity leak on the overview**: the new statistics page aggregated sprints through `find()`, which has no visibility layer, so it summed sprints from every entity. It now applies `getEntitiesRestrictCriteria()` like `Sprint::dropdown()` does; every downstream query is keyed off that sprint list
+- **Approval bypass via the sprint relation tabs**: the *Link a ticket / change / problem / project task* forms on a sprint were open to anyone with the sprint update right, which put work into a sprint without the Scrum Master. The form is now hidden for non-Scrum-Masters and the add is rejected server-side in each relation's `prepareInputForAdd()`
+
+## [1.1.6] - 2026-07-21
+
+### Added
+- **Adhoc flag**: Scrum Master-only checkbox on sprint items (quick-edit modals) for work added after kick-off; flagged rows get a violet highlight + badge on the dashboard, personal view and meetings (new `is_adhoc` column)
+- **Backlog capacity preview**: with an owner + proposed sprint set, the row shows a free-capacity chip and the edit modal a live breakdown (total, used in sprint, pending from backlog, free after assigning) via the new `ajax/backlogcapacity.php`
+- **Collapsible meeting sections**: Fastlane and Sprint Items Review fold like the dashboard sections, persisted per meeting
+
+### Changed
+- **Backlog redesign**: compact read-only rows (owner, sprint, capacity, status icons); all editing moved to a per-row modal — no more inline dropdowns per row. Multiple dependencies can be added in a row from the modal, and "Assign all ready" now only assigns complete items (owner + sprint + capacity)
+- **Velocity chart**: third bar per sprint with the adhoc item count
+- **Capacity dropdowns start at 0.5%**: the 0% option is gone (existing 0 values are preserved until edited)
+- **Compact view switcher**: Global/Personal toggle is now a small segmented control and remembers the last choice
+
+### Fixed
+- **Backlog dependency button**: no longer fails silently — clear feedback when no sprint is pre-selected or no toast function exists
+- **Dark themes**: light/white bars (section headers, filter bars, table header rows, capacity section, note fields) now follow the active theme via Tabler variables
 
 ### Added
 - **0.5% capacity granularity**: every capacity field (member capacity, sprint item capacity, fastlane allocations, dependencies, template members and the per-sprint fastlane cap) now accepts half percents. All capacity dropdowns gain a **0.5%** choice and now step per whole percent up to 10% (0.5, 1–10, then per 5 up to 100), the fastlane cap field steps by 0.5, and the six capacity columns were migrated from `INT` to `DECIMAL(5,1)` (existing values are preserved). Totals, capacity bars, overflow warnings/confirmations, the dashboard, the export report and the CSV all render halves as `0.5%` — whole numbers keep rendering without decimals

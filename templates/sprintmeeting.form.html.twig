@@ -69,16 +69,18 @@
 
     <tr><td colspan="4" style="padding:0;">
 
-        {# === Fastlane section === #}
+        {# === Fastlane section (collapsible, same pattern as the dashboard) === #}
         {% if fastlane_items|length > 0 %}
-        <div class="mt-2 mb-0">
-            <div class="d-flex align-items-center px-3 py-2" style="background:#fff3cd;font-weight:700;border-bottom:2px solid #fd7e14;border-radius:6px 6px 0 0;">
+        <div class="sprint-collapsible mt-2 mb-0" data-sprint-collapse-key="meeting-fastlane-{{ item.fields['id'] }}" style="border-bottom:2px solid #fd7e14;">
+            <div class="sprint-collapsible-header">
+                <i class="fas fa-chevron-down sprint-collapsible-chevron"></i>
                 <i class="fas fa-bolt" style="color:#fd7e14;"></i>
-                <span class="ms-2">{{ __('Fastlane', 'sprint') }}</span>
-                <span class="badge bg-warning text-dark ms-2">{{ fastlane_items|length }}</span>
+                <span>{{ __('Fastlane', 'sprint') }}</span>
+                <span class="badge bg-warning text-dark">{{ fastlane_items|length }}</span>
             </div>
+            <div class="sprint-collapsible-body">
             <div id="sprint-filter-fastlane" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
-                 data-target="sprint-review-fastlane" style="background:#f1f3f5;border-radius:6px;">
+                 data-target="sprint-review-fastlane">
                 <div class="d-flex align-items-center gap-1 text-muted small">
                     <i class="fas fa-filter"></i><span>{{ __('Filter', 'sprint') }}</span>
                 </div>
@@ -131,7 +133,7 @@
                         {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
                         {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
                         {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
-                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}{% if si.review_unclosed %} sprint-review-unclosed{% endif %}"
+                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}{% if si.review_unclosed %} sprint-review-unclosed{% endif %}{% if si.is_adhoc %} sprint-adhoc{% endif %}"
                             data-item-id="{{ si.id }}"
                             data-item-name="{{ si.name }}"
                             data-item-status="{{ si.status }}"
@@ -142,9 +144,11 @@
                             data-story-points="{{ si.story_points }}"
                             data-capacity="{{ si.capacity }}"
                             data-is-fastlane="1"
+                            data-is-adhoc="{{ si.is_adhoc ? '1' : '0' }}"
                             data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"
                             data-note="{{ si.note }}"
                             data-item-tags="{{ si.tags_blob|default('|') }}"
+                            data-linked-itemtype="{{ si.itemtype }}"
                             data-fastlane-url="{{ si.fastlane_url }}"
                             data-fastlane-allocations="{{ si.fastlane_allocations|default([])|json_encode|e('html_attr') }}">
                             <td class="text-center" style="white-space:nowrap;">
@@ -162,7 +166,8 @@
                             </td>
                             <td>
                                 <i class="fas fa-bolt" style="color:#fd7e14;margin-right:4px;"></i>
-                                <a href="{{ si.url }}">{{ si.name }}</a>
+                                <a href="{{ si.url }}">{{ si.name }}</a>{{ si.project_suffix_html|default('')|raw }}
+                                {% if si.is_adhoc %}<span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>{% endif %}
                                 {{ si.tags_pills_html|default('')|raw }}
                             </td>
                             <td class="sprint-review-linked">{{ si.linked_display|raw }}</td>
@@ -215,7 +220,7 @@
                                 {% endif %}
                             </td>
                             <td class="sprint-review-note" style="max-width:360px;">
-                                <div class="sprint-note-display" style="white-space:pre-wrap;word-break:break-word;min-height:38px;max-height:120px;overflow:auto;padding:6px 8px;background:#f8f9fa;border:1px solid #e9ecef;border-radius:4px;font-size:0.88em;color:#495057;">{{ si.note }}</div>
+                                <div class="sprint-note-display">{{ si.note }}</div>
                             </td>
                             <td class="text-center" style="white-space:nowrap;">
                                 <button type="button"
@@ -267,19 +272,22 @@
                     </tbody>
                 </table>
             </div>
+            </div>
         </div>
         {% endif %}
 
-        {# === Regular sprint items section === #}
-        <div class="{{ fastlane_items|length > 0 ? 'mt-3' : 'mt-2' }} mb-2">
-            <div class="d-flex align-items-center px-3 py-2" style="background:#f8f9fa;font-weight:700;border-radius:6px 6px 0 0;">
+        {# === Regular sprint items section (collapsible) === #}
+        <div class="sprint-collapsible {{ fastlane_items|length > 0 ? 'mt-3' : 'mt-2' }} mb-2" data-sprint-collapse-key="meeting-items-{{ item.fields['id'] }}">
+            <div class="sprint-collapsible-header">
+                <i class="fas fa-chevron-down sprint-collapsible-chevron"></i>
                 <i class="fas fa-clipboard-list"></i>
-                <span class="ms-2">{{ __('Sprint Items Review', 'sprint') }}</span>
-                <span class="badge bg-secondary ms-2">{{ regular_items|length }}</span>
+                <span>{{ __('Sprint Items Review', 'sprint') }}</span>
+                <span class="badge bg-secondary">{{ regular_items|length }}</span>
             </div>
+            <div class="sprint-collapsible-body">
             {% if regular_items|length > 0 %}
             <div id="sprint-filter-regular" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
-                 data-target="sprint-review-regular" style="background:#f1f3f5;border-radius:6px;">
+                 data-target="sprint-review-regular">
                 <div class="d-flex align-items-center gap-1 text-muted small">
                     <i class="fas fa-filter"></i><span>{{ __('Filter', 'sprint') }}</span>
                 </div>
@@ -332,7 +340,7 @@
                         {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
                         {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
                         {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
-                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}{% if si.review_unclosed %} sprint-review-unclosed{% endif %}"
+                        <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}{% if si.review_unclosed %} sprint-review-unclosed{% endif %}{% if si.is_adhoc %} sprint-adhoc{% endif %}"
                             data-item-id="{{ si.id }}"
                             data-item-name="{{ si.name }}"
                             data-item-status="{{ si.status }}"
@@ -343,8 +351,10 @@
                             data-story-points="{{ si.story_points }}"
                             data-capacity="{{ si.capacity }}"
                             data-is-fastlane="0"
+                            data-is-adhoc="{{ si.is_adhoc ? '1' : '0' }}"
                             data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"
                             data-item-tags="{{ si.tags_blob|default('|') }}"
+                            data-linked-itemtype="{{ si.itemtype }}"
                             data-note="{{ si.note }}">
                             <td class="text-center" style="white-space:nowrap;">
                                 {% if si.itemtype == 'Ticket' %}
@@ -359,7 +369,7 @@
                                     <i class="fas fa-clipboard-list" style="color:#6c757d;" title="{{ __('Manual', 'sprint') }}"></i>
                                 {% endif %}
                             </td>
-                            <td><a href="{{ si.url }}">{{ si.name }}</a>{{ si.tags_pills_html|default('')|raw }}</td>
+                            <td><a href="{{ si.url }}">{{ si.name }}</a>{{ si.project_suffix_html|default('')|raw }}{% if si.is_adhoc %} <span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>{% endif %}{{ si.tags_pills_html|default('')|raw }}</td>
                             <td class="sprint-review-linked">{{ si.linked_display|raw }}</td>
                             <td>
                                 <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
@@ -395,7 +405,7 @@
                                 {% endif %}
                             </td>
                             <td class="sprint-review-note" style="max-width:360px;">
-                                <div class="sprint-note-display" style="white-space:pre-wrap;word-break:break-word;min-height:38px;max-height:120px;overflow:auto;padding:6px 8px;background:#f8f9fa;border:1px solid #e9ecef;border-radius:4px;font-size:0.88em;color:#495057;">{{ si.note }}</div>
+                                <div class="sprint-note-display">{{ si.note }}</div>
                             </td>
                             <td class="text-center" style="white-space:nowrap;">
                                 <button type="button"
@@ -448,6 +458,7 @@
                 {{ __('No items in this sprint', 'sprint') }}
             </div>
             {% endif %}
+            </div>
         </div>
 
         <script>
@@ -598,11 +609,32 @@
                 $modal.find('.sprint-qe-title').text(itemName);
                 $modal.find('input[name=id]').val(itemId);
                 $modal.find('input[name=name]').val(itemName);
+                // Linked items mirror the underlying item's name
+                // (server-enforced); only manual items are editable.
+                (function() {
+                    var linkedType = String($row.attr('data-linked-itemtype') || '');
+                    $modal.find('input[name=name]')
+                        .prop('readonly', linkedType !== '')
+                        .attr('title', linkedType !== '' ? '{{ __('The name follows the linked item and cannot be edited here.', 'sprint')|e('js') }}' : '');
+                })();
+                $modal.find('input[name=is_adhoc]').prop('checked', parseInt($row.data('is-adhoc'), 10) === 1);
                 $modal.find('select[name=status]').val(String(status));
                 $modal.find('select[name=priority]').val(String(priority));
                 $modal.find('select[name=users_id]').val(String(usersId));
                 $modal.find('input[name=story_points]').val(points);
-                $modal.find('select[name=capacity]').val(String(capacity));
+                // Match the capacity option numerically ("0.5"/"5.0"/5 all
+                // resolve to the same option) so DECIMAL formatting from the
+                // database never clears the selection.
+                (function() {
+                    var $sel = $modal.find('select[name=capacity]');
+                    var num  = parseFloat(capacity);
+                    if (isNaN(num)) { num = 0; }
+                    var match = '';
+                    $sel.find('option').each(function() {
+                        if (parseFloat(this.value) === num) { match = this.value; return false; }
+                    });
+                    $sel.val(match);
+                })();
                 $modal.find('textarea[name=note]').val(note);
                 $modal.find('select[name=carry_over_to_sprint_id]').val('0');
                 $modal.find('.sprint-qe-error').hide().text('');
@@ -661,8 +693,11 @@
                     $fastList.hide();
                 }
 
+                // Guarded capacity for non-scrum-master users: the select stays
+                // enabled, but the change is sent to the Scrum Master as an
+                // approval request instead of applied directly.
                 var capacityLocked = {{ capacity_locked ? 'true' : 'false' }};
-                $modal.find('select[name=capacity]').prop('disabled', capacityLocked && !isFastlane);
+                $modal.find('.sprint-qe-capacity-hint').toggle(capacityLocked && !isFastlane);
 
                 var m = new bootstrap.Modal($modal[0]);
                 m.show();
@@ -687,6 +722,11 @@
                         data: {
                             id:           id,
                             name:         $modal.find('input[name=name]').val(),
+                            // Only the Scrum Master's modal renders the adhoc
+                            // switch; jQuery drops undefined values for others.
+                            is_adhoc:     $modal.find('input[name=is_adhoc]').length
+                                ? ($modal.find('input[name=is_adhoc]').is(':checked') ? 1 : 0)
+                                : undefined,
                             status:       $modal.find('select[name=status]').val(),
                             priority:     $modal.find('select[name=priority]').val(),
                             users_id:     $modal.find('select[name=users_id]').val(),
@@ -714,6 +754,11 @@
                     if (resp && resp.success) {
                         if (resp.carried_over && resp.carry_over_message) {
                             try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.carry_over_message); } } catch (e) {}
+                        }
+                        // Relay server-side notices (e.g. "capacity change sent
+                        // to the Scrum Master for approval").
+                        if (resp.message && resp.message !== 'Item updated') {
+                            try { if (typeof glpi_toast_info === 'function') { glpi_toast_info(resp.message); } } catch (e) {}
                         }
                         var $row = $('tr.sprint-review-row[data-item-id="' + id + '"]');
                         var statusSelect = $modal.find('select[name=status]');
@@ -749,6 +794,22 @@
                             var href = $a.attr('href');
                             return href && href.indexOf('sprintitem.form.php') !== -1;
                         }).text(resp.name);
+
+                        if (typeof resp.is_adhoc !== 'undefined') {
+                            var adhocOn = parseInt(resp.is_adhoc, 10) === 1;
+                            $row.attr('data-is-adhoc', adhocOn ? '1' : '0').data('is-adhoc', adhocOn ? 1 : 0);
+                            $row.toggleClass('sprint-adhoc', adhocOn);
+                            var $nameLink = $row.find('td a').filter(function() {
+                                var href = $(this).attr('href');
+                                return !$(this).hasClass('btn') && href && href.indexOf('sprintitem.form.php') !== -1;
+                            }).first();
+                            $row.find('.sprint-adhoc-badge').remove();
+                            if (adhocOn && $nameLink.length) {
+                                $nameLink.after(
+                                    $('<span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint')|e('js') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint')|e('js') }}</span>')
+                                );
+                            }
+                        }
 
                         if (window.SprintFilter) { window.SprintFilter.applyAll(); }
 
@@ -884,6 +945,16 @@
                             <input type="text" name="name" class="form-control" value="">
                         </div>
 
+                        {% if is_scrum_master|default(false) %}
+                        <div class="mb-3 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="sprint-qe-adhoc" name="is_adhoc">
+                            <label class="form-check-label" for="sprint-qe-adhoc">
+                                <span class="sprint-adhoc-badge"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>
+                                {{ __('Added to the sprint after kick-off (highlights the item)', 'sprint') }}
+                            </label>
+                        </div>
+                        {% endif %}
+
                         <div class="row g-3">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">{{ __('Status') }}</label>
@@ -916,7 +987,7 @@
                                 <label class="form-label">
                                     <i class="fas fa-bolt text-warning me-1"></i>{{ __('Fastlane allocations', 'sprint') }}
                                 </label>
-                                <div class="sprint-qe-fastlane-list" style="border:1px solid #e9ecef;border-radius:6px;padding:8px 10px;background:#fff8e1;font-size:0.9em;min-height:38px;"></div>
+                                <div class="sprint-qe-fastlane-list"></div>
                                 <a href="#" class="sprint-qe-fastlane-manage btn btn-sm btn-outline-warning mt-2" target="_blank" rel="noopener">
                                     <i class="fas fa-cog me-1"></i>{{ __('Manage fastlane members', 'sprint') }}
                                 </a>
@@ -932,6 +1003,9 @@
                                     <option value="{{ val }}">{{ label }}</option>
                                     {% endfor %}
                                 </select>
+                                <div class="form-text small text-warning sprint-qe-capacity-hint" style="display:none;">
+                                    <i class="fas fa-user-shield me-1"></i>{{ __('Capacity changes are sent to the Scrum Master for approval.', 'sprint') }}
+                                </div>
                             </div>
                         </div>
 

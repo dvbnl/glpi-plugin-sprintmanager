@@ -86,7 +86,7 @@ class SprintTemplateMeeting extends CommonDBTM
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprinttemplates_id', ['value' => $ID]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='8'>" .
                 __('Add a meeting to the schedule', 'sprint') . "</th></tr>";
 
@@ -192,7 +192,7 @@ class SprintTemplateMeeting extends CommonDBTM
             ['sort_order ASC']
         );
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Ceremony', 'sprint') . "</th>";
         echo "<th>" . __('Name') . "</th>";

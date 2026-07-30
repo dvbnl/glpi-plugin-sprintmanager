@@ -38,6 +38,23 @@ class SprintTemplateMember extends CommonDBRelation
         return '';
     }
 
+    /** Capacity is stored as DECIMAL(5,1); snap to 0.5% steps like everywhere else. */
+    public function prepareInputForAdd($input)
+    {
+        if (isset($input['capacity_percent'])) {
+            $input['capacity_percent'] = SprintMember::normalizeCapacity($input['capacity_percent']);
+        }
+        return parent::prepareInputForAdd($input);
+    }
+
+    public function prepareInputForUpdate($input)
+    {
+        if (isset($input['capacity_percent'])) {
+            $input['capacity_percent'] = SprintMember::normalizeCapacity($input['capacity_percent']);
+        }
+        return parent::prepareInputForUpdate($input);
+    }
+
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0): bool
     {
         if ($item instanceof SprintTemplate) {
@@ -58,7 +75,7 @@ class SprintTemplateMember extends CommonDBRelation
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprinttemplates_id', ['value' => $ID]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='6'>" .
                 __('Add a default team member', 'sprint') . "</th></tr>";
 
@@ -89,7 +106,7 @@ class SprintTemplateMember extends CommonDBRelation
         $member  = new self();
         $members = $member->find(['plugin_sprint_sprinttemplates_id' => $ID], ['role ASC']);
 
-        echo "<div class='center'><table class='tab_cadre_fixe'>";
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('User') . "</th>";
         echo "<th>" . __('Role', 'sprint') . "</th>";

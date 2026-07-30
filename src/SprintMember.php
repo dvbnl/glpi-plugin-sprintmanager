@@ -69,18 +69,14 @@ class SprintMember extends CommonDBRelation
 
     /**
      * Capacity-percent dropdown choices: 0.5 and 1..10 for tiny allocations,
-     * then per-5.
+     * then per-5. Estimates start at 0.5% — a 0% allocation adds nothing.
      *
-     * @param bool $includeZero If true, prepends a 0% option.
+     * @param bool $includeZero Kept for backward compatibility; ignored.
      * @return array<int|string,string> [value => label]
      */
     public static function getCapacityChoices(bool $includeZero = true): array
     {
-        $values = [];
-        if ($includeZero) {
-            $values[] = 0;
-        }
-        $values[] = '0.5';
+        $values = ['0.5'];
         for ($i = 1; $i <= 10; $i++) {
             $values[] = $i;
         }
@@ -119,7 +115,7 @@ class SprintMember extends CommonDBRelation
         $totalMarkerLeft = ($used > $total && $denom > 0) ? round(($total / $denom) * 100, 2) : 0;
         $regularColor    = $used > $total ? '#dc3545' : ($used >= $total * 0.8 ? '#e67e22' : '#198754');
 
-        $html = "<div style='position:relative;display:flex;height:{$height}px;background:#e9ecef;border-radius:{$borderRadius};overflow:hidden;'>";
+        $html = "<div style='position:relative;display:flex;height:{$height}px;background:var(--tblr-border-color,#e9ecef);border-radius:{$borderRadius};overflow:hidden;'>";
         if ($regularW > 0) {
             $html .= "<div style='width:{$regularW}%;height:100%;background:{$regularColor};' title='" . __('Regular', 'sprint') . " " . self::formatCapacity($regularUsed) . "%'></div>";
         }
@@ -204,7 +200,7 @@ class SprintMember extends CommonDBRelation
             echo "<form method='post' action='" . static::getFormURL() . "'>";
             echo Html::hidden('plugin_sprint_sprints_id', ['value' => $ID]);
 
-            echo "<table class='tab_cadre_fixe'>";
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='6'>" .
                 __('Add a team member', 'sprint') . "</th></tr>";
 
@@ -266,7 +262,7 @@ class SprintMember extends CommonDBRelation
             self::ROLE_OTHER         => 'fas fa-user',
         ];
 
-        echo "<div class='center' style='margin-top:16px;'><table class='tab_cadre_fixe'>";
+        echo "<div class='center' style='margin-top:16px;'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'><th colspan='" . ($canedit ? 4 : 3) . "'>" .
             "<i class='fas fa-user-cog' style='margin-right:6px;'></i>" .
             __('Member settings', 'sprint') . "</th></tr>";
@@ -298,7 +294,7 @@ class SprintMember extends CommonDBRelation
             $pctLabel = self::formatCapacity($pct);
             $barColor = $pct >= 80 ? '#198754' : ($pct >= 50 ? '#ffc107' : '#dc3545');
             echo "<div style='display:flex;align-items:center;gap:8px;'>";
-            echo "<div style='width:80px;height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;'>";
+            echo "<div style='width:80px;height:10px;background:var(--tblr-border-color,#e9ecef);border-radius:5px;overflow:hidden;'>";
             echo "<div style='width:{$pct}%;height:100%;background:{$barColor};'></div>";
             echo "</div>";
             echo "<span>{$pctLabel}%</span>";
@@ -388,7 +384,7 @@ class SprintMember extends CommonDBRelation
             $progressColor = $progressPct >= 80 ? '#198754' : ($progressPct >= 50 ? '#ffc107' : ($progressPct > 0 ? '#0d6efd' : '#adb5bd'));
             $capBarColor   = $capUsedPct >= 100 ? '#dc3545' : ($capUsedPct >= 80 ? '#e67e22' : '#198754');
 
-            echo "<div style='border:1px solid #e9ecef;border-radius:10px;padding:14px 16px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.03);'>";
+            echo "<div style='border:1px solid var(--tblr-border-color,#e9ecef);border-radius:10px;padding:14px 16px;background:var(--tblr-bg-surface,#fff);box-shadow:0 1px 2px rgba(0,0,0,0.03);'>";
 
             echo "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>";
             echo "<i class='fas fa-user-circle' style='font-size:1.6em;color:#6c757d;'></i>";
@@ -398,7 +394,7 @@ class SprintMember extends CommonDBRelation
             echo "</div>";
             if ($fastlaneItemCount > 0) {
                 echo "<span title='" . __('Fastlane items assigned', 'sprint') . "' "
-                    . "style='background:#fff3cd;color:#fd7e14;padding:2px 8px;border-radius:10px;font-size:0.78em;font-weight:700;margin-right:4px;'>"
+                    . "style='background:color-mix(in srgb,#fd7e14 18%,var(--tblr-bg-surface,#fff));color:#fd7e14;padding:2px 8px;border-radius:10px;font-size:0.78em;font-weight:700;margin-right:4px;'>"
                     . "<i class='fas fa-bolt'></i> {$fastlaneItemCount}</span>";
             }
             if ($dependencyItemCount > 0) {
@@ -413,7 +409,7 @@ class SprintMember extends CommonDBRelation
             echo "<span>" . __('Sprint progress', 'sprint') . "</span>";
             echo "<span><strong>{$done}</strong> / {$total} " . __('items done', 'sprint') . " ({$progressPct}%)</span>";
             echo "</div>";
-            echo "<div style='height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;'>";
+            echo "<div style='height:10px;background:var(--tblr-border-color,#e9ecef);border-radius:5px;overflow:hidden;'>";
             echo "<div style='width:{$progressPct}%;height:100%;background:{$progressColor};transition:width 0.3s;'></div>";
             echo "</div>";
             echo "</div>";
@@ -611,7 +607,7 @@ class SprintMember extends CommonDBRelation
         }
         $out .= "</div>";
 
-        $out .= "<div style='flex:1;min-width:120px;height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;display:flex;'>";
+        $out .= "<div style='flex:1;min-width:120px;height:10px;background:var(--tblr-border-color,#e9ecef);border-radius:5px;overflow:hidden;display:flex;'>";
         foreach ($segments as [$key, $label, $color, $icon]) {
             $n = (int)($counts[$key] ?? 0);
             if ($n === 0) {
@@ -728,6 +724,93 @@ class SprintMember extends CommonDBRelation
         );
 
         return $regularUsed + $fastlaneUsed + $dependencyUsed;
+    }
+
+    /**
+     * Capacity snapshot for the backlog: how full is $userId in $sprintId
+     * right now (items already in the sprint), plus how much is already
+     * pencilled in by other backlog items proposed for that same sprint.
+     * Cached per request so rendering many backlog rows stays cheap.
+     *
+     * @return array{total: float, used: float, pending_other: float, is_member: bool}|null
+     *         null when the sprint/user pair is invalid.
+     */
+    public static function backlogCapacityPreview(int $sprintId, int $userId, int $excludeItemId = 0): ?array
+    {
+        if ($sprintId <= 0 || $userId <= 0) {
+            return null;
+        }
+
+        static $cache = [];
+        $key = $sprintId . ':' . $userId;
+        if (!isset($cache[$key])) {
+            $member   = new self();
+            $rows     = $member->find([
+                'plugin_sprint_sprints_id' => $sprintId,
+                'users_id'                 => $userId,
+            ]);
+            $isMember = count($rows) > 0;
+            $total    = 0.0;
+            if ($isMember) {
+                $first = reset($rows);
+                $total = self::normalizeCapacity($first['capacity_percent'] ?? 0);
+            }
+
+            $used = self::getUsedCapacityForUser($sprintId, $userId);
+
+            // Pending = backlog rows pencilled in for this sprint: items the
+            // user owns (fastlane rows spread capacity via their own junction
+            // table) plus open dependency allocations where the user is the
+            // coupled helper — those claim their capacity too.
+            $pendingIds = [];
+            $depIds     = [];
+            $si = new SprintItem();
+            $allProposed = $si->find([
+                'plugin_sprint_sprints_id' => 0,
+                'proposed_sprints_id'      => $sprintId,
+            ]);
+            foreach ($allProposed as $r) {
+                if ((int)$r['users_id'] === $userId && (int)($r['is_fastlane'] ?? 0) === 0) {
+                    $pendingIds[(int)$r['id']] = (float)($r['capacity'] ?? 0);
+                }
+            }
+            $proposedItemIds = array_map(fn($r) => (int)$r['id'], $allProposed);
+            if (count($proposedItemIds) > 0) {
+                $dep = new SprintItemDependency();
+                foreach ($dep->find([
+                    'plugin_sprint_sprintitems_id' => $proposedItemIds,
+                    'users_id'                     => $userId,
+                    'is_resolved'                  => 0,
+                ]) as $d) {
+                    $iid = (int)$d['plugin_sprint_sprintitems_id'];
+                    $depIds[$iid] = ($depIds[$iid] ?? 0.0) + (float)$d['capacity'];
+                }
+            }
+
+            $cache[$key] = [
+                'total'       => $total,
+                'used'        => $used,
+                'pending_ids' => $pendingIds,
+                'dep_ids'     => $depIds,
+                'is_member'   => $isMember,
+            ];
+        }
+
+        $c            = $cache[$key];
+        $pendingOther = array_sum($c['pending_ids']) + array_sum($c['dep_ids']);
+        if ($excludeItemId > 0 && isset($c['pending_ids'][$excludeItemId])) {
+            $pendingOther -= $c['pending_ids'][$excludeItemId];
+        }
+        if ($excludeItemId > 0 && isset($c['dep_ids'][$excludeItemId])) {
+            $pendingOther -= $c['dep_ids'][$excludeItemId];
+        }
+
+        return [
+            'total'         => $c['total'],
+            'used'          => $c['used'],
+            'pending_other' => $pendingOther,
+            'is_member'     => $c['is_member'],
+        ];
     }
 
     /**
