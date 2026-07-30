@@ -220,7 +220,7 @@ class SprintOverview extends CommonGLPI
             }
         );
 
-        echo "<div class='row g-3'>";
+        echo "<div class='row g-3 mb-3'>";
         self::renderCard(
             __('Completed points per member', 'sprint'),
             'fas fa-users',
@@ -392,7 +392,7 @@ class SprintOverview extends CommonGLPI
             [
                 'icon'  => 'fas fa-ban',
                 'color' => 'secondary',
-                'value' => (string)$data['blocked'],
+                'value' => (string)max($data['blocked'], $data['flow']['blocked_items']),
                 'label' => __('Blocked items', 'sprint'),
                 'delta' => '',
             ],
@@ -563,7 +563,7 @@ class SprintOverview extends CommonGLPI
             'per_member'     => [],
             'per_type'       => [],
             'workload'       => [],
-            'flow'           => ['cycle_days' => 0.0, 'blocked_days' => 0.0, 'rework_pct' => 0, 'measured' => 0],
+            'flow'           => ['cycle_days' => 0.0, 'blocked_days' => 0.0, 'rework_pct' => 0, 'measured' => 0, 'blocked_items' => 0],
             'requests'       => ['total' => 0, 'accepted_pct' => 0, 'wait_days' => 0.0],
         ];
         if ($out['sprint_count'] === 0) {
@@ -610,7 +610,10 @@ class SprintOverview extends CommonGLPI
             if ((int)($item['is_adhoc'] ?? 0) === 1) {
                 $bucket['adhoc']++;
             }
-            if ((int)($item['is_blocked'] ?? 0) === 1) {
+            // In a sprint blocked lives in `status`; `is_blocked` is the
+            // backlog flag, cleared on assignment.
+            if ((string)$item['status'] === SprintItem::STATUS_BLOCKED
+                || (int)($item['is_blocked'] ?? 0) === 1) {
                 $bucket['blocked']++;
             }
             unset($bucket);
@@ -807,13 +810,25 @@ class SprintOverview extends CommonGLPI
     /**
      * Reconstructed from GLPI's history: time to done, time blocked, reopens.
      *
-     * @return array{cycle_days:float,blocked_days:float,rework_pct:int,measured:int}
+     * @return array{cycle_days:float,blocked_days:float,rework_pct:int,measured:int,blocked_items:int}
      */
     private static function flowMetrics(array $items): array
     {
         global $DB;
 
-        $out = ['cycle_days' => 0.0, 'blocked_days' => 0.0, 'rework_pct' => 0, 'measured' => 0];
+        $out = ['cycle_days' => 0.0, 'blocked_days' => 0.0, 'rework_pct' => 0, 'measured' => 0, 'blocked_items' => 0];
+
+        // Still blocked at close; the log walk below adds the ones that only
+        // passed through blocked, or a completed sprint reports no blockers.
+        $everBlocked = [];
+        foreach ($items as $item) {
+            if ((string)($item['status'] ?? '') === SprintItem::STATUS_BLOCKED
+                || (int)($item['is_blocked'] ?? 0) === 1) {
+                $everBlocked[(int)$item['id']] = true;
+            }
+        }
+        $out['blocked_items'] = count($everBlocked);
+
         $ids = array_map(static fn($i) => (int)$i['id'], $items);
         if (empty($ids) || !$DB->tableExists('glpi_logs')) {
             return $out;
@@ -845,7 +860,7 @@ class SprintOverview extends CommonGLPI
         $blockedSeconds = 0;
         $doneItems = 0;
         $reopened  = 0;
-        foreach ($logs as $itemLogs) {
+        foreach ($logs as $itemId => $itemLogs) {
             $started    = null;
             $finished   = null;
             $blockedAt  = null;
@@ -868,6 +883,7 @@ class SprintOverview extends CommonGLPI
 
                 if (in_array($value, $blocked, true)) {
                     $blockedAt = $ts;
+                    $everBlocked[$itemId] = true;
                 } elseif ($blockedAt !== null) {
                     $blockedSeconds += max(0, $ts - $blockedAt);
                     $blockedAt = null;
@@ -890,6 +906,7 @@ class SprintOverview extends CommonGLPI
         $out['blocked_days'] = $blockedSeconds / 86400;
         $out['rework_pct']   = $doneItems > 0 ? (int)round(($reopened / $doneItems) * 100) : 0;
         $out['measured']     = $cycleN;
+        $out['blocked_items'] = count($everBlocked);
         return $out;
     }
 
@@ -1033,7 +1050,10 @@ class SprintOverview extends CommonGLPI
         if ($wrapper !== '') {
             echo "<div class='" . htmlescape($wrapper) . "'>";
         }
-        echo "<div class='card mb-3 h-100'><div class='card-body'>";
+        // h-100 only for cards sharing a row: on a full-width card the
+        // percentage resolves against the whole stretched content column.
+        $classes = $wrapper !== '' ? 'card h-100' : 'card mb-3';
+        echo "<div class='" . $classes . "'><div class='card-body'>";
         echo "<h3 class='card-title'><i class='" . htmlescape($icon) . " me-2'></i>" . htmlescape($title) . "</h3>";
         if ($subtitle !== '') {
             echo "<div class='text-muted small mb-2'>" . htmlescape($subtitle) . "</div>";
