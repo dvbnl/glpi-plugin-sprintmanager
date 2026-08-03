@@ -125,7 +125,7 @@ class SprintTemplateMember extends CommonDBRelation
         foreach ($members as $row) {
             $roleName = $roles[$row['role']] ?? $row['role'];
             echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user'></i> " . htmlescape(getUserName($row['users_id'])) . "</td>";
+            echo "<td><i class='fas fa-user'></i> " . htmlescape(SprintCache::userName($row['users_id'])) . "</td>";
             echo "<td>" . $roleName . "</td>";
             echo "<td class='center'>" . SprintMember::formatCapacity($row['capacity_percent']) . "%</td>";
             if ($canedit) {

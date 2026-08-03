@@ -188,7 +188,7 @@ class SprintMeeting extends CommonDBTM
                 ($types[$row['meeting_type']] ?? $row['meeting_type']) . "</td>";
             echo "<td>" . Html::convDateTime($row['date_meeting']) . "</td>";
             echo "<td class='center'>" . (int)$row['duration_minutes'] . " min</td>";
-            echo "<td>" . htmlescape(getUserName($row['users_id'])) . "</td>";
+            echo "<td>" . htmlescape(SprintCache::userName($row['users_id'])) . "</td>";
             echo "<td class='center'>";
             if ($canedit) {
                 echo "<a href='" . static::getFormURLWithID($row['id']) .
@@ -419,7 +419,7 @@ class SprintMeeting extends CommonDBTM
                         $fastlaneTotal += $cap;
                         $fastlaneAllocations[] = [
                             'users_id' => $uid,
-                            'name'     => getUserName($uid),
+                            'name'     => SprintCache::userName($uid),
                             'capacity' => $cap,
                         ];
                     }
@@ -527,7 +527,7 @@ class SprintMeeting extends CommonDBTM
 
             echo "<tr class='tab_bg_1'><td>" . __('Facilitator', 'sprint') . "</td><td>";
             $facilitatorId = (int)($this->fields['users_id'] ?? 0);
-            echo ($facilitatorId > 0) ? htmlescape(getUserName($facilitatorId)) : '-';
+            echo ($facilitatorId > 0) ? htmlescape(SprintCache::userName($facilitatorId)) : '-';
             echo Html::hidden('users_id', ['value' => $facilitatorId]);
             echo "</td><td>" . __('Sprint') . "</td><td>";
             Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $this->fields['plugin_sprint_sprints_id'] ?? 0]);
@@ -622,7 +622,7 @@ class SprintMeeting extends CommonDBTM
                 $statusClass = 'sprint-status-' . str_replace('_', '-', $row['status']);
                 echo "<td><span class='sprint-badge {$statusClass}'>" .
                     ($statuses[$row['status']] ?? $row['status']) . "</span></td>";
-                echo "<td>" . (((int)$row['users_id'] > 0) ? htmlescape(getUserName($row['users_id'])) :
+                echo "<td>" . (((int)$row['users_id'] > 0) ? htmlescape(SprintCache::userName($row['users_id'])) :
                     '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
             }
             echo "<td class='center'>" . (int)$row['story_points'] . "</td>";

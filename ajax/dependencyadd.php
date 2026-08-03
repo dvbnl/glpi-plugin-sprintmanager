@@ -129,7 +129,7 @@ $openCount = count($openDeps);
 
 $baseMessage = sprintf(
     __('Dependency added: %s (%s%%)', 'sprint'),
-    getUserName($userId),
+    GlpiPlugin\Sprint\SprintCache::userName($userId),
     GlpiPlugin\Sprint\SprintMember::formatCapacity($capacity)
 );
 
@@ -141,7 +141,7 @@ echo json_encode([
     'open_deps'  => $openDeps,
     'helper'     => [
         'users_id' => $userId,
-        'name'     => getUserName($userId),
+        'name'     => GlpiPlugin\Sprint\SprintCache::userName($userId),
         'capacity' => $capacity,
     ],
 ]);

@@ -222,7 +222,7 @@ class SprintItemDependency extends CommonDBRelation
 
             $rowStyle = $isResolved ? "opacity:0.55;" : "";
             echo "<tr class='tab_bg_1' style='{$rowStyle}'>";
-            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($uid)) . "</td>";
+            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(SprintCache::userName($uid)) . "</td>";
             echo "<td class='center'>{$capLabel}%</td>";
             echo "<td class='center'>";
             if ($isResolved) {
@@ -392,7 +392,7 @@ class SprintItemDependency extends CommonDBRelation
             $uid    = (int)$r['users_id'];
             $out[$itemId][] = [
                 'users_id' => $uid,
-                'name'     => $uid > 0 ? getUserName($uid) : '',
+                'name'     => $uid > 0 ? SprintCache::userName($uid) : '',
                 'capacity' => (float)$r['capacity'],
             ];
         }
@@ -439,7 +439,7 @@ class SprintItemDependency extends CommonDBRelation
                 'item_id'    => $itemId,
                 'name'       => (string)($item['name'] ?? ''),
                 'owner_id'   => $ownerId,
-                'owner_name' => $ownerId > 0 ? getUserName($ownerId) : '',
+                'owner_name' => $ownerId > 0 ? SprintCache::userName($ownerId) : '',
                 'capacity'   => (float)$r['capacity'],
             ];
         }

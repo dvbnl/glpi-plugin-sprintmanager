@@ -502,7 +502,7 @@ class SprintRequest extends CommonDBTM
             if ($showSprint) {
                 echo "<td>" . htmlescape($sprintNames[$sid]) . "</td>";
             }
-            echo "<td>" . htmlescape(getUserName((int)$row['users_id'])) . "</td>";
+            echo "<td>" . htmlescape(SprintCache::userName((int)$row['users_id'])) . "</td>";
             // Age hint so a request that has been waiting for days stands out.
             $created = (string)($row['date_creation'] ?? '');
             echo "<td style='white-space:nowrap;'>";

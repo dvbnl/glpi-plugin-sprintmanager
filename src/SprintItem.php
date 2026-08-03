@@ -286,8 +286,8 @@ class SprintItem extends CommonDBTM
             return '';
         }
 
-        $linkedItem = new $itemtype();
-        if (!$linkedItem->getFromDB($itemsId)) {
+        $linkedItem = SprintCache::getObject($itemtype, $itemsId);
+        if ($linkedItem === null) {
             return '<span style="color:#dc3545;"><i class="fas fa-exclamation-triangle"></i> ' .
                 __('Item not found', 'sprint') . '</span>';
         }
@@ -315,11 +315,9 @@ class SprintItem extends CommonDBTM
         $tooltip = $rawName;
         if ($itemtype === 'ProjectTask') {
             $projectId = (int)($linkedItem->fields['projects_id'] ?? 0);
-            if ($projectId > 0) {
-                $project = new \Project();
-                if ($project->getFromDB($projectId)) {
-                    $tooltip .= ' (' . (string)($project->fields['name'] ?? '') . ')';
-                }
+            $project   = ($projectId > 0) ? SprintCache::getObject('Project', $projectId) : null;
+            if ($project !== null) {
+                $tooltip .= ' (' . (string)($project->fields['name'] ?? '') . ')';
             }
         }
 
@@ -375,8 +373,8 @@ class SprintItem extends CommonDBTM
             return '';
         }
 
-        $task = new ProjectTask();
-        if (!$task->getFromDB($itemsId)) {
+        $task = SprintCache::getObject('ProjectTask', $itemsId);
+        if ($task === null) {
             return '';
         }
 
@@ -385,8 +383,8 @@ class SprintItem extends CommonDBTM
             return '';
         }
 
-        $project = new \Project();
-        if (!$project->getFromDB($projectId)) {
+        $project = SprintCache::getObject('Project', $projectId);
+        if ($project === null) {
             return '';
         }
 
@@ -453,8 +451,8 @@ class SprintItem extends CommonDBTM
             return true;
         }
 
-        $linked = new $itemtype();
-        if (!$linked->getFromDB($itemsId)) {
+        $linked = SprintCache::getObject($itemtype, $itemsId);
+        if ($linked === null) {
             return true;
         }
 
@@ -742,7 +740,7 @@ class SprintItem extends CommonDBTM
         if ($reason === '') {
             return '';
         }
-        $who = getUserName((int)Session::getLoginUserID());
+        $who = SprintCache::userName((int)Session::getLoginUserID());
         return '[' . date('Y-m-d') . ' — ' . $who . '] '
             . __('Back to backlog', 'sprint') . ': ' . $reason;
     }
@@ -930,7 +928,7 @@ class SprintItem extends CommonDBTM
         foreach ($items as $row) {
             $statusClass = 'sprint-status-' . str_replace('_', '-', $row['status']);
             $statusLabel = $statuses[$row['status']] ?? $row['status'];
-            $ownerName   = ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : '';
+            $ownerName   = ((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : '';
 
             $linkedDisplay = '<span style="color:#ccc;">-</span>';
             if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
@@ -956,7 +954,7 @@ class SprintItem extends CommonDBTM
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td class='center sprint-cell-story-points'>" . (int)$row['story_points'] . "</td>";
             echo "<td class='center sprint-cell-capacity'>" . SprintMember::formatCapacity($row['capacity'] ?? 0) . "%</td>";
-            echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? htmlescape(getUserName($row['users_id'])) :
+            echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? htmlescape(SprintCache::userName($row['users_id'])) :
                 '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
             if ($canedit) {
                 $isOwn = (int)$row['users_id'] === (int)Session::getLoginUserID();
@@ -1140,7 +1138,7 @@ HTML;
     {
         $statuses    = self::getAllStatuses();
         $statusLabel = $statuses[$row['status'] ?? ''] ?? (string)($row['status'] ?? '');
-        $ownerName   = ((int)($row['users_id'] ?? 0) > 0) ? getUserName((int)$row['users_id']) : '';
+        $ownerName   = ((int)($row['users_id'] ?? 0) > 0) ? SprintCache::userName((int)$row['users_id']) : '';
         return self::buildRowDataAttrs($row, $statusLabel, $ownerName, $tags);
     }
 

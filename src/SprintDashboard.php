@@ -492,7 +492,7 @@ class SprintDashboard extends CommonGLPI
             $usedLabel       = SprintMember::formatCapacity($used);
 
             echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($uid)) . "</td>";
+            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(SprintCache::userName($uid)) . "</td>";
             echo "<td>" . $roleName . "</td>";
             echo "<td class='center'>{$totalLabel}%</td>";
             echo "<td class='center'>{$regularLabel}%</td>";
@@ -647,7 +647,7 @@ class SprintDashboard extends CommonGLPI
             foreach ($relRows as $r) {
                 $cap = (float)$r['capacity'];
                 $totalCap += $cap;
-                $memberLines[] = htmlescape(getUserName((int)$r['users_id'])) . " (" . SprintMember::formatCapacity($cap) . "%)";
+                $memberLines[] = htmlescape(SprintCache::userName((int)$r['users_id'])) . " (" . SprintMember::formatCapacity($cap) . "%)";
             }
 
             $linkedDisplay = '<span style="color:#ccc;">-</span>';
@@ -696,9 +696,6 @@ class SprintDashboard extends CommonGLPI
         if (!SprintItemDependency::isTableReady()) {
             return;
         }
-        $depRel  = new SprintItemDependency();
-        $allRels = $depRel->find([], ['date_creation DESC']);
-
         $si          = new SprintItem();
         $sprintItems = [];
         foreach ($si->find(['plugin_sprint_sprints_id' => $sprintId]) as $row) {
@@ -708,13 +705,16 @@ class SprintDashboard extends CommonGLPI
             return;
         }
 
+        // Scoped to this sprint's items — find([]) pulled the whole table.
+        $depRel  = new SprintItemDependency();
+        $allRels = $depRel->find(
+            ['plugin_sprint_sprintitems_id' => array_keys($sprintItems)],
+            ['date_creation DESC']
+        );
+
         $relRowsByItem = [];
         foreach ($allRels as $r) {
-            $itemId = (int)$r['plugin_sprint_sprintitems_id'];
-            if (!isset($sprintItems[$itemId])) {
-                continue;
-            }
-            $relRowsByItem[$itemId][] = $r;
+            $relRowsByItem[(int)$r['plugin_sprint_sprintitems_id']][] = $r;
         }
         if (count($relRowsByItem) === 0) {
             return;
@@ -814,7 +814,7 @@ class SprintDashboard extends CommonGLPI
                 $resolved = (int)($r['is_resolved'] ?? 0) === 1;
                 $cap      = (float)$r['capacity'];
                 $capLabel = SprintMember::formatCapacity($cap);
-                $name     = htmlescape(getUserName((int)$r['users_id']));
+                $name     = htmlescape(SprintCache::userName((int)$r['users_id']));
                 if ($resolved) {
                     $helperLines[] = "<span class='text-muted' style='text-decoration:line-through;'>{$name} ({$capLabel}%)</span>";
                 } else {
@@ -827,7 +827,7 @@ class SprintDashboard extends CommonGLPI
             $statusLabel = $statuses[$row['status']] ?? $row['status'];
 
             $ownerName = ((int)$row['users_id'] > 0)
-                ? htmlescape(getUserName((int)$row['users_id']))
+                ? htmlescape(SprintCache::userName((int)$row['users_id']))
                 : '<span style="color:#adb5bd;font-style:italic;">' . __('Unassigned', 'sprint') . '</span>';
 
             echo "<tr class='tab_bg_1'>";
@@ -899,21 +899,10 @@ class SprintDashboard extends CommonGLPI
             $itemsId  = (int)($row['items_id'] ?? 0);
             $typeInfo = $typeIcons[$itemtype] ?? $typeIcons[''];
 
-            $linkedName = '';
-            $linkedUrl  = '';
             // Delegate linked-item rendering so the dashboard stays consistent with the items tab and meeting review.
             $tmp = new SprintItem();
             $tmp->fields = $row;
             $linkedDisplayHtml = $tmp->getLinkedItemDisplay();
-
-            $allowedTypes = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
-            if (!empty($itemtype) && $itemsId > 0 && in_array($itemtype, $allowedTypes, true) && class_exists($itemtype)) {
-                $linked = new $itemtype();
-                if ($linked->getFromDB($itemsId)) {
-                    $linkedName = $linked->fields['name'];
-                    $linkedUrl  = $itemtype::getFormURLWithID($itemsId);
-                }
-            }
 
             $statusClass = 'sprint-status-' . str_replace('_', '-', $row['status']);
 
@@ -938,8 +927,6 @@ class SprintDashboard extends CommonGLPI
                 'color'          => $typeInfo[1],
                 'name'           => $row['name'],
                 'url'            => SprintItem::getFormURLWithID($row['id']),
-                'linked_name'    => $linkedName,
-                'linked_url'     => $linkedUrl,
                 'linked_display' => $linkedDisplayHtml,
                 'raw_status'    => $row['status'],
                 'raw_priority'  => (int)($row['priority'] ?? 3),
@@ -948,7 +935,7 @@ class SprintDashboard extends CommonGLPI
                 'users_id'      => (int)$row['users_id'],
                 'is_adhoc'      => (int)($row['is_adhoc'] ?? 0),
                 'note'          => (string)($row['note'] ?? ''),
-                'member_name'   => ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : '',
+                'member_name'   => ((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : '',
                 'status'        => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:' . $statusBg . ';">' .
                                    ($statuses[$row['status']] ?? $row['status']) . '</span>',
                 'priority'      => $priorities[$row['priority']] ?? '',
@@ -1028,7 +1015,7 @@ class SprintDashboard extends CommonGLPI
         echo "</tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(getUserName($userId)) . "</td>";
+        echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(SprintCache::userName($userId)) . "</td>";
         $totalLabel      = SprintMember::formatCapacity($total);
         $regularLabel    = SprintMember::formatCapacity($regularUsed);
         $fastlaneLabel   = SprintMember::formatCapacity($fastlaneUsed);
@@ -1056,7 +1043,7 @@ class SprintDashboard extends CommonGLPI
     private static function getMemberName(int $usersId): string
     {
         if ($usersId > 0) {
-            return htmlescape(getUserName($usersId));
+            return htmlescape(SprintCache::userName($usersId));
         }
         return '<span style="color:#adb5bd;font-style:italic;">' . __('Unassigned', 'sprint') . '</span>';
     }
@@ -1114,7 +1101,7 @@ class SprintDashboard extends CommonGLPI
                         (int)($row['items_id'] ?? 0)
                     ),
                     'owner'   => ((int)($row['users_id'] ?? 0) > 0)
-                        ? getUserName((int)$row['users_id'])
+                        ? SprintCache::userName((int)$row['users_id'])
                         : '',
                     'helpers' => $helperNames,
                 ];

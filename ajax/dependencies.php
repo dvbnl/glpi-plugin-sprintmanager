@@ -46,7 +46,7 @@ if ($action === 'list') {
         $deps[] = [
             'id'          => (int)$r['id'],
             'users_id'    => $uid,
-            'name'        => $uid > 0 ? getUserName($uid) : '',
+            'name'        => $uid > 0 ? GlpiPlugin\Sprint\SprintCache::userName($uid) : '',
             'capacity'    => GlpiPlugin\Sprint\SprintMember::formatCapacity($r['capacity']),
             'is_resolved' => (int)$r['is_resolved'],
         ];

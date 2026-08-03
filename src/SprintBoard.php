@@ -170,7 +170,7 @@ class SprintBoard extends CommonGLPI
         }
 
         $ownerId   = (int)($row['users_id'] ?? 0);
-        $ownerName = $ownerId > 0 ? getUserName($ownerId) : '';
+        $ownerName = $ownerId > 0 ? SprintCache::userName($ownerId) : '';
         $points    = (int)($row['story_points'] ?? 0);
         $capacity  = (float)($row['capacity'] ?? 0);
         $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;

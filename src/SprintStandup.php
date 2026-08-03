@@ -189,7 +189,7 @@ class SprintStandup extends CommonDBTM
 
             echo "<tr class='tab_bg_1'>";
             echo "<td>" . htmlescape($itemName) . "</td>";
-            echo "<td>" . htmlescape(getUserName($row['users_id'])) . "</td>";
+            echo "<td>" . htmlescape(SprintCache::userName($row['users_id'])) . "</td>";
             echo "<td><i class='{$icon}'></i> " .
                 ($statuses[$row['status_update']] ?? $row['status_update']) . "</td>";
             echo "<td>" . nl2br(htmlescape($row['done_yesterday'] ?? '')) . "</td>";

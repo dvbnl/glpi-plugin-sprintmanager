@@ -114,7 +114,7 @@ class SprintFastlane extends CommonGLPI
                 $uid = (int)$r['users_id'];
                 $cap = (float)$r['capacity'];
                 $totalCap += $cap;
-                $memberNames[] = htmlescape(getUserName($uid)) . " (" . SprintMember::formatCapacity($cap) . "%)";
+                $memberNames[] = htmlescape(SprintCache::userName($uid)) . " (" . SprintMember::formatCapacity($cap) . "%)";
             }
 
             $statusLabel = $statuses[$row['status']] ?? $row['status'];

@@ -119,7 +119,7 @@ class SprintChange extends CommonDBRelation
             }
 
             $assignedMember = ((int)$row['users_id'] > 0)
-                ? htmlescape(getUserName($row['users_id']))
+                ? htmlescape(SprintCache::userName($row['users_id']))
                 : '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>';
 
             echo "<tr class='tab_bg_1'>";

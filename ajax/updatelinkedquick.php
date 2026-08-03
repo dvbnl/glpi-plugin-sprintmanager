@@ -93,6 +93,9 @@ if (!$ok) {
 
 $item->getFromDB($id);
 
+// The badges below re-read this object through the request memo table.
+GlpiPlugin\Sprint\SprintCache::forget($itemtype, $id);
+
 $response = [
     'success'  => true,
     'message'  => $messages ? implode("\n", $messages) : 'Updated',

@@ -287,7 +287,7 @@ class SprintMember extends CommonDBRelation
             $userId     = (int)$row['users_id'];
 
             echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user'></i> " . htmlescape(getUserName($userId)) . "</td>";
+            echo "<td><i class='fas fa-user'></i> " . htmlescape(SprintCache::userName($userId)) . "</td>";
             echo "<td><i class='{$icon}'></i> {$roleName}</td>";
             echo "<td class='center'>";
             $pct      = self::normalizeCapacity($row['capacity_percent']);
@@ -389,7 +389,7 @@ class SprintMember extends CommonDBRelation
             echo "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>";
             echo "<i class='fas fa-user-circle' style='font-size:1.6em;color:#6c757d;'></i>";
             echo "<div style='flex:1;'>";
-            echo "<div style='font-weight:700;'>" . htmlescape(getUserName($userId)) . "</div>";
+            echo "<div style='font-weight:700;'>" . htmlescape(SprintCache::userName($userId)) . "</div>";
             echo "<div style='font-size:0.82em;color:#6c757d;'><i class='{$roleIcon}'></i> " . htmlescape($roleName) . "</div>";
             echo "</div>";
             if ($fastlaneItemCount > 0) {
@@ -850,7 +850,7 @@ class SprintMember extends CommonDBRelation
                 Session::addMessageAfterRedirect(
                     sprintf(
                         __('%s is now over capacity: %s%% used of %s%% (+%s%% overflow).', 'sprint'),
-                        getUserName($userId),
+                        SprintCache::userName($userId),
                         self::formatCapacity($newUsed),
                         self::formatCapacity($totalCapacity),
                         self::formatCapacity($newUsed - $totalCapacity)
@@ -863,7 +863,7 @@ class SprintMember extends CommonDBRelation
             Session::addMessageAfterRedirect(
                 sprintf(
                     __('%s has only %s%% capacity remaining (total: %s%%, used: %s%%). Cannot assign %s%%.', 'sprint'),
-                    getUserName($userId),
+                    SprintCache::userName($userId),
                     self::formatCapacity(max($remaining, 0)),
                     self::formatCapacity($totalCapacity),
                     self::formatCapacity($used),
@@ -922,7 +922,7 @@ class SprintMember extends CommonDBRelation
             'total'    => $total,
             'after'    => $after,
             'overflow' => $after - $total,
-            'name'     => getUserName($userId),
+            'name'     => SprintCache::userName($userId),
         ];
     }
 
@@ -973,7 +973,7 @@ class SprintMember extends CommonDBRelation
         $roles   = self::getAllRoles();
 
         foreach ($members as $row) {
-            $name     = getUserName($row['users_id']);
+            $name     = SprintCache::userName($row['users_id']);
             $roleName = $roles[$row['role']] ?? $row['role'];
             $options[(int)$row['users_id']] = "{$name} ({$roleName})";
         }

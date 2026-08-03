@@ -1850,3 +1850,38 @@ msgstr "Sprints por encima de capacidad"
 
 msgid "Only the Scrum Master of this sprint can change the fastlane flag."
 msgstr "Solo el Scrum Master de este sprint puede cambiar la marca fastlane."
+
+# Workload trend (overview)
+msgid "Workload trend"
+msgstr "Tendencia de carga"
+
+msgid "Average allocated load across the members of each sprint. The dashed line is 100% capacity — above it the team is booked beyond availability."
+msgstr "Carga asignada media entre los miembros de cada sprint. La línea discontinua es el 100 % de capacidad — por encima, el equipo está planificado por encima de su disponibilidad."
+
+msgid "Not enough sprints in this period to show a trend."
+msgstr "No hay suficientes sprints en este periodo para mostrar una tendencia."
+
+msgid "%1$s — modelled change in team load over this period (%2$s)"
+msgstr "%1$s — cambio modelado de la carga del equipo en este periodo (%2$s)"
+
+msgid "Trend"
+msgstr "Tendencia"
+
+msgid "Improving"
+msgstr "Mejorando"
+
+msgid "Worsening"
+msgstr "Empeorando"
+
+msgid "Stable"
+msgstr "Estable"
+
+msgid "%d member"
+msgid_plural "%d members"
+msgstr[0] "%d miembro"
+msgstr[1] "%d miembros"
+
+msgid "%d member over capacity"
+msgid_plural "%d members over capacity"
+msgstr[0] "%d miembro por encima de la capacidad"
+msgstr[1] "%d miembros por encima de la capacidad"

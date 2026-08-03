@@ -599,7 +599,7 @@ class Sprint extends CommonDBTM
 
             // Pre-populate options so the read-only label has a user name.
             if ($currentMaster > 0 && !isset($memberOptions[$currentMaster])) {
-                $memberOptions[$currentMaster] = getUserName($currentMaster);
+                $memberOptions[$currentMaster] = SprintCache::userName($currentMaster);
             }
 
             \Glpi\Application\View\TemplateRenderer::getInstance()->display(

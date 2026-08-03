@@ -241,8 +241,205 @@ class SprintOverview extends CommonGLPI
         );
         echo "</div>";
 
+        self::renderWorkloadTrend($data);
         self::renderWorkload($data);
         self::renderSprintTable($data);
+    }
+
+    /** Colour + glyph for a load drift verdict; the glyph is what carries it under CVD. */
+    private static function driftStyle(string $direction): array
+    {
+        return match ($direction) {
+            'improving' => ['#198754', '↓', __('Improving', 'sprint')],
+            'worsening' => ['#dc3545', '↑', __('Worsening', 'sprint')],
+            default     => ['#6c757d', '→', __('Stable', 'sprint')],
+        };
+    }
+
+    private static function formatDrift(float $drift): string
+    {
+        return ($drift > 0 ? '+' : '') . number_format($drift, 1, ',', '') . ' %';
+    }
+
+    /** Team average load per sprint, against the 100% capacity line. */
+    private static function renderWorkloadTrend(array $data): void
+    {
+        $trend = $data['workload_trend'] ?? [];
+        self::renderCard(
+            __('Workload trend', 'sprint'),
+            'fas fa-chart-line',
+            __('Average allocated load across the members of each sprint. The dashed line is 100% capacity — above it the team is booked beyond availability.', 'sprint'),
+            function () use ($trend) {
+                $labels = $trend['labels'] ?? [];
+                $team   = $trend['team'] ?? [];
+                if (count(array_filter($team, static fn($v) => $v !== null)) < 2) {
+                    echo "<div class='text-muted py-3'>" . __('Not enough sprints in this period to show a trend.', 'sprint') . "</div>";
+                    return;
+                }
+
+                // Same window as the other charts, so the x-axis lines up.
+                $labels = array_slice($labels, -self::CHART_SPRINTS);
+                $team   = array_slice($team, -self::CHART_SPRINTS);
+                $over   = array_slice($trend['over'] ?? [], -self::CHART_SPRINTS);
+
+                [$color, $glyph, $verdict] = self::driftStyle((string)($trend['direction'] ?? 'stable'));
+                echo "<div class='d-flex align-items-baseline gap-2 mb-3'>";
+                echo "<span style='font-size:1.75rem;font-weight:600;color:" . $color . ";'>" . $glyph . "</span>";
+                echo "<span style='font-size:1.5rem;font-weight:600;'>" . htmlescape(self::formatDrift((float)($trend['drift'] ?? 0))) . "</span>";
+                echo "<span class='text-muted'>" . htmlescape(sprintf(
+                    __('%1$s — modelled change in team load over this period (%2$s)', 'sprint'),
+                    $verdict,
+                    sprintf(_n('%d member', '%d members', (int)($trend['members'] ?? 0), 'sprint'), (int)($trend['members'] ?? 0))
+                )) . "</span>";
+                echo "</div>";
+
+                self::renderLoadLine($labels, $team, $over);
+            }
+        );
+    }
+
+    /** Single-series load line; $over feeds the per-point tooltip. */
+    private static function renderLoadLine(array $labels, array $values, array $over = []): void
+    {
+        $n = count($labels);
+        if ($n === 0) {
+            return;
+        }
+
+        $tilted = $n > 8;
+        $width = 900; $height = $tilted ? 300 : 260;
+        $padL = 44; $padR = 20; $padT = 18; $padB = $tilted ? 86 : 46;
+        $plotW = $width - $padL - $padR;
+        $plotH = $height - $padT - $padB;
+
+        $peak     = max(100.0, max(array_map(static fn($v) => (float)$v, array_filter($values, static fn($v) => $v !== null)) ?: [0.0]));
+        $tickStep = max(25, (int)ceil($peak / 4 / 25) * 25);
+        $yMax     = $tickStep * 4;
+
+        $slot = $plotW / max(1, $n);
+        $fmt  = fn(float $v) => number_format($v, 2, '.', '');
+        $yAt  = fn(float $v) => $padT + $plotH - ($plotH * ($v / $yMax));
+        $halo = "paint-order:stroke;stroke:var(--tblr-bg-surface,#fff);stroke-width:3.5px;stroke-linejoin:round;";
+        $grid = "var(--tblr-border-color,#e9ecef)";
+        $ink  = "var(--tblr-secondary,#6c757d)";
+
+        echo "<div style='overflow-x:auto;'>";
+        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' role='img' "
+            . "style='width:100%;height:auto;min-width:520px;font-family:sans-serif;font-size:11px;'>";
+
+        for ($t = 0; $t <= 4; $t++) {
+            $value = (int)round($yMax * $t / 4);
+            $y     = $fmt($yAt($value));
+            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($padL + $plotW) . "' y2='{$y}' stroke='{$grid}' stroke-width='1' />";
+            echo "<text x='" . ($padL - 6) . "' y='" . $fmt($yAt($value) + 3) . "' text-anchor='end' fill='{$ink}'>{$value}%</text>";
+        }
+
+        $refY = $fmt($yAt(100.0));
+        echo "<line x1='{$padL}' y1='{$refY}' x2='" . ($padL + $plotW) . "' y2='{$refY}' stroke='#dc3545' "
+            . "stroke-width='1.2' stroke-dasharray='5,4' opacity='0.7' />";
+
+        $points = [];
+        for ($i = 0; $i < $n; $i++) {
+            $cx = $padL + ($slot * $i) + ($slot / 2);
+            if ($values[$i] !== null) {
+                $points[$i] = ['x' => $cx, 'y' => $yAt((float)$values[$i]), 'v' => (float)$values[$i]];
+            }
+
+            $label  = mb_strlen($labels[$i]) > 16 ? (mb_substr($labels[$i], 0, 15) . '…') : $labels[$i];
+            $labelX = $fmt($cx);
+            $labelY = $padT + $plotH + ($tilted ? 14 : 16);
+            $rotate = $tilted ? " transform='rotate(-35 {$labelX} {$labelY})'" : '';
+            echo "<text x='{$labelX}' y='{$labelY}' text-anchor='" . ($tilted ? 'end' : 'middle') . "' fill='{$ink}'{$rotate}>"
+                . htmlescape($label) . "<title>" . htmlescape($labels[$i]) . "</title></text>";
+        }
+
+        // Nulls break the polyline into segments instead of bridging the gap.
+        $segment = [];
+        $flush   = function () use (&$segment, $fmt) {
+            if (count($segment) > 1) {
+                echo "<polyline points='" . implode(' ', $segment) . "' fill='none' stroke='#0d6efd' "
+                    . "stroke-width='2' stroke-linejoin='round' stroke-linecap='round' />";
+            }
+            $segment = [];
+        };
+        for ($i = 0; $i < $n; $i++) {
+            if (!isset($points[$i])) {
+                $flush();
+                continue;
+            }
+            $segment[] = $fmt($points[$i]['x']) . ',' . $fmt($points[$i]['y']);
+        }
+        $flush();
+
+        $lastIndex = array_key_last($points);
+        foreach ($points as $i => $point) {
+            $tip = $labels[$i] . ' — ' . number_format($point['v'], 1, ',', '') . '%';
+            if (($over[$i] ?? 0) > 0) {
+                $tip .= ' · ' . sprintf(
+                    _n('%d member over capacity', '%d members over capacity', (int)$over[$i], 'sprint'),
+                    (int)$over[$i]
+                );
+            }
+            // 2px surface ring so a marker on the reference line stays readable.
+            echo "<circle cx='" . $fmt($point['x']) . "' cy='" . $fmt($point['y']) . "' r='4' fill='#0d6efd' "
+                . "stroke='var(--tblr-bg-surface,#fff)' stroke-width='2'>"
+                . "<title>" . htmlescape($tip) . "</title></circle>";
+            // Direct-label the ends only — a number on every point is noise.
+            if ($i === array_key_first($points) || $i === $lastIndex) {
+                echo "<text x='" . $fmt($point['x']) . "' y='" . $fmt(max($point['y'] - 12, $padT + 10)) . "' "
+                    . "text-anchor='middle' fill='#0d6efd' font-weight='600' style='{$halo}'>"
+                    . round($point['v']) . "%</text>";
+            }
+        }
+
+        echo "</svg></div>";
+    }
+
+    /** Inline sparkline for one member's per-sprint load, with the 100% line. */
+    private static function renderLoadSparkline(array $values, float $yMax): void
+    {
+        $n = count($values);
+        $filled = array_filter($values, static fn($v) => $v !== null);
+        if ($n < 2 || count($filled) < 2) {
+            echo "<span class='text-muted'>&mdash;</span>";
+            return;
+        }
+
+        $w = 96; $h = 26; $pad = 3;
+        $plotH = $h - ($pad * 2);
+        $step  = $w / max(1, $n - 1);
+        $fmt   = fn(float $v) => number_format($v, 2, '.', '');
+        $yAt   = fn(float $v) => $pad + $plotH - ($plotH * (min($v, $yMax) / $yMax));
+
+        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$w} {$h}' aria-hidden='true' "
+            . "style='width:{$w}px;height:{$h}px;overflow:visible;'>";
+        $refY = $fmt($yAt(100.0));
+        echo "<line x1='0' y1='{$refY}' x2='{$w}' y2='{$refY}' stroke='#dc3545' stroke-width='1' stroke-dasharray='3,3' opacity='0.55' />";
+
+        $segment = [];
+        $flush   = function () use (&$segment) {
+            if (count($segment) > 1) {
+                echo "<polyline points='" . implode(' ', $segment) . "' fill='none' stroke='#0d6efd' "
+                    . "stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round' />";
+            }
+            $segment = [];
+        };
+        $last = null;
+        foreach ($values as $i => $value) {
+            if ($value === null) {
+                $flush();
+                continue;
+            }
+            $x = $i * $step;
+            $y = $yAt((float)$value);
+            $segment[] = $fmt($x) . ',' . $fmt($y);
+            $last = [$x, $y];
+        }
+        $flush();
+        if ($last !== null) {
+            echo "<circle cx='" . $fmt($last[0]) . "' cy='" . $fmt($last[1]) . "' r='2' fill='#0d6efd' />";
+        }
+        echo "</svg>";
     }
 
     /** Allocated capacity per member, with the overflow highlighted. */
@@ -258,12 +455,22 @@ class SprintOverview extends CommonGLPI
                     return;
                 }
 
+                // One shared scale, or a light member's sparkline would look as
+                // steep as an overloaded one.
+                $sparkMax = 100.0;
+                foreach ($data['workload'] as $row) {
+                    foreach ($row['loads'] ?? [] as $load) {
+                        $sparkMax = max($sparkMax, (float)$load);
+                    }
+                }
+
                 echo "<div class='table-responsive'>";
                 echo "<table class='table table-vcenter mb-0'>";
                 echo "<thead><tr>";
                 echo "<th>" . __('Member', 'sprint') . "</th>";
                 echo "<th>" . _n('Sprint', 'Sprints', 2, 'sprint') . "</th>";
-                echo "<th style='width:35%;'>" . __('Avg load', 'sprint') . "</th>";
+                echo "<th style='width:28%;'>" . __('Avg load', 'sprint') . "</th>";
+                echo "<th>" . __('Trend', 'sprint') . "</th>";
                 echo "<th class='text-end'>" . __('Peak load', 'sprint') . "</th>";
                 echo "<th class='text-end'>" . __('Sprints over capacity', 'sprint') . "</th>";
                 echo "</tr></thead><tbody>";
@@ -278,6 +485,16 @@ class SprintOverview extends CommonGLPI
                         . "role='progressbar' style='width:{$width}%' aria-valuenow='{$width}' aria-valuemin='0' aria-valuemax='100'></div></div>";
                     echo "<span class='text-nowrap'>" . (int)$row['avg'] . "%</span>";
                     echo "</div></td>";
+
+                    [$driftColor, $driftGlyph, $driftLabel] = self::driftStyle((string)($row['direction'] ?? 'stable'));
+                    echo "<td><div class='d-flex align-items-center gap-2'>";
+                    self::renderLoadSparkline($row['loads'] ?? [], $sparkMax);
+                    echo "<span class='text-nowrap' title='" . htmlescape($driftLabel) . "'>"
+                        . "<span style='color:" . $driftColor . ";font-weight:600;'>" . $driftGlyph . "</span> "
+                        . "<span class='text-muted'>" . htmlescape(self::formatDrift((float)($row['drift'] ?? 0))) . "</span>"
+                        . "</span>";
+                    echo "</div></td>";
+
                     echo "<td class='text-end'>" . (int)$row['peak'] . "%</td>";
                     echo "<td class='text-end'>"
                         . ($row['over'] > 0
@@ -563,6 +780,7 @@ class SprintOverview extends CommonGLPI
             'per_member'     => [],
             'per_type'       => [],
             'workload'       => [],
+            'workload_trend' => ['labels' => [], 'team' => [], 'over' => [], 'members' => 0, 'drift' => 0.0, 'direction' => 'stable'],
             'flow'           => ['cycle_days' => 0.0, 'blocked_days' => 0.0, 'rework_pct' => 0, 'measured' => 0, 'blocked_items' => 0],
             'requests'       => ['total' => 0, 'accepted_pct' => 0, 'wait_days' => 0.0],
         ];
@@ -674,7 +892,8 @@ class SprintOverview extends CommonGLPI
         $out['consistency']    = self::consistency($velocities, $out['avg_velocity']);
         $out['per_member']     = self::rankMembers($perMember);
         $out['per_type']       = self::rankTypes($perType);
-        $out['workload']       = self::workload($sprintIds, $items, $flByUser, $depByUser);
+        $out['workload']       = self::workload($sprints, $items, $flByUser, $depByUser);
+        $out['workload_trend'] = self::workloadTrend($out['labels'], $out['workload']);
 
         // The delta badges don't use flow data, so skip the log work there.
         if (!$shift) {
@@ -743,11 +962,14 @@ class SprintOverview extends CommonGLPI
      * Regular, fastlane and dependency capacity against availability, averaged
      * over the sprints a member took part in — same sum as the sprint dashboard.
      *
-     * @return array<int,array{label:string,sprints:int,avg:int,peak:int,over:int}>
+     * `loads` is the per-sprint load in $sprints order, null where the member did
+     * not take part.
      */
-    private static function workload(array $sprintIds, array $items, array $flByUser, array $depByUser): array
+    private static function workload(array $sprints, array $items, array $flByUser, array $depByUser): array
     {
         global $DB;
+
+        $sprintIds = array_map(static fn($s) => (int)$s['id'], $sprints);
 
         $used     = [];   // [sprint][user] => allocated %
         $sprintOf = [];
@@ -784,10 +1006,11 @@ class SprintOverview extends CommonGLPI
             $uid  = (int)$row['users_id'];
             $load = (($used[$sid][$uid] ?? 0) / $available) * 100;
 
-            $totals[$uid] ??= ['sum' => 0.0, 'sprints' => 0, 'peak' => 0.0, 'over' => 0];
+            $totals[$uid] ??= ['sum' => 0.0, 'sprints' => 0, 'peak' => 0.0, 'over' => 0, 'by_sprint' => []];
             $totals[$uid]['sum'] += $load;
             $totals[$uid]['sprints']++;
             $totals[$uid]['peak'] = max($totals[$uid]['peak'], $load);
+            $totals[$uid]['by_sprint'][$sid] = $load;
             if ($load > 100) {
                 $totals[$uid]['over']++;
             }
@@ -795,16 +1018,108 @@ class SprintOverview extends CommonGLPI
 
         $out = [];
         foreach ($totals as $uid => $t) {
+            $loads = [];
+            foreach ($sprintIds as $sid) {
+                $loads[] = $t['by_sprint'][$sid] ?? null;
+            }
+            [$drift, $direction] = self::loadDrift($loads);
+
             $out[] = [
-                'label'   => getUserName($uid),
-                'sprints' => $t['sprints'],
-                'avg'     => (int)round($t['sum'] / max(1, $t['sprints'])),
-                'peak'    => (int)round($t['peak']),
-                'over'    => $t['over'],
+                'label'     => SprintCache::userName($uid),
+                'sprints'   => $t['sprints'],
+                'avg'       => (int)round($t['sum'] / max(1, $t['sprints'])),
+                'peak'      => (int)round($t['peak']),
+                'over'      => $t['over'],
+                'loads'     => $loads,
+                'drift'     => $drift,
+                'direction' => $direction,
             ];
         }
         usort($out, static fn($a, $b) => $b['avg'] <=> $a['avg']);
         return $out;
+    }
+
+    /** Average load per sprint over the members who took part, plus how many were over capacity. */
+    private static function workloadTrend(array $labels, array $rows): array
+    {
+        $out = ['labels' => $labels, 'team' => [], 'over' => [], 'members' => count($rows), 'drift' => 0.0, 'direction' => 'stable'];
+        if (empty($rows) || empty($labels)) {
+            return $out;
+        }
+
+        foreach (array_keys($labels) as $i) {
+            $loads = [];
+            $over  = 0;
+            foreach ($rows as $row) {
+                $load = $row['loads'][$i] ?? null;
+                if ($load === null) {
+                    continue;
+                }
+                $loads[] = (float)$load;
+                if ($load > 100) {
+                    $over++;
+                }
+            }
+            $out['team'][] = $loads === [] ? null : round(array_sum($loads) / count($loads), 1);
+            $out['over'][] = $over;
+        }
+
+        [$out['drift'], $out['direction']] = self::loadDrift($out['team']);
+        return $out;
+    }
+
+    /**
+     * Least-squares trend over a member's loads → [drift in %-points across the
+     * window, improving|worsening|stable]. A regression beats last-minus-first,
+     * which two noisy sprints can flip on their own.
+     *
+     * The verdict is judged against the 100% line: only someone over capacity can
+     * improve by dropping, and only a rise ending over capacity is worsening.
+     */
+    private static function loadDrift(array $loads): array
+    {
+        $points = [];
+        foreach ($loads as $index => $load) {
+            if ($load !== null) {
+                $points[] = [(float)$index, (float)$load];
+            }
+        }
+        $n = count($points);
+        if ($n < 2) {
+            return [0.0, 'stable'];
+        }
+
+        $meanX = array_sum(array_column($points, 0)) / $n;
+        $meanY = array_sum(array_column($points, 1)) / $n;
+        $num   = 0.0;
+        $den   = 0.0;
+        foreach ($points as [$x, $y]) {
+            $num += ($x - $meanX) * ($y - $meanY);
+            $den += ($x - $meanX) ** 2;
+        }
+        if ($den <= 0.0) {
+            return [0.0, 'stable'];
+        }
+
+        $span  = $points[$n - 1][0] - $points[0][0];
+        $drift = round(($num / $den) * $span, 1);
+
+        // Over two sprints a "trend" is just last-minus-first: report the number,
+        // but withhold the verdict until there is a third point to reject noise.
+        if ($n < 3) {
+            return [$drift, 'stable'];
+        }
+
+        $first = $points[0][1] + 0.0;
+        $last  = $points[$n - 1][1];
+        // 5 %-points of movement is the noise floor for a half-percent capacity grid.
+        if ($drift <= -5.0 && ($meanY > 100 || $first > 100)) {
+            return [$drift, 'improving'];
+        }
+        if ($drift >= 5.0 && ($meanY > 100 || $last > 100)) {
+            return [$drift, 'worsening'];
+        }
+        return [$drift, 'stable'];
     }
 
     /**
@@ -967,7 +1282,7 @@ class SprintOverview extends CommonGLPI
                 continue;
             }
             $out[] = [
-                'label' => $userId > 0 ? getUserName($userId) : __('Unassigned', 'sprint'),
+                'label' => $userId > 0 ? SprintCache::userName($userId) : __('Unassigned', 'sprint'),
                 'value' => (float)$points,
             ];
         }

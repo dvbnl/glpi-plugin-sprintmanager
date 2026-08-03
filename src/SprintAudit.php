@@ -196,7 +196,7 @@ class SprintAudit extends CommonGLPI
                 $userId = (int)$m[1];
             }
             if ($userId > 0) {
-                $userName = $nameCache[$userId] ?? ($nameCache[$userId] = getUserName($userId));
+                $userName = SprintCache::userName($userId);
             } else {
                 $userName = self::stripUserName($rawUser);
             }
@@ -390,7 +390,7 @@ class SprintAudit extends CommonGLPI
 
         $name = (string)($obj->fields['name'] ?? '');
         if ($name === '' && isset($obj->fields['users_id'])) {
-            $name = getUserName((int)$obj->fields['users_id']);
+            $name = SprintCache::userName((int)$obj->fields['users_id']);
         }
         if ($name === '') {
             $name = $typeLabel . " #{$itemsId}";
@@ -915,7 +915,7 @@ class SprintAudit extends CommonGLPI
             }
             $members[] = [
                 'user_id' => $uid,
-                'name'    => getUserName($uid) ?: ('#' . $uid),
+                'name'    => SprintCache::userName($uid) ?: ('#' . $uid),
                 'color'   => $palette[$paletteIdx % count($palette)],
                 'counts'  => $seq,
                 'total'   => $total,

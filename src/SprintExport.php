@@ -112,7 +112,7 @@ class SprintExport extends CommonGLPI
         $start    = Html::convDateTime($sprint->fields['date_start'] ?? '');
         $end      = Html::convDateTime($sprint->fields['date_end'] ?? '');
         $scrumId  = (int)($sprint->fields['users_id'] ?? 0);
-        $scrumName = $scrumId > 0 ? getUserName($scrumId) : __('Unassigned', 'sprint');
+        $scrumName = $scrumId > 0 ? SprintCache::userName($scrumId) : __('Unassigned', 'sprint');
         $goal     = trim((string)($sprint->fields['goal'] ?? ''));
         $logoSrc   = self::resolveLogoSrc();
 
@@ -526,7 +526,7 @@ class SprintExport extends CommonGLPI
             $regBg        = $used >= $totalCap ? '#dc3545' : ($used >= ($totalCap * 0.8) ? '#e67e22' : '#198754');
 
             echo "<tr style='border-bottom:1px solid #e9ecef;'>";
-            echo "<td style='padding:6px 8px;'>" . htmlescape(getUserName($userId)) . "</td>";
+            echo "<td style='padding:6px 8px;'>" . htmlescape(SprintCache::userName($userId)) . "</td>";
             echo "<td style='padding:6px 8px;color:#6c757d;'>" . htmlescape((string)$roleName) . "</td>";
             echo "<td style='padding:6px 8px;text-align:right;'>{$totalCap}%</td>";
             echo "<td style='padding:6px 8px;text-align:right;'>{$regularUsed}%</td>";
@@ -636,7 +636,7 @@ class SprintExport extends CommonGLPI
                 $cap = (float)$alloc['capacity'];
                 $itemTotal += $cap;
                 $perUserTotal[$uid] = ($perUserTotal[$uid] ?? 0) + $cap;
-                $allocText[] = htmlescape(getUserName($uid)) . " <span style='color:#6c757d;'>(" . SprintMember::formatCapacity($cap) . "%)</span>";
+                $allocText[] = htmlescape(SprintCache::userName($uid)) . " <span style='color:#6c757d;'>(" . SprintMember::formatCapacity($cap) . "%)</span>";
             }
             $allocHtml = $allocText
                 ? implode(', ', $allocText)
@@ -682,7 +682,7 @@ class SprintExport extends CommonGLPI
             foreach ($perUserTotal as $uid => $total) {
                 $pct = $maxTotal > 0 ? round(($total / $maxTotal) * 100) : 0;
                 echo "<tr style='border-bottom:1px solid #e9ecef;'>";
-                echo "<td style='padding:5px 8px;'>" . htmlescape(getUserName((int)$uid)) . "</td>";
+                echo "<td style='padding:5px 8px;'>" . htmlescape(SprintCache::userName((int)$uid)) . "</td>";
                 echo "<td style='padding:5px 8px;text-align:right;font-weight:600;color:#fd7e14;'>" . SprintMember::formatCapacity($total) . "%</td>";
                 echo "<td style='padding:5px 8px;'>";
                 echo "<div style='height:8px;background:#fff3cd;border-radius:4px;overflow:hidden;'>";
@@ -754,7 +754,7 @@ class SprintExport extends CommonGLPI
             foreach ($relRows as $r) {
                 $cap      = (float)$r['capacity'];
                 $capLabel = SprintMember::formatCapacity($cap);
-                $name = htmlescape(getUserName((int)$r['users_id']));
+                $name = htmlescape(SprintCache::userName((int)$r['users_id']));
                 if ((int)($r['is_resolved'] ?? 0) === 1) {
                     $helperLines[] = "<span style='color:#6c757d;text-decoration:line-through;'>{$name} ({$capLabel}%)</span>";
                 } else {
@@ -765,7 +765,7 @@ class SprintExport extends CommonGLPI
 
             $statusBg  = $statusBgColors[$row['status']] ?? '#6c757d';
             $ownerName = ((int)$row['users_id'] > 0)
-                ? htmlescape(getUserName((int)$row['users_id']))
+                ? htmlescape(SprintCache::userName((int)$row['users_id']))
                 : "<span style='color:#adb5bd;font-style:italic;'>" . __('Unassigned', 'sprint') . "</span>";
 
             echo "<tr style='border-bottom:1px solid #d1f2ea;page-break-inside:avoid;'>";
@@ -949,7 +949,7 @@ class SprintExport extends CommonGLPI
 
         foreach ($items as $row) {
             $statusBg = $statusBgColors[$row['status']] ?? '#6c757d';
-            $owner    = ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : __('Unassigned', 'sprint');
+            $owner    = ((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : __('Unassigned', 'sprint');
             $type     = $typeLabels[$row['itemtype']] ?? $row['itemtype'];
             $isFast   = !empty($row['is_fastlane']);
 
@@ -1042,24 +1042,22 @@ class SprintExport extends CommonGLPI
                     $uid       = (int)$alloc['users_id'];
                     $cap       = (float)$alloc['capacity'];
                     $capacity += $cap;
-                    $names[]   = getUserName($uid) . ' (' . SprintMember::formatCapacity($cap) . '%)';
+                    $names[]   = SprintCache::userName($uid) . ' (' . SprintMember::formatCapacity($cap) . '%)';
                 }
                 $owner = $names
                     ? implode(', ', $names)
-                    : (((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : __('Unassigned', 'sprint'));
+                    : (((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : __('Unassigned', 'sprint'));
             } else {
-                $owner    = ((int)$row['users_id'] > 0) ? getUserName((int)$row['users_id']) : __('Unassigned', 'sprint');
+                $owner    = ((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : __('Unassigned', 'sprint');
                 $capacity = (float)($row['capacity'] ?? 0);
             }
 
             $linkedName = '';
             $itemtype   = (string)($row['itemtype'] ?? '');
             $itemsId    = (int)($row['items_id'] ?? 0);
-            if ($itemtype !== '' && $itemsId > 0 && class_exists($itemtype)) {
-                $linked = new $itemtype();
-                if ($linked->getFromDB($itemsId)) {
-                    $linkedName = (string)($linked->fields['name'] ?? '');
-                }
+            $linked = SprintCache::getObject($itemtype, $itemsId);
+            if ($linked !== null) {
+                $linkedName = (string)($linked->fields['name'] ?? '');
             }
 
             fputcsv($out, [
@@ -1100,8 +1098,8 @@ class SprintExport extends CommonGLPI
                 }
                 fputcsv($out, [
                     (string)$parent['name'],
-                    ((int)$parent['users_id'] > 0) ? getUserName((int)$parent['users_id']) : __('Unassigned', 'sprint'),
-                    getUserName((int)$r['users_id']),
+                    ((int)$parent['users_id'] > 0) ? SprintCache::userName((int)$parent['users_id']) : __('Unassigned', 'sprint'),
+                    SprintCache::userName((int)$r['users_id']),
                     SprintMember::formatCapacity($r['capacity']),
                     ((int)($r['is_resolved'] ?? 0) === 1) ? __('Yes') : __('No'),
                     (string)($r['comment'] ?? ''),

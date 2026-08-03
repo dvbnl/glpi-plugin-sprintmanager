@@ -251,7 +251,7 @@ class Backlog
         foreach (array_merge($blocked, $items) as $r) {
             $uid = (int)($r['users_id'] ?? 0);
             if ($uid > 0 && !isset($owners[$uid])) {
-                $owners[$uid] = getUserName($uid);
+                $owners[$uid] = SprintCache::userName($uid);
             }
         }
         asort($owners);
@@ -1253,7 +1253,7 @@ HTML;
         $flags      = self::computeRowFlags($row);
 
         $ownerId      = (int)($row['users_id'] ?? 0);
-        $ownerName    = $ownerId > 0 ? getUserName($ownerId) : '';
+        $ownerName    = $ownerId > 0 ? SprintCache::userName($ownerId) : '';
         $estCapacity  = (float)($row['capacity'] ?? 0);
         $proposedId   = (int)($row['proposed_sprints_id'] ?? 0);
         $proposedName = $proposedId > 0 ? (string)($sprintNames[$proposedId] ?? ('#' . $proposedId)) : '';
