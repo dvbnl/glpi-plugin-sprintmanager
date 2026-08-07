@@ -62,11 +62,25 @@ if (!$canAssign) {
     return;
 }
 
-$result = $item->update([
+// DoR is mandatory on assign; fastlane items are exempt.
+$dor    = GlpiPlugin\Sprint\Config::getDefinitionReady();
+$update = [
     'id'                       => $id,
     'plugin_sprint_sprints_id' => $sprintId,
     'proposed_sprints_id'      => 0,
-]);
+];
+if ($dor) {
+    $confirmed = array_values(array_intersect($dor, (array)($_POST['ready'] ?? [])));
+    if (!$isFastlane && count($confirmed) < count($dor)) {
+        echo json_encode([
+            'success' => false,
+            'message' => __('Definition of Ready incomplete. Confirm every check to assign this item.', 'sprint'),
+        ]);
+        return;
+    }
+    $update['ready_checks'] = json_encode($confirmed);
+}
+$result = $item->update($update);
 
 if ($result) {
     // Coupled items live in one place: drop leftover backlog rows for the coupling.

@@ -3,9 +3,7 @@
 namespace GlpiPlugin\Sprint;
 
 use CommonDBTM;
-use CommonGLPI;
 use Html;
-use Session;
 use Dropdown;
 use Log;
 
@@ -111,6 +109,22 @@ class SprintTemplate extends CommonDBTM
         return $ong;
     }
 
+    public function prepareInputForAdd($input)
+    {
+        if (isset($input['fastlane_capacity'])) {
+            $input['fastlane_capacity'] = SprintMember::normalizeCapacity($input['fastlane_capacity']);
+        }
+        return parent::prepareInputForAdd($input);
+    }
+
+    public function prepareInputForUpdate($input)
+    {
+        if (isset($input['fastlane_capacity'])) {
+            $input['fastlane_capacity'] = SprintMember::normalizeCapacity($input['fastlane_capacity']);
+        }
+        return parent::prepareInputForUpdate($input);
+    }
+
     public function showForm($ID, array $options = []): bool
     {
         $this->initForm($ID, $options);
@@ -152,6 +166,10 @@ class SprintTemplate extends CommonDBTM
             echo "<td>" . __('Sprint goal', 'sprint') . "</td>";
             echo "<td colspan='3'><textarea name='goal' rows='4' cols='80'>" .
                 htmlescape($this->fields['goal'] ?? '') . "</textarea></td></tr>";
+
+            echo "<tr class='tab_bg_1'><td>" . __('WIP limits: progress / review / dependency', 'sprint') . "</td><td><input type='number' min='0' name='wip_in_progress' value='" . (int)($this->fields['wip_in_progress'] ?? 0) . "'> / <input type='number' min='0' name='wip_review' value='" . (int)($this->fields['wip_review'] ?? 0) . "'> / <input type='number' min='0' name='wip_dependency' value='" . (int)($this->fields['wip_dependency'] ?? 0) . "'></td><td>" . __('Enforce WIP limits', 'sprint') . "</td><td>"; Dropdown::showYesNo('wip_hard', $this->fields['wip_hard'] ?? 0); echo '</td></tr>';
+
+            echo "<tr class='tab_bg_1'><td>" . __('Fastlane capacity cap (%)', 'sprint') . "</td><td><input type='number' min='0' max='100' step='.5' name='fastlane_capacity' value='" . htmlescape((string)($this->fields['fastlane_capacity'] ?? 0)) . "'></td><td colspan='2'></td></tr>";
 
             echo "<tr class='tab_bg_1'>";
             echo "<td>" . __('Comments') . "</td>";
@@ -216,6 +234,13 @@ class SprintTemplate extends CommonDBTM
             if (empty($sprint->fields['comment']) && !empty($template->fields['comment'])) {
                 $updates['comment'] = $template->fields['comment'];
             }
+            $updates['wip_hard'] = (int)($template->fields['wip_hard'] ?? 0);
+            $updates['wip_limits'] = json_encode([
+                SprintItem::STATUS_IN_PROGRESS => max(0, (int)($template->fields['wip_in_progress'] ?? 0)),
+                SprintItem::STATUS_REVIEW => max(0, (int)($template->fields['wip_review'] ?? 0)),
+                SprintItem::STATUS_DEPENDENCY => max(0, (int)($template->fields['wip_dependency'] ?? 0)),
+            ]);
+            $updates['fastlane_capacity'] = SprintMember::normalizeCapacity($template->fields['fastlane_capacity'] ?? 0);
             if (count($updates) > 1) {
                 $sprint->update($updates);
             }
@@ -233,6 +258,8 @@ class SprintTemplate extends CommonDBTM
                 'comment'                  => $row['comment'] ?? '',
             ]);
         }
+
+        self::applyFixedLeave($template, $sprint, $sprintId);
 
         $tmplItem = new SprintTemplateItem();
         $items = $tmplItem->find(
@@ -256,5 +283,52 @@ class SprintTemplate extends CommonDBTM
         });
 
         SprintTemplateMeeting::applyToSprint($templateId, $sprintId);
+    }
+
+    /**
+     * Materialize the template's fixed weekly leave into dated availability
+     * exceptions for the sprint window (working days only).
+     */
+    private static function applyFixedLeave(self $template, Sprint $sprint, int $sprintId): void
+    {
+        global $DB;
+
+        $rules = (new SprintTemplateAvailability())->find(
+            ['plugin_sprint_sprinttemplates_id' => (int)$template->getID()]
+        );
+        $startRaw = substr((string)($sprint->fields['date_start'] ?? ''), 0, 10);
+        $endRaw   = substr((string)($sprint->fields['date_end'] ?? ''), 0, 10);
+        if (!$rules || $startRaw === '' || $endRaw === '') {
+            return;
+        }
+        try {
+            $cursor = new \DateTimeImmutable($startRaw);
+            $end    = new \DateTimeImmutable($endRaw);
+        } catch (\Exception $e) {
+            return;
+        }
+
+        $guard = 0;
+        while ($cursor <= $end && $guard < 120) {
+            $dow = (int)$cursor->format('N');
+            foreach ($rules as $rule) {
+                if ((int)$rule['weekday'] !== $dow) {
+                    continue;
+                }
+                $DB->insert('glpi_plugin_sprint_sprintavailabilities', [
+                    'plugin_sprint_sprints_id' => $sprintId,
+                    'users_id'                 => (int)$rule['users_id'],
+                    'date_start'               => $cursor->format('Y-m-d'),
+                    'date_end'                 => $cursor->format('Y-m-d'),
+                    'availability_percent'     => $rule['availability_percent'],
+                    'comment'                  => ($rule['comment'] ?? '') !== ''
+                        ? $rule['comment']
+                        : __('Fixed leave', 'sprint'),
+                    'date_creation'            => $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s'),
+                ]);
+            }
+            $cursor = $cursor->modify('+1 day');
+            $guard++;
+        }
     }
 }

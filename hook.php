@@ -33,9 +33,12 @@ function plugin_sprint_install(): bool
             `date_start`      TIMESTAMP NULL DEFAULT NULL,
             `date_end`        TIMESTAMP NULL DEFAULT NULL,
             `duration_weeks`  INT UNSIGNED NOT NULL DEFAULT 2,
+            `scope_baseline_items` INT UNSIGNED NOT NULL DEFAULT 0,
+            `scope_baseline_points` INT UNSIGNED NOT NULL DEFAULT 0,
             `fastlane_capacity` DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Fastlane capacity cap in %, 0 = no cap',
             `users_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master',
             `projects_id`     INT UNSIGNED NOT NULL DEFAULT 0,
+            `plugin_sprint_sprinttemplates_id` INT UNSIGNED NOT NULL DEFAULT 0,
             `comment`         TEXT,
             `date_creation`   TIMESTAMP NULL DEFAULT NULL,
             `date_mod`        TIMESTAMP NULL DEFAULT NULL,
@@ -45,6 +48,7 @@ function plugin_sprint_install(): bool
             KEY `status` (`status`),
             KEY `users_id` (`users_id`),
             KEY `projects_id` (`projects_id`),
+            KEY `plugin_sprint_sprinttemplates_id` (`plugin_sprint_sprinttemplates_id`),
             KEY `date_start` (`date_start`),
             KEY `date_end` (`date_end`),
             KEY `date_creation` (`date_creation`),
@@ -55,6 +59,10 @@ function plugin_sprint_install(): bool
 
     // Migration: per-sprint fastlane hard cap (display-only overflow guard)
     if ($DB->tableExists('glpi_plugin_sprint_sprints')) {
+        $migration->addField('glpi_plugin_sprint_sprints', 'scope_baseline_items', 'integer', ['value' => 0, 'after' => 'duration_weeks']);
+        $migration->addField('glpi_plugin_sprint_sprints', 'scope_baseline_points', 'integer', ['value' => 0, 'after' => 'scope_baseline_items']);
+        $migration->addField('glpi_plugin_sprint_sprints', 'plugin_sprint_sprinttemplates_id', 'integer', ['value' => 0, 'after' => 'projects_id']);
+        $migration->addKey('glpi_plugin_sprint_sprints', 'plugin_sprint_sprinttemplates_id');
         $migration->addField(
             'glpi_plugin_sprint_sprints',
             'fastlane_capacity',
@@ -160,6 +168,172 @@ function plugin_sprint_install(): bool
             ['value' => 0, 'after' => 'is_blocked']
         );
         $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_adhoc');
+        $migration->addField('glpi_plugin_sprint_sprintitems', 'ready_checks', 'text', ['after' => 'description']);
+        $migration->addField('glpi_plugin_sprint_sprintitems', 'done_checks', 'text', ['after' => 'ready_checks']);
+        $migration->addField('glpi_plugin_sprint_sprintitems', 'plugin_sprint_sprintepics_id', 'integer', ['value' => 0, 'after' => 'done_checks']);
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'plugin_sprint_sprintepics_id');
+        // Backlog category (Projects / R&D / Internal / ... — admin-defined
+        // in plugin settings). Exactly one per item so capacity can be
+        // aggregated per category on the backlog dashboard.
+        $migration->addField('glpi_plugin_sprint_sprintitems', 'plugin_sprint_sprintcategories_id', 'integer', ['value' => 0, 'after' => 'plugin_sprint_sprintepics_id']);
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'plugin_sprint_sprintcategories_id');
+        // Non-active tier: parked backlog items are long-term / low-priority
+        // work kept out of the active planning sections and capacity totals.
+        $migration->addField('glpi_plugin_sprint_sprintitems', 'is_parked', 'bool', ['value' => 0, 'after' => 'is_adhoc']);
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_parked');
+    }
+
+    // =========================================================================
+    // Backlog categories + per-sprint capacity caps per category
+    // =========================================================================
+    $backlogTables = [
+        'glpi_plugin_sprint_sprintcategories' => "CREATE TABLE `glpi_plugin_sprint_sprintcategories` (
+            `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `name`          VARCHAR(255) NOT NULL DEFAULT '',
+            `color`         VARCHAR(16) NOT NULL DEFAULT '#0d6efd',
+            `plugin_sprint_sprintcategories_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Parent category, 0 = top level (max one level of nesting)',
+            `sort_order`    INT NOT NULL DEFAULT 0,
+            `is_active`     TINYINT NOT NULL DEFAULT 1,
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`      TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`), KEY `name` (`name`), KEY `is_active` (`is_active`),
+            KEY `plugin_sprint_sprintcategories_id` (`plugin_sprint_sprintcategories_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_backlogflow' => "CREATE TABLE `glpi_plugin_sprint_backlogflow` (
+            `id`                                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `date`                              DATE NOT NULL,
+            `plugin_sprint_sprintcategories_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `direction`                         VARCHAR(3) NOT NULL DEFAULT 'in' COMMENT 'in = entered backlog, out = left (assigned/removed)',
+            `capacity`                          DECIMAL(6,1) NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`),
+            KEY `date_dir` (`date`, `direction`),
+            KEY `category` (`plugin_sprint_sprintcategories_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintcategorycaps' => "CREATE TABLE `glpi_plugin_sprint_sprintcategorycaps` (
+            `id`                                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id`          INT UNSIGNED NOT NULL DEFAULT 0,
+            `plugin_sprint_sprintcategories_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `max_percent`                       DECIMAL(6,1) NOT NULL DEFAULT 0 COMMENT 'Capacity cap in %, 0 = no cap',
+            `min_percent`                       DECIMAL(6,1) NOT NULL DEFAULT 0 COMMENT 'Capacity floor in %, 0 = no minimum',
+            `date_mod`                          TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unicity` (`plugin_sprint_sprints_id`, `plugin_sprint_sprintcategories_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+    ];
+    foreach ($backlogTables as $table => $query) {
+        if (!$DB->tableExists($table)) {
+            $DB->doQueryOrDie($query, $DB->error());
+        }
+    }
+
+    // Subcategories: one level of nesting so the backlog and the planning
+    // matrix can group work per category/subcategory.
+    if ($DB->tableExists('glpi_plugin_sprint_sprintcategories')) {
+        $migration->addField(
+            'glpi_plugin_sprint_sprintcategories',
+            'plugin_sprint_sprintcategories_id',
+            "INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Parent category, 0 = top level (max one level of nesting)'",
+            ['after' => 'color']
+        );
+        $migration->addKey('glpi_plugin_sprint_sprintcategories', 'plugin_sprint_sprintcategories_id');
+    }
+
+    if ($DB->tableExists('glpi_plugin_sprint_sprintcategorycaps')) {
+        $migration->addField(
+            'glpi_plugin_sprint_sprintcategorycaps',
+            'min_percent',
+            "DECIMAL(6,1) NOT NULL DEFAULT 0 COMMENT 'Capacity floor in %, 0 = no minimum'",
+            ['after' => 'max_percent']
+        );
+    }
+
+    // Sprint flow policies.
+    if ($DB->tableExists('glpi_plugin_sprint_sprints')) {
+        $migration->addField('glpi_plugin_sprint_sprints', 'wip_limits', 'text', ['after' => 'goal']);
+        $migration->addField('glpi_plugin_sprint_sprints', 'wip_hard', 'bool', ['value' => 0, 'after' => 'wip_limits']);
+        $migration->addField('glpi_plugin_sprint_sprints', 'sync_linked_status', 'bool', ['value' => 0, 'after' => 'wip_hard']);
+        $migration->addField('glpi_plugin_sprint_sprints', 'linked_status_rules', 'text', ['after' => 'sync_linked_status']);
+    }
+
+    // 1.2.2: DoR/DoD moved to global settings and WIP limits became
+    // per-person — drop the dead columns.
+    $migration->dropField('glpi_plugin_sprint_sprints', 'definition_ready');
+    $migration->dropField('glpi_plugin_sprint_sprints', 'definition_done');
+    $migration->dropField('glpi_plugin_sprint_sprints', 'wip_per_person');
+    $migration->dropField('glpi_plugin_sprint_sprinttemplates', 'definition_ready');
+    $migration->dropField('glpi_plugin_sprint_sprinttemplates', 'definition_done');
+    $migration->dropField('glpi_plugin_sprint_sprinttemplates', 'wip_per_person');
+    $migration->dropField('glpi_plugin_sprint_sprintitems', 'acceptance_criteria');
+
+    $agilityTables = [
+        'glpi_plugin_sprint_sprintepics' => "CREATE TABLE `glpi_plugin_sprint_sprintepics` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `entities_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `name` VARCHAR(255) NOT NULL DEFAULT '',
+            `color` VARCHAR(16) NOT NULL DEFAULT '#0d6efd',
+            `target_date` TIMESTAMP NULL DEFAULT NULL,
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            `date_mod` TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`), KEY `sprint` (`plugin_sprint_sprints_id`), KEY `entities_id` (`entities_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintavailabilities' => "CREATE TABLE `glpi_plugin_sprint_sprintavailabilities` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `date_start` DATE NOT NULL,
+            `date_end` DATE NOT NULL,
+            `availability_percent` DECIMAL(5,1) NOT NULL DEFAULT 0,
+            `comment` VARCHAR(255) NOT NULL DEFAULT '',
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`), KEY `sprint_user` (`plugin_sprint_sprints_id`,`users_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintimprovements' => "CREATE TABLE `glpi_plugin_sprint_sprintimprovements` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `category` VARCHAR(32) NOT NULL DEFAULT 'action',
+            `description` TEXT NOT NULL,
+            `users_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `due_date` DATE NULL DEFAULT NULL,
+            `status` VARCHAR(20) NOT NULL DEFAULT 'open',
+            `votes` INT UNSIGNED NOT NULL DEFAULT 0,
+            `carry_to_next` TINYINT NOT NULL DEFAULT 1,
+            `is_anonymous` TINYINT NOT NULL DEFAULT 0,
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            `date_mod` TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`), KEY `sprint_status` (`plugin_sprint_sprints_id`,`status`), KEY `owner` (`users_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintimprovementvotes' => "CREATE TABLE `glpi_plugin_sprint_sprintimprovementvotes` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprintimprovements_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unicity` (`plugin_sprint_sprintimprovements_id`, `users_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintsignals' => "CREATE TABLE `glpi_plugin_sprint_sprintsignals` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `signal_type` VARCHAR(40) NOT NULL DEFAULT 'info',
+            `message` TEXT NOT NULL,
+            `url` VARCHAR(1000) NOT NULL DEFAULT '',
+            `is_read` TINYINT NOT NULL DEFAULT 0,
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`), KEY `user_read` (`users_id`,`is_read`), KEY `sprint` (`plugin_sprint_sprints_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+    ];
+    foreach ($agilityTables as $table => $query) {
+        if (!$DB->tableExists($table)) {
+            $DB->doQueryOrDie($query, $DB->error());
+        }
+    }
+    if ($DB->tableExists('glpi_plugin_sprint_sprintimprovements')) {
+        $migration->addField('glpi_plugin_sprint_sprintimprovements', 'is_anonymous', 'bool', ['value' => 0, 'after' => 'carry_to_next']);
+    }
+    if ($DB->tableExists('glpi_plugin_sprint_sprintepics')) {
+        $migration->addField('glpi_plugin_sprint_sprintepics', 'entities_id', 'integer', ['value' => 0, 'after' => 'plugin_sprint_sprints_id']);
+        $migration->addKey('glpi_plugin_sprint_sprintepics', 'entities_id');
     }
 
     // =========================================================================
@@ -237,9 +411,13 @@ function plugin_sprint_install(): bool
             `date_meeting`             TIMESTAMP NULL DEFAULT NULL,
             `duration_minutes`         INT UNSIGNED NOT NULL DEFAULT 15,
             `notes`                    LONGTEXT,
-            `attendees`                TEXT COMMENT 'JSON array of user IDs',
             `users_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Facilitator',
-            `treated_items`            TEXT COMMENT 'JSON array of treated sprint item IDs',
+            `meeting_status`           VARCHAR(20) NOT NULL DEFAULT 'open' COMMENT 'Guided session: open / in_progress / completed',
+            `current_phase`            INT UNSIGNED NOT NULL DEFAULT 0,
+            `started_at`               TIMESTAMP NULL DEFAULT NULL,
+            `ended_at`                 TIMESTAMP NULL DEFAULT NULL,
+            `phase_started_at`         TIMESTAMP NULL DEFAULT NULL,
+            `phase_notes`              LONGTEXT COMMENT 'JSON object of per-phase notes keyed by phase key',
             `date_creation`            TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                 TIMESTAMP NULL DEFAULT NULL,
             PRIMARY KEY (`id`),
@@ -251,38 +429,18 @@ function plugin_sprint_install(): bool
         $DB->doQueryOrDie($query, $DB->error());
     }
 
-    // Migration: add treated_items to existing meetings table
+    // Migration: guided meeting session state (review/retrospective rail);
+    // the never-used attendees/treated_items columns are dropped.
     if ($DB->tableExists('glpi_plugin_sprint_sprintmeetings')) {
-        $migration->addField(
-            'glpi_plugin_sprint_sprintmeetings',
-            'treated_items',
-            'text',
-            ['after' => 'users_id']
-        );
-    }
-
-    // =========================================================================
-    // Table: glpi_plugin_sprint_sprintstandups (standup entries per item)
-    // =========================================================================
-    if (!$DB->tableExists('glpi_plugin_sprint_sprintstandups')) {
-        $query = "CREATE TABLE `glpi_plugin_sprint_sprintstandups` (
-            `id`                              INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `plugin_sprint_sprintmeetings_id` INT UNSIGNED NOT NULL DEFAULT 0,
-            `plugin_sprint_sprintitems_id`    INT UNSIGNED NOT NULL DEFAULT 0,
-            `users_id`                        INT UNSIGNED NOT NULL DEFAULT 0,
-            `status_update`                   VARCHAR(50) NOT NULL DEFAULT 'on_track',
-            `done_yesterday`                  TEXT,
-            `plan_today`                      TEXT,
-            `blockers`                        TEXT,
-            `date_creation`                   TIMESTAMP NULL DEFAULT NULL,
-            `date_mod`                        TIMESTAMP NULL DEFAULT NULL,
-            PRIMARY KEY (`id`),
-            KEY `plugin_sprint_sprintmeetings_id` (`plugin_sprint_sprintmeetings_id`),
-            KEY `plugin_sprint_sprintitems_id` (`plugin_sprint_sprintitems_id`),
-            KEY `users_id` (`users_id`),
-            KEY `status_update` (`status_update`)
-        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
-        $DB->doQueryOrDie($query, $DB->error());
+        $meetingsTable = 'glpi_plugin_sprint_sprintmeetings';
+        $migration->dropField($meetingsTable, 'attendees');
+        $migration->dropField($meetingsTable, 'treated_items');
+        $migration->addField($meetingsTable, 'meeting_status', "VARCHAR(20) NOT NULL DEFAULT 'open'", ['after' => 'users_id']);
+        $migration->addField($meetingsTable, 'current_phase', 'INT UNSIGNED NOT NULL DEFAULT 0', ['after' => 'meeting_status']);
+        $migration->addField($meetingsTable, 'started_at', 'TIMESTAMP NULL DEFAULT NULL', ['after' => 'current_phase']);
+        $migration->addField($meetingsTable, 'ended_at', 'TIMESTAMP NULL DEFAULT NULL', ['after' => 'started_at']);
+        $migration->addField($meetingsTable, 'phase_started_at', 'TIMESTAMP NULL DEFAULT NULL', ['after' => 'ended_at']);
+        $migration->addField($meetingsTable, 'phase_notes', 'longtext', ['after' => 'phase_started_at']);
     }
 
     // =========================================================================
@@ -459,6 +617,13 @@ function plugin_sprint_install(): bool
         ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
         $DB->doQueryOrDie($query, $DB->error());
     }
+    if ($DB->tableExists('glpi_plugin_sprint_sprinttemplates')) {
+        $migration->addField('glpi_plugin_sprint_sprinttemplates', 'wip_in_progress', 'integer', ['value' => 0, 'after' => 'goal']);
+        $migration->addField('glpi_plugin_sprint_sprinttemplates', 'wip_review', 'integer', ['value' => 0, 'after' => 'wip_in_progress']);
+        $migration->addField('glpi_plugin_sprint_sprinttemplates', 'wip_dependency', 'integer', ['value' => 0, 'after' => 'wip_review']);
+        $migration->addField('glpi_plugin_sprint_sprinttemplates', 'wip_hard', 'bool', ['value' => 0, 'after' => 'wip_dependency']);
+        $migration->addField('glpi_plugin_sprint_sprinttemplates', 'fastlane_capacity', 'integer', ['value' => 0, 'after' => 'wip_hard']);
+    }
 
     // =========================================================================
     // Table: glpi_plugin_sprint_sprinttemplatemembers
@@ -536,6 +701,27 @@ function plugin_sprint_install(): bool
             'bool',
             ['value' => 0, 'after' => 'is_optional']
         );
+    }
+
+    // =========================================================================
+    // Table: glpi_plugin_sprint_sprinttemplateavailabilities (fixed weekly leave,
+    // materialized into sprint availability exceptions on template apply)
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_sprinttemplateavailabilities')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_sprinttemplateavailabilities` (
+            `id`                               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprinttemplates_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id`                         INT UNSIGNED NOT NULL DEFAULT 0,
+            `weekday`                          TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'ISO weekday 1=Monday .. 5=Friday',
+            `availability_percent`             DECIMAL(5,1) NOT NULL DEFAULT 0,
+            `comment`                          VARCHAR(255) NOT NULL DEFAULT '',
+            `date_creation`                    TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`                         TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `plugin_sprint_sprinttemplates_id` (`plugin_sprint_sprinttemplates_id`),
+            KEY `users_id` (`users_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
     }
 
     // =========================================================================
@@ -719,6 +905,24 @@ function plugin_sprint_install(): bool
             'mode'    => CronTask::MODE_INTERNAL,
         ]
     );
+    CronTask::Register(
+        'GlpiPlugin\Sprint\SprintAgility',
+        'SprintSignals',
+        HOUR_TIMESTAMP,
+        [
+            'comment' => 'Create SprintManager meeting, approval and risk signals',
+            'mode'    => CronTask::MODE_INTERNAL,
+        ]
+    );
+    CronTask::Register(
+        'GlpiPlugin\Sprint\SprintItem',
+        'BacklogCleanup',
+        DAY_TIMESTAMP,
+        [
+            'comment' => 'Remove backlog items whose linked item is solved or closed',
+            'mode'    => CronTask::MODE_INTERNAL,
+        ]
+    );
 
     $migration->executeMigration();
 
@@ -735,11 +939,20 @@ function plugin_sprint_uninstall(): bool
     global $DB;
 
     $tables = [
+        'glpi_plugin_sprint_backlogflow',
+        'glpi_plugin_sprint_sprintcategorycaps',
+        'glpi_plugin_sprint_sprintcategories',
+        'glpi_plugin_sprint_sprintsignals',
+        'glpi_plugin_sprint_sprintimprovementvotes',
+        'glpi_plugin_sprint_sprintimprovements',
+        'glpi_plugin_sprint_sprintavailabilities',
+        'glpi_plugin_sprint_sprintepics',
         'glpi_plugin_sprint_sprintrequests',
         'glpi_plugin_sprint_meetingblockedsnapshots',
         'glpi_plugin_sprint_audit_sources',
         'glpi_plugin_sprint_sprinttemplatemeetings',
         'glpi_plugin_sprint_sprinttemplateitems',
+        'glpi_plugin_sprint_sprinttemplateavailabilities',
         'glpi_plugin_sprint_sprinttemplatemembers',
         'glpi_plugin_sprint_sprinttemplates',
         'glpi_plugin_sprint_profiles',
@@ -786,6 +999,13 @@ function plugin_sprint_uninstall(): bool
 function plugin_sprint_check_prerequisites(): bool
 {
     return true;
+}
+
+function plugin_sprint_display_central(): void
+{
+    if (Session::haveRight('plugin_sprint_sprint', READ)) {
+        GlpiPlugin\Sprint\SprintAgility::renderHomeWidget();
+    }
 }
 
 /**

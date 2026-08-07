@@ -362,7 +362,9 @@ class SprintDashboard extends CommonGLPI
                 . ' data-is-fastlane="0"'
                 . ' data-is-adhoc="' . ($isAdhoc ? 1 : 0) . '"'
                 . ' data-item-tags="' . htmlescape(SprintItem::tagsToBlob($rowTags)) . '"'
-                . ' data-note="' . htmlescape((string)($row['note'] ?? '')) . '"';
+                . ' data-note="' . htmlescape((string)($row['note'] ?? '')) . '"'
+                . ' data-done-checks="' . htmlescape(implode('|', SprintAgility::checklist((string)($row['done_checks'] ?? '')))) . '"'
+                . ' data-epic-id="' . (int)($row['epic_id'] ?? 0) . '"';
 
             $rowDeps = $depsById[(int)$row['item_id']] ?? [];
             $linkedOpenBadge = SprintItem::renderLinkedItemOpenBadge([
@@ -460,7 +462,9 @@ class SprintDashboard extends CommonGLPI
 
         foreach ($members as $row) {
             $uid        = (int)$row['users_id'];
-            $total      = SprintMember::normalizeCapacity($row['capacity_percent']);
+            // Effective capacity (availability exceptions applied), matching the team dashboard cards.
+            $baseCap    = SprintMember::normalizeCapacity($row['capacity_percent']);
+            $total      = SprintAgility::effectiveCapacity($sprintId, $uid, $baseCap);
             $regular    = $regularUsed[$uid] ?? 0;
             $fastlane   = $fastlaneUsed[$uid] ?? 0;
             $dependency = $dependencyUsed[$uid] ?? 0;
@@ -505,7 +509,7 @@ class SprintDashboard extends CommonGLPI
             echo "<td class='center'>{$usedLabel}%</td>";
             echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$availableDisplay}</td>";
             echo "<td style='min-width:180px;'>";
-            echo SprintMember::renderCapacityBar($total, $regular, $fastlane, $dependency, 16, '8px');
+            echo SprintMember::renderCapacityBar($total, $regular, $fastlane, $dependency, 16, '8px', $baseCap);
             echo "</td>";
             echo "</tr>";
         }
@@ -621,6 +625,7 @@ class SprintDashboard extends CommonGLPI
         echo "<th>" . __('Status') . "</th>";
         echo "<th>" . __('Members', 'sprint') . "</th>";
         echo "<th>" . __('Total', 'sprint') . "</th>";
+        echo "<th style='width:52px;'></th>";
         echo "</tr>";
 
         $rendered = 0;
@@ -663,7 +668,7 @@ class SprintDashboard extends CommonGLPI
             $rowTags = $tagsById[$itemId] ?? [];
             $rowDeps = $depsById[$itemId] ?? [];
 
-            echo "<tr class='tab_bg_1'>";
+            echo "<tr class='tab_bg_1' " . SprintItem::buildItemDataAttrs($row, $rowTags) . ">";
             echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
                 "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" .
                 htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
@@ -673,12 +678,17 @@ class SprintDashboard extends CommonGLPI
             echo "<td>" . (count($memberLines) > 0 ? implode('<br>', $memberLines) :
                 "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
             echo "<td class='center'><strong>" . SprintMember::formatCapacity($totalCap) . "%</strong></td>";
+            echo "<td class='text-center'>";
+            echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-quick-edit-btn' "
+                . "title='" . __('Quick edit', 'sprint') . "' data-item-id='{$itemId}'>"
+                . "<i class='fas fa-pen'></i></button>";
+            echo "</td>";
             echo "</tr>";
             $rendered++;
         }
 
         if ($rendered === 0) {
-            echo "<tr class='tab_bg_1'><td colspan='5' class='center'>" .
+            echo "<tr class='tab_bg_1'><td colspan='6' class='center'>" .
                 __('No fastlane items', 'sprint') . "</td></tr>";
         }
 
@@ -935,6 +945,8 @@ class SprintDashboard extends CommonGLPI
                 'users_id'      => (int)$row['users_id'],
                 'is_adhoc'      => (int)($row['is_adhoc'] ?? 0),
                 'note'          => (string)($row['note'] ?? ''),
+                'done_checks'   => (string)($row['done_checks'] ?? ''),
+                'epic_id'       => (int)($row['plugin_sprint_sprintepics_id'] ?? 0),
                 'member_name'   => ((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : '',
                 'status'        => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:' . $statusBg . ';">' .
                                    ($statuses[$row['status']] ?? $row['status']) . '</span>',
@@ -976,7 +988,9 @@ class SprintDashboard extends CommonGLPI
 
         $roles = SprintMember::getAllRoles();
         $memberData = reset($members);
-        $total      = SprintMember::normalizeCapacity($memberData['capacity_percent']);
+        // Effective capacity (availability exceptions applied), matching the team capacity table.
+        $baseCap    = SprintMember::normalizeCapacity($memberData['capacity_percent']);
+        $total      = SprintAgility::effectiveCapacity($sprintId, $userId, $baseCap);
         $remaining  = max($total - $usedCapacity, 0);
         $pctUsed    = ($total > 0) ? round(($usedCapacity / $total) * 100) : 0;
         $roleName   = $roles[$memberData['role']] ?? $memberData['role'];
@@ -1033,7 +1047,7 @@ class SprintDashboard extends CommonGLPI
         echo "<td class='center'>{$usedLabel}%</td>";
         echo "<td class='center' style='font-weight:700;color:{$remainColor};'>{$availableDisplay}</td>";
         echo "<td style='min-width:180px;'>";
-        echo SprintMember::renderCapacityBar($total, $regularUsed, $fastlaneUsed, $dependencyUsed, 16, '8px');
+        echo SprintMember::renderCapacityBar($total, $regularUsed, $fastlaneUsed, $dependencyUsed, 16, '8px', $baseCap);
         echo "</td>";
         echo "</tr>";
 
@@ -1304,8 +1318,8 @@ class SprintDashboard extends CommonGLPI
         echo "<div style='font-size:0.85em;color:#6c757d;margin-bottom:6px;'>"
             . __('This sprint and the six before it: completed story points, fastlane and adhoc items (bars), with total fastlane capacity % (line).', 'sprint') . "</div>";
         echo "<div style='overflow-x:auto;'>";
-        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
-            . "style='width:100%;height:auto;max-width:{$width}px;font-family:sans-serif;font-size:11px;'>";
+        echo "<svg class='sprint-responsive-chart' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "preserveAspectRatio='xMinYMin meet' style='width:100%;height:auto;display:block;font-family:sans-serif;font-size:11px;'>";
 
         for ($t = 0; $t <= 4; $t++) {
             $yv = (int)round($yMax * $t / 4);
@@ -1552,8 +1566,8 @@ class SprintDashboard extends CommonGLPI
         echo "<div style='font-size:0.85em;color:#6c757d;margin-bottom:6px;'>"
             . __('Remaining story points vs. the ideal line across the sprint.', 'sprint') . "</div>";
         echo "<div style='overflow-x:auto;'>";
-        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
-            . "style='width:100%;height:auto;max-width:{$width}px;font-family:sans-serif;font-size:11px;'>";
+        echo "<svg class='sprint-responsive-chart' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "preserveAspectRatio='xMinYMin meet' style='width:100%;height:auto;display:block;font-family:sans-serif;font-size:11px;'>";
 
         // Horizontal grid + y labels
         for ($t = 0; $t <= 4; $t++) {
@@ -1631,6 +1645,36 @@ class SprintDashboard extends CommonGLPI
             }
         }
 
+        // Items in review normally close at the next stand-up; show where the line lands then.
+        $reviewPts = 0;
+        foreach ($itemIds as $id) {
+            if ($currentStatuses[$id] === SprintItem::STATUS_REVIEW) {
+                $reviewPts += $points[$id];
+            }
+        }
+        $lastIdx = null;
+        foreach ($actual as $i => $v) {
+            if ($v !== null) { $lastIdx = $i; }
+        }
+        $hasProjection = ($reviewPts > 0 && $lastIdx !== null);
+        if ($hasProjection) {
+            $projVal = max((float)$actual[$lastIdx] - $reviewPts, 0);
+            $projIdx = min($lastIdx + 1, $nDays - 1);
+            $x1 = number_format($xAt($lastIdx), 2, '.', '');
+            $y1 = number_format($yAt((float)$actual[$lastIdx]), 2, '.', '');
+            $x2 = number_format($xAt($projIdx), 2, '.', '');
+            $y2 = number_format($yAt($projVal), 2, '.', '');
+            $projTitle = sprintf(
+                __('Projected after review: %d points remaining (%d in review)', 'sprint'),
+                (int)$projVal,
+                $reviewPts
+            );
+            echo "<line x1='{$x1}' y1='{$y1}' x2='{$x2}' y2='{$y2}' stroke='#6f42c1' "
+                . "stroke-width='2' stroke-dasharray='3,3' stroke-linecap='round' />";
+            echo "<circle cx='{$x2}' cy='{$y2}' r='3.2' fill='none' stroke='#6f42c1' stroke-width='2'>"
+                . "<title>" . htmlescape($projTitle) . "</title></circle>";
+        }
+
         echo "</svg>";
         echo "</div>"; // overflow
 
@@ -1646,6 +1690,10 @@ class SprintDashboard extends CommonGLPI
         }
         echo "<span><span style='display:inline-block;width:16px;height:0;border-top:2px dashed #adb5bd;vertical-align:middle;'></span> "
             . __('Ideal', 'sprint') . "</span>";
+        if ($hasProjection) {
+            echo "<span><span style='display:inline-block;width:16px;height:0;border-top:2px dashed #6f42c1;vertical-align:middle;'></span> "
+                . __('Projected after review', 'sprint') . "</span>";
+        }
         echo "<span class='text-muted'>" . sprintf(__('Scope: %d points', 'sprint'), $scope) . "</span>";
         echo "</div>";
     }
@@ -1725,8 +1773,8 @@ class SprintDashboard extends CommonGLPI
 
         echo "<div class='sprint-member-activity'>";
         echo "<div style='overflow-x:auto;'>";
-        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
-            . "style='width:100%;height:auto;max-width:{$width}px;font-family:sans-serif;font-size:11px;'>";
+        echo "<svg class='sprint-responsive-chart' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "preserveAspectRatio='xMinYMin meet' style='width:100%;height:auto;display:block;font-family:sans-serif;font-size:11px;'>";
 
         // Horizontal grid + y-axis tick labels
         for ($t = 0; $t <= 4; $t++) {

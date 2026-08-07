@@ -10,6 +10,15 @@ if (!defined('GLPI_ROOT')) {
 
 Session::checkRight('config', UPDATE);
 
+if (isset($_POST['save_sprint_categories'])) {
+    if ((int) explode('.', GLPI_VERSION)[0] < 11) {
+        Session::checkCSRF($_POST);
+    }
+    GlpiPlugin\Sprint\SprintCategory::saveFromConfigForm($_POST);
+    Session::addMessageAfterRedirect(__('Backlog categories saved', 'sprint'));
+    Html::back();
+}
+
 if (isset($_POST['update_sprint_config'])) {
     // GLPI 11's kernel already validates (and spends) the CSRF token for legacy
     // front/ POSTs, so checkCSRF() here would fail (HTTP 403). GLPI 10 has no

@@ -114,6 +114,22 @@ class SprintItemDependency extends CommonDBRelation
         return parent::prepareInputForUpdate($input);
     }
 
+    public function post_addItem(): void
+    {
+        $item = new SprintItem();
+        $itemId = (int)($this->fields['plugin_sprint_sprintitems_id'] ?? 0);
+        if ($itemId > 0 && $item->getFromDB($itemId)) {
+            SprintAgility::signal(
+                (int)($item->fields['plugin_sprint_sprints_id'] ?? 0),
+                (int)($this->fields['users_id'] ?? 0),
+                'dependency',
+                sprintf(__('You are needed on “%s”.', 'sprint'), (string)$item->fields['name']),
+                SprintItem::getFormURLWithID($itemId)
+            );
+        }
+        parent::post_addItem();
+    }
+
     private function validateCapacity(array $input, int $excludeId = 0): bool
     {
         $capacity = (float)($input['capacity'] ?? 0);

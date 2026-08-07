@@ -71,7 +71,7 @@ if (!$outcome['ok']) {
 echo json_encode([
     'success'    => true,
     'message'    => $outcome['stayed']
-        ? __('Underlying item moved to backlog; the sprint item stays for capacity.', 'sprint')
+        ? __('Underlying item moved to backlog. The sprint item stays for capacity.', 'sprint')
         : __('Item moved back to backlog', 'sprint'),
     'item_id'    => $id,
     'stayed'     => $outcome['stayed'],

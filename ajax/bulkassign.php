@@ -32,6 +32,21 @@ if ($onlySprintId > 0) {
 $item  = new GlpiPlugin\Sprint\SprintItem();
 $ready = $item->find($criteria);
 
+// DoR is mandatory and applies to every assigned item.
+$dor = GlpiPlugin\Sprint\Config::getDefinitionReady();
+$readyChecks = null;
+if ($dor) {
+    $confirmed = array_values(array_intersect($dor, (array)($_POST['ready'] ?? [])));
+    if (count($confirmed) < count($dor)) {
+        echo json_encode([
+            'success' => false,
+            'message' => __('Definition of Ready incomplete. Confirm every check to assign this item.', 'sprint'),
+        ]);
+        return;
+    }
+    $readyChecks = json_encode($confirmed);
+}
+
 $assigned = 0;
 $skipped  = 0;
 $sprintCache = [];
@@ -68,11 +83,15 @@ foreach ($ready as $row) {
         $skipped++;
         continue;
     }
-    if ($one->update([
+    $update = [
         'id'                       => $id,
         'plugin_sprint_sprints_id' => $sprintId,
         'proposed_sprints_id'      => 0,
-    ])) {
+    ];
+    if ($readyChecks !== null) {
+        $update['ready_checks'] = $readyChecks;
+    }
+    if ($one->update($update)) {
         GlpiPlugin\Sprint\SprintItem::purgeBacklogCoupling(
             (string)($one->fields['itemtype'] ?? ''),
             (int)($one->fields['items_id'] ?? 0),

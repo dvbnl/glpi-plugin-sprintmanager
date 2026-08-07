@@ -29,6 +29,20 @@ if (empty($ids)) {
     return;
 }
 
+// Optional category reassignments from dragging a row into another category
+// section: {itemId: categoryId}. Only known categories (or 0 = none) pass.
+$catDecoded = json_decode((string)($_POST['categories'] ?? '{}'), true);
+$catMap     = [];
+if (is_array($catDecoded)) {
+    $known = GlpiPlugin\Sprint\SprintCategory::getAll(false);
+    foreach ($catDecoded as $itemId => $catId) {
+        $catId = (int)$catId;
+        if ($catId === 0 || isset($known[$catId])) {
+            $catMap[(int)$itemId] = $catId;
+        }
+    }
+}
+
 $pos     = 10;
 $updated = 0;
 foreach ($ids as $id) {
@@ -44,7 +58,11 @@ foreach ($ids as $id) {
     if ($hasOwnOnly && (int)$item->fields['users_id'] !== (int)Session::getLoginUserID()) {
         continue;
     }
-    if ($item->update(['id' => $id, 'sort_order' => $pos])) {
+    $update = ['id' => $id, 'sort_order' => $pos];
+    if (array_key_exists($id, $catMap)) {
+        $update['plugin_sprint_sprintcategories_id'] = $catMap[$id];
+    }
+    if ($item->update($update)) {
         $updated++;
     }
     $pos += 10;

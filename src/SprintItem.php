@@ -6,7 +6,6 @@ use CommonDBTM;
 use CommonGLPI;
 use Html;
 use Session;
-use User;
 use Dropdown;
 use Ticket;
 use Change;
@@ -22,6 +21,7 @@ class SprintItem extends CommonDBTM
 
     /** @see withoutAssignGuard() */
     private static bool $skipAssignGuard = false;
+    private static bool $linkedStatusAutomation = false;
 
     /**
      * Cascade purge. SprintItem is the source of truth for the reverse
@@ -31,6 +31,9 @@ class SprintItem extends CommonDBTM
     public function cleanDBonPurge()
     {
         global $DB;
+        if ((int)($this->fields['plugin_sprint_sprints_id'] ?? 0) === 0) {
+            Backlog::logFlow($this->fields, 'out');
+        }
         $rel = new SprintFastlaneMember();
         $rel->deleteByCriteria(['plugin_sprint_sprintitems_id' => $this->getID()], 1);
 
@@ -172,7 +175,8 @@ class SprintItem extends CommonDBTM
             'table'    => $this->getTable(),
             'field'    => 'capacity',
             'name'     => __('Capacity (%)', 'sprint'),
-            'datatype' => 'integer',
+            // DECIMAL(5,1) column; 'integer' would strip the decimal point in filterValues() ("0.5" → 5)
+            'datatype' => 'decimal',
         ];
         $tab[] = [
             'id'       => 7,
@@ -574,8 +578,7 @@ class SprintItem extends CommonDBTM
         $stamp      = self::buildBacklogReasonNote($reason);
 
         if (!$removeFromSprint) {
-            // KEEP: item stays as a manual placeholder (capacity preserved);
-            // the coupling returns to the backlog as a single row.
+            // Keep the capacity placeholder in this sprint.
             $manualUpdate = [
                 'id'       => $id,
                 'itemtype' => '',
@@ -1018,7 +1021,7 @@ class SprintItem extends CommonDBTM
         $phReason     = __('Why is this going back to the backlog?', 'sprint');
         $errReason    = __('Please enter a reason.', 'sprint');
         $lblChoice    = __('What should happen to the sprint item?', 'sprint');
-        $optKeep      = __('Keep it in the sprint (capacity preserved); only the linked item returns to the backlog', 'sprint');
+        $optKeep      = __('Keep it in the sprint (capacity preserved). Only the linked item returns to the backlog', 'sprint');
         $optRemove    = __('Also remove the item from the current sprint (move the whole item to the backlog)', 'sprint');
         $lblCancel    = __('Cancel');
         $movedLabel   = __('Moved to backlog', 'sprint');
@@ -1159,6 +1162,8 @@ HTML;
             'data-note'              => (string)($row['note'] ?? ''),
             'data-item-tags'         => self::tagsToBlob($tags),
             'data-linked-itemtype'   => (string)($row['itemtype'] ?? ''),
+            'data-done-checks'       => implode('|', SprintAgility::checklist((string)($row['done_checks'] ?? ''))),
+            'data-epic-id'           => (int)($row['plugin_sprint_sprintepics_id'] ?? 0),
         ];
 
         $parts = [];
@@ -1329,6 +1334,23 @@ HTML;
         $memberOptions  = $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [];
         $moveTargets    = $sprintId > 0 ? Sprint::getMoveTargetOptions($sprintId) : [];
         $definedTags    = Config::getDefinedTags();
+        $dod            = Config::getDefinitionDone();
+
+        // Epic picker, Scrum Master only.
+        $epicOptions = [];
+        if ($sprintId > 0 && self::currentUserIsScrumMasterOf($sprintId)) {
+            global $DB;
+            $sprintObj = new Sprint();
+            if ($sprintObj->getFromDB($sprintId)) {
+                foreach ($DB->request([
+                    'FROM'  => 'glpi_plugin_sprint_sprintepics',
+                    'WHERE' => ['entities_id' => (int)($sprintObj->fields['entities_id'] ?? 0)],
+                    'ORDER' => 'name ASC',
+                ]) as $epic) {
+                    $epicOptions[(int)$epic['id']] = (string)$epic['name'];
+                }
+            }
+        }
 
         // Capacity guard: when restricted to the Scrum Master, others may still
         // pick a new % — it is sent to the Scrum Master as an approval request
@@ -1382,6 +1404,29 @@ HTML;
         }
         echo "</select></div>";
         echo "</div>";
+
+        // DoD checklist; the badge shows completion at a glance.
+        if ($dod) {
+            echo "<div class='mb-3 sprint-qe-dod-block'><label class='form-label'>"
+                . "<i class='fas fa-list-check me-1'></i>" . __('Definition of Done', 'sprint')
+                . " <span class='badge sprint-qe-dod-badge'></span></label>";
+            foreach ($dod as $check) {
+                echo "<label class='form-check d-block'>"
+                    . "<input type='checkbox' class='form-check-input sprint-qe-dod' value='" . htmlescape($check) . "'>"
+                    . "<span class='form-check-label'>" . htmlescape($check) . "</span></label>";
+            }
+            echo "</div>";
+        }
+
+        if ($epicOptions) {
+            echo "<div class='mb-3'><label class='form-label'>" . __('Epic', 'sprint') . "</label>";
+            echo "<select name='plugin_sprint_sprintepics_id' class='form-select'>";
+            echo "<option value='0'>" . __('No epic', 'sprint') . "</option>";
+            foreach ($epicOptions as $eid => $ename) {
+                echo "<option value='" . (int)$eid . "'>" . htmlescape($ename) . "</option>";
+            }
+            echo "</select></div>";
+        }
 
         echo "<div class='row g-3'>";
         echo "<div class='col-md-6 mb-3'><label class='form-label'>" . __('Owner', 'sprint') . "</label>";
@@ -1501,6 +1546,17 @@ $(function() {
 
     var \$modal = \$('#sprint-quickedit-modal');
 
+    function refreshDodBadge() {
+        var \$badge = \$modal.find('.sprint-qe-dod-badge');
+        if (!\$badge.length) { return; }
+        var total = \$modal.find('.sprint-qe-dod').length;
+        var done  = \$modal.find('.sprint-qe-dod:checked').length;
+        \$badge.text(done + '/' + total + (done === total ? ' ✓' : ''))
+            .toggleClass('bg-success', done === total)
+            .toggleClass('bg-secondary', done !== total);
+    }
+    \$(document).on('change', '.sprint-qe-dod', refreshDodBadge);
+
     \$(document).on('click', '.sprint-quick-edit-btn', function() {
         // Works for table rows (tr[data-item-id]) and Kanban cards
         // (.sprint-kanban-card[data-item-id]) alike. Match the row/card
@@ -1571,6 +1627,15 @@ $(function() {
             \$(this).prop('checked', v !== '' && tagBlob.indexOf('|' + v + '|') !== -1);
         });
 
+        // Definition of Done state from the row's pipe-delimited blob.
+        var dodBlob = '|' + String(\$row.attr('data-done-checks') || '') + '|';
+        \$modal.find('.sprint-qe-dod').each(function() {
+            \$(this).prop('checked', dodBlob.indexOf('|' + String(\$(this).val()) + '|') !== -1);
+        });
+        refreshDodBadge();
+
+        \$modal.find('select[name=plugin_sprint_sprintepics_id]').val(String(\$row.attr('data-epic-id') || '0'));
+
         // Guarded capacity for non-scrum-master users: the select stays
         // enabled, but a change is sent to the Scrum Master as an approval
         // request (see the hint under the select) — fastlane items stay free.
@@ -1640,6 +1705,12 @@ $(function() {
                     note: \$modal.find('textarea[name=note]').val(),
                     carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
                     capacity_reason: \$modal.data('qe-capacity-reason') || undefined,
+                    plugin_sprint_sprintepics_id: \$modal.find('select[name=plugin_sprint_sprintepics_id]').length
+                        ? \$modal.find('select[name=plugin_sprint_sprintepics_id]').val()
+                        : undefined,
+                    _dod_json: \$modal.find('.sprint-qe-dod').length
+                        ? JSON.stringify(\$modal.find('.sprint-qe-dod:checked').map(function(){ return \$(this).val(); }).get())
+                        : undefined,
                     _tags_json: JSON.stringify(tags),
                     confirm_overflow: confirmOverflow ? 1 : 0,
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
@@ -1705,6 +1776,12 @@ $(function() {
 
                 if (typeof resp.tags_blob !== 'undefined') {
                     \$row.attr('data-item-tags', resp.tags_blob).data('item-tags', resp.tags_blob);
+                }
+                if (typeof resp.done_checks_blob !== 'undefined') {
+                    \$row.attr('data-done-checks', resp.done_checks_blob).data('done-checks', resp.done_checks_blob);
+                }
+                if (typeof resp.epic_id !== 'undefined') {
+                    \$row.attr('data-epic-id', resp.epic_id).data('epic-id', resp.epic_id);
                 }
                 // Live "Linked item open" badge: shows/hides with the fresh
                 // status instead of waiting for a page reload.
@@ -2257,6 +2334,20 @@ JS;
     }
 
     /**
+     * Item-form _dod[] → done_checks JSON, restricted to the global definition;
+     * must run before the transition policy so status + DoD save together.
+     */
+    private static function normalizeDodInput(array $input): array
+    {
+        if (array_key_exists('_dod', $input)) {
+            $chosen = is_array($input['_dod']) ? $input['_dod'] : [];
+            $input['done_checks'] = json_encode(array_values(array_intersect(Config::getDefinitionDone(), $chosen)));
+            unset($input['_dod']);
+        }
+        return $input;
+    }
+
+    /**
      * Process input before adding: resolve linked item name + validate capacity
      */
     public function prepareInputForAdd($input)
@@ -2264,6 +2355,19 @@ JS;
         $input = self::sanitizeInput($input);
         $input = $this->resolveLinkedItem($input);
         $input = $this->enforceLinkedItemName($input);
+        $input = self::normalizeDodInput($input);
+
+        if (isset($input['status'])) {
+            $candidate = new self();
+            $candidate->fields = array_merge($this->fields, $input);
+            $candidate->fields['plugin_sprint_sprints_id'] = (int)($input['plugin_sprint_sprints_id'] ?? 0);
+            $candidate->fields['status'] = self::STATUS_TODO;
+            $policy = SprintAgility::validateTransition($candidate, (string)$input['status']);
+            if (!$policy['ok']) {
+                Session::addMessageAfterRedirect($policy['message'], false, ERROR);
+                return false;
+            }
+        }
         if (!isset($input['story_points']) || $input['story_points'] === '' || $input['story_points'] === null) {
             $input['story_points'] = 1;
         }
@@ -2313,7 +2417,7 @@ JS;
         // item. Without this the queue is bypassable by editing the item form
         // directly and saving. (Linked-item name sync is unaffected: it writes
         // through $DB->update, not through this hook.)
-        $pendingReq = SprintRequest::getAnyPendingForItem((int)$this->getID());
+        $pendingReq = self::$linkedStatusAutomation ? null : SprintRequest::getAnyPendingForItem((int)$this->getID());
         if ($pendingReq !== null) {
             $reqSprintId = (int)($pendingReq['plugin_sprint_sprints_id'] ?? 0);
             if ($reqSprintId > 0 && !self::currentUserIsScrumMasterOf($reqSprintId)) {
@@ -2329,6 +2433,22 @@ JS;
         $input = self::sanitizeInput($input);
         $input = $this->resolveLinkedItem($input);
         $input = $this->enforceLinkedItemName($input);
+        $input = self::normalizeDodInput($input);
+
+        if (isset($input['status'])) {
+            $policyItem = clone $this;
+            if (isset($input['users_id'])) {
+                $policyItem->fields['users_id'] = (int)$input['users_id'];
+            }
+            if (isset($input['done_checks'])) {
+                $policyItem->fields['done_checks'] = (string)$input['done_checks'];
+            }
+            $policy = SprintAgility::validateTransition($policyItem, (string)$input['status']);
+            if (!$policy['ok']) {
+                Session::addMessageAfterRedirect($policy['message'], false, ERROR);
+                return false;
+            }
+        }
 
         // Picking a sprint here is the same decision as a backlog assign, so it
         // goes through the same approval queue.
@@ -2352,7 +2472,7 @@ JS;
                         ''
                     );
                     Session::addMessageAfterRedirect(
-                        __('Assignment sent to the Scrum Master for approval; the item stays on the backlog until then.', 'sprint'),
+                        __('Assignment sent to the Scrum Master for approval. The item stays on the backlog until then.', 'sprint'),
                         false,
                         INFO
                     );
@@ -2452,6 +2572,21 @@ JS;
             }
         }
 
+        if ($wasBacklog && $newSprintId > 0) {
+            $target = new Sprint();
+            if ($target->getFromDB($newSprintId)) {
+                $preview = array_merge($this->fields, $input);
+                $ready = SprintAgility::readiness($preview);
+                if (!$ready['ready']) {
+                    Session::addMessageAfterRedirect(
+                        sprintf(__('Item assigned with readiness warnings: %s', 'sprint'), implode(', ', $ready['missing'])),
+                        false,
+                        WARNING
+                    );
+                }
+            }
+        }
+
         // Updates often carry only the changed field, so fill itemtype/items_id
         // from the persisted row — otherwise validateNoDuplicateLink can't catch
         // a duplicate move into an already-linked sprint.
@@ -2473,6 +2608,22 @@ JS;
             return false;
         }
         return parent::prepareInputForUpdate($input);
+    }
+
+    public static function applyAutomatedStatus(int $itemId, string $status): bool
+    {
+        $item = new self();
+        if ($itemId <= 0 || !$item->getFromDB($itemId)) return false;
+        self::$linkedStatusAutomation = true;
+        try {
+            return (bool)$item->update([
+                'id' => $itemId,
+                'status' => $status,
+                'is_blocked' => $status === self::STATUS_DONE ? 0 : (int)($item->fields['is_blocked'] ?? 0),
+            ]);
+        } finally {
+            self::$linkedStatusAutomation = false;
+        }
     }
 
     /**
@@ -2510,6 +2661,8 @@ JS;
         $itemsId  = (int)($this->fields['items_id'] ?? 0);
         if ($sprintId > 0) {
             self::removeBacklogDuplicatesForLinkedItem($itemtype, $itemsId);
+        } else {
+            Backlog::logFlow($this->fields, 'in');
         }
         if (array_key_exists('_tags', $this->input)) {
             self::setTagsForItem((int)$this->getID(), (array)$this->input['_tags']);
@@ -2545,6 +2698,30 @@ JS;
             && $sprintId > 0
         ) {
             SprintRequest::closePendingAssignForItem((int)$this->getID(), $sprintId);
+        }
+        // Backlog flow events: 0→sprint = out, sprint→0 = back in.
+        if (array_key_exists('plugin_sprint_sprints_id', $this->oldvalues ?? [])) {
+            $oldSprint = (int)$this->oldvalues['plugin_sprint_sprints_id'];
+            if ($oldSprint === 0 && $sprintId > 0) {
+                Backlog::logFlow($this->fields, 'out');
+            } elseif ($oldSprint > 0 && $sprintId === 0) {
+                Backlog::logFlow($this->fields, 'in');
+            }
+        }
+        if (
+            array_key_exists('status', $this->oldvalues ?? [])
+            && (string)($this->fields['status'] ?? '') === self::STATUS_BLOCKED
+        ) {
+            $sprint = new Sprint();
+            if ($sprintId > 0 && $sprint->getFromDB($sprintId)) {
+                SprintAgility::signal(
+                    $sprintId,
+                    (int)($sprint->fields['users_id'] ?? 0),
+                    'blocked',
+                    sprintf(__('“%s” became blocked.', 'sprint'), (string)$this->fields['name']),
+                    self::getFormURLWithID((int)$this->getID())
+                );
+            }
         }
         parent::post_updateItem($history);
     }
@@ -2773,6 +2950,9 @@ JS;
                 'status'                   => self::STATUS_TODO,
                 'priority'                 => (int)($source->fields['priority'] ?? 3),
                 'story_points'             => (int)($source->fields['story_points'] ?? 0),
+                // Classification travels with the work — execution state resets.
+                'plugin_sprint_sprintcategories_id' => (int)($source->fields['plugin_sprint_sprintcategories_id'] ?? 0),
+                'plugin_sprint_sprintepics_id'      => (int)($source->fields['plugin_sprint_sprintepics_id'] ?? 0),
                 'users_id'                 => 0,
                 'capacity'                 => 0,
                 'is_fastlane'              => (int)($source->fields['is_fastlane'] ?? 0),
@@ -2906,18 +3086,37 @@ JS;
         global $DB;
 
         $allowed = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
-        if (!in_array($item->getType(), $allowed, true)
-            || !in_array('name', (array)($item->updates ?? []), true)) {
+        if (!in_array($item->getType(), $allowed, true)) {
             return;
         }
-        $newName = (string)($item->fields['name'] ?? '');
-        if ($newName === '') {
-            return;
+        if (in_array('name', (array)($item->updates ?? []), true)) {
+            $newName = (string)($item->fields['name'] ?? '');
+            if ($newName !== '') {
+                $DB->update(self::getTable(), ['name' => $newName], [
+                    'itemtype' => $item->getType(),
+                    'items_id' => (int)$item->getID(),
+                ]);
+            }
         }
-        $DB->update(self::getTable(), ['name' => $newName], [
-            'itemtype' => $item->getType(),
-            'items_id' => (int)$item->getID(),
-        ]);
+        SprintAgility::syncLinkedStatus($item);
+        Backlog::autoCleanupForItem($item);
+    }
+
+    // GLPI cron task — nightly sweep that purges backlog rows whose linked
+    // item was solved outside the item_update hook (rules, imports, CLI).
+
+    public static function cronInfo(string $name): array
+    {
+        return [
+            'description' => __('Remove backlog items whose linked item is solved or closed', 'sprint'),
+        ];
+    }
+
+    public static function cronBacklogCleanup(\CronTask $task): int
+    {
+        $purged = Backlog::purgeSolvedRows();
+        $task->addVolume($purged);
+        return $purged > 0 ? 1 : 0;
     }
 
     /**
@@ -3147,6 +3346,22 @@ JS;
                 echo "</label>";
             }
             echo "</div>";
+            echo "</td></tr>";
+        }
+
+        $dod = Config::getDefinitionDone();
+        if (!empty($dod)) {
+            $checkedDod = array_flip(SprintAgility::checklist((string)($this->fields['done_checks'] ?? '')));
+            echo "<tr class='tab_bg_1'><td><i class='fas fa-list-check me-1'></i>" . __('Definition of Done', 'sprint') . "</td>";
+            echo "<td colspan='3'>";
+            echo "<input type='hidden' name='_dod' value=''>";
+            foreach ($dod as $check) {
+                $isChecked = isset($checkedDod[$check]) ? ' checked' : '';
+                echo "<label class='form-check d-block'>";
+                echo "<input type='checkbox' class='form-check-input' name='_dod[]' value='" . htmlescape($check) . "'{$isChecked}>";
+                echo "<span class='form-check-label'>" . htmlescape($check) . "</span>";
+                echo "</label>";
+            }
             echo "</td></tr>";
         }
 

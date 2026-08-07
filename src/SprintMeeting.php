@@ -6,7 +6,6 @@ use CommonDBTM;
 use CommonGLPI;
 use Html;
 use Session;
-use User;
 use Dropdown;
 
 /**
@@ -313,6 +312,273 @@ class SprintMeeting extends CommonDBTM
         return array_keys($ids);
     }
 
+    /**
+     * Phase lineup for the guided rail. Per phase: key, minutes, title,
+     * description, blocks (content identifiers for the rail template), has_notes.
+     */
+    public static function getPhaseDefinitions(string $meetingType): array
+    {
+        if ($meetingType === self::TYPE_REVIEW) {
+            return [
+                [
+                    'key'         => 'opening',
+                    'minutes'     => 5,
+                    'title'       => __('Opening & sprint goal', 'sprint'),
+                    'description' => __('Restate the sprint goal and planned scope. Was the goal met — yes or no, and why in one sentence.', 'sprint'),
+                    'blocks'      => ['sprint_goal'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'stats',
+                    'minutes'     => 5,
+                    'title'       => __('Results in numbers', 'sprint'),
+                    'description' => __('The numbers: planned vs done per the Definition of Done, plus carry-over. Name what is not done — no discussion yet.', 'sprint'),
+                    'blocks'      => ['stat_cards', 'charts'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'walkthrough',
+                    'minutes'     => 15,
+                    'title'       => __('Sprint items walkthrough', 'sprint'),
+                    'description' => __('Walk through the sprint items together: update status, owner and notes, resolve blockers, and decide per unfinished item whether it carries over or returns to the backlog.', 'sprint'),
+                    'blocks'      => ['sprint_items'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'demo',
+                    'minutes'     => 10,
+                    'title'       => __('Demo of the increment', 'sprint'),
+                    'description' => __('Each member briefly demos their own finished items — working functionality, no slides, done items only. Agree the order upfront so it tells one story.', 'sprint'),
+                    'blocks'      => ['done_items'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'feedback',
+                    'minutes'     => 10,
+                    'title'       => __('Stakeholder feedback', 'sprint'),
+                    'description' => __('Collect feedback on the increment from stakeholders. Capture remarks below and turn concrete insights into backlog items right away.', 'sprint'),
+                    'blocks'      => [],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'wrapup',
+                    'minutes'     => 5,
+                    'title'       => __('Wrap up & next steps', 'sprint'),
+                    'description' => __('Summarise the key outcomes and confirm backlog changes. Then on to the retrospective.', 'sprint'),
+                    'blocks'      => ['carryover_summary'],
+                    'has_notes'   => true,
+                ],
+            ];
+        }
+        if ($meetingType === self::TYPE_RETROSPECTIVE) {
+            return [
+                [
+                    'key'         => 'checkin',
+                    'minutes'     => 5,
+                    'title'       => __('Opening & check-in', 'sprint'),
+                    'description' => __('Everyone scores the sprint 1–5. Restate the goal: improve, no blame.', 'sprint'),
+                    'blocks'      => [],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'prev_actions',
+                    'minutes'     => 5,
+                    'title'       => __('Previous retro actions', 'sprint'),
+                    'description' => __("Walk through the previous retro's actions: what was done, what stalled and why.", 'sprint'),
+                    'blocks'      => ['prev_actions'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'data',
+                    'minutes'     => 5,
+                    'title'       => __('Sprint in numbers', 'sprint'),
+                    'description' => __('A quick, neutral look at the sprint numbers as input for the conversation — observations only, no conclusions yet.', 'sprint'),
+                    'blocks'      => ['stat_cards'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'collect',
+                    'minutes'     => 15,
+                    'title'       => __('Collect input', 'sprint'),
+                    'description' => __('Everyone writes input in silence first (Start/Stop/Continue or Mad/Sad/Glad) before anyone speaks.', 'sprint'),
+                    'blocks'      => ['improvement_collect'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'vote',
+                    'minutes'     => 10,
+                    'title'       => __('Cluster & vote', 'sprint'),
+                    'description' => __('Group similar input and dot-vote the two or three themes that matter most.', 'sprint'),
+                    'blocks'      => ['improvement_vote'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'actions',
+                    'minutes'     => 10,
+                    'title'       => __('Decide actions', 'sprint'),
+                    'description' => __('Define at most two or three actions with an owner and a due date — more usually means none get done.', 'sprint'),
+                    'blocks'      => ['improvement_actions'],
+                    'has_notes'   => true,
+                ],
+                [
+                    'key'         => 'close',
+                    'minutes'     => 5,
+                    'title'       => __('Wrap up', 'sprint'),
+                    'description' => __('Short retro on the retro: was this useful, what do we change next time?', 'sprint'),
+                    'blocks'      => ['retro_summary'],
+                    'has_notes'   => true,
+                ],
+            ];
+        }
+        return [];
+    }
+
+    /** Twig context for the guided rail: phases, session state, per-type data blocks. */
+    private function buildGuidedContext(int $sprintId, array $sprintItemsData, array $memberOptions): array
+    {
+        global $DB;
+
+        $meetingType  = (string)($this->fields['meeting_type'] ?? '');
+        $sprint       = new Sprint();
+        $sprintLoaded = $sprint->getFromDB($sprintId);
+
+        $uid           = (int)Session::getLoginUserID();
+        $isScrumMaster = SprintItem::currentUserIsScrumMasterOf($sprintId);
+        $isFacilitator = ((int)($this->fields['users_id'] ?? 0) === $uid);
+        $canDrive      = Sprint::canUpdate() && ($isScrumMaster || ($isFacilitator && SprintAgility::isCurrentUserMember($sprintId)));
+
+        $totalSp = $doneSp = $doneItems = $blockedCount = $adhocCount = 0;
+        foreach ($sprintItemsData as $si) {
+            $totalSp += (int)$si['story_points'];
+            if ($si['status'] === SprintItem::STATUS_DONE) {
+                $doneSp += (int)$si['story_points'];
+                $doneItems++;
+            }
+            if ($si['status'] === SprintItem::STATUS_BLOCKED) {
+                $blockedCount++;
+            }
+            if (!empty($si['is_adhoc'])) {
+                $adhocCount++;
+            }
+        }
+        $totalItems = count($sprintItemsData);
+
+        $guided = [
+            'meeting_type'        => $meetingType,
+            'phases'              => self::getPhaseDefinitions($meetingType),
+            'status'              => (string)($this->fields['meeting_status'] ?? 'open') ?: 'open',
+            'current_phase'       => (int)($this->fields['current_phase'] ?? 0),
+            'phase_started_at_ts' => !empty($this->fields['phase_started_at']) ? (int)strtotime((string)$this->fields['phase_started_at']) : 0,
+            'started_at'          => $this->fields['started_at'] ?? null,
+            'ended_at'            => $this->fields['ended_at'] ?? null,
+            'server_now_ts'       => time(),
+            'phase_notes'         => json_decode((string)($this->fields['phase_notes'] ?? ''), true) ?: [],
+            'can_drive'           => $canDrive,
+            'can_toggle_actions'  => $isScrumMaster || ($isFacilitator && SprintAgility::isCurrentUserMember($sprintId)),
+            'can_contribute'      => SprintAgility::isCurrentUserMember($sprintId),
+            'current_user_name'   => SprintCache::userName($uid),
+            'sprint_goal'         => $sprintLoaded ? trim((string)($sprint->fields['goal'] ?? '')) : '',
+            'sprint_name'         => $sprintLoaded ? (string)$sprint->fields['name'] : '',
+            'sprint_start'        => ($sprintLoaded && !empty($sprint->fields['date_start'])) ? Html::convDate($sprint->fields['date_start']) : '',
+            'sprint_end'          => ($sprintLoaded && !empty($sprint->fields['date_end'])) ? Html::convDate($sprint->fields['date_end']) : '',
+        ];
+
+        $statCards = [
+            ['label' => __('Delivered', 'sprint'),        'value' => $doneSp . ' / ' . $totalSp . ' SP',        'icon' => 'fas fa-chart-line',       'accent' => '#198754'],
+            ['label' => __('Items completed', 'sprint'),  'value' => $doneItems . ' / ' . $totalItems,          'icon' => 'fas fa-clipboard-check',  'accent' => '#0d6efd'],
+            ['label' => __('Adhoc added', 'sprint'),      'value' => $adhocCount,                               'icon' => 'fas fa-plus-circle',      'accent' => '#6f42c1'],
+            ['label' => __('Blocked', 'sprint'),          'value' => $blockedCount,                             'icon' => 'fas fa-ban',              'accent' => '#dc3545'],
+        ];
+
+        if ($meetingType === self::TYPE_REVIEW) {
+            $guided['stat_cards'] = $statCards;
+
+            if ($sprintLoaded) {
+                ob_start();
+                SprintDashboard::renderBurndownChartBody($sprint);
+                $guided['burndown_html'] = (string)ob_get_clean();
+                ob_start();
+                SprintDashboard::renderVelocityChartBody($sprint);
+                $guided['velocity_html'] = (string)ob_get_clean();
+            }
+
+            // Demo running order: done items grouped per owner.
+            $doneByOwner = [];
+            $unfinished  = [];
+            foreach ($sprintItemsData as $si) {
+                if ($si['status'] === SprintItem::STATUS_DONE) {
+                    $ownerName = $memberOptions[(int)$si['users_id']] ?? __('Unassigned', 'sprint');
+                    $doneByOwner[$ownerName][] = $si;
+                } else {
+                    $unfinished[] = $si;
+                }
+            }
+            $guided['done_by_owner']    = $doneByOwner;
+            $guided['unfinished_items'] = $unfinished;
+        }
+
+        if ($meetingType === self::TYPE_RETROSPECTIVE) {
+            // Previous completed sprint's velocity, for the comparison card.
+            $prevVelocity = null;
+            $prevSprint   = null;
+            if ($sprintLoaded) {
+                foreach ($DB->request([
+                    'FROM'  => Sprint::getTable(),
+                    'WHERE' => [
+                        'entities_id' => (int)($sprint->fields['entities_id'] ?? 0),
+                        'status'      => Sprint::STATUS_COMPLETED,
+                        ['NOT' => ['id' => $sprintId]],
+                    ],
+                    'ORDER' => ['date_end DESC'],
+                    'LIMIT' => 1,
+                ]) as $row) {
+                    $prevSprint = $row;
+                }
+                if ($prevSprint !== null) {
+                    $prevVelocity = 0;
+                    foreach ($DB->request([
+                        'SELECT' => ['story_points'],
+                        'FROM'   => SprintItem::getTable(),
+                        'WHERE'  => [
+                            'plugin_sprint_sprints_id' => (int)$prevSprint['id'],
+                            'status'                   => SprintItem::STATUS_DONE,
+                        ],
+                    ]) as $itemRow) {
+                        $prevVelocity += max(0, (int)$itemRow['story_points']);
+                    }
+                }
+            }
+            if ($prevVelocity !== null) {
+                $statCards[] = [
+                    'label'  => sprintf(__('Previous sprint (%s)', 'sprint'), (string)$prevSprint['name']),
+                    'value'  => $prevVelocity . ' SP',
+                    'icon'   => 'fas fa-history',
+                    'accent' => '#fd7e14',
+                ];
+            }
+            $guided['stat_cards'] = $statCards;
+
+            $improvements = SprintAgility::getImprovementsForSprint($sprintId);
+            $guided['improvements']           = $improvements;
+            $guided['improvement_categories'] = SprintAgility::improvementCategories();
+
+            // Open actions that predate the meeting start (= carried in from the
+            // previous sprint); actions created during this retro are excluded.
+            $startedAt = (string)($this->fields['started_at'] ?? '');
+            $guided['prev_actions'] = array_values(array_filter($improvements, function ($row) use ($startedAt) {
+                if (($row['category'] ?? '') !== 'action') {
+                    return false;
+                }
+                if ($startedAt !== '' && (string)($row['date_creation'] ?? '') > $startedAt) {
+                    return false;
+                }
+                return true;
+            }));
+        }
+
+        return $guided;
+    }
+
     public function showForm($ID, array $options = []): bool
     {
         $this->initForm($ID, $options);
@@ -459,294 +725,55 @@ class SprintMeeting extends CommonDBTM
             self::recordBlockedSnapshot((int)$ID, $currentBlockedIds);
         }
 
-        // Parse treated items from JSON
-        $treatedItems = [];
-        if (!empty($this->fields['treated_items'])) {
-            $treatedItems = json_decode($this->fields['treated_items'], true) ?: [];
-        }
-
         $carryOverTargetSprints = ($isExisting && $sprintId > 0)
             ? Sprint::getMoveTargetOptions($sprintId)
             : [];
 
-        if (class_exists('Glpi\Application\View\TemplateRenderer')) {
-            \Glpi\Application\View\TemplateRenderer::getInstance()->display(
-                '@sprint/sprintmeeting.form.html.twig',
-                [
-                    'item'              => $this,
-                    'params'            => $options,
-                    'meeting_types'     => self::getAllTypes(),
-                    'member_options'    => $memberOptions,
-                    'is_existing'       => $isExisting,
-                    'sprint_items'      => $sprintItemsData,
-                    'item_statuses'     => SprintItem::getAllStatuses(),
-                    'item_priorities'   => [
-                        1 => __('Very low'),
-                        2 => __('Low'),
-                        3 => __('Medium'),
-                        4 => __('High'),
-                        5 => __('Very high'),
-                    ],
-                    'capacity_choices'  => SprintMember::getCapacityChoices(),
-                    'treated_items'     => $treatedItems,
-                    'backlog_url'       => \GlpiPlugin\Sprint\Backlog::getFormURL(),
-                    'meeting_url'       => static::getFormURLWithID($ID),
-                    'meeting_id'        => $ID,
-                    'sprint_id'         => $sprintId,
-                    'move_target_sprints' => $carryOverTargetSprints,
-                    'capacity_locked'   => \GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
-                        && !SprintItem::currentUserIsScrumMasterOf($sprintId),
-                    'is_scrum_master'   => SprintItem::currentUserIsScrumMasterOf($sprintId),
-                    'defined_tags'      => \GlpiPlugin\Sprint\Config::getDefinedTags(),
-                ]
-            );
-            SprintItem::renderLinkedQuickEditUI();
-        } else {
-            $this->showFormHeader($options);
-            $types = self::getAllTypes();
-
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('Title') . "</td>";
-            echo "<td>" . Html::input('name', [
-                'value' => $this->fields['name'] ?? '', 'size' => 40
-            ]) . "</td>";
-            echo "<td>" . __('Type', 'sprint') . "</td><td>";
-            Dropdown::showFromArray('meeting_type', $types, [
-                'value' => $this->fields['meeting_type'] ?? self::TYPE_STANDUP,
-            ]);
-            echo "</td></tr>";
-
-            echo "<tr class='tab_bg_1'><td>" . __('Date') . "</td><td>";
-            Html::showDateTimeField('date_meeting', ['value' => $this->fields['date_meeting'] ?? '']);
-            echo "</td><td>" . __('Duration (min)', 'sprint') . "</td><td>";
-            Dropdown::showNumber('duration_minutes', [
-                'value' => $this->fields['duration_minutes'] ?? 15,
-                'min' => 5, 'max' => 240, 'step' => 5,
-            ]);
-            echo "</td></tr>";
-
-            echo "<tr class='tab_bg_1'><td>" . __('Facilitator', 'sprint') . "</td><td>";
-            $facilitatorId = (int)($this->fields['users_id'] ?? 0);
-            echo ($facilitatorId > 0) ? htmlescape(SprintCache::userName($facilitatorId)) : '-';
-            echo Html::hidden('users_id', ['value' => $facilitatorId]);
-            echo "</td><td>" . __('Sprint') . "</td><td>";
-            Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $this->fields['plugin_sprint_sprints_id'] ?? 0]);
-            echo "</td></tr>";
-
-            echo "<tr class='tab_bg_1'><td>" . __('Meeting Notes', 'sprint') . "</td>";
-            echo "<td colspan='3'><textarea name='notes' class='form-control' rows='10' cols='100'>" .
-                htmlescape($this->fields['notes'] ?? '') . "</textarea></td></tr>";
-
-            // Embed sprint items review inside the form (before buttons)
-            if ($ID > 0) {
-                $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
-                if ($sprintId > 0) {
-                    echo "</table>"; // close the form table temporarily
-                    self::showSprintItemsReview($sprintId, $ID);
-                    echo "<table class='tab_cadre_fixe sprint-themed'>"; // re-open for showFormButtons
-                }
-            }
-
-            $this->showFormButtons($options);
+        // Guided meeting rail (review/retrospective on the Twig path only)
+        $meetingType = (string)($this->fields['meeting_type'] ?? '');
+        $guided      = null;
+        if (
+            $isExisting && $sprintId > 0
+            && in_array($meetingType, [self::TYPE_REVIEW, self::TYPE_RETROSPECTIVE], true)
+        ) {
+            $guided = $this->buildGuidedContext($sprintId, $sprintItemsData, $memberOptions);
         }
+
+        \Glpi\Application\View\TemplateRenderer::getInstance()->display(
+            '@sprint/sprintmeeting.form.html.twig',
+            [
+                'item'              => $this,
+                'params'            => $options,
+                'meeting_types'     => self::getAllTypes(),
+                'member_options'    => $memberOptions,
+                'is_existing'       => $isExisting,
+                'sprint_items'      => $sprintItemsData,
+                'item_statuses'     => SprintItem::getAllStatuses(),
+                'item_priorities'   => [
+                    1 => __('Very low'),
+                    2 => __('Low'),
+                    3 => __('Medium'),
+                    4 => __('High'),
+                    5 => __('Very high'),
+                ],
+                'capacity_choices'  => SprintMember::getCapacityChoices(),
+                'backlog_url'       => \GlpiPlugin\Sprint\Backlog::getFormURL(),
+                'meeting_url'       => static::getFormURLWithID($ID),
+                'meeting_id'        => $ID,
+                'sprint_id'         => $sprintId,
+                'move_target_sprints' => $carryOverTargetSprints,
+                'capacity_locked'   => \GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
+                    && !SprintItem::currentUserIsScrumMasterOf($sprintId),
+                'is_scrum_master'   => SprintItem::currentUserIsScrumMasterOf($sprintId),
+                'defined_tags'      => \GlpiPlugin\Sprint\Config::getDefinedTags(),
+                'guided'            => $guided,
+            ]
+        );
+        SprintItem::renderLinkedQuickEditUI();
 
         return true;
     }
 
-    /**
-     * Embedded sprint-items review table. Field names _sprintitems[id][field]
-     * let the meeting save button process all changes at once.
-     */
-    public static function showSprintItemsReview(int $sprintId, int $meetingId = 0): void
-    {
-        $canedit       = Sprint::canUpdate();
-        $memberOptions = SprintMember::getSprintMemberOptions($sprintId);
-        $statuses      = SprintItem::getAllStatuses();
-
-        $si    = new SprintItem();
-        $allItems = $si->find(
-            ['plugin_sprint_sprints_id' => $sprintId],
-            ['sort_order ASC', 'priority DESC']
-        );
-
-        // Split into fastlane and regular items
-        $fastlaneItems = array_filter($allItems, fn($r) => !empty($r['is_fastlane']));
-        $regularItems  = array_filter($allItems, fn($r) => empty($r['is_fastlane']));
-
-        $typeIcons = [
-            ''            => ['fas fa-clipboard-list', '#6c757d', __('Manual', 'sprint')],
-            'Ticket'      => ['fas fa-ticket-alt', '#0d6efd', __('Ticket')],
-            'Change'      => ['fas fa-exchange-alt', '#6f42c1', __('Change')],
-            'Problem'     => ['fas fa-exclamation-circle', '#dc3545', __('Problem')],
-            'ProjectTask' => ['fas fa-tasks', '#fd7e14', __('Project task')],
-        ];
-        $backlogUrl = Backlog::getFormURL();
-        $meetingUrl = ($meetingId > 0) ? static::getFormURLWithID($meetingId) : '';
-
-        // Helper to render a row
-        $renderRow = function (array $row, bool $isFastlane) use ($canedit, $statuses, $memberOptions, $typeIcons, $backlogUrl, $meetingUrl) {
-            $itemId    = (int)$row['id'];
-            $itemtype  = $row['itemtype'] ?? '';
-            $typeInfo  = $typeIcons[$itemtype] ?? $typeIcons[''];
-
-            $linkedDisplay = '<span style="color:#ccc;">-</span>';
-            if (!empty($itemtype) && (int)$row['items_id'] > 0) {
-                $tmpItem = new SprintItem();
-                $tmpItem->fields = $row;
-                $linkedDisplay = $tmpItem->getLinkedItemDisplay();
-            }
-
-            echo "<tr class='tab_bg_1'>";
-            echo "<td class='center'><i class='{$typeInfo[0]}' style='color:{$typeInfo[1]};' title='{$typeInfo[2]}'></i></td>";
-            $fastlaneIcon = $isFastlane ? "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" : '';
-            echo "<td>{$fastlaneIcon}<a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
-                htmlescape($row['name']) . "</a>" .
-                SprintItem::renderParentProjectSuffix((string)$itemtype, (int)($row['items_id'] ?? 0)) .
-                SprintItem::renderAdhocBadge((int)($row['is_adhoc'] ?? 0) === 1) . "</td>";
-            echo "<td>" . $linkedDisplay . "</td>";
-
-            if ($canedit) {
-                echo "<td>";
-                Dropdown::showFromArray("_sprintitems[{$itemId}][status]", $statuses, [
-                    'value' => $row['status'],
-                    'width' => '140px',
-                ]);
-                echo "</td>";
-                echo "<td>";
-                Dropdown::showFromArray("_sprintitems[{$itemId}][users_id]", $memberOptions, [
-                    'value' => (int)$row['users_id'],
-                    'width' => '170px',
-                ]);
-                echo "</td>";
-            } else {
-                $statusClass = 'sprint-status-' . str_replace('_', '-', $row['status']);
-                echo "<td><span class='sprint-badge {$statusClass}'>" .
-                    ($statuses[$row['status']] ?? $row['status']) . "</span></td>";
-                echo "<td>" . (((int)$row['users_id'] > 0) ? htmlescape(SprintCache::userName($row['users_id'])) :
-                    '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
-            }
-            echo "<td class='center'>" . (int)$row['story_points'] . "</td>";
-
-            echo "<td class='center'>";
-            if ($canedit) {
-                echo "<form method='post' action='{$backlogUrl}' style='display:inline;'>";
-                echo Html::hidden('id', ['value' => $itemId]);
-                if ($meetingUrl) {
-                    echo Html::hidden('_redirect', ['value' => $meetingUrl]);
-                }
-                echo "<button type='submit' name='back_to_backlog' class='btn btn-sm btn-outline-warning' "
-                    . "title='" . __('Back to backlog', 'sprint') . "' "
-                    . "onclick=\"return confirm('" . __('Move this item back to the backlog?', 'sprint') . "');\">"
-                    . "<i class='fas fa-undo'></i></button>";
-                Html::closeForm();
-            }
-            echo "</td>";
-            echo "</tr>";
-        };
-
-        $tableHeaders = function () {
-            echo "<tr class='tab_bg_2'>";
-            echo "<th style='width:40px;'>" . __('Type') . "</th>";
-            echo "<th>" . __('Name') . "</th>";
-            echo "<th>" . __('Linked item', 'sprint') . "</th>";
-            echo "<th>" . __('Status') . "</th>";
-            echo "<th>" . __('Owner', 'sprint') . "</th>";
-            echo "<th>" . __('Story Points', 'sprint') . "</th>";
-            echo "<th style='width:40px;'></th>";
-            echo "</tr>";
-        };
-
-        // === Fastlane section (collapsible, same pattern as dashboard) ===
-        if (count($fastlaneItems) > 0) {
-            $collapseKey = 'meeting-fastlane-' . (int)$meetingId;
-            echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "' style='margin-top:20px;'>";
-            echo "<div class='sprint-collapsible-header'>";
-            echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
-            echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-left:2px;'></i>";
-            echo "<span>" . __('Fastlane', 'sprint') .
-                " <span class='text-muted' style='font-weight:400;'>(" . count($fastlaneItems) . ")</span></span>";
-            echo "</div>";
-            echo "<div class='sprint-collapsible-body'>";
-            echo "<div class='center'>";
-            echo "<table class='tab_cadre_fixe sprint-themed'>";
-            $tableHeaders();
-            foreach ($fastlaneItems as $row) {
-                $renderRow($row, true);
-            }
-            echo "</table></div>";
-            echo "</div></div>";
-        }
-
-        // === Regular items section (collapsible) ===
-        $collapseKey = 'meeting-items-' . (int)$meetingId;
-        echo "<div class='sprint-collapsible' data-sprint-collapse-key='" . htmlescape($collapseKey) . "'>";
-        echo "<div class='sprint-collapsible-header'>";
-        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
-        echo "<i class='fas fa-clipboard-list' style='margin-left:2px;'></i>";
-        echo "<span>" . __('Sprint Items Review', 'sprint') .
-            " <span class='text-muted' style='font-weight:400;'>(" . count($regularItems) . ")</span></span>";
-        echo "</div>";
-        echo "<div class='sprint-collapsible-body'>";
-        echo "<div class='center'>";
-        echo "<table class='tab_cadre_fixe sprint-themed'>";
-        $tableHeaders();
-
-        if (count($regularItems) === 0) {
-            echo "<tr class='tab_bg_1'><td colspan='7' class='center' style='padding:16px;color:#999;'>" .
-                __('No items in this sprint', 'sprint') . "</td></tr>";
-        }
-
-        foreach ($regularItems as $row) {
-            $renderRow($row, false);
-        }
-
-        echo "</table></div>";
-        echo "</div></div>";
-    }
-
-    public function prepareInputForUpdate($input)
-    {
-        // Process sprint item changes before the meeting update
-        if (!empty($input['_sprintitems']) && is_array($input['_sprintitems'])) {
-            $meetingId = (int)($this->fields['id'] ?? 0);
-            $si        = new SprintItem();
-
-            foreach ($input['_sprintitems'] as $itemId => $fields) {
-                $itemId = (int)$itemId;
-                if ($itemId <= 0) {
-                    continue;
-                }
-                // _treated is only a UX lock — still persist any submitted values
-                // so that ticking "treated" and editing fields in the same save works.
-                $update = ['id' => $itemId];
-                if (isset($fields['status'])) {
-                    $update['status'] = $fields['status'];
-                }
-                if (isset($fields['users_id'])) {
-                    $update['users_id'] = (int)$fields['users_id'];
-                }
-                if (array_key_exists('note', $fields)) {
-                    $update['note'] = $fields['note'];
-                }
-
-                // Bracket the update by max log id to attribute GLPI's log
-                // rows to this meeting: Log::history() bypasses CommonDBTM
-                // hooks, so they can't be caught post-insert.
-                $beforeLogId = SprintAudit::snapshotMaxLogId();
-                $si->update($update);
-                SprintAudit::tagNewLogsAsMeetingSourced($beforeLogId, $itemId, $meetingId);
-            }
-        }
-
-        // Store treated items as JSON
-        if (isset($input['_treated_items']) && is_array($input['_treated_items'])) {
-            $input['treated_items'] = json_encode(array_map('intval', $input['_treated_items']));
-        } else {
-            $input['treated_items'] = json_encode([]);
-        }
-
-        return parent::prepareInputForUpdate($input);
-    }
 
     public function defineTabs($options = []): array
     {

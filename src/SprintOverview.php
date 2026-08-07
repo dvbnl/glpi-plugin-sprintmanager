@@ -3,6 +3,7 @@
 namespace GlpiPlugin\Sprint;
 
 use CommonGLPI;
+use Dropdown;
 use Html;
 use Search;
 use Session;
@@ -26,7 +27,7 @@ class SprintOverview extends CommonGLPI
     const PERIOD_YEAR     = 'year';
     const PERIOD_ALL      = 'all';
 
-    /** Charts stay readable up to this many sprints; the tiles cover them all. */
+    /** Maximum sprints shown in charts. */
     const CHART_SPRINTS = 20;
 
     public static function getTypeName($nb = 0): string
@@ -134,20 +135,25 @@ class SprintOverview extends CommonGLPI
 
     private static function renderStatistics(string $period): void
     {
-        $data     = self::collect($period);
-        $previous = $period === self::PERIOD_ALL ? ['sprint_count' => 0] : self::collect($period, true);
+        $filters  = self::filtersFromRequest();
+        $data     = self::collect($period, false, $filters);
+        $previous = $period === self::PERIOD_ALL ? ['sprint_count' => 0] : self::collect($period, true, $filters);
 
         echo "<h2 class='mb-1'><i class='" . self::getIcon() . " me-2'></i>"
             . __('Sprint overview', 'sprint') . "</h2>";
         echo "<div class='text-muted mb-3'>"
             . __('Trends across completed sprints, filtered on their end date.', 'sprint') . "</div>";
 
-        self::renderPeriodSelector($period);
+        self::renderPeriodSelector($period, $filters);
+        self::renderFilterBar($filters);
+        self::renderLiveSprints($filters);
         self::renderTiles($data, $previous, $period);
 
         if ($data['sprint_count'] === 0) {
             echo "<div class='alert alert-info'><i class='fas fa-info-circle me-2'></i>"
                 . __('No completed sprints in this period.', 'sprint') . "</div>";
+            self::renderComparison($data, $period, $filters);
+            self::renderOverviewBehaviour();
             return;
         }
 
@@ -155,7 +161,7 @@ class SprintOverview extends CommonGLPI
         if ($chart['dropped'] > 0) {
             echo "<div class='text-muted small mb-2'><i class='fas fa-info-circle me-1'></i>"
                 . sprintf(
-                    __('Charts show the last %1$d of %2$d sprints in this period; the tiles cover all of them.', 'sprint'),
+                    __('Charts show the last %1$d of %2$d sprints in this period. The tiles cover all of them.', 'sprint'),
                     self::CHART_SPRINTS,
                     $data['sprint_count']
                 ) . "</div>";
@@ -180,7 +186,8 @@ class SprintOverview extends CommonGLPI
                         'label' => sprintf(__('Avg points: %s', 'sprint'), number_format($data['avg_velocity'], 1)),
                         'value' => $data['avg_velocity'],
                         'color' => '#0d6efd',
-                    ]
+                    ],
+                    $chart['links']
                 );
             }
         );
@@ -194,9 +201,11 @@ class SprintOverview extends CommonGLPI
                     ['label' => __('Planned points', 'sprint'), 'color' => '#adb5bd', 'values' => $chart['series']['pts_planned']],
                     ['label' => __('Completed points', 'sprint'), 'color' => '#198754', 'values' => $chart['series']['pts_done']],
                     ['label' => __('Carry-over items', 'sprint'), 'color' => '#dc3545', 'values' => $chart['series']['carryover']],
-                ]);
+                ], null, null, $chart['links']);
             }
         );
+
+        self::renderCategoryDelivery($data);
 
         self::renderCard(
             __('Fastlane & adhoc', 'sprint'),
@@ -215,7 +224,9 @@ class SprintOverview extends CommonGLPI
                         'values' => $chart['series']['fl_cap'],
                         'suffix' => '%',
                         'max'    => max(20, (int)ceil(max(array_merge([0], $chart['series']['fl_cap'])) / 20) * 20),
-                    ]
+                    ],
+                    null,
+                    $chart['links']
                 );
             }
         );
@@ -243,7 +254,130 @@ class SprintOverview extends CommonGLPI
 
         self::renderWorkloadTrend($data);
         self::renderWorkload($data);
+        self::renderScopeStability($chart);
+        self::renderFlowHealth($data);
+        self::renderCapacityDelivery($data);
+        self::renderDependencyHealth($data);
+        self::renderComparison($data, $period, $filters);
         self::renderSprintTable($data);
+        self::renderOverviewBehaviour();
+    }
+
+    /**
+     * Realised work per backlog category/subcategory over the completed sprints
+     * in the period: planned vs completed points, so the product owner can
+     * review per category what was delivered and what was not.
+     */
+    private static function renderCategoryDelivery(array $data): void
+    {
+        $per = $data['per_category'] ?? [];
+        if (!$per) {
+            return;
+        }
+
+        self::renderCard(
+            __('Delivered per category', 'sprint'),
+            'fas fa-folder-tree',
+            __('Planned versus completed story points per backlog category across the completed sprints in this period. A parent category row includes its subcategories.', 'sprint'),
+            function () use ($per) {
+                $cats = SprintCategory::getAll(false);
+
+                // Points on deleted categories count as uncategorized.
+                $none = ['pts_planned' => 0, 'pts_done' => 0, 'items_total' => 0, 'items_done' => 0];
+                foreach ($per as $cid => $bucket) {
+                    if ((int)$cid === 0 || !isset($cats[(int)$cid])) {
+                        foreach ($none as $key => $v) {
+                            $none[$key] += (int)$bucket[$key];
+                        }
+                    }
+                }
+
+                // Tree rows: parent = own + subcategories, children indented.
+                $rows = [];
+                foreach ($cats as $cid => $cat) {
+                    if ((int)($cat['level'] ?? 0) > 0) {
+                        continue;
+                    }
+                    $childIds = SprintCategory::getChildrenOf((int)$cid, false);
+                    $rollup   = $per[(int)$cid] ?? ['pts_planned' => 0, 'pts_done' => 0, 'items_total' => 0, 'items_done' => 0];
+                    foreach ($childIds as $childId) {
+                        foreach ($per[$childId] ?? [] as $key => $v) {
+                            $rollup[$key] += (int)$v;
+                        }
+                    }
+                    if ($rollup['items_total'] === 0) {
+                        continue;
+                    }
+                    $rows[] = ['id' => (int)$cid, 'label' => (string)$cat['name'], 'color' => (string)$cat['color'], 'level' => 0] + $rollup;
+                    foreach ($childIds as $childId) {
+                        $bucket = $per[$childId] ?? null;
+                        if ($bucket === null || (int)$bucket['items_total'] === 0) {
+                            continue;
+                        }
+                        $rows[] = [
+                            'id'    => $childId,
+                            'label' => (string)($cats[$childId]['name'] ?? ''),
+                            'color' => (string)($cats[$childId]['color'] ?? '#6c757d'),
+                            'level' => 1,
+                        ] + $bucket;
+                    }
+                }
+                if ($none['items_total'] > 0) {
+                    $rows[] = ['id' => 0, 'label' => __('No category', 'sprint'), 'color' => '#6c757d', 'level' => 0] + $none;
+                }
+
+                if (!$rows) {
+                    echo "<div class='text-muted py-3'>" . __('No data for this period.', 'sprint') . "</div>";
+                    return;
+                }
+
+                echo "<div class='table-responsive'><table class='table table-vcenter mb-0'>";
+                echo "<thead><tr>";
+                echo "<th>" . __('Category', 'sprint') . "</th>";
+                echo "<th style='width:30%;'>" . __('Completed vs planned points', 'sprint') . "</th>";
+                echo "<th class='text-end'>" . __('Completed points', 'sprint') . "</th>";
+                echo "<th class='text-end'>" . __('Planned points', 'sprint') . "</th>";
+                echo "<th class='text-end'>" . __('Items completed', 'sprint') . "</th>";
+                echo "</tr></thead><tbody>";
+                foreach ($rows as $row) {
+                    $pct   = $row['pts_planned'] > 0 ? (int)round(100 * $row['pts_done'] / $row['pts_planned']) : 0;
+                    $width = number_format(min(100, $pct), 1, '.', '');
+                    $bar   = $pct >= 85 ? 'green' : ($pct >= 60 ? 'yellow' : 'red');
+                    $color = htmlescape($row['color']);
+
+                    $query = $_GET;
+                    $query['section'] = self::SECTION_OVERVIEW;
+                    $query['category_id'] = $row['id'];
+                    $url = $row['id'] > 0
+                        ? Plugin::getWebDir('sprint') . '/front/sprint.php?' . http_build_query($query)
+                        : '';
+
+                    $indent = $row['level'] > 0
+                        ? "<i class='fas fa-turn-up fa-rotate-90 text-muted me-1' style='margin-left:18px;font-size:0.8em;'></i>"
+                        : '';
+                    $label = htmlescape($row['label']);
+                    if ($url !== '') {
+                        $label = "<a href='" . htmlescape($url) . "'>" . $label . "</a>";
+                    }
+                    if ($row['level'] === 0) {
+                        $label = "<strong>" . $label . "</strong>";
+                    }
+
+                    echo "<tr>";
+                    echo "<td>{$indent}<span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:{$color};margin-right:6px;'></span>{$label}</td>";
+                    echo "<td><div class='d-flex align-items-center gap-2'>"
+                        . "<div class='progress progress-sm flex-grow-1'><div class='progress-bar bg-{$bar}' role='progressbar' "
+                        . "style='width:{$width}%' aria-valuenow='{$width}' aria-valuemin='0' aria-valuemax='100'></div></div>"
+                        . "<span class='text-nowrap small'>{$pct}%</span>"
+                        . "</div></td>";
+                    echo "<td class='text-end'>" . (int)$row['pts_done'] . "</td>";
+                    echo "<td class='text-end'>" . (int)$row['pts_planned'] . "</td>";
+                    echo "<td class='text-end text-nowrap'>" . (int)$row['items_done'] . " / " . (int)$row['items_total'] . "</td>";
+                    echo "</tr>";
+                }
+                echo "</tbody></table></div>";
+            }
+        );
     }
 
     /** Colour + glyph for a load drift verdict; the glyph is what carries it under CVD. */
@@ -517,13 +651,15 @@ class SprintOverview extends CommonGLPI
         }
 
         $data['labels'] = array_slice($data['labels'], -self::CHART_SPRINTS);
+        $data['links'] = array_slice($data['links'] ?? [], -self::CHART_SPRINTS);
+        $data['sprints'] = array_slice($data['sprints'] ?? [], -self::CHART_SPRINTS);
         foreach ($data['series'] as $key => $values) {
             $data['series'][$key] = array_slice($values, -self::CHART_SPRINTS);
         }
         return $data;
     }
 
-    private static function renderPeriodSelector(string $period): void
+    private static function renderPeriodSelector(string $period, array $filters = []): void
     {
         $self = Plugin::getWebDir('sprint') . '/front/sprint.php';
         echo "<div class='d-flex flex-wrap align-items-center gap-2 mb-3'>";
@@ -531,10 +667,172 @@ class SprintOverview extends CommonGLPI
         echo "<div class='btn-group'>";
         foreach (self::getPeriods() as $key => $label) {
             $class = 'btn btn-sm ' . ($key === $period ? 'btn-primary' : 'btn-outline-secondary');
-            $url   = $self . '?section=' . self::SECTION_OVERVIEW . '&period=' . $key;
+            $url   = $self . '?' . http_build_query(array_merge(
+                ['section' => self::SECTION_OVERVIEW, 'period' => $key],
+                array_filter($filters, static fn($value) => $value !== '' && $value !== 0)
+            ));
             echo "<a class='" . $class . "' href='" . htmlescape($url) . "'>" . htmlescape($label) . "</a>";
         }
         echo "</div></div>";
+    }
+
+    private static function filtersFromRequest(): array
+    {
+        $text = static fn(string $key) => trim((string)($_GET[$key] ?? ''));
+        $int  = static fn(string $key) => max(0, (int)($_GET[$key] ?? 0));
+        return [
+            'from' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $text('from')) ? $text('from') : '',
+            'to' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $text('to')) ? $text('to') : '',
+            'entities_id' => $int('entities_id'),
+            'scrum_master' => $int('scrum_master'),
+            'member_id' => $int('member_id'),
+            'projects_id' => $int('projects_id'),
+            'template_id' => $int('template_id'),
+            'epic_id' => $int('epic_id'),
+            'category_id' => $int('category_id'),
+            'itemtype' => in_array($text('itemtype'), ['', 'Ticket', 'Change', 'Problem', 'ProjectTask'], true) ? $text('itemtype') : '',
+            'tag' => mb_substr($text('tag'), 0, 255),
+            'blocked_only' => $int('blocked_only') > 0 ? 1 : 0,
+            'over_only' => $int('over_only') > 0 ? 1 : 0,
+            'predictability_below' => min(100, $int('predictability_below')),
+            'compare_period' => array_key_exists($text('compare_period'), self::getPeriods()) ? $text('compare_period') : '',
+            'compare_scrum_master' => $int('compare_scrum_master'),
+            'view' => $text('view') === 'compact' ? 'compact' : 'expanded',
+        ];
+    }
+
+    private static function renderFilterBar(array $filters): void
+    {
+        global $DB;
+        $self = Plugin::getWebDir('sprint') . '/front/sprint.php';
+        $sprints = array_values((new Sprint())->find(getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true), ['name ASC']));
+        $masters = $members = $projects = $templates = $entities = [];
+        $sprintIds = [];
+        foreach ($sprints as $sprint) {
+            $sprintIds[] = (int)$sprint['id'];
+            $uid = (int)$sprint['users_id'];
+            if ($uid > 0) $masters[$uid] = SprintCache::userName($uid);
+            $pid = (int)$sprint['projects_id'];
+            if ($pid > 0) $projects[$pid] = Dropdown::getDropdownName('glpi_projects', $pid);
+            $tid = (int)($sprint['plugin_sprint_sprinttemplates_id'] ?? 0);
+            if ($tid > 0) $templates[$tid] = Dropdown::getDropdownName(SprintTemplate::getTable(), $tid);
+            $eid = (int)$sprint['entities_id'];
+            $entities[$eid] = Dropdown::getDropdownName('glpi_entities', $eid);
+        }
+        if ($sprintIds) {
+            foreach ($DB->request(['SELECT' => ['users_id'], 'FROM' => SprintMember::getTable(), 'WHERE' => ['plugin_sprint_sprints_id' => $sprintIds]]) as $row) {
+                $uid = (int)$row['users_id'];
+                if ($uid > 0) $members[$uid] = SprintCache::userName($uid);
+            }
+        }
+        natcasesort($masters);
+        natcasesort($members);
+        natcasesort($projects);
+        natcasesort($templates);
+        natcasesort($entities);
+        $tags = Config::getDefinedTags();
+        $epics = [];
+        if ($DB->tableExists('glpi_plugin_sprint_sprintepics')) {
+            foreach ($DB->request(['SELECT' => ['id', 'name'], 'FROM' => 'glpi_plugin_sprint_sprintepics', 'ORDER' => ['name ASC']]) as $row) $epics[(int)$row['id']] = (string)$row['name'];
+        }
+        // Include deactivated categories: completed sprints may still carry them.
+        $categories = [];
+        foreach (SprintCategory::getAll(false) as $cid => $cat) {
+            $categories[(int)$cid] = (((int)($cat['level'] ?? 0) > 0) ? '— ' : '') . (string)$cat['name'];
+        }
+
+        $select = static function (string $name, array $options, $selected, string $empty): string {
+            $html = "<select class='form-select form-select-sm' name='" . htmlescape($name) . "'><option value=''>" . htmlescape($empty) . '</option>';
+            foreach ($options as $value => $label) $html .= "<option value='" . htmlescape((string)$value) . "'" . ((string)$selected === (string)$value ? ' selected' : '') . '>' . htmlescape((string)$label) . '</option>';
+            return $html . '</select>';
+        };
+
+        echo "<details class='card mb-3 sprint-overview-filters'" . (array_filter($filters, static fn($v, $k) => !in_array($k, ['view'], true) && $v !== '' && $v !== 0, ARRAY_FILTER_USE_BOTH) ? ' open' : '') . "><summary class='card-header cursor-pointer'><strong><i class='fas fa-filter me-2'></i>" . __('Filters and comparison', 'sprint') . "</strong></summary><div class='card-body'>";
+        echo "<form method='get' action='" . htmlescape($self) . "' class='row g-2'>" . Html::hidden('section', ['value' => self::SECTION_OVERVIEW]) . Html::hidden('period', ['value' => (string)($_GET['period'] ?? self::PERIOD_YEAR)]);
+        echo "<div class='col-md-2'><label class='form-label'>" . __('From') . "</label><input class='form-control form-control-sm' type='date' name='from' value='" . htmlescape($filters['from']) . "'></div>";
+        echo "<div class='col-md-2'><label class='form-label'>" . __('To') . "</label><input class='form-control form-control-sm' type='date' name='to' value='" . htmlescape($filters['to']) . "'></div>";
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Entity') . "</label>" . $select('entities_id', $entities, $filters['entities_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Scrum Master', 'sprint') . "</label>" . $select('scrum_master', $masters, $filters['scrum_master'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Team member', 'sprint') . "</label>" . $select('member_id', $members, $filters['member_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Project') . "</label>" . $select('projects_id', $projects, $filters['projects_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Template', 'sprint') . "</label>" . $select('template_id', $templates, $filters['template_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Epic or theme', 'sprint') . "</label>" . $select('epic_id', $epics, $filters['epic_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Category', 'sprint') . "</label>" . $select('category_id', $categories, $filters['category_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Linked type', 'sprint') . "</label>" . $select('itemtype', array_combine(['Ticket', 'Change', 'Problem', 'ProjectTask'], ['Ticket', 'Change', 'Problem', 'Project task']), $filters['itemtype'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Tag', 'sprint') . "</label>" . $select('tag', array_combine($tags, $tags), $filters['tag'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Compare period', 'sprint') . "</label>" . $select('compare_period', self::getPeriods(), $filters['compare_period'], __('None', 'sprint')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Compare Scrum Master', 'sprint') . "</label>" . $select('compare_scrum_master', $masters, $filters['compare_scrum_master'], __('None', 'sprint')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('View', 'sprint') . "</label>" . $select('view', ['expanded' => __('Expanded', 'sprint'), 'compact' => __('Compact', 'sprint')], $filters['view'], __('Expanded', 'sprint')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label'>" . __('Predictability below', 'sprint') . "</label><div class='input-group input-group-sm'><input class='form-control' type='number' min='0' max='100' name='predictability_below' value='" . ($filters['predictability_below'] ?: '') . "'><span class='input-group-text'>%</span></div></div>";
+        echo "<div class='col-12 d-flex flex-wrap gap-3 mt-3'><label class='form-check'><input class='form-check-input' type='checkbox' name='blocked_only' value='1'" . ($filters['blocked_only'] ? ' checked' : '') . "><span class='form-check-label'>" . __('Only sprints with blocked work', 'sprint') . "</span></label><label class='form-check'><input class='form-check-input' type='checkbox' name='over_only' value='1'" . ($filters['over_only'] ? ' checked' : '') . "><span class='form-check-label'>" . __('Only sprints over capacity', 'sprint') . "</span></label></div>";
+        echo "<div class='col-12 mt-3 d-flex flex-wrap gap-2'><button class='btn btn-primary btn-sm'><i class='fas fa-check me-1'></i>" . __('Apply filters', 'sprint') . "</button><a class='btn btn-outline-secondary btn-sm' href='" . htmlescape($self . '?section=' . self::SECTION_OVERVIEW) . "'>" . __('Reset', 'sprint') . "</a><button type='button' class='btn btn-outline-primary btn-sm' id='sprint-save-filter'><i class='fas fa-bookmark me-1'></i>" . __('Save filter', 'sprint') . "</button><select id='sprint-saved-filters' class='form-select form-select-sm' style='width:auto'><option value=''>" . __('Saved filters', 'sprint') . '</option></select></div>';
+        Html::closeForm();
+        $active = [];
+        $labels = [
+            'from' => __('From'), 'to' => __('To'), 'entities_id' => __('Entity'), 'scrum_master' => __('Scrum Master', 'sprint'),
+            'member_id' => __('Team member', 'sprint'), 'projects_id' => __('Project'), 'template_id' => __('Template', 'sprint'),
+            'epic_id' => __('Epic or theme', 'sprint'), 'category_id' => __('Category', 'sprint'),
+            'itemtype' => __('Linked type', 'sprint'), 'tag' => __('Tag', 'sprint'),
+            'blocked_only' => __('Blocked work', 'sprint'), 'over_only' => __('Over capacity', 'sprint'),
+            'predictability_below' => __('Predictability below', 'sprint'),
+        ];
+        foreach ($labels as $key => $label) if (($filters[$key] ?? '') !== '' && ($filters[$key] ?? 0) !== 0) $active[] = "<span class='badge bg-blue-lt'>" . htmlescape($label) . ': ' . htmlescape((string)$filters[$key]) . '</span>';
+        if ($active) echo "<div class='d-flex flex-wrap gap-1 mt-3'>" . implode('', $active) . '</div>';
+        echo '</div></details>';
+    }
+
+    private static function renderLiveSprints(array $filters): void
+    {
+        global $DB;
+        $criteria = ['status' => Sprint::STATUS_ACTIVE];
+        $entityCriteria = getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true);
+        if ($entityCriteria) $criteria = array_merge($criteria, $entityCriteria);
+        if (!empty($filters['entities_id'])) $criteria['entities_id'] = (int)$filters['entities_id'];
+        if (!empty($filters['scrum_master'])) $criteria['users_id'] = (int)$filters['scrum_master'];
+        if (!empty($filters['projects_id'])) $criteria['projects_id'] = (int)$filters['projects_id'];
+        if (!empty($filters['template_id'])) $criteria['plugin_sprint_sprinttemplates_id'] = (int)$filters['template_id'];
+        if (!empty($filters['member_id'])) {
+            $ids = [];
+            foreach ((new SprintMember())->find(['users_id' => (int)$filters['member_id']]) as $member) $ids[] = (int)$member['plugin_sprint_sprints_id'];
+            $criteria['id'] = $ids ?: [-1];
+        }
+        $sprints = array_values((new Sprint())->find($criteria, ['date_end ASC']));
+        if (!$sprints) return;
+        echo "<div class='d-flex align-items-center justify-content-between mt-3 mb-2'><h3 class='m-0'><i class='fas fa-heart-pulse me-2 text-red'></i>" . __('Live sprint status', 'sprint') . "</h3><span class='text-muted small'>" . __('Kept separate from completed sprint statistics', 'sprint') . '</span></div>';
+        echo "<div class='row g-2 mb-4'>";
+        foreach ($sprints as $sprint) {
+            $sid = (int)$sprint['id'];
+            $items = self::filterItems(self::fetchItems([$sid]), $filters);
+            $total = $done = $blocked = $dependency = $remainingPoints = $totalPoints = 0;
+            $byStatus = [];
+            foreach ($items as $item) {
+                $total++;
+                $byStatus[(string)$item['status']] = ($byStatus[(string)$item['status']] ?? 0) + 1;
+                $points = max(0, (int)$item['story_points']);
+                $totalPoints += $points;
+                if ((string)$item['status'] === SprintItem::STATUS_DONE) $done++; else $remainingPoints += $points;
+                if ((string)$item['status'] === SprintItem::STATUS_BLOCKED || (int)$item['is_blocked'] === 1) $blocked++;
+                if ((string)$item['status'] === SprintItem::STATUS_DEPENDENCY) $dependency++;
+            }
+            $limits = SprintAgility::getWipLimits($sprint);
+            $wipBreaches = 0;
+            foreach ($limits as $status => $limit) if ($limit > 0 && ($byStatus[$status] ?? 0) > $limit) $wipBreaches++;
+            $start = strtotime((string)$sprint['date_start']) ?: time();
+            $end = strtotime((string)$sprint['date_end']) ?: $start + DAY_TIMESTAMP;
+            $elapsed = max(0, min(100, (int)round(100 * (time() - $start) / max(1, $end - $start))));
+            $progress = $totalPoints > 0 ? (int)round(100 * ($totalPoints - $remainingPoints) / $totalPoints) : ($total > 0 ? (int)round(100 * $done / $total) : 0);
+            $expected = $elapsed > 0 ? min($totalPoints, (int)round(($totalPoints - $remainingPoints) * 100 / $elapsed)) : 0;
+            $nextMeeting = '';
+            foreach ($DB->request(['SELECT' => ['date_meeting'], 'FROM' => SprintMeeting::getTable(), 'WHERE' => ['plugin_sprint_sprints_id' => $sid, ['date_meeting' => ['>=', date('Y-m-d H:i:s')]]], 'ORDER' => ['date_meeting ASC'], 'LIMIT' => 1]) as $meeting) $nextMeeting = (string)$meeting['date_meeting'];
+            $url = Sprint::getFormURLWithID($sid);
+            echo "<div class='col-12 col-xl-6'><a class='card card-sm h-100 text-reset text-decoration-none' href='" . htmlescape($url) . "'><div class='card-body'><div class='d-flex justify-content-between'><strong>" . htmlescape((string)$sprint['name']) . "</strong><span>" . $progress . "%</span></div>";
+            echo "<div class='progress progress-sm my-2'><div class='progress-bar bg-blue' style='width:" . min(100, $progress) . "%'></div><span class='position-absolute border-start border-dark' style='left:" . $elapsed . "%'></span></div>";
+            echo "<div class='small text-muted mb-2'>" . sprintf(__('Progress %1$d%% · time elapsed %2$d%% · expected %3$d story points', 'sprint'), $progress, $elapsed, $expected) . "</div><div class='d-flex flex-wrap gap-2'>";
+            echo "<span class='badge bg-blue-lt'>" . sprintf(__('%d points remaining', 'sprint'), $remainingPoints) . "</span><span class='badge bg-red-lt'>" . sprintf(__('%d blocked', 'sprint'), $blocked) . "</span><span class='badge bg-teal-lt'>" . sprintf(__('%d dependencies', 'sprint'), $dependency) . "</span><span class='badge bg-orange-lt'>" . sprintf(__('%d WIP breaches', 'sprint'), $wipBreaches) . '</span>';
+            if ($nextMeeting !== '') echo "<span class='badge bg-purple-lt'><i class='fas fa-calendar me-1'></i>" . Html::convDateTime($nextMeeting) . '</span>';
+            echo '</div></div></a></div>';
+        }
+        echo '</div>';
     }
 
     /** KPI tiles with an optional delta against the previous period. */
@@ -730,9 +1028,18 @@ class SprintOverview extends CommonGLPI
      * Aggregate every completed sprint whose end date falls in the period.
      * `$shift` moves the window one full period back for the delta badges.
      */
-    private static function collect(string $period, bool $shift = false): array
+    private static function collect(string $period, bool $shift = false, array $filters = []): array
     {
         [$from, $to] = self::periodRange($period, $shift);
+        if (!empty($filters['from']) || !empty($filters['to'])) {
+            $from = $filters['from'] ?: null;
+            $to   = $filters['to'] ?: null;
+            if ($shift && $from !== null && $to !== null) {
+                $days = max(1, (int)((strtotime($to) - strtotime($from)) / DAY_TIMESTAMP) + 1);
+                $from = date('Y-m-d', strtotime($from) - $days * DAY_TIMESTAMP);
+                $to   = date('Y-m-d', strtotime($to) - $days * DAY_TIMESTAMP);
+            }
+        }
 
         $criteria = ['status' => Sprint::STATUS_COMPLETED];
         $range    = [];
@@ -744,6 +1051,15 @@ class SprintOverview extends CommonGLPI
         }
         if (!empty($range)) {
             $criteria[] = ['AND' => $range];
+        }
+        if (!empty($filters['entities_id'])) $criteria['entities_id'] = (int)$filters['entities_id'];
+        if (!empty($filters['scrum_master'])) $criteria['users_id'] = (int)$filters['scrum_master'];
+        if (!empty($filters['projects_id'])) $criteria['projects_id'] = (int)$filters['projects_id'];
+        if (!empty($filters['template_id'])) $criteria['plugin_sprint_sprinttemplates_id'] = (int)$filters['template_id'];
+        if (!empty($filters['member_id'])) {
+            $memberSprintIds = [];
+            foreach ((new SprintMember())->find(['users_id' => (int)$filters['member_id']]) as $member) $memberSprintIds[] = (int)$member['plugin_sprint_sprints_id'];
+            $criteria['id'] = $memberSprintIds ?: [-1];
         }
         // find() has no visibility layer: restrict to the caller's entities the
         // way Sprint::dropdown() does, or the page aggregates the whole install.
@@ -757,6 +1073,7 @@ class SprintOverview extends CommonGLPI
             'sprint_count'   => count($sprints),
             'sprints'        => [],
             'labels'         => [],
+            'links'          => [],
             'series'         => [
                 'pts_done'       => [],
                 'pts_planned'    => [],
@@ -765,6 +1082,12 @@ class SprintOverview extends CommonGLPI
                 'fl_done'        => [],
                 'adhoc'          => [],
                 'fl_cap'         => [],
+                'initial_scope'  => [],
+                'removed_scope'  => [],
+                'dependency'     => [],
+                'cycle_days'     => [],
+                'blocked_days'   => [],
+                'rework_pct'     => [],
             ],
             'pts_done'       => 0,
             'pts_planned'    => 0,
@@ -779,10 +1102,12 @@ class SprintOverview extends CommonGLPI
             'consistency'    => 0,
             'per_member'     => [],
             'per_type'       => [],
+            'per_category'   => [],
             'workload'       => [],
             'workload_trend' => ['labels' => [], 'team' => [], 'over' => [], 'members' => 0, 'drift' => 0.0, 'direction' => 'stable'],
             'flow'           => ['cycle_days' => 0.0, 'blocked_days' => 0.0, 'rework_pct' => 0, 'measured' => 0, 'blocked_items' => 0],
             'requests'       => ['total' => 0, 'accepted_pct' => 0, 'wait_days' => 0.0],
+            'dependencies'   => ['open' => 0, 'resolved' => 0, 'avg_age' => 0.0, 'multi_sprint' => 0, 'without_owner' => 0],
         ];
         if ($out['sprint_count'] === 0) {
             return $out;
@@ -790,6 +1115,14 @@ class SprintOverview extends CommonGLPI
 
         $sprintIds = array_map(static fn($s) => (int)$s['id'], $sprints);
         $items     = self::fetchItems($sprintIds);
+        $items     = self::filterItems($items, $filters);
+        if (!empty($filters['itemtype']) || !empty($filters['tag']) || !empty($filters['epic_id']) || !empty($filters['category_id']) || !empty($filters['blocked_only']) || !empty($filters['over_only'])) {
+            $matchingSprints = array_fill_keys(array_unique(array_map(static fn($item) => (int)$item['plugin_sprint_sprints_id'], $items)), true);
+            $sprints = array_values(array_filter($sprints, static fn($sprint) => isset($matchingSprints[(int)$sprint['id']])));
+            $sprintIds = array_map(static fn($sprint) => (int)$sprint['id'], $sprints);
+            $out['sprint_count'] = count($sprints);
+            if (!$sprints) return $out;
+        }
         $flByUser  = self::fetchAllocations(SprintFastlaneMember::getTable(), $items, true);
         $depByUser = self::fetchAllocations(SprintItemDependency::getTable(), $items, false);
 
@@ -799,17 +1132,27 @@ class SprintOverview extends CommonGLPI
             $flCap[$itemId] = array_sum($perUser);
         }
 
-        $bySprint  = [];
-        $perMember = [];
-        $perType   = [];
+        $bySprint    = [];
+        $perMember   = [];
+        $perType     = [];
+        $perCategory = [];
         foreach ($items as $item) {
             $sid  = (int)$item['plugin_sprint_sprints_id'];
             $done = (string)$item['status'] === SprintItem::STATUS_DONE;
             $pts  = (int)$item['story_points'];
 
+            $cid = (int)($item['plugin_sprint_sprintcategories_id'] ?? 0);
+            $perCategory[$cid] ??= ['pts_planned' => 0, 'pts_done' => 0, 'items_total' => 0, 'items_done' => 0];
+            $perCategory[$cid]['pts_planned'] += $pts;
+            $perCategory[$cid]['items_total']++;
+            if ($done) {
+                $perCategory[$cid]['pts_done'] += $pts;
+                $perCategory[$cid]['items_done']++;
+            }
+
             $bySprint[$sid] ??= [
                 'pts_planned' => 0, 'pts_done' => 0, 'items_total' => 0, 'items_done' => 0,
-                'fl_items' => 0, 'fl_done' => 0, 'adhoc' => 0, 'blocked' => 0, 'fl_cap' => 0.0,
+                'fl_items' => 0, 'fl_done' => 0, 'adhoc' => 0, 'blocked' => 0, 'fl_cap' => 0.0, 'dependencies' => 0,
             ];
             $bucket = &$bySprint[$sid];
             $bucket['items_total']++;
@@ -834,6 +1177,7 @@ class SprintOverview extends CommonGLPI
                 || (int)($item['is_blocked'] ?? 0) === 1) {
                 $bucket['blocked']++;
             }
+            if ((string)$item['status'] === SprintItem::STATUS_DEPENDENCY) $bucket['dependencies']++;
             unset($bucket);
 
             if ($done) {
@@ -844,12 +1188,42 @@ class SprintOverview extends CommonGLPI
             }
         }
 
+        if (!empty($filters['predictability_below'])) {
+            $threshold = (int)$filters['predictability_below'];
+            $sprints = array_values(array_filter($sprints, static function ($sprint) use ($bySprint, $threshold) {
+                $bucket = $bySprint[(int)$sprint['id']] ?? ['pts_planned' => 0, 'pts_done' => 0];
+                $predictability = $bucket['pts_planned'] > 0 ? (int)round(100 * $bucket['pts_done'] / $bucket['pts_planned']) : 0;
+                return $predictability < $threshold;
+            }));
+            $sprintIds = array_map(static fn($sprint) => (int)$sprint['id'], $sprints);
+            $items = array_values(array_filter($items, static fn($item) => in_array((int)$item['plugin_sprint_sprints_id'], $sprintIds, true)));
+            $perMember = $perType = $perCategory = [];
+            foreach ($items as $item) {
+                $done = (string)$item['status'] === SprintItem::STATUS_DONE;
+                $pts  = (int)$item['story_points'];
+                $cid  = (int)($item['plugin_sprint_sprintcategories_id'] ?? 0);
+                $perCategory[$cid] ??= ['pts_planned' => 0, 'pts_done' => 0, 'items_total' => 0, 'items_done' => 0];
+                $perCategory[$cid]['pts_planned'] += $pts;
+                $perCategory[$cid]['items_total']++;
+                if (!$done) continue;
+                $perCategory[$cid]['pts_done'] += $pts;
+                $perCategory[$cid]['items_done']++;
+                $uid = (int)$item['users_id'];
+                $perMember[$uid] = ($perMember[$uid] ?? 0) + $pts;
+                $type = (string)$item['itemtype'];
+                $perType[$type] = ($perType[$type] ?? 0) + 1;
+            }
+            $out['sprint_count'] = count($sprints);
+            if (!$sprints) return $out;
+        }
+
         $velocities = [];
-        foreach ($sprints as $sprint) {
+        $flowStart = max(0, count($sprints) - self::CHART_SPRINTS);
+        foreach ($sprints as $sprintIndex => $sprint) {
             $sid    = (int)$sprint['id'];
             $bucket = $bySprint[$sid] ?? [
                 'pts_planned' => 0, 'pts_done' => 0, 'items_total' => 0, 'items_done' => 0,
-                'fl_items' => 0, 'fl_done' => 0, 'adhoc' => 0, 'blocked' => 0, 'fl_cap' => 0.0,
+                'fl_items' => 0, 'fl_done' => 0, 'adhoc' => 0, 'blocked' => 0, 'fl_cap' => 0.0, 'dependencies' => 0,
             ];
             $predict = $bucket['pts_planned'] > 0
                 ? (int)round(($bucket['pts_done'] / $bucket['pts_planned']) * 100)
@@ -864,6 +1238,7 @@ class SprintOverview extends CommonGLPI
                 'carryover'      => $carry,
             ]);
             $out['labels'][] = (string)$sprint['name'];
+            $out['links'][] = Sprint::getFormURLWithID($sid);
             $out['series']['pts_done'][]       = $bucket['pts_done'];
             $out['series']['pts_planned'][]    = $bucket['pts_planned'];
             $out['series']['predictability'][] = $predict;
@@ -871,6 +1246,22 @@ class SprintOverview extends CommonGLPI
             $out['series']['fl_done'][]        = $bucket['fl_done'];
             $out['series']['adhoc'][]          = $bucket['adhoc'];
             $out['series']['fl_cap'][]         = (int)round($bucket['fl_cap']);
+            $baselineItems = max(0, (int)($sprint['scope_baseline_items'] ?? 0));
+            if ($baselineItems === 0) $baselineItems = max(0, $bucket['items_total'] - $bucket['adhoc']);
+            $out['series']['initial_scope'][]  = $baselineItems;
+            $out['series']['removed_scope'][]  = max(0, $baselineItems + $bucket['adhoc'] - $bucket['items_total']);
+            $out['series']['dependency'][]     = $bucket['dependencies'];
+
+            if (!$shift && $sprintIndex >= $flowStart) {
+                $sprintFlow = self::flowMetrics(array_values(array_filter($items, static fn($item) => (int)$item['plugin_sprint_sprints_id'] === $sid)));
+                $out['series']['cycle_days'][] = round($sprintFlow['cycle_days'], 1);
+                $out['series']['blocked_days'][] = round($sprintFlow['blocked_days'], 1);
+                $out['series']['rework_pct'][] = $sprintFlow['rework_pct'];
+            } elseif (!$shift) {
+                $out['series']['cycle_days'][] = 0;
+                $out['series']['blocked_days'][] = 0;
+                $out['series']['rework_pct'][] = 0;
+            }
 
             $out['pts_done']    += $bucket['pts_done'];
             $out['pts_planned'] += $bucket['pts_planned'];
@@ -892,6 +1283,7 @@ class SprintOverview extends CommonGLPI
         $out['consistency']    = self::consistency($velocities, $out['avg_velocity']);
         $out['per_member']     = self::rankMembers($perMember);
         $out['per_type']       = self::rankTypes($perType);
+        $out['per_category']   = $perCategory;
         $out['workload']       = self::workload($sprints, $items, $flByUser, $depByUser);
         $out['workload_trend'] = self::workloadTrend($out['labels'], $out['workload']);
 
@@ -899,6 +1291,7 @@ class SprintOverview extends CommonGLPI
         if (!$shift) {
             $out['flow']     = self::flowMetrics($items);
             $out['requests'] = self::requestStats($sprintIds);
+            $out['dependencies'] = self::dependencyMetrics($items);
         }
 
         return $out;
@@ -916,7 +1309,9 @@ class SprintOverview extends CommonGLPI
         foreach ($DB->request([
             'SELECT' => [
                 'id', 'plugin_sprint_sprints_id', 'status', 'story_points', 'capacity',
-                'users_id', 'itemtype', 'is_fastlane', 'is_adhoc', 'is_blocked',
+                'users_id', 'itemtype', 'items_id', 'is_fastlane', 'is_adhoc', 'is_blocked',
+                'plugin_sprint_sprintepics_id', 'plugin_sprint_sprintcategories_id',
+                'date_creation', 'date_mod', 'name',
             ],
             'FROM'   => SprintItem::getTable(),
             'WHERE'  => ['plugin_sprint_sprints_id' => $sprintIds],
@@ -924,6 +1319,79 @@ class SprintOverview extends CommonGLPI
             $rows[] = $row;
         }
         return $rows;
+    }
+
+    private static function filterItems(array $items, array $filters): array
+    {
+        global $DB;
+        if (!$items) return [];
+        $allowedIds = null;
+        if (!empty($filters['tag']) && $DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+            $allowedIds = [];
+            foreach ($DB->request(['SELECT' => ['plugin_sprint_sprintitems_id'], 'FROM' => 'glpi_plugin_sprint_sprintitemtags', 'WHERE' => ['tag' => $filters['tag']]]) as $row) $allowedIds[(int)$row['plugin_sprint_sprintitems_id']] = true;
+        }
+        $cohortSprints = null;
+        if (!empty($filters['blocked_only'])) {
+            $cohortSprints = [];
+            foreach ($items as $item) if ((string)$item['status'] === SprintItem::STATUS_BLOCKED || (int)$item['is_blocked'] === 1) $cohortSprints[(int)$item['plugin_sprint_sprints_id']] = true;
+        }
+        if (!empty($filters['over_only'])) {
+            $over = [];
+            $sprintIds = array_values(array_unique(array_map(static fn($item) => (int)$item['plugin_sprint_sprints_id'], $items)));
+            foreach ((new SprintMember())->find(['plugin_sprint_sprints_id' => $sprintIds]) as $member) {
+                $sid = (int)$member['plugin_sprint_sprints_id'];
+                $uid = (int)$member['users_id'];
+                $capacity = SprintAgility::effectiveCapacity($sid, $uid, (float)$member['capacity_percent']);
+                if ($capacity > 0 && SprintMember::getUsedCapacityForUser($sid, $uid) > $capacity) $over[$sid] = true;
+            }
+            $cohortSprints = $cohortSprints === null ? $over : array_intersect_key($cohortSprints, $over);
+        }
+        // Filtering on a parent category includes its subcategories.
+        $categoryIds = null;
+        if (!empty($filters['category_id'])) {
+            $categoryIds = array_fill_keys(
+                array_merge([(int)$filters['category_id']], SprintCategory::getChildrenOf((int)$filters['category_id'], false)),
+                true
+            );
+        }
+        return array_values(array_filter($items, static function ($item) use ($filters, $allowedIds, $cohortSprints, $categoryIds) {
+            if ($cohortSprints !== null && !isset($cohortSprints[(int)$item['plugin_sprint_sprints_id']])) return false;
+            if ($allowedIds !== null && !isset($allowedIds[(int)$item['id']])) return false;
+            if (!empty($filters['itemtype']) && (string)$item['itemtype'] !== $filters['itemtype']) return false;
+            if (!empty($filters['epic_id']) && (int)$item['plugin_sprint_sprintepics_id'] !== (int)$filters['epic_id']) return false;
+            if ($categoryIds !== null && !isset($categoryIds[(int)($item['plugin_sprint_sprintcategories_id'] ?? 0)])) return false;
+            return true;
+        }));
+    }
+
+    private static function dependencyMetrics(array $items): array
+    {
+        global $DB;
+        $out = ['open' => 0, 'resolved' => 0, 'avg_age' => 0.0, 'multi_sprint' => 0, 'without_owner' => 0];
+        $ids = array_map(static fn($item) => (int)$item['id'], $items);
+        if (!$ids || !$DB->tableExists(SprintItemDependency::getTable())) return $out;
+        $itemMap = [];
+        foreach ($items as $item) $itemMap[(int)$item['id']] = $item;
+        $age = 0.0;
+        foreach ($DB->request(['FROM' => SprintItemDependency::getTable(), 'WHERE' => ['plugin_sprint_sprintitems_id' => $ids]]) as $row) {
+            if ((int)$row['is_resolved'] === 1) {
+                $out['resolved']++;
+                continue;
+            }
+            $out['open']++;
+            if ((int)$row['users_id'] <= 0) $out['without_owner']++;
+            $created = strtotime((string)$row['date_creation']);
+            if ($created) $age += max(0, time() - $created) / DAY_TIMESTAMP;
+        }
+        $out['avg_age'] = $out['open'] > 0 ? $age / $out['open'] : 0.0;
+        $linked = [];
+        foreach ($items as $item) {
+            if (empty($item['itemtype']) || empty($item['items_id'])) continue;
+            $key = $item['itemtype'] . ':' . $item['items_id'];
+            $linked[$key][(int)$item['plugin_sprint_sprints_id']] = true;
+        }
+        $out['multi_sprint'] = count(array_filter($linked, static fn($sprints) => count($sprints) > 1));
+        return $out;
     }
 
     /**
@@ -998,12 +1466,12 @@ class SprintOverview extends CommonGLPI
             'FROM'   => SprintMember::getTable(),
             'WHERE'  => ['plugin_sprint_sprints_id' => $sprintIds],
         ]) as $row) {
-            $available = (float)$row['capacity_percent'];
+            $sid = (int)$row['plugin_sprint_sprints_id'];
+            $uid = (int)$row['users_id'];
+            $available = SprintAgility::effectiveCapacity($sid, $uid, (float)$row['capacity_percent']);
             if ($available <= 0) {
                 continue;
             }
-            $sid  = (int)$row['plugin_sprint_sprints_id'];
-            $uid  = (int)$row['users_id'];
             $load = (($used[$sid][$uid] ?? 0) / $available) * 100;
 
             $totals[$uid] ??= ['sum' => 0.0, 'sprints' => 0, 'peak' => 0.0, 'over' => 0, 'by_sprint' => []];
@@ -1284,6 +1752,8 @@ class SprintOverview extends CommonGLPI
             $out[] = [
                 'label' => $userId > 0 ? SprintCache::userName($userId) : __('Unassigned', 'sprint'),
                 'value' => (float)$points,
+                'filter_key' => 'member_id',
+                'filter_value' => (int)$userId,
             ];
         }
         return $out;
@@ -1305,6 +1775,8 @@ class SprintOverview extends CommonGLPI
             $out[] = [
                 'label' => $labels[$type] ?? $type,
                 'value' => (float)$count,
+                'filter_key' => 'itemtype',
+                'filter_value' => (string)$type,
             ];
         }
         return $out;
@@ -1360,6 +1832,139 @@ class SprintOverview extends CommonGLPI
     // Rendering helpers
     // =========================================================================
 
+    private static function renderScopeStability(array $chart): void
+    {
+        self::renderCard(__('Scope stability', 'sprint'), 'fas fa-arrows-left-right', __('Shows baseline scope, work added after kick-off, completed work and carry-over per sprint.', 'sprint'), function () use ($chart) {
+            self::renderGroupedBars($chart['labels'], [
+                ['label' => __('Baseline items', 'sprint'), 'color' => '#6c757d', 'values' => $chart['series']['initial_scope']],
+                ['label' => __('Added after kick-off', 'sprint'), 'color' => '#d63384', 'values' => $chart['series']['adhoc']],
+                ['label' => __('Removed during sprint', 'sprint'), 'color' => '#fd7e14', 'values' => $chart['series']['removed_scope']],
+                ['label' => __('Completed items', 'sprint'), 'color' => '#198754', 'values' => array_map(static fn($row) => $row['items_done'], array_slice($chart['sprints'], -count($chart['labels'])))],
+                ['label' => __('Carry-over items', 'sprint'), 'color' => '#dc3545', 'values' => $chart['series']['carryover']],
+            ], null, null, $chart['links']);
+        });
+    }
+
+    private static function renderFlowHealth(array $data): void
+    {
+        self::renderCard(__('Flow health', 'sprint'), 'fas fa-water', __('Compares cycle time, blocked time and rework across completed sprints.', 'sprint'), function () use ($data) {
+            $chart = self::trimToChartWindow($data);
+            self::renderGroupedBars($chart['labels'], [
+                ['label' => __('Cycle time (days)', 'sprint'), 'color' => '#0d6efd', 'values' => $chart['series']['cycle_days']],
+                ['label' => __('Blocked time (days)', 'sprint'), 'color' => '#dc3545', 'values' => $chart['series']['blocked_days']],
+            ], ['label' => __('Rework rate', 'sprint'), 'color' => '#fd7e14', 'values' => $chart['series']['rework_pct'], 'suffix' => '%', 'max' => 100], null, $chart['links']);
+        });
+    }
+
+    private static function renderCapacityDelivery(array $data): void
+    {
+        self::renderCard(__('Capacity versus delivery', 'sprint'), 'fas fa-circle-nodes', __('Each bubble is a sprint. Position compares team load with predictability. Colour shows blocked work and size shows adhoc work.', 'sprint'), function () use ($data) {
+            $loads = $data['workload_trend']['team'] ?? [];
+            if (!$loads) { echo "<div class='text-muted py-3'>" . __('No data for this period.', 'sprint') . '</div>'; return; }
+            $w = 900; $h = 320; $l = 52; $r = 24; $t = 16; $b = 56; $pw = $w - $l - $r; $ph = $h - $t - $b;
+            $xMax = max(125, (int)ceil(max(array_map(static fn($v) => (float)($v ?? 0), $loads)) / 25) * 25);
+            $okColor = '#1a9c8c'; $blockedColor = '#d63939';
+            echo "<div style='overflow-x:auto'><svg class='sprint-responsive-chart' viewBox='0 0 {$w} {$h}' role='img' style='font-size:11px;'>";
+            // Recessive horizontal grid + y labels; x labels every 25% without vertical grid.
+            for ($i = 0; $i <= 4; $i++) {
+                $y = $t + $ph - $ph * $i / 4;
+                echo "<line x1='{$l}' y1='{$y}' x2='" . ($l + $pw) . "' y2='{$y}' stroke='var(--tblr-border-color,#ddd)' stroke-opacity='.55'/>";
+                echo "<text x='" . ($l - 7) . "' y='" . ($y + 4) . "' text-anchor='end' fill='var(--tblr-secondary)'>" . (25 * $i) . "%</text>";
+            }
+            for ($pct = 0; $pct <= $xMax; $pct += 25) {
+                $x = $l + $pw * $pct / $xMax;
+                echo "<text x='{$x}' y='" . ($t + $ph + 18) . "' text-anchor='middle' fill='var(--tblr-secondary)'>{$pct}%</text>";
+            }
+            // Reference line: 100% load = fully committed team.
+            $x100 = $l + $pw * min(100, $xMax) / $xMax;
+            echo "<line x1='{$x100}' y1='{$t}' x2='{$x100}' y2='" . ($t + $ph) . "' stroke='var(--tblr-secondary,#888)' stroke-opacity='.5' stroke-dasharray='4,4'/>";
+            echo "<text x='" . ($x100 + 4) . "' y='" . ($t + 10) . "' fill='var(--tblr-secondary)' font-size='10'>" . htmlescape(__('100% load', 'sprint')) . "</text>";
+
+            // Large bubbles first so small ones stay clickable on top.
+            $bubbles = [];
+            foreach ($data['sprints'] as $i => $row) {
+                $load = (float)($loads[$i] ?? 0);
+                $bubbles[] = ['row' => $row, 'load' => $load, 'radius' => 6 + min(16, (int)$row['adhoc'] * 2)];
+            }
+            usort($bubbles, static fn($a, $b2) => $b2['radius'] <=> $a['radius']);
+            foreach ($bubbles as $bubble) {
+                $row = $bubble['row'];
+                $predict = (float)$row['predictability'];
+                $cx = number_format($l + $pw * min($xMax, $bubble['load']) / $xMax, 1, '.', '');
+                $cy = number_format($t + $ph - $ph * min(100, $predict) / 100, 1, '.', '');
+                $radius = $bubble['radius'];
+                $blocked = (int)$row['blocked'] > 0;
+                $color = $blocked ? $blockedColor : $okColor;
+                // Blocked = filled, healthy = ring: state stays readable without color.
+                $fill = $blocked ? $color : $color . '2e';
+                $title = $row['name']
+                    . ' · ' . sprintf(__('%d%% load', 'sprint'), (int)round($bubble['load']))
+                    . ' · ' . sprintf(__('%s%% predictability', 'sprint'), $predict)
+                    . ' · ' . sprintf(__('%d blocked', 'sprint'), (int)$row['blocked'])
+                    . ' · ' . sprintf(__('%d adhoc', 'sprint'), (int)$row['adhoc']);
+                echo "<a href='" . htmlescape(Sprint::getFormURLWithID((int)$row['id'])) . "'>"
+                    . "<circle cx='{$cx}' cy='{$cy}' r='" . ($radius + 1.5) . "' fill='none' stroke='var(--tblr-bg-surface,#fff)' stroke-width='2'/>"
+                    . "<circle cx='{$cx}' cy='{$cy}' r='{$radius}' fill='{$fill}' stroke='{$color}' stroke-width='2' fill-opacity='" . ($blocked ? '.6' : '1') . "'>"
+                    . "<title>" . htmlescape($title) . "</title></circle></a>";
+            }
+            echo "<text x='" . ($l + $pw / 2) . "' y='" . ($h - 6) . "' text-anchor='middle' fill='var(--tblr-secondary)'>" . htmlescape(__('Average team load', 'sprint')) . "</text><text transform='translate(13 " . ($t + $ph / 2) . ") rotate(-90)' text-anchor='middle' fill='var(--tblr-secondary)'>" . htmlescape(__('Predictability', 'sprint')) . '</text></svg></div>';
+
+            echo "<div class='d-flex flex-wrap gap-3 mt-1 small text-muted'>";
+            echo "<span><span style='display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid {$okColor};vertical-align:-2px;'></span> " . __('No blocked work', 'sprint') . "</span>";
+            echo "<span><span style='display:inline-block;width:11px;height:11px;border-radius:50%;background:{$blockedColor};vertical-align:-2px;'></span> " . __('Blocked work', 'sprint') . "</span>";
+            echo "<span>" . __('Bubble size = adhoc items', 'sprint') . "</span>";
+            echo "</div>";
+        });
+    }
+
+    private static function renderDependencyHealth(array $data): void
+    {
+        $dep = $data['dependencies'];
+        self::renderCard(__('Dependency health', 'sprint'), 'fas fa-link', __('Tracks open and resolved dependencies, waiting time and linked work that spans several sprints.', 'sprint'), function () use ($dep) {
+            echo "<div class='row g-2'>";
+            foreach ([
+                [__('Open dependencies', 'sprint'), $dep['open'], 'red'],
+                [__('Resolved dependencies', 'sprint'), $dep['resolved'], 'green'],
+                [__('Average waiting time', 'sprint'), number_format($dep['avg_age'], 1) . ' ' . __('days', 'sprint'), 'orange'],
+                [__('Linked work across sprints', 'sprint'), $dep['multi_sprint'], 'blue'],
+                [__('Without owner', 'sprint'), $dep['without_owner'], 'purple'],
+            ] as [$label, $value, $color]) echo "<div class='col-6 col-lg'><div class='border rounded p-3 h-100'><div class='h2 text-{$color} mb-1'>" . htmlescape((string)$value) . "</div><div class='text-muted small'>" . htmlescape($label) . '</div></div></div>';
+            echo '</div>';
+        });
+    }
+
+    private static function renderComparison(array $current, string $period, array $filters): void
+    {
+        if (empty($filters['compare_period']) && empty($filters['compare_scrum_master'])) return;
+        $compareFilters = $filters;
+        $comparePeriod = $filters['compare_period'] ?: $period;
+        if (!empty($filters['compare_period'])) {
+            $compareFilters['from'] = '';
+            $compareFilters['to'] = '';
+        }
+        if (!empty($filters['compare_scrum_master'])) $compareFilters['scrum_master'] = (int)$filters['compare_scrum_master'];
+        $compareFilters['compare_period'] = '';
+        $compareFilters['compare_scrum_master'] = 0;
+        $other = self::collect($comparePeriod, false, $compareFilters);
+        self::renderCard(__('Comparison', 'sprint'), 'fas fa-code-compare', __('Compare the current selection with another period or Scrum Master.', 'sprint'), function () use ($current, $other) {
+            echo "<div class='table-responsive'><table class='table table-sm'><thead><tr><th>" . __('Metric', 'sprint') . "</th><th>" . __('Current selection', 'sprint') . "</th><th>" . __('Comparison', 'sprint') . "</th><th>" . __('Difference', 'sprint') . "</th></tr></thead><tbody>";
+            foreach ([
+                __('Completed sprints', 'sprint') => ['sprint_count', ''],
+                __('Completed points', 'sprint') => ['pts_done', ''],
+                __('Avg velocity per sprint', 'sprint') => ['avg_velocity', ''],
+                __('Predictability', 'sprint') => ['predictability', '%'],
+                __('Carry-over items', 'sprint') => ['carryover', ''],
+                __('Adhoc items', 'sprint') => ['adhoc', ''],
+            ] as $label => [$key, $suffix]) { $a = (float)$current[$key]; $b = (float)$other[$key]; echo '<tr><td>' . htmlescape($label) . '</td><td>' . round($a, 1) . $suffix . '</td><td>' . round($b, 1) . $suffix . "</td><td class='" . ($a >= $b ? 'text-success' : 'text-danger') . "'>" . ($a - $b > 0 ? '+' : '') . round($a - $b, 1) . $suffix . '</td></tr>'; }
+            echo '</tbody></table></div>';
+        });
+    }
+
+    private static function renderOverviewBehaviour(): void
+    {
+        echo "<script>(function(){var root=document.querySelector('.sprint-overview-shell')||document;var compact=new URLSearchParams(location.search).get('view')==='compact';root.querySelectorAll('.card.mb-3').forEach(function(card,i){card.classList.add('sprint-overview-collapsible');var body=card.querySelector('.card-body');var title=card.querySelector('.card-title');if(!body||!title)return;var key='sprint-overview-card-'+i;title.style.cursor='pointer';title.setAttribute('title','" . addslashes(__('Click to collapse or expand', 'sprint')) . "');var hidden=compact||localStorage.getItem(key)==='1';if(hidden)body.classList.add('sprint-overview-collapsed');title.addEventListener('click',function(){body.classList.toggle('sprint-overview-collapsed');localStorage.setItem(key,body.classList.contains('sprint-overview-collapsed')?'1':'0');});});var storeKey='sprint-overview-saved-filters',select=document.getElementById('sprint-saved-filters'),save=document.getElementById('sprint-save-filter');function read(){try{return JSON.parse(localStorage.getItem(storeKey)||'{}')}catch(e){return {}}}function fill(){if(!select)return;var all=read();Object.keys(all).sort().forEach(function(name){var o=document.createElement('option');o.value=all[name];o.textContent=name;select.appendChild(o);});}if(save)save.addEventListener('click',function(){var name=window.prompt('" . addslashes(__('Name this filter', 'sprint')) . "');if(!name)return;var all=read();all[name]=location.href;localStorage.setItem(storeKey,JSON.stringify(all));location.reload();});if(select)select.addEventListener('change',function(){if(this.value)location.href=this.value;});fill();})();</script>";
+    }
+
     private static function renderCard(string $title, string $icon, string $subtitle, callable $body, string $wrapper = ''): void
     {
         if ($wrapper !== '') {
@@ -1388,7 +1993,7 @@ class SprintOverview extends CommonGLPI
      * @param array{label:string,color:string,values:array,suffix:string,max:int}|null $line
      * @param array{label:string,value:float,color:string}|null $reference
      */
-    private static function renderGroupedBars(array $labels, array $series, ?array $line = null, ?array $reference = null): void
+    private static function renderGroupedBars(array $labels, array $series, ?array $line = null, ?array $reference = null, array $links = []): void
     {
         $n = count($labels);
         if ($n === 0) {
@@ -1425,8 +2030,8 @@ class SprintOverview extends CommonGLPI
         $halo    = "paint-order:stroke;stroke:var(--tblr-bg-surface,#fff);stroke-width:3.5px;stroke-linejoin:round;";
 
         echo "<div style='overflow-x:auto;'>";
-        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
-            . "style='width:100%;height:auto;min-width:520px;font-family:sans-serif;font-size:11px;'>";
+        echo "<svg class='sprint-responsive-chart' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "style='min-width:520px;font-family:sans-serif;font-size:11px;'>";
 
         for ($t = 0; $t <= 4; $t++) {
             $value = (int)round($yMax * $t / 4);
@@ -1445,9 +2050,11 @@ class SprintOverview extends CommonGLPI
                 $value = (float)($set['values'][$i] ?? 0);
                 $x     = $startX + $index * ($barW + $gap);
                 $y     = $yAt($value);
+                if (!empty($links[$i])) echo "<a href='" . htmlescape($links[$i]) . "'>";
                 echo "<rect x='" . $fmt($x) . "' y='" . $fmt($y) . "' width='" . $fmt($barW) . "' "
                     . "height='" . $fmt($plotH - ($y - $padT)) . "' rx='2' fill='" . $set['color'] . "'>"
                     . "<title>" . htmlescape($labels[$i] . ' — ' . $set['label'] . ': ' . round($value)) . "</title></rect>";
+                if (!empty($links[$i])) echo '</a>';
                 if ($value > 0) {
                     echo "<text x='" . $fmt($x + $barW / 2) . "' y='" . $fmt($y - 4) . "' text-anchor='middle' "
                         . "fill='" . $set['color'] . "' font-weight='600' style='{$halo}'>" . round($value) . "</text>";
@@ -1533,8 +2140,15 @@ class SprintOverview extends CommonGLPI
         echo "<table class='table table-vcenter mb-0 sprint-overview-ranked'><tbody>";
         foreach ($rows as $row) {
             $share = number_format(((float)$row['value'] / $max) * 100, 1, '.', '');
+            $url = '';
+            if (!empty($row['filter_key']) && $row['filter_value'] !== '') {
+                $query = $_GET;
+                $query['section'] = self::SECTION_OVERVIEW;
+                $query[$row['filter_key']] = $row['filter_value'];
+                $url = Plugin::getWebDir('sprint') . '/front/sprint.php?' . http_build_query($query);
+            }
             echo "<tr>";
-            echo "<td class='sprint-overview-ranked-label'>" . htmlescape($row['label']) . "</td>";
+            echo "<td class='sprint-overview-ranked-label'>" . ($url !== '' ? "<a href='" . htmlescape($url) . "'>" : '') . htmlescape($row['label']) . ($url !== '' ? '</a>' : '') . "</td>";
             echo "<td><div class='progress progress-sm'><div class='progress-bar bg-" . $color . "' "
                 . "role='progressbar' style='width:{$share}%' aria-valuenow='{$share}' aria-valuemin='0' aria-valuemax='100'></div></div></td>";
             echo "<td class='text-end text-nowrap'>" . (int)$row['value']

@@ -3,13 +3,11 @@
 namespace GlpiPlugin\Sprint;
 
 use CommonDBTM;
-use CommonGLPI;
 use Html;
 use Session;
 use User;
 use Project;
 use Dropdown;
-use Search;
 
 /**
  * Sprint - a configurable-length sprint with goal, status, and linked items.
@@ -516,10 +514,22 @@ class Sprint extends CommonDBTM
      */
     public function post_updateItem($history = 1)
     {
+        if (in_array('status', $this->updates ?? [], true)
+            && ($this->fields['status'] ?? '') === self::STATUS_ACTIVE
+            && (($this->oldvalues['status'] ?? '') !== self::STATUS_ACTIVE)) {
+            global $DB;
+            $items = (new SprintItem())->find(['plugin_sprint_sprints_id' => (int)$this->getID()]);
+            $baselineItems = count($items);
+            $baselinePoints = array_sum(array_map(static fn($item) => max(0, (int)($item['story_points'] ?? 0)), $items));
+            $DB->update(self::getTable(), ['scope_baseline_items' => $baselineItems, 'scope_baseline_points' => $baselinePoints], ['id' => (int)$this->getID()]);
+            $this->fields['scope_baseline_items'] = $baselineItems;
+            $this->fields['scope_baseline_points'] = $baselinePoints;
+        }
         if (
             in_array('status', $this->updates ?? [], true)
             && ($this->fields['status'] ?? '') === self::STATUS_COMPLETED
         ) {
+            SprintAgility::carryImprovementsForward($this);
             $unfinished = countElementsInTable(
                 SprintItem::getTable(),
                 [
@@ -559,6 +569,7 @@ class Sprint extends CommonDBTM
         $this->addStandardTab('GlpiPlugin\Sprint\SprintFastlane', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintMeeting', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintRequest', $ong, $options);
+        $this->addStandardTab('GlpiPlugin\Sprint\SprintAgility', $ong, $options);
         $this->addStandardTab('GlpiPlugin\Sprint\SprintAudit', $ong, $options);
         $this->addStandardTab('Log', $ong, $options);
 
@@ -682,7 +693,7 @@ class Sprint extends CommonDBTM
             User::dropdown(['name' => 'users_id', 'value' => $this->fields['users_id'] ?? 0, 'right' => 'all']);
             echo "</td>";
             echo "<td>" . __('Fastlane capacity cap (%)', 'sprint') . "<br>"
-                . "<span class='text-muted' style='font-size:0.82em;'>" . __('0 = no cap; exceeding it shows as overflow on the fastlane', 'sprint') . "</span></td>";
+                . "<span class='text-muted' style='font-size:0.82em;'>" . __('0 = no cap. Exceeding it shows as overflow on the fastlane', 'sprint') . "</span></td>";
             echo "<td>";
             Dropdown::showNumber('fastlane_capacity', [
                 'value' => $this->fields['fastlane_capacity'] ?? 0,
@@ -924,81 +935,7 @@ class Sprint extends CommonDBTM
         if ($templateId > 0) {
             SprintTemplate::applyToSprint($templateId, $this->getID());
         }
+        SprintAgility::carryImprovementsToSprint($this);
     }
 
-    /**
-     * Linked-item counts and points for the dashboard.
-     *
-     * @return array
-     */
-    public function getSprintStats(): array
-    {
-        $stats = [
-            'total_items'     => 0,
-            'todo_items'      => 0,
-            'in_progress'     => 0,
-            'done_items'      => 0,
-            'blocked_items'   => 0,
-            'total_points'    => 0,
-            'done_points'     => 0,
-            'tickets'         => 0,
-            'changes'         => 0,
-            'project_tasks'   => 0,
-            'meetings'        => 0,
-        ];
-
-        if (!$this->getID()) {
-            return $stats;
-        }
-
-        $item = new SprintItem();
-        $items = $item->find(['plugin_sprint_sprints_id' => $this->getID()]);
-
-        $stats['total_items'] = count($items);
-        foreach ($items as $row) {
-            // Fastlane items don't count toward velocity — points are ignored.
-            $isFastlane = (int)($row['is_fastlane'] ?? 0) === 1;
-            if (!$isFastlane) {
-                $stats['total_points'] += (int)$row['story_points'];
-            }
-            switch ($row['status']) {
-                case SprintItem::STATUS_TODO:
-                    $stats['todo_items']++;
-                    break;
-                case SprintItem::STATUS_IN_PROGRESS:
-                    $stats['in_progress']++;
-                    break;
-                case SprintItem::STATUS_DONE:
-                    $stats['done_items']++;
-                    if (!$isFastlane) {
-                        $stats['done_points'] += (int)$row['story_points'];
-                    }
-                    break;
-                case SprintItem::STATUS_BLOCKED:
-                    $stats['blocked_items']++;
-                    break;
-            }
-        }
-
-        foreach ($items as $row) {
-            switch ($row['itemtype'] ?? '') {
-                case 'Ticket':
-                    $stats['tickets']++;
-                    break;
-                case 'Change':
-                    $stats['changes']++;
-                    break;
-                case 'ProjectTask':
-                    $stats['project_tasks']++;
-                    break;
-            }
-        }
-
-        $meeting = new SprintMeeting();
-        $stats['meetings'] = count($meeting->find([
-            'plugin_sprint_sprints_id' => $this->getID()
-        ]));
-
-        return $stats;
-    }
 }

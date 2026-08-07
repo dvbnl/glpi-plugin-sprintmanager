@@ -11,11 +11,6 @@
     --sprint-dependency: #20c997;
     --sprint-blocked: #dc3545;
     --sprint-todo: #6c757d;
-    --sprint-cancelled: #dc3545;
-    --sprint-planned: #6c757d;
-    --sprint-active: #0d6efd;
-    --sprint-completed: #198754;
-    --sprint-points: #d68a00;
     --sprint-radius: 8px;
     --sprint-radius-sm: 6px;
     --sprint-radius-pill: 20px;
@@ -24,7 +19,6 @@
     --sprint-transition: 0.2s ease;
     --sprint-muted: #6c757d;
     --sprint-border: var(--tblr-border-color, #e2e8f0);
-    --sprint-bg-subtle: var(--tblr-bg-surface-secondary, #f8fafc);
 }
 
 /* === Dashboard stat cards ================================================
@@ -184,6 +178,20 @@ tr.sprint-adhoc > td {
     padding: 16px 0;
 }
 
+/* Responsive inline charts. */
+.sprint-responsive-chart {
+    display: block;
+    width: 100%;
+    max-width: none;
+    height: auto;
+}
+
+.sprint-overview-collapsed { display: none; }
+.sprint-overview-filters summary { cursor: pointer; list-style: none; }
+.sprint-overview-filters summary::-webkit-details-marker { display: none; }
+.sprint-overview-filters select,
+.sprint-overview-filters input { min-height: 31px; }
+
 /* Filtering must override GLPI row helper classes such as `tab_bg_1`,
    which can otherwise keep table rows visible. */
 .sprint-row-hidden {
@@ -207,6 +215,170 @@ tr.sprint-adhoc > td {
     font-weight: 600;
     line-height: 1.5;
     white-space: nowrap;
+}
+.sprint-matrix-cell { vertical-align: middle; }
+.sprint-matrix-bar {
+    position: relative;
+    height: 4px;
+    max-width: 90px;
+    margin: 3px auto 2px;
+    border-radius: 2px;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    overflow: hidden;
+}
+.sprint-matrix-bar > div { height: 100%; border-radius: 2px; }
+.sprint-matrix-min-tick {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: #d97706;
+}
+
+/* Category limits modal: dual-range slider (min = amber, max = blue thumb). */
+.sprint-limits-row {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--tblr-border-color, #e2e8f0);
+}
+.sprint-limits-row:last-child { border-bottom: none; }
+.sprint-limits-row-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+.sprint-limits-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+}
+.sprint-limits-vals {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.sprint-limits-vals label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    font-size: 0.8em;
+    color: var(--tblr-secondary, #64748b);
+}
+.sprint-limits-vals input {
+    width: 72px;
+    text-align: right;
+}
+.sprint-limits-slider {
+    position: relative;
+    height: 24px;
+}
+.sprint-limits-slider input[type='range'] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 24px;
+    margin: 0;
+    background: none;
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: none;
+}
+.sprint-limits-slider input[type='range']::-webkit-slider-runnable-track { background: transparent; }
+.sprint-limits-slider input[type='range']::-moz-range-track { background: transparent; }
+.sprint-limits-slider input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--tblr-primary, #0d6efd);
+    border: 2px solid var(--tblr-bg-surface, #fff);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    margin-top: 5px;
+}
+.sprint-limits-slider input[type='range']::-moz-range-thumb {
+    pointer-events: auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--tblr-primary, #0d6efd);
+    border: 2px solid var(--tblr-bg-surface, #fff);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+}
+.sprint-limits-slider .sprint-range-min::-webkit-slider-thumb { background: #d97706; }
+.sprint-limits-slider .sprint-range-min::-moz-range-thumb { background: #d97706; }
+.sprint-limits-track {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    top: 10px;
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, currentColor 15%, transparent);
+}
+.sprint-limits-fill {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--tblr-primary, #0d6efd);
+}
+.sprint-cap-edit {
+    display: inline-block;
+    padding: 0 8px;
+    border: 1px dashed var(--tblr-border-color, #cbd5e1);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--tblr-secondary, #6c757d);
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1.7;
+    cursor: pointer;
+    transition: color 0.1s, border-color 0.1s;
+}
+.sprint-cap-edit:hover {
+    color: var(--tblr-primary, #0d6efd);
+    border-color: var(--tblr-primary, #0d6efd);
+}
+.sprint-cap-edit i { font-size: 0.85em; margin-right: 2px; }
+.sprint-aging-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    margin-left: 4px;
+    border-radius: 10px;
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.sprint-aging-warn {
+    background: color-mix(in srgb, #f59f00 16%, var(--tblr-bg-surface, #fff));
+    color: #b06d00;
+    border: 1px solid #f59f00;
+}
+.sprint-aging-late {
+    background: color-mix(in srgb, #dc3545 14%, var(--tblr-bg-surface, #fff));
+    color: #b02a37;
+    border: 1px solid #dc3545;
+}
+.sprint-category-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    margin-left: 4px;
+    border-radius: 10px;
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 .sprint-dep-pill {
     display: inline-block;
@@ -690,6 +862,14 @@ table.tab_cadre_fixe.sprint-themed {
 .sprint-backlog-row.sprint-row-dragging { opacity: 0.45; }
 .sprint-backlog-grip:active { cursor: grabbing; }
 
+/* Multi-selected rows (Ctrl/Cmd-click) travel together on drag */
+.sprint-backlog-row.sprint-row-selected > td {
+    background: color-mix(in srgb, var(--tblr-primary, #0d6efd) 14%, transparent);
+}
+.sprint-backlog-row.sprint-row-selected > td:first-child {
+    box-shadow: inset 3px 0 0 var(--tblr-primary, #0d6efd);
+}
+
 /* === SprintManager overview page ==========================================
    Layout, cards and tiles come from Tabler; only the bits it has no class for
    live here. */
@@ -739,3 +919,123 @@ table.tab_cadre_fixe.sprint-themed {
     vertical-align: middle;
 }
 .sprint-overview-legend-line.dashed { border-top-style: dashed; opacity: 0.7; }
+
+/* === Guided meeting rail (review / retrospective) ========================
+   Sticky control bar above one card per phase; colors derive from Tabler
+   theme variables so dark mode keeps working. */
+.sprint-meeting-rail {
+    margin: 12px 0;
+}
+.sprint-meeting-controlbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    background: var(--tblr-bg-surface, #fff);
+    border: 1px solid var(--sprint-border);
+    border-radius: var(--sprint-radius);
+    box-shadow: var(--sprint-shadow);
+}
+.sprint-meeting-timer {
+    min-width: 90px;
+    font-variant-numeric: tabular-nums;
+}
+.sprint-phase-card {
+    border: 1px solid var(--sprint-border);
+    border-left: 4px solid var(--sprint-border);
+    border-radius: var(--sprint-radius);
+    background: var(--tblr-bg-surface, #fff);
+    margin-bottom: 14px;
+    transition: border-color var(--sprint-transition), opacity var(--sprint-transition);
+    scroll-margin-top: 70px;
+}
+.sprint-phase-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--tblr-bg-surface-secondary, #f8f9fa);
+    color: var(--tblr-body-color, inherit);
+    border-radius: var(--sprint-radius) var(--sprint-radius) 0 0;
+    font-weight: 600;
+}
+.sprint-phase-card-header[data-sprint-action="meeting-goto"] {
+    cursor: pointer;
+    user-select: none;
+}
+.sprint-phase-card-header[data-sprint-action="meeting-goto"]:hover {
+    background: color-mix(in srgb, var(--tblr-bg-surface-secondary, #f8f9fa) 80%, var(--tblr-body-color, #000) 12%);
+}
+.sprint-phase-card-body {
+    padding: 12px 14px;
+}
+.sprint-phase-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--tblr-bg-surface, #fff);
+    border: 2px solid var(--sprint-todo);
+    color: var(--tblr-body-color, inherit);
+    font-size: 0.85em;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.sprint-phase-done-icon {
+    display: none;
+}
+.sprint-phase-card.is-active {
+    border-left-color: var(--sprint-progress);
+}
+.sprint-phase-card.is-active .sprint-phase-number {
+    border-color: var(--sprint-progress);
+    background: var(--sprint-progress);
+    color: #fff;
+}
+.sprint-phase-card.is-done {
+    border-left-color: var(--sprint-done);
+}
+.sprint-phase-card.is-done .sprint-phase-number {
+    border-color: var(--sprint-done);
+    color: var(--sprint-done);
+}
+.sprint-phase-card.is-done .sprint-phase-done-icon {
+    display: inline;
+}
+.sprint-phase-card.is-upcoming .sprint-phase-card-body {
+    opacity: 0.75;
+}
+.sprint-goal-quote {
+    margin: 0;
+    padding: 8px 12px;
+    border-left: 3px solid var(--sprint-progress);
+    background: var(--tblr-bg-surface-secondary, #f8f9fa);
+    border-radius: 0 var(--sprint-radius-sm) var(--sprint-radius-sm) 0;
+    font-style: italic;
+}
+.sprint-phase-chart {
+    border: 1px solid var(--sprint-border);
+    border-radius: var(--sprint-radius-sm);
+    padding: 10px 12px;
+    background: var(--tblr-bg-surface, transparent);
+}
+.sprint-demo-group {
+    border: 1px solid var(--sprint-border);
+    border-radius: var(--sprint-radius-sm);
+    padding: 8px 10px;
+    height: 100%;
+    background: var(--tblr-bg-surface, transparent);
+}
+.sprint-imp-list .sprint-imp-item {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--sprint-border);
+}
+.sprint-imp-list .sprint-imp-item:last-of-type {
+    border-bottom: none;
+}
+.sprint-imp-item .sprint-imp-vote-btn {
+    text-decoration: none;
+}

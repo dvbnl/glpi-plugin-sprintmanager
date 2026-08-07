@@ -130,7 +130,7 @@ class SprintFastlane extends CommonGLPI
             $rowTags = $tagsById[$itemId] ?? [];
             $rowDeps = $depsById[$itemId] ?? [];
 
-            echo "<tr class='tab_bg_1'>";
+            echo "<tr class='tab_bg_1' " . SprintItem::buildItemDataAttrs($row, $rowTags) . ">";
             echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
                 htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td>" . $linkedDisplay . "</td>";
@@ -141,6 +141,9 @@ class SprintFastlane extends CommonGLPI
             echo "<td class='center'><strong>" . SprintMember::formatCapacity($totalCap) . "%</strong></td>";
             if ($canedit) {
                 echo "<td class='center' style='white-space:nowrap;'>";
+                echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-quick-edit-btn me-1' "
+                    . "title='" . __('Quick edit', 'sprint') . "' data-item-id='{$itemId}'>"
+                    . "<i class='fas fa-pen'></i></button>";
                 echo "<a href='" . SprintItem::getFormURLWithID($itemId) .
                     "' class='btn btn-sm btn-outline-primary' title='" . __('Open') . "'>" .
                     "<i class='fas fa-edit'></i></a>";
@@ -151,8 +154,8 @@ class SprintFastlane extends CommonGLPI
 
         echo "</table></div>";
 
-        // Mount the modal + JS for the "quick edit linked item" buttons;
-        // without it those buttons render but do nothing.
+        // Modals for the quick-edit / linked-item buttons above.
+        SprintItem::renderQuickEditUI((int)$sprintId);
         SprintItem::renderLinkedQuickEditUI();
     }
 }

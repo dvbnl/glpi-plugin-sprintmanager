@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.2.0');
+define('PLUGIN_SPRINT_VERSION', '1.2.1');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -76,6 +76,7 @@ function plugin_init_sprint(): void
 
     // "Configure" wrench icon in the Plugins list → opens the settings page.
     $PLUGIN_HOOKS['config_page']['sprint'] = 'front/config.php';
+    $PLUGIN_HOOKS['display_central']['sprint'] = 'plugin_sprint_display_central';
 
     // Assets: public/ on GLPI 11, css/js/ on GLPI 10. Use __DIR__ (not a
     // hardcoded plugins/ path) so it also resolves under marketplace/.
@@ -164,6 +165,12 @@ function plugin_init_sprint(): void
         ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
     );
 
+    // Sprint agility tab.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintAgility',
+        ['addtabon' => ['GlpiPlugin\Sprint\Sprint']]
+    );
+
     // Ticket/Change/ProjectTask tabs only on the GLPI objects (not on Sprint)
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintTicket',
@@ -219,6 +226,12 @@ function plugin_init_sprint(): void
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintTemplateMeeting',
         ['addtabon' => ['GlpiPlugin\Sprint\SprintTemplate']]
+    );
+
+    // Fixed weekly leave rules, shown inside the template Members tab.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintTemplateAvailability',
+        ['addtabon' => []]
     );
 
     // Item actions hooks

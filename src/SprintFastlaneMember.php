@@ -5,7 +5,6 @@ namespace GlpiPlugin\Sprint;
 use CommonDBRelation;
 use CommonGLPI;
 use Html;
-use Session;
 use User;
 use Dropdown;
 

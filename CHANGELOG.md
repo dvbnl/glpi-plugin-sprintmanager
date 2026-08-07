@@ -2,6 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-08-07
+
+### Added
+- **Global Definition of Ready / Definition of Done** in the plugin settings (Setup > General config > SprintManager), replacing the per-sprint definitions on the Agility tab.
+- **DoR dialog on sprint assignment**: assigning backlog items to a sprint (single or bulk "Assign all ready") opens a Definition of Ready checklist; every check is mandatory and enforced server-side. Fastlane items are exempt.
+- **DoD dialog on In Review / Done**: dragging a board card to In Review or Done opens the Definition of Done checklist (all checks required); the quick-edit dialog carries the same checklist inline with a completion badge (e.g. "4/4 ✓").
+- **Guided review & retrospective meetings**: the Sprint Review and Sprint Retrospective pages are full top-to-bottom guided meetings. A sticky control bar (status badge, live phase timer that turns red past the timebox, previous/next/end navigation) drives one card per phase with the content that phase needs. Review (6 phases): sprint goal & period recap, results in numbers (stat cards + burndown and velocity charts), the interactive sprint-items walkthrough (quick edit, carry-over, back-to-backlog, filters, newly-blocked highlighting), a demo running order grouped per owner, stakeholder feedback capture and a wrap-up with a carry-over summary. Retrospective (7 phases): check-in, previous retro actions (carried in from the last sprint, toggled done inline), sprint in numbers incl. previous-sprint velocity, collecting Start/Stop/Continue input (optionally anonymous), cluster & vote with live re-sorting, defining owned actions with due dates, and a closing summary of top themes and agreed actions. The session is persisted — status, current phase, start/end time and per-phase notes with autosave — so a refresh resumes the meeting mid-phase and a completed meeting stays readable as a report. Driving is restricted to the Scrum Master or the meeting facilitator; every sprint member can contribute input and vote from the meeting itself.
+- **Epic picker in quick edit** (Scrum Master only), replacing the removed per-item readiness table.
+- **Definition of Done on the full item form**: the sprint item form now carries the DoD checklist, so checks can be ticked outside the quick-edit dialog; a status + DoD change in a single save is validated together.
+- **Quick edit for fastlane items everywhere**: the dashboard Fastlane section and the sprint Fastlane tab gained the shared quick-edit dialog (fastlane items previously had no quick edit there, leaving their Definition of Done unreachable).
+- **Agility cockpit** with Definition of Ready/Done policies, item acceptance criteria and checklists, configurable soft/hard WIP limits and reusable policy defaults on sprint templates.
+- **Linked status mapping** per GLPI object type, including separate solved/closed and reopened outcomes. Definition of Done remains authoritative when automation targets Done.
+- **Retrospective improvement tracking** with Start/Stop/Continue/action categories, optional anonymity, voting, owner, due date, completion and automatic carry-forward to the next sprint.
+- **Availability exceptions** that calculate effective capacity per working day and feed member dashboards, capacity validation and planning suggestions.
+- **Historical forecasting and scenario planning** with an 85%-safe throughput figure, delivery confidence and adjustable scope/availability assumptions.
+- **SLA/deadline risks**, smart owner suggestions, and entity-wide epics with progress across multiple sprints.
+- **Personal action signals** for approvals, blocked work and dependencies, plus hourly meeting reminders and stale-approval escalation.
+- **Saved Kanban views** with owner/tag filters and owner swimlanes.
+- **Automated quality checks** through PHP lint, static migration contracts and a PHP 8.1–8.4 GitHub Actions matrix.
+- **Overview control centre** with separate live sprint cards, shareable advanced filters, saved filter sets, custom date ranges, comparison mode and compact collapsible cards. New scope stability, flow health, capacity-versus-delivery and dependency-health analyses support direct sprint drill-down.
+- **Team pace** card on the Agility tab: per member, completed story points are compared against the elapsed working-day share of the sprint, with an ahead/on-schedule/behind verdict, blocked-work warnings and the members most behind sorted to the top.
+- **Fixed weekly leave on sprint templates**: per-member weekday rules (e.g. every Friday 0%) that are materialized into dated availability exceptions for the sprint window when a sprint is created from the template.
+- **Fastlane capacity cap on sprint templates**, copied onto sprints created from the template.
+- **Projected burndown**: items currently in review are shown as a dashed projection segment with its own legend entry — where the line lands once review moves to done at the next stand-up.
+- **Scenario planner baseline**: expected team availability is now pre-computed from member maximum capacity and availability exceptions instead of defaulting to 100%.
+- **Capacity-versus-delivery chart**: legend, 100%-load reference line, round axis ticks and a colour-blind-safe teal/red encoding (blocked = filled, healthy = ring).
+- **Backlog categories**: admin-defined categories (name + color) managed in the plugin settings. The backlog is grouped into a collapsible section per category with item count and estimated-capacity subtotal; items can be dragged between sections to recategorize, and the edit dialog gained a category dropdown.
+- **Capacity-per-category dashboard** on top of the backlog: pick a planned/active sprint and see the estimated backlog capacity routed to it per category, plus a total against the sprint's team capacity.
+- **Per-category capacity limits per sprint**: the Scrum Master sets an optional minimum and maximum (%) per category for each upcoming sprint in a Limits dialog with dual-range sliders (0–1000%); over-allocation is flagged in red, under-allocation against the minimum in amber.
+- **Active / non-active tier**: park long-term or low-priority backlog items in a collapsed "Non-active (long term)" section, outside the active planning sections and capacity totals.
+- **Priority rank numbers** in every category section — the higher an item sits (drag order), the sooner it should be picked up.
+- **Auto-remove solved items from the backlog** (setting, default on): a backlog item is removed as soon as its linked ticket/change/problem/project task is solved or closed, plus a daily cron sweep for changes made outside the normal flow.
+- **Retro input for the whole team**: every sprint member can add Start/Stop/Continue input and vote (one vote per user, toggleable) in the guided retrospective meeting — no longer Scrum-Master-only. Closing items and other agility edits stay with the Scrum Master (the meeting facilitator can also toggle actions done).
+- **Prognosis matrix**: the backlog capacity dashboard is a category × upcoming-sprints matrix (up to 4 sprints, plus a "Not yet planned" column), showing allocated capacity against the configured min/max limits and totals against each sprint's team capacity.
+- **Work supply per category**: backlog capacity divided by the average delivered capacity per sprint (last 6 completed sprints, with an overall fallback) — "≈ 2.5 sprints of work" at a glance.
+- **Backlog inflow vs outflow**: weekly chart (last 12 weeks) of new backlog work versus work assigned to a sprint or resolved, with a category filter. Events are recorded from 1.2.1 onward in a dedicated flow table, so auto-cleaned items keep counting.
+- **Aging badges**: unplanned active backlog items older than a configurable threshold (default 21 days, red at twice that) get a badge nudging to schedule or park them.
+
+### Changed
+- **WIP limits apply per person**: the In Progress / In Review / Dependency limits now cap each member's items in a column instead of the whole column; fastlane items no longer count toward or get blocked by WIP limits. The separate "WIP limit per person" field is gone, and the board over-WIP indicator follows the per-person rule.
+- **Agility tab is realtime**: voting, status toggles, adding improvement actions and marking sprint action signals as read update in place without reloading the tab; failed saves now report an error instead of a false "Saved".
+- **Sprint action signals auto-resolve**: approval notifications are marked read automatically as soon as their sprint has no pending requests left.
+- **Agility tab improvements card is a read-only overview**: adding input, voting and defining actions moved into the guided retrospective meeting; the Scrum Master keeps the done/open toggle on the tab.
+- Definition of Done is now also required when moving to In Review (previously only Done).
+- Capacity validation and member capacity cards now use dated effective availability.
+- Board status transitions enforce configured WIP and Definition of Done policies on the server, including AJAX moves.
+- Sprints now retain the template they were created from so overview filtering can use it.
+- **Effective capacity (availability exceptions) is now applied consistently everywhere**: team capacity table, personal capacity view, sprint export, backlog free-capacity chip/preview/AJAX endpoint, and the overview workload trend and over-capacity filter.
+- Member capacity fields are labelled **"Maximum capacity (%)"** to clarify that temporary reductions belong in availability exceptions.
+- **Agility page simplified**: all cards are collapsible (state persisted; action signals start open) with descriptions moved into tooltips; scenario sliders are read-only for non-Scrum-Masters.
+- **Agility saves via AJAX**: all agility forms save without a full page reload; only the tab content refreshes.
+- **Agility cards open by default** (personal collapse preference still persists).
+
+### Removed
+- Per-sprint DoR/DoD textareas and the per-item "Readiness & Definition of Done" table on the Agility tab, the DoR/DoD fields on sprint templates and the guided retro on the Agility tab (moved to the meeting pages).
+- Dead database columns are dropped on upgrade: `definition_ready`, `definition_done`, `wip_per_person` (sprints and sprint templates) and `acceptance_criteria` (sprint items).
+
+### Internationalisation
+- **Brazilian Portuguese (pt_BR)** joins the shipped catalogs and is translated to completion against the full string inventory.
+- The guided-meeting strings were added to the `en_GB`, `nl_NL`, `fr_FR` and `es_ES` catalogs and the `sprint.pot` template (deduplicated and completed), and all `.mo` files were recompiled.
+
+### Fixed
+- **Responsive graphs**: dashboard Velocity, Burndown and Team Activity SVGs, plus the export chart, no longer stop growing at their internal 820px coordinate width. They now continuously follow the available card width when the browser is resized.
+- **CSRF failure on all agility form submissions under GLPI 11** (epics, availability, policies, improvements): the kernel already validates and spends the single-use token for legacy front/ POSTs, so the manual re-check is now version-gated like the other handlers.
+- Scenario confidence box no longer overflows its card.
+- Yellow badges ("Missing N", request counter) now use dark text and stay readable in dark themes.
+- **Agility stat cards on completed sprints**: "Completion confidence" no longer keeps forecasting a finished sprint (it now shows the actual result: delivered vs committed points) and the misleading "Ready items" card is split into "Ready to start (DoR)" for running sprints and "Items completed" for finished ones.
+
 ## [1.2.0] - 2026-07-30
 
 ### Added
@@ -63,14 +131,14 @@ All notable changes to this project will be documented in this file.
 - **Compact, modernised dashboard stat cards**: the oversized pastel stat blocks are replaced by compact horizontal chips — tinted icon square, value + label stack, per-status accent border — styled via CSS classes (theme-aware through Tabler tokens, dark-mode friendly) instead of inline styles. All seven cards now fit a single row on desktop
 
 ### Security
-- **XSS**: removed the unescaped `$_SERVER['PHP_SELF']` echo (the affected legacy `front/sprint.fromtemplate.php` page was dead code and has been deleted)
+- **XSS**: removed the unescaped `$_SERVER['PHP_SELF']` echo (the affected legacy `front/sprint.fromtemplate.php` page has been deleted)
 - **Entity restriction on carry-over**: `ajax/carryover.php` and the carry-over branch of `ajax/updateitemquick.php` now verify `Session::haveAccessToEntity()` on the target sprint, matching every other sprint-loading handler, so items can no longer be injected into sprints in inaccessible entities
 - **Own-items right scoped in reorder**: `ajax/reorder.php` no longer lets users holding only the *own items* right reorder backlog rows they don't own
 - **Open redirect closed**: `front/backlog.form.php` only follows same-site relative `_redirect` targets; absolute/protocol-relative URLs fall back to the referer
 - **Report logo containment**: the export's logo embedding refuses files outside the GLPI install, so a config-supplied absolute path can no longer leak arbitrary server files into the report
 
-### Removed
-- **Dead code cleanup**: deleted the orphaned `front/sprint.fromtemplate.php` page and `ajax/sprintstats.php` endpoint, the unused `SprintStandup::showLogForSprint()` and `SprintDashboard::parseActivityRangeFromRequest()` methods, five never-called JS globals (`sprintUpdateItemStatus`, `sprintToggleItemType`, `sprintLoadDashboard`, `sprintFilterApply`, `sprintFilterReset`) plus the legacy JS dashboard renderer, and the entire unused legacy CSS block (old stat-card component, JS progress bar, capacity/member/schedule helpers). `Profile::uninstallRights()` is now actually called on uninstall so profile rights no longer linger after removing the plugin
+### Fixed
+- **Profile rights cleanup on uninstall**: `Profile::uninstallRights()` is now actually called on uninstall, so profile rights no longer linger after removing the plugin
 
 ### Internationalisation
 - Added translations for all 1.1.4 strings to the `en_GB`, `nl_NL`, `fr_FR` and `es_ES` catalogs (and the `sprint.pot` template), and recompiled the `.mo` files
@@ -97,9 +165,6 @@ All notable changes to this project will be documented in this file.
 ### Internationalisation
 - Added translations for all 1.1.3 strings to the `en_GB`, `nl_NL`, `fr_FR` and `es_ES` catalogs (and the `sprint.pot` template), and recompiled the `.mo` files
 
-### Removed
-- **Dead code cleanup**: removed the orphaned `carry_over_to_sprint` branch in `front/backlog.form.php` (the meeting carry-over is now the AJAX `ajax/carryover.php` flow, so nothing posted it anymore)
-
 ### Changed
 - **Back to backlog now preserves sprint capacity, with a keep/remove choice**: the action opens a modal where you enter a **required reason** (stamped `[date — user] Back to backlog: …` into the item `note`) and choose what happens to the sprint item: **keep it in the sprint** (default) as a **manual placeholder** — its booked capacity, owner and status stay intact so the sprint's capacity totals remain correct, and only the underlying ticket/change/problem/project-task is **decoupled** and re-created as a fresh backlog row (reused if one already exists) — or **also remove it from the current sprint** (the legacy behaviour: the whole item moves to the backlog). Available from both the **meeting review** and the **Sprint Items** tab, updating the row in place. New shared `SprintItem::backToBacklog()` powers the AJAX endpoint and the form fallback
 - **A coupled item now exists exactly once** (no duplicates): a linked ticket/change/problem/project-task lives in **either** the backlog **or** a single sprint, never both. Back-to-backlog skips creating a backlog row when the coupling is already active in another sprint, assigning a backlog item to a sprint purges any leftover backlog copies, and **manual placeholder items can no longer be sent back to the backlog** (the "Back to backlog" button is hidden for them) — they stay in their sprint as pure capacity holders
@@ -121,9 +186,6 @@ All notable changes to this project will be documented in this file.
 ### Security
 - **Stored-XSS hardening on member names**: every place that echoed `getUserName()` straight into HTML now wraps it in `htmlescape()` (linked-item tabs for Ticket/Change/Problem/Project Task, the Sprint Items / Members / Template Members / Fastlane Members / Standup / Meeting tables, the dashboard capacity tables and `getMemberName()`). A user whose GLPI display name contained markup could previously inject it into any sprint view that listed them as owner/member. Output paths that were already safe (PDF export, audit log, Twig templates, dropdowns and `data-*` attributes all escape at their own render point) were left unchanged
 - **CSRF check on the settings form**: `front/config.form.php` now calls `Session::checkCSRF()` before `Config::saveConfig()`. Because the save runs through GLPI's config writer rather than `CommonDBTM`, the implicit token validation never fired; the form already emits the token via `Html::closeForm()`, so legitimate saves are unaffected
-
-### Removed
-- **Dead code cleanup**: dropped an unreachable `if ($verbose)` branch in `plugin_sprint_check_config()`, an unused `use Log;` import in `Sprint.php`, and unused CSS (the never-rendered Kanban board styles, the unused capacity-bar / empty-state rules, and the `planned`/`active`/`completed`/`cancelled` status-badge classes that were never applied — Sprint status renders as a plain text label). No behavioural change
 
 ## [1.1.1] - 2026-05-28
 

@@ -48,10 +48,15 @@ class SprintMember extends CommonDBRelation
         return max(0.0, min(100.0, $v));
     }
 
-    /** Display form: "5" for whole numbers, "0.5" for halves. */
+    /**
+     * Display form: "5" for whole numbers, "0.5" for halves. Snaps to 0.5%
+     * steps but does NOT clamp to 100 — callers pass sums, team totals and
+     * per-sprint caps that legitimately exceed 100% (clamping belongs to
+     * normalizeCapacity, which guards a single member's stored capacity).
+     */
     public static function formatCapacity($value): string
     {
-        $v = self::normalizeCapacity($value);
+        $v = round((float)$value * 2) / 2;
         return ($v === floor($v)) ? (string)(int)$v : number_format($v, 1, '.', '');
     }
 
@@ -94,6 +99,10 @@ class SprintMember extends CommonDBRelation
      * Render a stacked capacity bar. Segments are sized against max(total, used)
      * so they fit even when over capacity; the slice past total renders as a
      * striped red overflow band with a 100% marker line.
+     *
+     * $baseTotal is the configured member capacity before availability
+     * exceptions; when it exceeds $total the difference renders as a dark grey
+     * band pinned to the right, so the bar still spans the configured capacity.
      */
     public static function renderCapacityBar(
         float $total,
@@ -101,10 +110,12 @@ class SprintMember extends CommonDBRelation
         float $fastlaneUsed,
         float $dependencyUsed,
         int $height = 10,
-        string $borderRadius = '5px'
+        string $borderRadius = '5px',
+        float $baseTotal = 0
     ): string {
-        $used      = $regularUsed + $fastlaneUsed + $dependencyUsed;
-        $denom     = max($total, $used, 1);
+        $used        = $regularUsed + $fastlaneUsed + $dependencyUsed;
+        $unavailable = max($baseTotal - $total, 0);
+        $denom       = max($total + $unavailable, $used, 1);
         $regularW    = ($denom > 0) ? round(($regularUsed / $denom) * 100, 2) : 0;
         $fastlaneW   = ($denom > 0) ? round(($fastlaneUsed / $denom) * 100, 2) : 0;
         $dependencyW = ($denom > 0) ? round(($dependencyUsed / $denom) * 100, 2) : 0;
@@ -129,6 +140,12 @@ class SprintMember extends CommonDBRelation
             $stripe = 'repeating-linear-gradient(45deg,#dc3545,#dc3545 4px,#a71d2a 4px,#a71d2a 8px)';
             $html .= "<div style='width:{$overflowW}%;height:100%;background:{$stripe};' title='" . sprintf(__('Overflow %s%%', 'sprint'), self::formatCapacity($overflow)) . "'></div>";
             $html .= "<div style='position:absolute;top:-2px;bottom:-2px;left:{$totalMarkerLeft}%;width:2px;background:#212529;' title='100%'></div>";
+        } elseif ($unavailable > 0) {
+            // Availability exceptions eat into the configured capacity from the
+            // right; margin-left:auto keeps the band pinned there past the free space.
+            $unavailableW = round(($unavailable / $denom) * 100, 2);
+            $html .= "<div style='width:{$unavailableW}%;height:100%;margin-left:auto;background:#6c757d;' title='"
+                . sprintf(__('%s%% unavailable (availability exceptions)', 'sprint'), self::formatCapacity($unavailable)) . "'></div>";
         }
         $html .= "</div>";
         return $html;
@@ -218,7 +235,7 @@ class SprintMember extends CommonDBRelation
                 'value' => self::ROLE_DEVELOPER,
             ]);
             echo "</td>";
-            echo "<td>" . __('Capacity (%)', 'sprint') . "</td>";
+            echo "<td>" . __('Maximum capacity (%)', 'sprint') . "</td>";
             echo "<td>";
             Dropdown::showFromArray('capacity_percent', self::getCapacityChoices(), [
                 'value' => 100,
@@ -355,7 +372,8 @@ class SprintMember extends CommonDBRelation
         $si = new SprintItem();
         foreach ($members as $row) {
             $userId   = (int)$row['users_id'];
-            $totalCap = self::normalizeCapacity($row['capacity_percent']);
+            $baseCap  = self::normalizeCapacity($row['capacity_percent']);
+            $totalCap = SprintAgility::effectiveCapacity($sprintId, $userId, $baseCap);
             $roleName = $roles[$row['role']] ?? $row['role'];
             $roleIcon = $roleIcons[$row['role']] ?? 'fas fa-user';
 
@@ -417,21 +435,26 @@ class SprintMember extends CommonDBRelation
             $overflowCap   = max($usedCap - $totalCap, 0);
             $usedCapLabel  = self::formatCapacity($usedCap);
             $totalCapLabel = self::formatCapacity($totalCap);
+            // Availability exceptions lower the effective total below the
+            // configured capacity — keep the configured value visible.
+            $baseNote = ($baseCap - $totalCap) > 0.01
+                ? " <span style='color:#adb5bd;'>" . sprintf(__('of %s%% set', 'sprint'), self::formatCapacity($baseCap)) . "</span>"
+                : '';
             echo "<div style='margin-bottom:10px;'>";
             echo "<div style='display:flex;justify-content:space-between;font-size:0.78em;color:#6c757d;margin-bottom:3px;'>";
             echo "<span>" . __('Capacity used', 'sprint') . "</span>";
             if ($overflowCap > 0) {
-                echo "<span><strong style='color:#dc3545;'>{$usedCapLabel}%</strong> / {$totalCapLabel}% &mdash; "
+                echo "<span><strong style='color:#dc3545;'>{$usedCapLabel}%</strong> / {$totalCapLabel}%{$baseNote} &mdash; "
                     . "<span style='color:#dc3545;font-weight:600;'>"
                     . "<i class='fas fa-exclamation-triangle' style='margin-right:2px;'></i>"
                     . sprintf(__('%s%% overflow', 'sprint'), self::formatCapacity($overflowCap))
                     . "</span></span>";
             } else {
-                echo "<span><strong>{$usedCapLabel}%</strong> / {$totalCapLabel}% &mdash; "
+                echo "<span><strong>{$usedCapLabel}%</strong> / {$totalCapLabel}%{$baseNote} &mdash; "
                     . sprintf(__('%s%% free', 'sprint'), self::formatCapacity($remaining)) . "</span>";
             }
             echo "</div>";
-            echo self::renderCapacityBar($totalCap, $regularUsed, $fastlaneUsed, $dependencyUsed);
+            echo self::renderCapacityBar($totalCap, $regularUsed, $fastlaneUsed, $dependencyUsed, 10, '5px', $baseCap);
             echo "</div>";
 
             echo self::renderStatusDistribution($counts);
@@ -660,7 +683,7 @@ class SprintMember extends CommonDBRelation
             Dropdown::showFromArray('role', $roles, ['value' => $this->fields['role'] ?? self::ROLE_DEVELOPER]);
             echo "</td></tr>";
 
-            echo "<tr class='tab_bg_1'><td>" . __('Capacity (%)', 'sprint') . "</td><td>";
+            echo "<tr class='tab_bg_1'><td>" . __('Maximum capacity (%)', 'sprint') . "</td><td>";
             Dropdown::showFromArray('capacity_percent', self::getCapacityChoices(), [
                 'value' => self::capacityKey($this->fields['capacity_percent'] ?? 100),
             ]);
@@ -753,7 +776,12 @@ class SprintMember extends CommonDBRelation
             $total    = 0.0;
             if ($isMember) {
                 $first = reset($rows);
-                $total = self::normalizeCapacity($first['capacity_percent'] ?? 0);
+                // Effective capacity (availability exceptions applied), matching the sprint views.
+                $total = SprintAgility::effectiveCapacity(
+                    $sprintId,
+                    $userId,
+                    self::normalizeCapacity($first['capacity_percent'] ?? 0)
+                );
             }
 
             $used = self::getUsedCapacityForUser($sprintId, $userId);
@@ -839,7 +867,11 @@ class SprintMember extends CommonDBRelation
             return true;
         }
         $row           = reset($members);
-        $totalCapacity = self::normalizeCapacity($row['capacity_percent']);
+        $totalCapacity = SprintAgility::effectiveCapacity(
+            $sprintId,
+            $userId,
+            self::normalizeCapacity($row['capacity_percent'])
+        );
 
         $used      = self::getUsedCapacityForUser($sprintId, $userId, $excludeRegularItemId, $excludeFastlaneMemberId, $excludeDependencyId);
         $remaining = $totalCapacity - $used;
@@ -910,7 +942,11 @@ class SprintMember extends CommonDBRelation
         if (count($members) === 0) {
             return null;
         }
-        $total = self::normalizeCapacity(reset($members)['capacity_percent']);
+        $total = SprintAgility::effectiveCapacity(
+            $sprintId,
+            $userId,
+            self::normalizeCapacity(reset($members)['capacity_percent'])
+        );
         $used  = self::getUsedCapacityForUser($sprintId, $userId, $excludeRegularItemId, $excludeFastlaneMemberId, $excludeDependencyId);
         $after = $used + $additional;
         if ($after <= $total) {

@@ -43,7 +43,8 @@ $update = ['id' => (int)$_POST['id']];
 // is_adhoc is additionally restricted to the sprint's Scrum Master inside
 // SprintItem::prepareInputForUpdate().
 $allowed = ['name', 'status', 'priority', 'users_id', 'story_points', 'capacity', 'note',
-    'proposed_sprints_id', 'is_fastlane', 'is_blocked', 'is_adhoc'];
+    'proposed_sprints_id', 'is_fastlane', 'is_blocked', 'is_adhoc', 'is_parked',
+    'plugin_sprint_sprintcategories_id'];
 
 // When capacity edits are restricted to the Scrum Master, a change by someone
 // else is turned into an approval request inside
@@ -70,6 +71,19 @@ foreach ($allowed as $field) {
 if (array_key_exists('_tags_json', $_POST)) {
     $decoded = json_decode((string)$_POST['_tags_json'], true);
     $update['_tags'] = is_array($decoded) ? $decoded : [];
+}
+
+// DoD checks from the modal; only values from the global definition are stored.
+if (array_key_exists('_dod_json', $_POST)) {
+    $dod     = GlpiPlugin\Sprint\Config::getDefinitionDone();
+    $decoded = json_decode((string)$_POST['_dod_json'], true);
+    $update['done_checks'] = json_encode(array_values(array_intersect($dod, is_array($decoded) ? $decoded : [])));
+}
+
+// Epic picker is rendered for the Scrum Master only; enforce that here too.
+if (array_key_exists('plugin_sprint_sprintepics_id', $_POST)
+    && GlpiPlugin\Sprint\SprintItem::currentUserIsScrumMasterOf((int)($item->fields['plugin_sprint_sprints_id'] ?? 0))) {
+    $update['plugin_sprint_sprintepics_id'] = (int)$_POST['plugin_sprint_sprintepics_id'];
 }
 
 // Motivation for a guarded capacity edit; picked up when the change turns
@@ -202,7 +216,11 @@ echo json_encode([
     'is_fastlane'          => (int)($item->fields['is_fastlane'] ?? 0),
     'is_blocked'           => (int)($item->fields['is_blocked'] ?? 0),
     'is_adhoc'             => (int)($item->fields['is_adhoc'] ?? 0),
+    'is_parked'            => (int)($item->fields['is_parked'] ?? 0),
+    'category_id'          => (int)($item->fields['plugin_sprint_sprintcategories_id'] ?? 0),
     'tags'                 => $updatedTags,
+    'done_checks_blob'     => implode('|', GlpiPlugin\Sprint\SprintAgility::checklist((string)($item->fields['done_checks'] ?? ''))),
+    'epic_id'              => (int)($item->fields['plugin_sprint_sprintepics_id'] ?? 0),
     'tags_blob'            => GlpiPlugin\Sprint\SprintItem::tagsToBlob($updatedTags),
     'tags_pills_html'      => GlpiPlugin\Sprint\SprintItem::renderTagPills($updatedTags),
     'linked_open_badge_html' => GlpiPlugin\Sprint\SprintItem::renderLinkedItemOpenBadge($item->fields),

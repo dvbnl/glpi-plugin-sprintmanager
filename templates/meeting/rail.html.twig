@@ -1,0 +1,376 @@
+{# Guided meeting rail (review/retrospective): sticky control bar + one card
+   per phase. Session state persists via ajax/meetingphase.php; improvements
+   post to front/sprintagility.form.php with _ajax=1. #}
+
+{% set is_retro = guided.meeting_type == 'retrospective' %}
+{% set status_bg = {
+    'todo':        '#6c757d',
+    'in_progress': '#0d6efd',
+    'review':      '#6f42c1',
+    'done':        '#198754',
+    'blocked':     '#dc3545',
+} %}
+
+{% macro imp_row(row, categories, opts) %}
+<div class="sprint-imp-item d-flex flex-wrap align-items-center gap-2"
+     data-improvement-id="{{ row.id }}"
+     data-category="{{ row.category }}"
+     data-votes="{{ row.votes }}"
+     data-status="{{ row.status }}">
+    <span class="badge bg-blue-lt sprint-imp-cat">{{ categories[row.category]|default(row.category) }}</span>
+    <span class="sprint-imp-desc flex-grow-1">{{ row.description|nl2br }}</span>
+    {% if opts.show_owner|default(false) %}
+    <span class="sprint-imp-owner text-muted small"><i class="fas fa-user me-1"></i>{{ row.owner_name|default('') != '' ? row.owner_name : '—' }}</span>
+    {% if row.due_date %}<span class="sprint-imp-due text-muted small"><i class="far fa-calendar me-1"></i>{{ row.due_date }}</span>{% endif %}
+    {% endif %}
+    {% if opts.show_vote_btn|default(false) and opts.can_vote|default(false) %}
+    <button type="button" class="btn btn-sm btn-link sprint-imp-vote-btn{{ row.voted_by_me|default(false) ? '' : ' text-muted' }}"
+            data-sprint-action="meeting-imp-vote"
+            title="{{ row.voted_by_me|default(false) ? __('Remove my vote', 'sprint') : __('Vote', 'sprint') }}">
+        <i class="{{ row.voted_by_me|default(false) ? 'fas' : 'far' }} fa-thumbs-up"></i>
+        <span class="sprint-imp-votes">{{ row.votes }}</span>
+    </button>
+    {% elseif opts.show_votes|default(false) %}
+    <span class="badge bg-secondary-lt sprint-imp-votepill"><i class="far fa-thumbs-up me-1"></i><span class="sprint-imp-votes">{{ row.votes }}</span></span>
+    {% endif %}
+    {% if opts.show_status|default(false) %}
+    <span class="badge sprint-imp-statuspill {{ row.status == 'done' ? 'bg-green-lt' : 'bg-yellow-lt' }}">
+        {{ row.status == 'done' ? __('Done', 'sprint') : __('Open', 'sprint') }}
+    </span>
+    {% endif %}
+    {% if opts.show_toggle|default(false) and opts.can_toggle|default(false) %}
+    <button type="button" class="btn btn-sm btn-outline-success sprint-imp-toggle-btn"
+            data-sprint-action="meeting-imp-toggle" title="{{ __('Toggle done', 'sprint') }}">
+        <i class="fas fa-check"></i>
+    </button>
+    {% endif %}
+</div>
+{% endmacro %}
+{% import _self as imp %}
+
+<div class="sprint-meeting-rail"
+     data-meeting-id="{{ meeting_id }}"
+     data-sprint-id="{{ sprint_id }}"
+     data-meeting-type="{{ guided.meeting_type }}"
+     data-status="{{ guided.status }}"
+     data-current-phase="{{ guided.current_phase }}"
+     data-phase-started-at="{{ guided.phase_started_at_ts }}"
+     data-server-now="{{ guided.server_now_ts }}"
+     data-can-drive="{{ guided.can_drive ? 1 : 0 }}"
+     data-can-contribute="{{ guided.can_contribute ? 1 : 0 }}"
+     data-can-toggle="{{ guided.can_toggle_actions ? 1 : 0 }}"
+     data-phase-count="{{ guided.phases|length }}"
+     data-cat-labels="{{ (guided.improvement_categories|default({}))|json_encode|e('html_attr') }}"
+     data-lbl-anon="{{ __('Anonymous', 'sprint') }}"
+     data-current-user="{{ guided.current_user_name|default('') }}"
+     data-lbl-open="{{ __('Open', 'sprint') }}"
+     data-lbl-done="{{ __('Done', 'sprint') }}"
+     data-lbl-vote="{{ __('Vote', 'sprint') }}"
+     data-lbl-unvote="{{ __('Remove my vote', 'sprint') }}">
+
+    {# ============================ Control bar ============================ #}
+    <div class="sprint-meeting-controlbar">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <i class="{{ is_retro ? 'fas fa-lightbulb' : 'fas fa-clipboard-check' }} text-primary"></i>
+            <span class="fw-bold">{{ is_retro ? __('Sprint Retrospective', 'sprint') : __('Sprint Review', 'sprint') }}</span>
+            <span class="badge sprint-meeting-status-badge"
+                  data-lbl-open="{{ __('Not started', 'sprint') }}"
+                  data-lbl-in-progress="{{ __('In progress', 'sprint') }}"
+                  data-lbl-completed="{{ __('Completed', 'sprint') }}"></span>
+            <span class="small text-muted sprint-meeting-step"></span>
+            <span class="small fw-bold sprint-meeting-timer" title="{{ __('Time in this phase', 'sprint') }}"></span>
+            <span class="sprint-meeting-phase-title small text-muted d-none d-md-inline"></span>
+            <span style="flex:1;"></span>
+            {% if guided.can_drive %}
+            <button type="button" class="btn btn-sm btn-primary sprint-meeting-btn-start" data-sprint-action="meeting-start"
+                    data-lbl-start="{{ is_retro ? __('Start guided retrospective', 'sprint') : __('Start guided review', 'sprint') }}"
+                    data-lbl-restart="{{ __('Restart meeting', 'sprint') }}">
+                <i class="fas fa-person-chalkboard me-1"></i><span class="sprint-meeting-btn-start-label"></span>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary sprint-meeting-btn-prev" data-sprint-action="meeting-prev" title="{{ __('Previous phase', 'sprint') }}">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-primary sprint-meeting-btn-next" data-sprint-action="meeting-next">
+                {{ __('Next phase', 'sprint') }} <i class="fas fa-arrow-right"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger sprint-meeting-btn-end" data-sprint-action="meeting-end"
+                    data-confirm="{{ __('End this meeting? The session is marked completed; notes and results stay available.', 'sprint') }}">
+                {{ is_retro ? __('End retrospective', 'sprint') : __('End review', 'sprint') }}
+            </button>
+            {% endif %}
+        </div>
+        {% if guided.started_at or guided.ended_at %}
+        <div class="small text-muted mt-1 sprint-meeting-times">
+            {% if guided.started_at %}<span>{{ __('Started', 'sprint') }}: {{ guided.started_at }}</span>{% endif %}
+            {% if guided.ended_at %}<span class="ms-2">{{ __('Ended', 'sprint') }}: {{ guided.ended_at }}</span>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {# ============================ Phase cards ============================ #}
+    {% for phase in guided.phases %}
+    {% set phase_index = loop.index0 %}
+    <div class="sprint-phase-card{% if guided.status == 'completed' %} is-done{% elseif guided.status == 'in_progress' and phase_index == guided.current_phase %} is-active{% elseif guided.status == 'in_progress' and phase_index < guided.current_phase %} is-done{% else %} is-upcoming{% endif %}"
+         data-phase-index="{{ phase_index }}"
+         data-phase-key="{{ phase.key }}"
+         data-minutes="{{ phase.minutes }}">
+        <div class="sprint-phase-card-header"{% if guided.can_drive %} data-sprint-action="meeting-goto" title="{{ __('Jump to this phase', 'sprint') }}"{% endif %}>
+            <span class="sprint-phase-number">{{ loop.index }}</span>
+            <span class="sprint-phase-title">{{ phase.title }}</span>
+            <span class="badge bg-blue-lt">{{ phase.minutes }} {{ __('min', 'sprint') }}</span>
+            <span class="sprint-phase-done-icon text-success ms-auto"><i class="fas fa-check-circle"></i></span>
+        </div>
+        <div class="sprint-phase-card-body">
+            <div class="text-muted small mb-2 sprint-phase-description">{{ phase.description }}</div>
+
+            {% for block in phase.blocks %}
+
+                {% if block == 'sprint_goal' %}
+                <div class="sprint-phase-block sprint-phase-goal">
+                    <div class="d-flex flex-wrap gap-3 mb-2 small">
+                        <span><i class="fas fa-flag-checkered me-1 text-primary"></i><strong>{{ guided.sprint_name }}</strong></span>
+                        {% if guided.sprint_start or guided.sprint_end %}
+                        <span class="text-muted"><i class="far fa-calendar me-1"></i>{{ guided.sprint_start }} → {{ guided.sprint_end }}</span>
+                        {% endif %}
+                    </div>
+                    {% if guided.sprint_goal != '' %}
+                    <blockquote class="sprint-goal-quote mb-0">{{ guided.sprint_goal|nl2br }}</blockquote>
+                    {% else %}
+                    <div class="text-muted fst-italic">{{ __('No sprint goal was recorded for this sprint.', 'sprint') }}</div>
+                    {% endif %}
+                </div>
+
+                {% elseif block == 'stat_cards' %}
+                <div class="sprint-phase-block sprint-stat-cards">
+                    {% for card in guided.stat_cards|default([]) %}
+                    <div class="sprint-stat-card" style="--stat-accent: {{ card.accent }};">
+                        <div class="sprint-stat-icon"><i class="{{ card.icon }}"></i></div>
+                        <div class="sprint-stat-text">
+                            <div class="sprint-stat-value">{{ card.value }}</div>
+                            <div class="sprint-stat-label">{{ card.label }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% elseif block == 'charts' %}
+                <div class="sprint-phase-block sprint-phase-charts">
+                    {% if guided.burndown_html|default('') != '' %}
+                    <div class="sprint-phase-chart">
+                        <h4 class="mb-2"><i class="fas fa-chart-line me-1"></i>{{ __('Burndown', 'sprint') }}</h4>
+                        {{ guided.burndown_html|raw }}
+                    </div>
+                    {% endif %}
+                    {% if guided.velocity_html|default('') != '' %}
+                    <div class="sprint-phase-chart mt-3">
+                        <h4 class="mb-2"><i class="fas fa-tachometer-alt me-1"></i>{{ __('Velocity', 'sprint') }}</h4>
+                        {{ guided.velocity_html|raw }}
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% elseif block == 'sprint_items' %}
+                <div class="sprint-phase-block">
+                    {% include '@sprint/meeting/items_tables.html.twig' %}
+                </div>
+
+                {% elseif block == 'done_items' %}
+                <div class="sprint-phase-block">
+                    {% if guided.done_by_owner|default({})|length > 0 %}
+                    <div class="row g-3">
+                        {% for owner, items in guided.done_by_owner %}
+                        <div class="col-md-6 col-lg-4">
+                            <div class="sprint-demo-group">
+                                <div class="fw-bold mb-1"><i class="fas fa-user me-1 text-muted"></i>{{ owner }}
+                                    <span class="badge bg-secondary ms-1">{{ items|length }}</span>
+                                </div>
+                                <ul class="mb-0 ps-3">
+                                    {% for si in items %}
+                                    <li class="mb-1">
+                                        <a href="{{ si.url }}">{{ si.name }}</a>
+                                        <span class="text-muted small">({{ si.story_points }} SP)</span>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-muted fst-italic">{{ __('No finished items to demo yet.', 'sprint') }}</div>
+                    {% endif %}
+                </div>
+
+                {% elseif block == 'carryover_summary' %}
+                <div class="sprint-phase-block">
+                    {% if guided.unfinished_items|default([])|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-1">
+                            <thead><tr>
+                                <th>{{ __('Name') }}</th>
+                                <th>{{ __('Status') }}</th>
+                                <th>{{ __('Owner', 'sprint') }}</th>
+                                <th>{{ __('Note', 'sprint') }}</th>
+                            </tr></thead>
+                            <tbody>
+                                {% for si in guided.unfinished_items %}
+                                <tr>
+                                    <td><a href="{{ si.url }}">{{ si.name }}</a></td>
+                                    <td><span class="sprint-badge" style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_bg[si.status]|default('#6c757d') }};">{{ item_statuses[si.status]|default(si.status) }}</span></td>
+                                    <td>{{ member_options[si.users_id]|default('—') }}</td>
+                                    <td class="small text-muted">{{ si.note }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="small text-muted">
+                        <i class="fas fa-circle-info me-1"></i>{{ __('Use the carry-over and back-to-backlog actions in the walkthrough phase to decide where these items go.', 'sprint') }}
+                    </div>
+                    {% else %}
+                    <div class="text-success"><i class="fas fa-check-circle me-1"></i>{{ __('Everything is done — nothing to carry over.', 'sprint') }}</div>
+                    {% endif %}
+                </div>
+
+                {% elseif block == 'prev_actions' %}
+                <div class="sprint-phase-block sprint-imp-list" data-imp-static="1">
+                    {% for row in guided.prev_actions|default([]) %}
+                        {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_owner: true, show_status: true, show_toggle: true, can_toggle: guided.can_toggle_actions}) }}
+                    {% else %}
+                    <div class="text-muted fst-italic sprint-imp-empty">{{ __('No open actions from the previous retrospective.', 'sprint') }}</div>
+                    {% endfor %}
+                </div>
+
+                {% elseif block == 'improvement_collect' %}
+                <div class="sprint-phase-block">
+                    {% if guided.can_contribute %}
+                    <div class="sprint-imp-add row g-2 align-items-center mb-2">
+                        <div class="col-md-3 col-lg-2">
+                            <select class="form-select form-select-sm sprint-imp-add-category">
+                                {% for value, label in guided.improvement_categories|default({}) %}
+                                {% if value != 'action' %}<option value="{{ value }}">{{ label }}</option>{% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 col-lg-7">
+                            <input type="text" class="form-control form-control-sm sprint-imp-add-description"
+                                   placeholder="{{ __('Improvement or action', 'sprint') }}">
+                        </div>
+                        <div class="col-md-2 col-lg-2">
+                            <label class="form-check form-check-inline mb-0 small" title="{{ __('Anonymous', 'sprint') }}">
+                                <input type="checkbox" class="form-check-input sprint-imp-add-anonymous" value="1">
+                                <span class="form-check-label"><i class="fas fa-user-secret"></i> {{ __('Anonymous', 'sprint') }}</span>
+                            </label>
+                        </div>
+                        <div class="col-md-1 col-lg-1">
+                            <button type="button" class="btn btn-sm btn-primary" data-sprint-action="meeting-imp-add">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="sprint-imp-list" data-imp-list data-imp-categories="start,stop,continue" data-imp-owner="1">
+                        {% for row in guided.improvements|default([])|filter(r => r.category != 'action') %}
+                            {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_owner: true}) }}
+                        {% endfor %}
+                        <div class="text-muted fst-italic sprint-imp-empty"{% if guided.improvements|default([])|filter(r => r.category != 'action')|length > 0 %} style="display:none;"{% endif %}>
+                            {{ __('No input collected yet.', 'sprint') }}
+                        </div>
+                    </div>
+                </div>
+
+                {% elseif block == 'improvement_vote' %}
+                <div class="sprint-phase-block">
+                    <div class="sprint-imp-list" data-imp-list data-imp-categories="start,stop,continue" data-imp-sort="votes" data-imp-vote-btn="1">
+                        {% for row in guided.improvements|default([])|filter(r => r.category != 'action') %}
+                            {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_vote_btn: true, can_vote: guided.can_contribute}) }}
+                        {% endfor %}
+                        <div class="text-muted fst-italic sprint-imp-empty"{% if guided.improvements|default([])|filter(r => r.category != 'action')|length > 0 %} style="display:none;"{% endif %}>
+                            {{ __('No input collected yet.', 'sprint') }}
+                        </div>
+                    </div>
+                </div>
+
+                {% elseif block == 'improvement_actions' %}
+                <div class="sprint-phase-block">
+                    {% if guided.can_contribute %}
+                    <div class="sprint-imp-add row g-2 align-items-center mb-2" data-imp-fixed-category="action">
+                        <div class="col-md-5 col-lg-5">
+                            <input type="text" class="form-control form-control-sm sprint-imp-add-description"
+                                   placeholder="{{ __('Action with a clear owner and due date', 'sprint') }}">
+                        </div>
+                        <div class="col-md-3 col-lg-3">
+                            <select class="form-select form-select-sm sprint-imp-add-owner">
+                                <option value="0">— {{ __('Owner', 'sprint') }} —</option>
+                                {% for uid, uname in member_options %}
+                                {% if uid > 0 %}<option value="{{ uid }}">{{ uname }}</option>{% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3 col-lg-3">
+                            <input type="date" class="form-control form-control-sm sprint-imp-add-due">
+                        </div>
+                        <div class="col-md-1 col-lg-1">
+                            <button type="button" class="btn btn-sm btn-primary" data-sprint-action="meeting-imp-add">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="sprint-imp-list" data-imp-list data-imp-categories="action" data-imp-owner="1" data-imp-status="1" data-imp-toggle-btn="1">
+                        {% for row in guided.improvements|default([])|filter(r => r.category == 'action') %}
+                            {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_owner: true, show_status: true, show_toggle: true, can_toggle: guided.can_toggle_actions}) }}
+                        {% endfor %}
+                        <div class="text-muted fst-italic sprint-imp-empty"{% if guided.improvements|default([])|filter(r => r.category == 'action')|length > 0 %} style="display:none;"{% endif %}>
+                            {{ __('No actions defined yet.', 'sprint') }}
+                        </div>
+                    </div>
+                </div>
+
+                {% elseif block == 'retro_summary' %}
+                <div class="sprint-phase-block">
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <div class="fw-bold mb-1"><i class="far fa-thumbs-up me-1"></i>{{ __('Top voted themes', 'sprint') }}</div>
+                            <div class="sprint-imp-list" data-imp-list data-imp-categories="start,stop,continue" data-imp-sort="votes" data-imp-votes="1">
+                                {% for row in guided.improvements|default([])|filter(r => r.category != 'action') %}
+                                    {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_votes: true}) }}
+                                {% endfor %}
+                                <div class="text-muted fst-italic sprint-imp-empty"{% if guided.improvements|default([])|filter(r => r.category != 'action')|length > 0 %} style="display:none;"{% endif %}>
+                                    {{ __('No input collected yet.', 'sprint') }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="fw-bold mb-1"><i class="fas fa-list-check me-1"></i>{{ __('Agreed actions', 'sprint') }}</div>
+                            <div class="sprint-imp-list" data-imp-list data-imp-categories="action" data-imp-owner="1" data-imp-status="1">
+                                {% for row in guided.improvements|default([])|filter(r => r.category == 'action') %}
+                                    {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_owner: true, show_status: true}) }}
+                                {% endfor %}
+                                <div class="text-muted fst-italic sprint-imp-empty"{% if guided.improvements|default([])|filter(r => r.category == 'action')|length > 0 %} style="display:none;"{% endif %}>
+                                    {{ __('No actions defined yet.', 'sprint') }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+            {% endfor %}
+
+            {% if phase.has_notes %}
+            <div class="sprint-phase-notes mt-3">
+                <label class="form-label small fw-bold mb-1">
+                    <i class="fas fa-pen me-1"></i>{{ __('Phase notes', 'sprint') }}
+                    <span class="sprint-phase-note-saved text-success ms-2" style="display:none;"><i class="fas fa-check"></i> {{ __('Saved', 'sprint') }}</span>
+                </label>
+                <textarea class="form-control form-control-sm sprint-phase-note" rows="2"
+                          data-phase-key="{{ phase.key }}"
+                          {% if not guided.can_drive %}readonly{% endif %}
+                          placeholder="{{ __('Notes for this phase...', 'sprint') }}">{{ guided.phase_notes[phase.key]|default('') }}</textarea>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>

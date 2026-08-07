@@ -507,7 +507,12 @@ class SprintExport extends CommonGLPI
 
         foreach ($members as $row) {
             $userId   = (int)$row['users_id'];
-            $totalCap = SprintMember::normalizeCapacity($row['capacity_percent']);
+            // Effective capacity (availability exceptions applied), matching the dashboard.
+            $totalCap = SprintAgility::effectiveCapacity(
+                $sprintId,
+                $userId,
+                SprintMember::normalizeCapacity($row['capacity_percent'])
+            );
             $roleName = $roles[$row['role']] ?? $row['role'];
 
             $regularUsed = 0.0;
@@ -824,8 +829,8 @@ class SprintExport extends CommonGLPI
         $xAt    = fn(int $i) => $padL + ($xStep * $i);
         $yAt    = fn(int $v) => $padT + $plotH - ($plotH * ($v / $yMax));
 
-        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
-            . "style='width:100%;height:auto;max-width:{$width}px;font-family:sans-serif;font-size:11px;'>";
+        echo "<svg class='sprint-responsive-chart' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "preserveAspectRatio='xMinYMin meet' style='width:100%;height:auto;display:block;font-family:sans-serif;font-size:11px;'>";
 
         for ($t = 0; $t <= 4; $t++) {
             $yv = (int)round($yMax * $t / 4);

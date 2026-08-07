@@ -5,7 +5,6 @@ namespace GlpiPlugin\Sprint;
 use CommonDBRelation;
 use CommonGLPI;
 use Html;
-use Session;
 use User;
 use Dropdown;
 
@@ -88,7 +87,7 @@ class SprintTemplateMember extends CommonDBRelation
             echo "<td>";
             Dropdown::showFromArray('role', $roles, ['value' => SprintMember::ROLE_DEVELOPER]);
             echo "</td>";
-            echo "<td>" . __('Capacity (%)', 'sprint') . "</td>";
+            echo "<td>" . __('Maximum capacity (%)', 'sprint') . "</td>";
             echo "<td>";
             Dropdown::showFromArray('capacity_percent', SprintMember::getCapacityChoices(), [
                 'value' => 100,
@@ -136,6 +135,88 @@ class SprintTemplateMember extends CommonDBRelation
                     'name'    => 'purge',
                     'class'   => 'btn btn-sm btn-outline-danger',
                     'confirm' => __('Remove this member?', 'sprint'),
+                ]);
+                Html::closeForm();
+                echo "</td>";
+            }
+            echo "</tr>";
+        }
+
+        echo "</table></div>";
+
+        self::showFixedLeave($template, $canedit);
+    }
+
+    /**
+     * Fixed weekly leave (e.g. every Friday off). Applied as dated
+     * availability exceptions when a sprint is created from this template.
+     */
+    private static function showFixedLeave(SprintTemplate $template, bool $canedit): void
+    {
+        $ID       = (int)$template->getID();
+        $weekdays = SprintTemplateAvailability::getWeekdays();
+        $formUrl  = SprintTemplateAvailability::getFormURL();
+
+        if ($canedit) {
+            echo "<div class='center'>";
+            echo "<form method='post' action='" . $formUrl . "'>";
+            echo Html::hidden('plugin_sprint_sprinttemplates_id', ['value' => $ID]);
+            echo "<table class='tab_cadre_fixe sprint-themed'>";
+            echo "<tr class='tab_bg_2'><th colspan='8'>" . __('Add fixed leave (weekly)', 'sprint') . "</th></tr>";
+            echo "<tr class='tab_bg_1'>";
+            echo "<td>" . __('User') . "</td><td>";
+            User::dropdown(['name' => 'users_id', 'right' => 'all']);
+            echo "</td><td>" . __('Weekday', 'sprint') . "</td><td>";
+            Dropdown::showFromArray('weekday', $weekdays, ['value' => 5]);
+            echo "</td><td>" . __('Availability %', 'sprint') . "</td><td>";
+            echo "<input type='number' min='0' max='100' step='.5' value='0' class='form-control' name='availability_percent'>";
+            echo "</td><td>" . __('Reason', 'sprint') . "</td><td>";
+            echo "<input class='form-control' name='comment' placeholder='" . htmlescape(__('Reason', 'sprint')) . "'>";
+            echo "</td></tr>";
+            echo "<tr class='tab_bg_1'><td colspan='8' class='center'>";
+            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
+            echo "</td></tr>";
+            echo "</table>";
+            Html::closeForm();
+            echo "</div>";
+        }
+
+        $rows = (new SprintTemplateAvailability())->find(
+            ['plugin_sprint_sprinttemplates_id' => $ID],
+            ['users_id ASC', 'weekday ASC']
+        );
+
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
+        echo "<tr class='tab_bg_2'><th colspan='5'>" . __('Fixed leave', 'sprint') . "</th></tr>";
+        echo "<tr class='tab_bg_2'>";
+        echo "<th>" . __('User') . "</th>";
+        echo "<th>" . __('Weekday', 'sprint') . "</th>";
+        echo "<th>" . __('Availability %', 'sprint') . "</th>";
+        echo "<th>" . __('Reason', 'sprint') . "</th>";
+        if ($canedit) {
+            echo "<th>" . __('Actions') . "</th>";
+        }
+        echo "</tr>";
+
+        if (count($rows) === 0) {
+            $cols = $canedit ? 5 : 4;
+            echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
+                __('No fixed leave', 'sprint') . "</td></tr>";
+        }
+
+        foreach ($rows as $row) {
+            echo "<tr class='tab_bg_1'>";
+            echo "<td><i class='fas fa-user-clock'></i> " . htmlescape(SprintCache::userName($row['users_id'])) . "</td>";
+            echo "<td>" . htmlescape($weekdays[(int)$row['weekday']] ?? (string)$row['weekday']) . "</td>";
+            echo "<td class='center'>" . SprintMember::formatCapacity($row['availability_percent']) . "%</td>";
+            echo "<td>" . htmlescape((string)$row['comment']) . "</td>";
+            if ($canedit) {
+                echo "<td class='center'>";
+                echo "<form method='post' action='" . $formUrl . "' style='display:inline;'>";
+                echo Html::hidden('id', ['value' => $row['id']]);
+                echo Html::submit(__('Delete'), [
+                    'name'  => 'purge',
+                    'class' => 'btn btn-sm btn-outline-danger',
                 ]);
                 Html::closeForm();
                 echo "</td>";

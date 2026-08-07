@@ -47,7 +47,36 @@ if (!in_array($_POST['status'], $validStatuses)) {
 // Moving to Review/Done while the underlying GLPI item is still open: don't
 // apply yet — ask the client to confirm ("continue anyway") or visit the
 // linked item first. A confirm_linked_open=1 retry skips this gate.
-$newStatus         = (string)$_POST['status'];
+$newStatus = (string)$_POST['status'];
+
+// DoD gate for Review/Done: first attempt returns needs_dod (board shows the
+// dialog), the retry carries done[] which is stored.
+$dod = GlpiPlugin\Sprint\Config::getDefinitionDone();
+$doneChecks = null;
+if ($dod && in_array($newStatus, [
+    GlpiPlugin\Sprint\SprintItem::STATUS_REVIEW,
+    GlpiPlugin\Sprint\SprintItem::STATUS_DONE,
+], true)) {
+    $current = GlpiPlugin\Sprint\SprintAgility::checklist((string)($item->fields['done_checks'] ?? ''));
+    if (isset($_POST['done'])) {
+        $doneChecks = array_values(array_intersect($dod, (array)$_POST['done']));
+        $item->fields['done_checks'] = json_encode($doneChecks);
+    } elseif (array_diff($dod, $current)) {
+        echo json_encode([
+            'success'   => false,
+            'needs_dod' => true,
+            'dod'       => array_values($dod),
+            'checked'   => array_values(array_intersect($dod, $current)),
+        ]);
+        return;
+    }
+}
+
+$policy = GlpiPlugin\Sprint\SprintAgility::validateTransition($item, $newStatus);
+if (!$policy['ok']) {
+    echo json_encode(['success' => false, 'message' => $policy['message']]);
+    return;
+}
 $confirmLinkedOpen = (int)($_POST['confirm_linked_open'] ?? 0) === 1;
 if (
     !$confirmLinkedOpen
@@ -80,10 +109,15 @@ if (
     }
 }
 
-$result = $item->update([
+$update = [
     'id'     => (int)$_POST['id'],
     'status' => $_POST['status'],
-]);
+];
+if ($doneChecks !== null) {
+    $update['done_checks'] = json_encode($doneChecks);
+}
+$result = $item->update($update);
+
 
 // Relay queued messages (e.g. the pending-approval lock reason) to the client
 // instead of stacking them up for the next page load.

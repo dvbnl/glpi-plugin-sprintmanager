@@ -98,12 +98,11 @@ class SprintBoard extends CommonGLPI
         $tagsById = SprintItem::getTagsForItems($itemIds);
         $depsById = SprintItemDependency::getOpenSummariesForItems($itemIds);
 
-        // Soft WIP heuristic: flag "In Progress" when in-flight items exceed
-        // team members (no configuration needed).
         $memberCount = countElementsInTable(
             SprintMember::getTable(),
             ['plugin_sprint_sprints_id' => $sprintId]
         );
+        $wipLimits = SprintAgility::getWipLimits($sprint->fields);
 
         echo "<div class='sprint-kanban-intro text-muted' style='padding:10px 4px;'>"
             . "<i class='" . self::getIcon() . "' style='margin-right:6px;'></i>"
@@ -112,23 +111,39 @@ class SprintBoard extends CommonGLPI
                 : __('Sprint items grouped by status.', 'sprint'))
             . "</div>";
 
+        self::renderViewTools($items, $tagsById);
+
         echo "<div class='sprint-kanban' data-sprint-id='" . (int)$sprintId . "'>";
         foreach ($columns as $status => $color) {
             $label = $statuses[$status] ?? $status;
             $cards = $byStatus[$status];
-            $overWip = $status === SprintItem::STATUS_IN_PROGRESS
-                && $memberCount > 0
-                && count($cards) > $memberCount;
+            $limit = (int)($wipLimits[$status] ?? 0);
+            // Per-person limits: flag when one owner exceeds it (fastlane
+            // exempt); team-size fallback for In-progress without a limit.
+            $perOwner = [];
+            foreach ($cards as $row) {
+                if ((int)($row['is_fastlane'] ?? 0) === 1) {
+                    continue;
+                }
+                $ownerKey = (int)($row['users_id'] ?? 0);
+                $perOwner[$ownerKey] = ($perOwner[$ownerKey] ?? 0) + 1;
+            }
+            $maxPerOwner = $perOwner ? max($perOwner) : 0;
+            $overWip = $limit > 0
+                ? $maxPerOwner > $limit
+                : ($status === SprintItem::STATUS_IN_PROGRESS && $memberCount > 0 && count($cards) > $memberCount);
             echo "<div class='sprint-kanban-col" . ($overWip ? ' sk-over-wip' : '') . "' style='--sk-accent:" . htmlescape($color) . ";'>";
             echo "<div class='sprint-kanban-col-header'>"
                 . "<span class='sprint-kanban-dot' style='background:" . htmlescape($color) . ";'></span>"
                 . "<span class='sprint-kanban-col-title'>" . htmlescape($label) . "</span>"
                 . ($overWip
                     ? "<i class='fas fa-triangle-exclamation' style='color:#fd7e14;' title='"
-                        . sprintf(__('More items in progress (%1$d) than team members (%2$d)', 'sprint'), count($cards), $memberCount)
+                        . ($limit > 0
+                            ? sprintf(__('WIP limit exceeded: a member has %1$d items, limit %2$d per person', 'sprint'), $maxPerOwner, $limit)
+                            : sprintf(__('WIP limit exceeded: %1$d items, limit %2$d', 'sprint'), count($cards), $memberCount))
                         . "'></i>"
                     : "")
-                . "<span class='sprint-kanban-count'>" . count($cards) . "</span>"
+                . "<span class='sprint-kanban-count'>" . count($cards) . ($limit > 0 ? ' / ' . $limit : '') . "</span>"
                 . "</div>";
             echo "<div class='sprint-kanban-body' data-status='" . htmlescape($status) . "'>";
             foreach ($cards as $row) {
@@ -219,6 +234,22 @@ class SprintBoard extends CommonGLPI
         echo "</div>"; // card
     }
 
+    private static function renderViewTools(array $items, array $tagsById): void
+    {
+        $owners = []; $tags = [];
+        foreach ($items as $row) {
+            $uid = (int)($row['users_id'] ?? 0);
+            $owners[$uid] = $uid > 0 ? SprintCache::userName($uid) : __('Unassigned', 'sprint');
+            foreach ($tagsById[(int)$row['id']] ?? [] as $tag) $tags[$tag] = $tag;
+        }
+        asort($owners); natcasesort($tags);
+        echo "<div class='d-flex flex-wrap gap-2 align-items-center mb-2 p-2 rounded border'><i class='fas fa-filter text-muted'></i><select class='form-select form-select-sm' id='sb-owner' style='width:auto'><option value=''>" . __('All owners', 'sprint') . '</option>';
+        foreach ($owners as $id => $name) echo "<option value='" . (int)$id . "'>" . htmlescape($name) . '</option>';
+        echo "</select><select class='form-select form-select-sm' id='sb-tag' style='width:auto'><option value=''>" . __('All tags', 'sprint') . '</option>';
+        foreach ($tags as $tag) echo "<option value='" . htmlescape(mb_strtolower($tag)) . "'>" . htmlescape($tag) . '</option>';
+        echo "</select><label class='form-check form-switch mb-0'><input class='form-check-input' id='sb-swimlane' type='checkbox'><span class='form-check-label'>" . __('Owner swimlanes', 'sprint') . "</span></label><button type='button' class='btn btn-sm btn-outline-secondary' id='sb-reset'>" . __('Reset') . '</button></div>';
+    }
+
     private static function renderBoardScript(): void
     {
         $endpoint = Plugin::getWebDir('sprint') . '/ajax/updatestatus.php';
@@ -232,6 +263,7 @@ class SprintBoard extends CommonGLPI
         $btnOpenLinked = htmlescape(__('Open linked item', 'sprint'));
         $btnContinue   = htmlescape(__('Continue anyway', 'sprint'));
         $btnCancel     = htmlescape(__('Cancel'));
+        $unassignedJs  = addslashes(__('Unassigned', 'sprint'));
         echo "<div class='modal fade' id='sprint-linkedopen-modal' tabindex='-1' aria-hidden='true'>"
             . "<div class='modal-dialog modal-dialog-centered'>"
             . "<div class='modal-content'>"
@@ -251,12 +283,69 @@ class SprintBoard extends CommonGLPI
             . "</div>"
             . "</div></div></div>";
 
+        // DoD dialog for moves to Review/Done (needs_dod response).
+        $ttlDod = htmlescape(__('Definition of Done', 'sprint'));
+        $msgDod = htmlescape(__('Confirm every check before moving this item on.', 'sprint'));
+        $btnDod = htmlescape(__('Confirm', 'sprint'));
+        echo "<div class='modal fade' id='sprint-dod-modal' tabindex='-1' aria-hidden='true'>"
+            . "<div class='modal-dialog modal-dialog-centered'>"
+            . "<div class='modal-content'>"
+            . "<div class='modal-header'>"
+            . "<h5 class='modal-title'><i class='fas fa-list-check me-2'></i>{$ttlDod}</h5>"
+            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>"
+            . "</div>"
+            . "<div class='modal-body'>"
+            . "<p class='text-muted small mb-2'>{$msgDod}</p>"
+            . "<div class='sprint-dod-list'></div>"
+            . "</div>"
+            . "<div class='modal-footer'>"
+            . "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$btnCancel}</button>"
+            . "<button type='button' class='btn btn-success sprint-dod-go' disabled>{$btnDod}</button>"
+            . "</div>"
+            . "</div></div></div>";
+
         echo <<<JS
 <script>
 (function(){
     if (window.__sprintKanbanBound) { return; }
     window.__sprintKanbanBound = true;
     if (typeof jQuery === 'undefined') { return; }
+
+    // Personal display settings stay local.
+    (function(){
+        var owner = document.getElementById('sb-owner'), tag = document.getElementById('sb-tag'), swim = document.getElementById('sb-swimlane');
+        if (!owner || !tag || !swim) return;
+        document.querySelectorAll('.sprint-kanban-body').forEach(function(body){Array.from(body.querySelectorAll('.sprint-kanban-card')).forEach(function(card,index){card.dataset.boardOrder=String(index);});});
+        var key = 'sprint-board-view-' + (document.querySelector('.sprint-kanban') || {}).dataset.sprintId;
+        try { var saved = JSON.parse(localStorage.getItem(key) || '{}'); owner.value=saved.owner||'';tag.value=saved.tag||'';swim.checked=!!saved.swim; } catch(e) {}
+        function apply(){
+            document.querySelectorAll('.sprint-kanban-card').forEach(function(card){
+                var ownerOk=!owner.value||String(card.dataset.usersId||'0')===owner.value;
+                var blob=String(card.dataset.itemTags||'').toLowerCase();
+                var tagOk=!tag.value||blob.indexOf('|'+tag.value+'|')!==-1;
+                card.style.display=ownerOk&&tagOk?'':'none';
+            });
+            document.querySelectorAll('.sb-owner-lane').forEach(function(n){n.remove();});
+            if(swim.checked){
+                document.querySelectorAll('.sprint-kanban-body').forEach(function(body){
+                    var last='';
+                    Array.from(body.querySelectorAll('.sprint-kanban-card')).sort(function(a,b){return String(a.dataset.ownerName).localeCompare(String(b.dataset.ownerName));}).forEach(function(card){
+                        var name=card.dataset.ownerName||'{$unassignedJs}';
+                        if(card.style.display!== 'none' && name!==last){var h=document.createElement('div');h.className='sb-owner-lane small fw-bold text-muted mt-2 mb-1';h.textContent=name;body.appendChild(h);last=name;}
+                        body.appendChild(card);
+                    });
+                });
+            } else {
+                document.querySelectorAll('.sprint-kanban-body').forEach(function(body){
+                    Array.from(body.querySelectorAll('.sprint-kanban-card')).sort(function(a,b){return parseInt(a.dataset.boardOrder||'0',10)-parseInt(b.dataset.boardOrder||'0',10);}).forEach(function(card){body.appendChild(card);});
+                });
+            }
+            try { localStorage.setItem(key,JSON.stringify({owner:owner.value,tag:tag.value,swim:swim.checked})); } catch(e) {}
+        }
+        owner.addEventListener('change',apply);tag.addEventListener('change',apply);swim.addEventListener('change',apply);
+        document.getElementById('sb-reset').addEventListener('click',function(){owner.value='';tag.value='';swim.checked=false;apply();});
+        setTimeout(apply,0);
+    })();
 
     var endpoint = "{$endpoint}";
     var tokenUrl = "{$tokenUrl}";
@@ -320,18 +409,57 @@ class SprintBoard extends CommonGLPI
         }
     }
 
-    function persistStatus(id, newStatus, card, fromBody, confirmOpen) {
+    function persistStatus(id, newStatus, card, fromBody, confirmOpen, doneList) {
         jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
         .then(function(tok){
+            var data = {
+                id: id, status: newStatus,
+                confirm_linked_open: confirmOpen ? 1 : 0,
+                _glpi_csrf_token: tok && tok.token ? tok.token : ''
+            };
+            if (doneList && doneList.length) { data.done = doneList; }
             return jQuery.ajax({
                 url: endpoint, type: 'POST', dataType: 'json',
-                data: {
-                    id: id, status: newStatus,
-                    confirm_linked_open: confirmOpen ? 1 : 0,
-                    _glpi_csrf_token: tok && tok.token ? tok.token : ''
-                }
+                data: data
             });
         }).done(function(resp){
+            if (resp && resp.needs_dod) {
+                var dodEl = document.getElementById('sprint-dod-modal');
+                if (!dodEl) {
+                    revertMove(card, fromBody);
+                    if (window.glpi_toast_error) { window.glpi_toast_error(resp.message || "{$errMove}"); }
+                    return;
+                }
+                pendingMove = { id: id, newStatus: newStatus, card: card, fromBody: fromBody, doneList: doneList || null };
+                pendingMoveConfirmed = false;
+                var list = dodEl.querySelector('.sprint-dod-list');
+                list.innerHTML = '';
+                (resp.dod || []).forEach(function(check){
+                    var label = document.createElement('label');
+                    label.className = 'form-check d-block';
+                    var input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.className = 'form-check-input sprint-dod-check';
+                    input.value = check;
+                    input.checked = (resp.checked || []).indexOf(check) !== -1;
+                    var span = document.createElement('span');
+                    span.className = 'form-check-label';
+                    span.textContent = check;
+                    label.appendChild(input);
+                    label.appendChild(span);
+                    list.appendChild(label);
+                });
+                var goBtn = dodEl.querySelector('.sprint-dod-go');
+                var refreshGo = function(){
+                    goBtn.disabled = !!list.querySelector('.sprint-dod-check:not(:checked)');
+                };
+                list.querySelectorAll('.sprint-dod-check').forEach(function(cb){
+                    cb.addEventListener('change', refreshGo);
+                });
+                refreshGo();
+                bootstrap.Modal.getOrCreateInstance(dodEl).show();
+                return;
+            }
             if (resp && resp.needs_confirm) {
                 var modalEl = document.getElementById('sprint-linkedopen-modal');
                 if (!modalEl) {
@@ -402,12 +530,26 @@ class SprintBoard extends CommonGLPI
         if (pendingMove) {
             var mv = pendingMove;
             pendingMove = null;
-            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, true);
+            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, true, mv.doneList);
+        }
+    });
+
+    // DoD confirmed: retry the move carrying the checked DoD values.
+    jQuery(document).on('click', '#sprint-dod-modal .sprint-dod-go', function(){
+        var dodEl = document.getElementById('sprint-dod-modal');
+        pendingMoveConfirmed = true;
+        var done = [];
+        dodEl.querySelectorAll('.sprint-dod-check:checked').forEach(function(cb){ done.push(cb.value); });
+        bootstrap.Modal.getOrCreateInstance(dodEl).hide();
+        if (pendingMove) {
+            var mv = pendingMove;
+            pendingMove = null;
+            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, false, done);
         }
     });
 
     // Dismissed without confirming (Cancel, X, backdrop): undo the move.
-    jQuery(document).on('hidden.bs.modal', '#sprint-linkedopen-modal', function(){
+    jQuery(document).on('hidden.bs.modal', '#sprint-linkedopen-modal, #sprint-dod-modal', function(){
         if (pendingMoveConfirmed) { pendingMoveConfirmed = false; return; }
         if (pendingMove) {
             revertMove(pendingMove.card, pendingMove.fromBody);

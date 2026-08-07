@@ -6,7 +6,6 @@ use CommonDBTM;
 use CommonGLPI;
 use Plugin;
 use Profile as GlpiProfile;
-use ProfileRight;
 use Html;
 use Session;
 

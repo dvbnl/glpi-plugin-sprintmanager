@@ -211,6 +211,16 @@ class SprintRequest extends CommonDBTM
             'status'                       => self::STATUS_PENDING,
             'date_creation'                => $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s'),
         ]);
+        $sprint = new Sprint();
+        if ($newId && $sprint->getFromDB($sprintId)) {
+            SprintAgility::signal(
+                $sprintId,
+                (int)($sprint->fields['users_id'] ?? 0),
+                'approval',
+                sprintf(__('A new %s request is waiting for approval.', 'sprint'), $type),
+                Sprint::getFormURLWithID($sprintId)
+            );
+        }
         return (int)$newId;
     }
 
@@ -228,23 +238,6 @@ class SprintRequest extends CommonDBTM
             'plugin_sprint_sprintitems_id' => $itemId,
             'status'                       => self::STATUS_PENDING,
         ], ['date_creation ASC']);
-        if (count($rows) === 0) {
-            return null;
-        }
-        return reset($rows);
-    }
-
-    /** Pending request row for an item+type, or null. */
-    public static function getPendingForItem(int $itemId, string $type): ?array
-    {
-        if ($itemId <= 0 || !self::ensureTable()) {
-            return null;
-        }
-        $rows = (new self())->find([
-            'request_type'                 => $type,
-            'plugin_sprint_sprintitems_id' => $itemId,
-            'status'                       => self::STATUS_PENDING,
-        ]);
         if (count($rows) === 0) {
             return null;
         }
@@ -410,6 +403,7 @@ class SprintRequest extends CommonDBTM
             'users_id_validate' => (int)Session::getLoginUserID(),
             'date_mod'          => $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s'),
         ]);
+        SprintAgility::resolveApprovalSignals((int)($this->fields['plugin_sprint_sprints_id'] ?? 0));
     }
 
     /**
@@ -430,7 +424,7 @@ class SprintRequest extends CommonDBTM
             . "background:color-mix(in srgb,#f1c40f 18%,var(--tblr-bg-surface,#fff));font-weight:700;'>";
         echo "<i class='fas fa-inbox'></i>";
         echo "<span>" . __('Requests awaiting your approval', 'sprint') . "</span>";
-        echo "<span class='badge bg-warning text-dark'>" . count($requests) . "</span>";
+        echo "<span class='badge bg-warning' style='color:#212529;'>" . count($requests) . "</span>";
         echo "</div>";
 
         self::renderRequestsTable($requests, true, true);

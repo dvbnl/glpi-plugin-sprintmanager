@@ -3,9 +3,6 @@
 namespace GlpiPlugin\Sprint;
 
 use CommonGLPI;
-use DBmysqlIterator;
-use Html;
-use Session;
 
 /**
  * SprintAudit - consolidated audit trail for a sprint.
@@ -17,12 +14,6 @@ use Session;
 class SprintAudit extends CommonGLPI
 {
     public static $rightname = 'plugin_sprint_sprint';
-
-    /**
-     * Retention is scoped per-sprint (rows kept as long as the sprint
-     * exists). This is only a fallback bound for sprints with no dates set.
-     */
-    const RETENTION_DAYS = 14;
 
     public static function getTypeName($nb = 0): string
     {
@@ -182,7 +173,6 @@ class SprintAudit extends CommonGLPI
         ];
 
         $entries = [];
-        $nameCache = [];
         $logIds = [];
 
         foreach ($DB->request($criteria) as $row) {

@@ -522,8 +522,12 @@
             w.setAttribute('data-sprint-collapse-wired', '1');
             var key = w.getAttribute('data-sprint-collapse-key');
             try {
-                if (localStorage.getItem('sprint-collapse-' + key) === '1') {
+                var stored = localStorage.getItem('sprint-collapse-' + key);
+                if (stored === '1') {
                     w.classList.add('sprint-collapsed');
+                } else if (stored === '0') {
+                    // Explicitly expanded — overrides a server-rendered default collapse.
+                    w.classList.remove('sprint-collapsed');
                 }
             } catch (e) { /* localStorage unavailable — ignore */ }
         }
@@ -687,20 +691,24 @@
             }
 
             var btn = form.querySelector('.sprint-backlog-assign-btn');
+
+            var doAssign = function(readyChecks) {
             if (btn) { btn.disabled = true; }
 
             window.jQuery.ajax({
                 url: ajaxBase + 'csrftoken.php',
                 type: 'GET', dataType: 'json', cache: false
             }).then(function(tokResp) {
+                var data = {
+                    id: itemId,
+                    plugin_sprint_sprints_id: sprintId,
+                    _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                };
+                if (readyChecks && readyChecks.length) { data.ready = readyChecks; }
                 return window.jQuery.ajax({
                     url: ajaxBase + 'assigntosprint.php',
                     type: 'POST', dataType: 'json',
-                    data: {
-                        id: itemId,
-                        plugin_sprint_sprints_id: sprintId,
-                        _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
-                    }
+                    data: data
                 });
             }).done(function(resp) {
                 if (resp && resp.success) {
@@ -753,6 +761,14 @@
                 }
                 if (btn) { btn.disabled = false; }
             });
+            };
+
+            // Definition of Ready confirmation dialog, when the page provides one.
+            if (typeof window.sprintDorConfirm === 'function') {
+                window.sprintDorConfirm(doAssign);
+            } else {
+                doAssign(null);
+            }
         });
     }
 
@@ -760,5 +776,517 @@
         document.addEventListener('DOMContentLoaded', wireBacklogAssign);
     } else {
         wireBacklogAssign();
+    }
+})();
+
+/**
+ * ================================================================
+ * Guided meeting rail (review / retrospective)
+ * ================================================================
+ * Session state persists via ajax/meetingphase.php (resume after refresh);
+ * improvement widgets post to front/sprintagility.form.php with _ajax=1 and
+ * patch every matching [data-imp-list] so all phases stay in sync.
+ */
+(function() {
+    'use strict';
+
+    function pluginRoot() {
+        return ((window.CFG_GLPI && window.CFG_GLPI.root_doc) ? window.CFG_GLPI.root_doc : '') + '/plugins/sprint/';
+    }
+
+    function rail() {
+        return document.querySelector('.sprint-meeting-rail');
+    }
+
+    // Offset between the browser clock and the server clock, so the phase
+    // timer survives refreshes and client clock skew.
+    var clockOffset = 0;
+
+    function serverNowSec() {
+        return Math.floor(Date.now() / 1000) - clockOffset;
+    }
+
+    function recalcOffset(root) {
+        var serverNow = parseInt(root.getAttribute('data-server-now'), 10) || 0;
+        if (serverNow > 0) {
+            clockOffset = Math.floor(Date.now() / 1000) - serverNow;
+        }
+    }
+
+    function fetchToken() {
+        return window.jQuery.ajax({
+            url: pluginRoot() + 'ajax/csrftoken.php',
+            type: 'GET', dataType: 'json', cache: false
+        });
+    }
+
+    function phasePost(root, action, extra) {
+        return fetchToken().then(function(tok) {
+            var data = {
+                action: action,
+                meeting_id: parseInt(root.getAttribute('data-meeting-id'), 10) || 0,
+                _glpi_csrf_token: tok && tok.token ? tok.token : ''
+            };
+            if (extra) {
+                for (var k in extra) { data[k] = extra[k]; }
+            }
+            return window.jQuery.ajax({
+                url: pluginRoot() + 'ajax/meetingphase.php',
+                type: 'POST', dataType: 'json', data: data
+            });
+        });
+    }
+
+    function applySession(root, resp, scroll) {
+        if (!resp || !resp.success) {
+            if (window.glpi_toast_error) {
+                window.glpi_toast_error((resp && resp.message) || 'Could not update the meeting');
+            }
+            return;
+        }
+        root.setAttribute('data-status', resp.status);
+        root.setAttribute('data-current-phase', String(resp.current_phase));
+        root.setAttribute('data-phase-started-at', String(resp.phase_started_at_ts || 0));
+        root.setAttribute('data-server-now', String(resp.server_now_ts || 0));
+        recalcOffset(root);
+        syncUI(root);
+        tick(root);
+        if (scroll) {
+            var card = root.querySelector('.sprint-phase-card[data-phase-index="' + resp.current_phase + '"]');
+            if (card && card.scrollIntoView) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    }
+
+    function syncUI(root) {
+        var status  = root.getAttribute('data-status') || 'open';
+        var phase   = parseInt(root.getAttribute('data-current-phase'), 10) || 0;
+        var total   = parseInt(root.getAttribute('data-phase-count'), 10) || 0;
+        var running = (status === 'in_progress');
+
+        // Status badge
+        var badge = root.querySelector('.sprint-meeting-status-badge');
+        if (badge) {
+            var lbl = badge.getAttribute('data-lbl-' + status.replace('_', '-')) || status;
+            badge.textContent = lbl;
+            badge.className = 'badge sprint-meeting-status-badge ' +
+                (status === 'in_progress' ? 'bg-blue-lt' : (status === 'completed' ? 'bg-green-lt' : 'bg-secondary-lt'));
+        }
+
+        // Step + active phase title
+        var step = root.querySelector('.sprint-meeting-step');
+        if (step) { step.textContent = running ? ((phase + 1) + ' / ' + total) : ''; }
+        var activeCard = root.querySelector('.sprint-phase-card[data-phase-index="' + phase + '"]');
+        var titleEl = root.querySelector('.sprint-meeting-phase-title');
+        if (titleEl) {
+            var t = (running && activeCard) ? activeCard.querySelector('.sprint-phase-title') : null;
+            titleEl.textContent = t ? ('— ' + t.textContent) : '';
+        }
+
+        // Nav buttons
+        var btnStart = root.querySelector('.sprint-meeting-btn-start');
+        if (btnStart) {
+            btnStart.style.display = running ? 'none' : '';
+            var startLbl = btnStart.querySelector('.sprint-meeting-btn-start-label');
+            if (startLbl) {
+                startLbl.textContent = (status === 'completed')
+                    ? btnStart.getAttribute('data-lbl-restart')
+                    : btnStart.getAttribute('data-lbl-start');
+            }
+        }
+        var btnPrev = root.querySelector('.sprint-meeting-btn-prev');
+        var btnNext = root.querySelector('.sprint-meeting-btn-next');
+        var btnEnd  = root.querySelector('.sprint-meeting-btn-end');
+        if (btnPrev) { btnPrev.style.display = running ? '' : 'none'; btnPrev.disabled = phase <= 0; }
+        if (btnNext) { btnNext.style.display = running ? '' : 'none'; btnNext.disabled = phase >= total - 1; }
+        if (btnEnd)  { btnEnd.style.display  = running ? '' : 'none'; }
+
+        // Timer visibility
+        var timer = root.querySelector('.sprint-meeting-timer');
+        if (timer && !running) { timer.textContent = ''; }
+
+        // Phase card states
+        root.querySelectorAll('.sprint-phase-card').forEach(function(card) {
+            var idx = parseInt(card.getAttribute('data-phase-index'), 10) || 0;
+            card.classList.remove('is-active', 'is-done', 'is-upcoming');
+            if (status === 'completed') {
+                card.classList.add('is-done');
+            } else if (running && idx === phase) {
+                card.classList.add('is-active');
+            } else if (running && idx < phase) {
+                card.classList.add('is-done');
+            } else {
+                card.classList.add('is-upcoming');
+            }
+        });
+    }
+
+    function tick(root) {
+        if ((root.getAttribute('data-status') || '') !== 'in_progress') { return; }
+        var startedAt = parseInt(root.getAttribute('data-phase-started-at'), 10) || 0;
+        var phase     = parseInt(root.getAttribute('data-current-phase'), 10) || 0;
+        var card      = root.querySelector('.sprint-phase-card[data-phase-index="' + phase + '"]');
+        var mins      = card ? (parseInt(card.getAttribute('data-minutes'), 10) || 0) : 0;
+        var timer     = root.querySelector('.sprint-meeting-timer');
+        if (!timer || startedAt <= 0) { return; }
+        var s = Math.max(0, serverNowSec() - startedAt);
+        timer.textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) + ' / ' + mins + ' min';
+        timer.classList.toggle('text-danger', mins > 0 && s > mins * 60);
+    }
+
+    // ---- Phase navigation -------------------------------------------------
+
+    function canDrive(root) {
+        return root && root.getAttribute('data-can-drive') === '1';
+    }
+
+    document.addEventListener('click', function(e) {
+        var el = e.target && e.target.closest
+            ? e.target.closest('[data-sprint-action^="meeting-"]')
+            : null;
+        if (!el) { return; }
+        var root = rail();
+        if (!root) { return; }
+        var action = el.getAttribute('data-sprint-action');
+
+        if (action === 'meeting-start' && canDrive(root)) {
+            el.disabled = true;
+            phasePost(root, 'start_meeting').done(function(resp) {
+                applySession(root, resp, true);
+            }).always(function() { el.disabled = false; });
+
+        } else if ((action === 'meeting-prev' || action === 'meeting-next') && canDrive(root)) {
+            var phase = parseInt(root.getAttribute('data-current-phase'), 10) || 0;
+            var total = parseInt(root.getAttribute('data-phase-count'), 10) || 0;
+            var target = action === 'meeting-next'
+                ? Math.min(total - 1, phase + 1)
+                : Math.max(0, phase - 1);
+            if (target === phase) { return; }
+            el.disabled = true;
+            phasePost(root, 'set_phase', { phase: target }).done(function(resp) {
+                applySession(root, resp, true);
+            }).always(function() { el.disabled = false; });
+
+        } else if (action === 'meeting-goto' && canDrive(root)) {
+            if ((root.getAttribute('data-status') || '') !== 'in_progress') { return; }
+            var card = el.closest('.sprint-phase-card');
+            if (!card) { return; }
+            var idx = parseInt(card.getAttribute('data-phase-index'), 10) || 0;
+            if (idx === (parseInt(root.getAttribute('data-current-phase'), 10) || 0)) { return; }
+            phasePost(root, 'set_phase', { phase: idx }).done(function(resp) {
+                applySession(root, resp, false);
+            });
+
+        } else if (action === 'meeting-end' && canDrive(root)) {
+            var msg = el.getAttribute('data-confirm');
+            if (msg && !window.confirm(msg)) { return; }
+            el.disabled = true;
+            phasePost(root, 'end_meeting').done(function(resp) {
+                applySession(root, resp, false);
+            }).always(function() { el.disabled = false; });
+        }
+    }, true);
+
+    // ---- Per-phase notes autosave ----------------------------------------
+
+    var noteTimers = {};
+
+    document.addEventListener('input', function(e) {
+        var ta = e.target;
+        if (!ta || !ta.classList || !ta.classList.contains('sprint-phase-note')) { return; }
+        var root = rail();
+        if (!root || !canDrive(root)) { return; }
+        var key = ta.getAttribute('data-phase-key') || '';
+        if (noteTimers[key]) { clearTimeout(noteTimers[key]); }
+        noteTimers[key] = setTimeout(function() {
+            phasePost(root, 'save_phase_note', { phase_key: key, note: ta.value }).done(function(resp) {
+                if (!resp || !resp.success) { return; }
+                var wrap  = ta.closest('.sprint-phase-notes');
+                var saved = wrap ? wrap.querySelector('.sprint-phase-note-saved') : null;
+                if (saved) {
+                    saved.style.display = '';
+                    setTimeout(function() { saved.style.display = 'none'; }, 1500);
+                }
+            });
+        }, 800);
+    }, true);
+
+    // ---- Improvements (collect / vote / actions / summary) ----------------
+
+    function impPost(root, data) {
+        return fetchToken().then(function(tok) {
+            data.sprint_id = parseInt(root.getAttribute('data-sprint-id'), 10) || 0;
+            data._ajax = 1;
+            data._glpi_csrf_token = tok && tok.token ? tok.token : '';
+            return window.jQuery.ajax({
+                url: pluginRoot() + 'front/sprintagility.form.php',
+                type: 'POST', dataType: 'json', data: data
+            });
+        });
+    }
+
+    function catLabels(root) {
+        try {
+            return JSON.parse(root.getAttribute('data-cat-labels') || '{}') || {};
+        } catch (err) { return {}; }
+    }
+
+    // Build one improvement row for a given list, honouring the list's
+    // display flags (vote button / votes pill / owner / status / toggle).
+    function buildImpRow(root, list, row) {
+        var d = list.dataset;
+        var item = document.createElement('div');
+        item.className = 'sprint-imp-item d-flex flex-wrap align-items-center gap-2';
+        item.setAttribute('data-improvement-id', String(row.id));
+        item.setAttribute('data-category', row.category);
+        item.setAttribute('data-votes', String(row.votes || 0));
+        item.setAttribute('data-status', row.status || 'open');
+
+        var cat = document.createElement('span');
+        cat.className = 'badge bg-blue-lt sprint-imp-cat';
+        cat.textContent = catLabels(root)[row.category] || row.category;
+        item.appendChild(cat);
+
+        var desc = document.createElement('span');
+        desc.className = 'sprint-imp-desc flex-grow-1';
+        desc.textContent = row.description;
+        item.appendChild(desc);
+
+        if (d.impOwner === '1') {
+            var owner = document.createElement('span');
+            owner.className = 'sprint-imp-owner text-muted small';
+            owner.innerHTML = '<i class="fas fa-user me-1"></i>';
+            owner.appendChild(document.createTextNode(row.owner_name || '—'));
+            item.appendChild(owner);
+            if (row.due_date) {
+                var due = document.createElement('span');
+                due.className = 'sprint-imp-due text-muted small';
+                due.innerHTML = '<i class="far fa-calendar me-1"></i>';
+                due.appendChild(document.createTextNode(row.due_date));
+                item.appendChild(due);
+            }
+        }
+
+        if (d.impVoteBtn === '1' && root.getAttribute('data-can-contribute') === '1') {
+            var voteBtn = document.createElement('button');
+            voteBtn.type = 'button';
+            voteBtn.className = 'btn btn-sm btn-link sprint-imp-vote-btn text-muted';
+            voteBtn.setAttribute('data-sprint-action', 'meeting-imp-vote');
+            voteBtn.title = root.getAttribute('data-lbl-vote') || 'Vote';
+            voteBtn.innerHTML = '<i class="far fa-thumbs-up"></i> ';
+            var votes = document.createElement('span');
+            votes.className = 'sprint-imp-votes';
+            votes.textContent = String(row.votes || 0);
+            voteBtn.appendChild(votes);
+            item.appendChild(voteBtn);
+        } else if (d.impVotes === '1') {
+            var pill = document.createElement('span');
+            pill.className = 'badge bg-secondary-lt sprint-imp-votepill';
+            pill.innerHTML = '<i class="far fa-thumbs-up me-1"></i>';
+            var votes2 = document.createElement('span');
+            votes2.className = 'sprint-imp-votes';
+            votes2.textContent = String(row.votes || 0);
+            pill.appendChild(votes2);
+            item.appendChild(pill);
+        }
+
+        if (d.impStatus === '1') {
+            var st = document.createElement('span');
+            var done = (row.status === 'done');
+            st.className = 'badge sprint-imp-statuspill ' + (done ? 'bg-green-lt' : 'bg-yellow-lt');
+            st.textContent = done
+                ? (root.getAttribute('data-lbl-done') || 'Done')
+                : (root.getAttribute('data-lbl-open') || 'Open');
+            item.appendChild(st);
+        }
+
+        if (d.impToggleBtn === '1' && root.getAttribute('data-can-toggle') === '1') {
+            var tg = document.createElement('button');
+            tg.type = 'button';
+            tg.className = 'btn btn-sm btn-outline-success sprint-imp-toggle-btn';
+            tg.setAttribute('data-sprint-action', 'meeting-imp-toggle');
+            tg.innerHTML = '<i class="fas fa-check"></i>';
+            item.appendChild(tg);
+        }
+
+        return item;
+    }
+
+    function insertImpRow(root, row) {
+        root.querySelectorAll('[data-imp-list]').forEach(function(list) {
+            var cats = (list.getAttribute('data-imp-categories') || '').split(',');
+            if (cats.indexOf(row.category) === -1) { return; }
+            var empty = list.querySelector('.sprint-imp-empty');
+            if (empty) { empty.style.display = 'none'; }
+            var el = buildImpRow(root, list, row);
+            if (empty) { list.insertBefore(el, empty); } else { list.appendChild(el); }
+        });
+        resortVoteLists(root);
+    }
+
+    function resortVoteLists(root) {
+        root.querySelectorAll('[data-imp-list][data-imp-sort="votes"]').forEach(function(list) {
+            var rows = Array.prototype.slice.call(list.querySelectorAll('.sprint-imp-item'));
+            rows.sort(function(a, b) {
+                return (parseInt(b.getAttribute('data-votes'), 10) || 0)
+                    - (parseInt(a.getAttribute('data-votes'), 10) || 0);
+            });
+            var empty = list.querySelector('.sprint-imp-empty');
+            rows.forEach(function(r) {
+                if (empty) { list.insertBefore(r, empty); } else { list.appendChild(r); }
+            });
+        });
+    }
+
+    document.addEventListener('click', function(e) {
+        var el = e.target && e.target.closest
+            ? e.target.closest('[data-sprint-action^="meeting-imp-"]')
+            : null;
+        if (!el) { return; }
+        var root = rail();
+        if (!root) { return; }
+        var action = el.getAttribute('data-sprint-action');
+
+        if (action === 'meeting-imp-add') {
+            var box = el.closest('.sprint-imp-add');
+            if (!box) { return; }
+            var descInput = box.querySelector('.sprint-imp-add-description');
+            var desc = descInput ? descInput.value.trim() : '';
+            if (desc === '') {
+                if (descInput) { descInput.focus(); }
+                return;
+            }
+            var catSel   = box.querySelector('.sprint-imp-add-category');
+            var category = box.getAttribute('data-imp-fixed-category') || (catSel ? catSel.value : 'action');
+            var ownerSel = box.querySelector('.sprint-imp-add-owner');
+            var dueInput = box.querySelector('.sprint-imp-add-due');
+            var anonBox  = box.querySelector('.sprint-imp-add-anonymous');
+            var isAnon   = !!(anonBox && anonBox.checked);
+
+            var payload = {
+                action: 'improvement',
+                category: category,
+                description: desc,
+                users_id: ownerSel ? (parseInt(ownerSel.value, 10) || 0) : 0,
+                due_date: dueInput ? dueInput.value : ''
+            };
+            if (isAnon) { payload.is_anonymous = 1; }
+
+            el.disabled = true;
+            impPost(root, payload).done(function(resp) {
+                if (!resp || !resp.success || !resp.id) {
+                    if (window.glpi_toast_error) {
+                        window.glpi_toast_error((resp && resp.message) || 'Could not save');
+                    }
+                    return;
+                }
+                var ownerName = '';
+                if (isAnon && category !== 'action') {
+                    ownerName = root.getAttribute('data-lbl-anon') || 'Anonymous';
+                } else if (ownerSel && ownerSel.selectedIndex > 0) {
+                    ownerName = ownerSel.options[ownerSel.selectedIndex].text;
+                } else if (!ownerSel && category !== 'action') {
+                    ownerName = root.getAttribute('data-current-user') || '';
+                }
+                insertImpRow(root, {
+                    id: resp.id,
+                    category: category,
+                    description: desc,
+                    owner_name: ownerName,
+                    due_date: dueInput ? dueInput.value : '',
+                    votes: 0,
+                    status: 'open'
+                });
+                if (descInput) { descInput.value = ''; }
+                if (dueInput) { dueInput.value = ''; }
+                if (anonBox) { anonBox.checked = false; }
+                if (window.glpi_toast_info && resp.message) { window.glpi_toast_info(resp.message); }
+            }).always(function() { el.disabled = false; });
+
+        } else if (action === 'meeting-imp-vote') {
+            var item = el.closest('[data-improvement-id]');
+            if (!item) { return; }
+            var impId = parseInt(item.getAttribute('data-improvement-id'), 10) || 0;
+            var wasVoted = !!el.querySelector('i.fas');
+            el.disabled = true;
+            impPost(root, { action: 'improvement_vote', id: impId }).done(function(resp) {
+                if (!resp || !resp.success) {
+                    if (window.glpi_toast_error) {
+                        window.glpi_toast_error((resp && resp.message) || 'Could not vote');
+                    }
+                    return;
+                }
+                var delta = wasVoted ? -1 : 1;
+                root.querySelectorAll('[data-improvement-id="' + impId + '"]').forEach(function(r) {
+                    var votes = Math.max(0, (parseInt(r.getAttribute('data-votes'), 10) || 0) + delta);
+                    r.setAttribute('data-votes', String(votes));
+                    r.querySelectorAll('.sprint-imp-votes').forEach(function(v) { v.textContent = String(votes); });
+                    var vb = r.querySelector('.sprint-imp-vote-btn');
+                    if (vb) {
+                        vb.classList.toggle('text-muted', wasVoted);
+                        vb.title = wasVoted
+                            ? (root.getAttribute('data-lbl-vote') || 'Vote')
+                            : (root.getAttribute('data-lbl-unvote') || 'Remove my vote');
+                        var ic = vb.querySelector('i');
+                        if (ic) {
+                            ic.classList.toggle('fas', !wasVoted);
+                            ic.classList.toggle('far', wasVoted);
+                        }
+                    }
+                });
+                resortVoteLists(root);
+            }).always(function() { el.disabled = false; });
+
+        } else if (action === 'meeting-imp-toggle') {
+            var row = el.closest('[data-improvement-id]');
+            if (!row) { return; }
+            var togId = parseInt(row.getAttribute('data-improvement-id'), 10) || 0;
+            el.disabled = true;
+            impPost(root, {
+                action: 'improvement_toggle',
+                id: togId,
+                meeting_id: parseInt(root.getAttribute('data-meeting-id'), 10) || 0
+            }).done(function(resp) {
+                if (!resp || !resp.success) {
+                    if (window.glpi_toast_error) {
+                        window.glpi_toast_error((resp && resp.message) || 'Could not update');
+                    }
+                    return;
+                }
+                var nowDone = row.getAttribute('data-status') !== 'done';
+                root.querySelectorAll('[data-improvement-id="' + togId + '"]').forEach(function(r) {
+                    r.setAttribute('data-status', nowDone ? 'done' : 'open');
+                    var pill = r.querySelector('.sprint-imp-statuspill');
+                    if (pill) {
+                        pill.classList.toggle('bg-green-lt', nowDone);
+                        pill.classList.toggle('bg-yellow-lt', !nowDone);
+                        pill.textContent = nowDone
+                            ? (root.getAttribute('data-lbl-done') || 'Done')
+                            : (root.getAttribute('data-lbl-open') || 'Open');
+                    }
+                });
+            }).always(function() { el.disabled = false; });
+        }
+    }, true);
+
+    // ---- Boot -------------------------------------------------------------
+
+    function bootRail() {
+        var root = rail();
+        if (!root) { return; }
+        recalcOffset(root);
+        syncUI(root);
+        tick(root);
+        setInterval(function() {
+            var r = rail();
+            if (r) { tick(r); }
+        }, 1000);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootRail);
+    } else {
+        bootRail();
     }
 })();

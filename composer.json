@@ -15,5 +15,9 @@
         "psr-4": {
             "GlpiPlugin\\Sprint\\": "src/"
         }
+    },
+    "scripts": {
+        "lint": "find src front ajax -name '*.php' -print0 | xargs -0 -n1 php -l",
+        "test": "php tests/static_contracts.php"
     }
 }

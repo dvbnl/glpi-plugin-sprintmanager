@@ -49,10 +49,4 @@ final class SprintCache
     {
         unset(self::$objects[$itemtype . '#' . $itemsId]);
     }
-
-    public static function flush(): void
-    {
-        self::$objects   = [];
-        self::$userNames = [];
-    }
 }

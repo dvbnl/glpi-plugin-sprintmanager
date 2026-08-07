@@ -23,7 +23,9 @@ if ($fragment === null) {
 }
 
 echo json_encode([
-    'success'    => true,
-    'html'       => $fragment['html'],
-    'is_blocked' => $fragment['is_blocked'],
+    'success'     => true,
+    'html'        => $fragment['html'],
+    'is_blocked'  => $fragment['is_blocked'],
+    'is_parked'   => $fragment['is_parked'],
+    'category_id' => $fragment['category_id'],
 ]);

@@ -107,7 +107,7 @@ if (isset($_POST['back_to_backlog'])) {
         if ($outcome['ok']) {
             Session::addMessageAfterRedirect(
                 $outcome['stayed']
-                    ? __('Underlying item moved to backlog; the sprint item stays for capacity.', 'sprint')
+                    ? __('Underlying item moved to backlog. The sprint item stays for capacity.', 'sprint')
                     : __('Item moved back to backlog', 'sprint')
             );
         }
