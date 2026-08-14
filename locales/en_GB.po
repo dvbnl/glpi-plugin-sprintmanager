@@ -106,23 +106,6 @@ msgstr "Could not add dependency"
 msgid "Dependency added: %s (%s%%)"
 msgstr "Dependency added: %s (%s%%)"
 
-#: ajax/getitemdropdown.php:27 front/sprint.fromtemplate.php:119
-#: src/Sprint.php:175 src/SprintItem.php:411 src/SprintItem.php:806
-#: src/SprintOverview.php:632 src/SprintOverview.php:647
-#: src/SprintProjectTask.php:102
-msgid "Project"
-msgstr "Project"
-
-#: ajax/getitemdropdown.php:34 src/Backlog.php:123 src/SprintDashboard.php:886
-#: src/SprintExport.php:604 src/SprintExport.php:947 src/SprintExport.php:992
-#: src/SprintItem.php:245 src/SprintItem.php:309 src/SprintItem.php:806
-#: src/SprintItem.php:2097 src/SprintMeeting.php:581
-#: src/SprintOverview.php:1611 src/SprintProjectTask.php:76
-#: templates/sprintmeeting.form.html.twig:162
-#: templates/sprintmeeting.form.html.twig:367
-msgid "Project task"
-msgstr "Project task"
-
 #: ajax/requestcreate.php:23 ajax/requestcreate.php:48
 #: ajax/requestcreate.php:61 ajax/requesthandle.php:22
 #: src/SprintRequest.php:308 src/SprintRequest.php:374
@@ -209,34 +192,10 @@ msgstr "Sprint report — %s"
 msgid "Only the Scrum Master can permanently delete a sprint."
 msgstr "Only the Scrum Master can permanently delete a sprint."
 
-#: front/sprint.fromtemplate.php:17
-msgid "Please select a template"
-msgstr "Please select a template"
-
-#: front/sprint.fromtemplate.php:27
-msgid "Template not found"
-msgstr "Template not found"
-
-#: front/sprint.fromtemplate.php:54
-msgid "Failed to create sprint"
-msgstr "Failed to create sprint"
-
-#: front/sprint.fromtemplate.php:59 front/sprint.fromtemplate.php:74
-msgid "Create sprint from template"
-msgstr "Create sprint from template"
-
 #: front/sprint.fromtemplate.php:79 src/SprintOverview.php:633
 #: src/SprintOverview.php:647
 msgid "Template"
 msgstr "Template"
-
-#: front/sprint.fromtemplate.php:91
-msgid "Template details"
-msgstr "Template details"
-
-#: front/sprint.fromtemplate.php:97
-msgid "Sprint name"
-msgstr "Sprint name"
 
 #: front/sprint.fromtemplate.php:104 src/Sprint.php:158 src/Sprint.php:667
 #: templates/sprint.form.html.twig:31
@@ -255,21 +214,9 @@ msgstr "Start date"
 msgid "Scrum Master"
 msgstr "Scrum Master"
 
-#: front/sprint.fromtemplate.php:127
-msgid "Create sprint"
-msgstr "Create sprint"
-
 #: front/sprint.fromtemplate.php:161 src/SprintMeeting.php:171
 msgid "Duration"
 msgstr "Duration"
-
-#: front/sprint.fromtemplate.php:161
-msgid "weeks"
-msgstr "weeks"
-
-#: front/sprint.fromtemplate.php:163
-msgid "Goal"
-msgstr "Goal"
 
 #: front/sprint.fromtemplate.php:166 src/SprintDashboard.php:622
 #: src/SprintFastlane.php:90 src/SprintTemplateMember.php:36
@@ -328,15 +275,6 @@ msgstr "Add to backlog"
 msgid "Manual"
 msgstr "Manual"
 
-#: src/Backlog.php:120 src/SprintDashboard.php:883 src/SprintExport.php:601
-#: src/SprintExport.php:944 src/SprintExport.php:989 src/SprintItem.php:242
-#: src/SprintItem.php:306 src/SprintItem.php:803 src/SprintItem.php:2094
-#: src/SprintMeeting.php:578 src/SprintOverview.php:1608
-#: src/SprintTicket.php:75 templates/sprintmeeting.form.html.twig:156
-#: templates/sprintmeeting.form.html.twig:361
-msgid "Ticket"
-msgstr "Ticket"
-
 #: src/Backlog.php:121 src/SprintAudit.php:98 src/SprintChange.php:76
 #: src/SprintDashboard.php:884 src/SprintExport.php:602
 #: src/SprintExport.php:945 src/SprintExport.php:990 src/SprintItem.php:243
@@ -346,15 +284,6 @@ msgstr "Ticket"
 #: templates/sprintmeeting.form.html.twig:363
 msgid "Change"
 msgstr "Change"
-
-#: src/Backlog.php:122 src/SprintDashboard.php:885 src/SprintExport.php:603
-#: src/SprintExport.php:946 src/SprintExport.php:991 src/SprintItem.php:244
-#: src/SprintItem.php:308 src/SprintItem.php:805 src/SprintItem.php:2096
-#: src/SprintMeeting.php:580 src/SprintOverview.php:1610
-#: src/SprintProblem.php:73 templates/sprintmeeting.form.html.twig:160
-#: templates/sprintmeeting.form.html.twig:365
-msgid "Problem"
-msgstr "Problem"
 
 #: src/Backlog.php:207
 msgid "Items waiting to be assigned to a sprint. Use the dropdown to move an item into a sprint."
@@ -369,29 +298,9 @@ msgstr "Backlog items"
 msgid "Assign all ready (%d)"
 msgstr "Assign all ready (%d)"
 
-#: src/Backlog.php:267
-msgid "Backlog is empty"
-msgstr "Backlog is empty"
-
 #: src/Backlog.php:297 src/Backlog.php:1276
 msgid "Drag to reorder"
 msgstr "Drag to reorder"
-
-#: src/Backlog.php:299 src/Sprint.php:655 src/SprintDashboard.php:319
-#: src/SprintDashboard.php:619 src/SprintDashboard.php:785
-#: src/SprintExport.php:614 src/SprintExport.php:742 src/SprintExport.php:934
-#: src/SprintExport.php:1022 src/SprintExport.php:1085
-#: src/SprintFastlane.php:86 src/SprintItem.php:787 src/SprintItem.php:802
-#: src/SprintItem.php:815 src/SprintItem.php:913 src/SprintItem.php:1360
-#: src/SprintItem.php:3071 src/SprintMeeting.php:650 src/SprintTemplate.php:56
-#: src/SprintTemplate.php:130 src/SprintTemplateItem.php:64
-#: src/SprintTemplateItem.php:95 src/SprintTemplateMeeting.php:127
-#: src/SprintTemplateMeeting.php:198 templates/sprint.form.html.twig:11
-#: templates/sprintmeeting.form.html.twig:122
-#: templates/sprintmeeting.form.html.twig:329
-#: templates/sprintmeeting.form.html.twig:944
-msgid "Name"
-msgstr "Name"
 
 #: src/Backlog.php:300 src/SprintDashboard.php:320 src/SprintDashboard.php:620
 #: src/SprintExport.php:1030 src/SprintFastlane.php:87 src/SprintItem.php:914
@@ -433,18 +342,6 @@ msgstr "Estimated capacity (informational on backlog, enforced once the item joi
 msgid "Est. capacity"
 msgstr "Est. capacity"
 
-#: src/Backlog.php:306 src/SprintChange.php:105 src/SprintChange.php:217
-#: src/SprintFastlane.php:93 src/SprintFastlaneMember.php:170
-#: src/SprintItem.php:921 src/SprintItemDependency.php:216
-#: src/SprintMeeting.php:173 src/SprintMember.php:274 src/SprintProblem.php:102
-#: src/SprintProblem.php:213 src/SprintProjectTask.php:106
-#: src/SprintProjectTask.php:224 src/SprintRequest.php:479
-#: src/SprintStandup.php:169 src/SprintTemplateItem.php:100
-#: src/SprintTemplateMeeting.php:205 src/SprintTemplateMember.php:115
-#: src/SprintTicket.php:106 src/SprintTicket.php:221
-msgid "Actions"
-msgstr "Actions"
-
 #: src/Backlog.php:334 src/SprintItem.php:1344 src/SprintItem.php:3079
 #: templates/sprintmeeting.form.html.twig:618
 msgid "The name follows the linked item and cannot be edited here."
@@ -483,13 +380,6 @@ msgstr "Sprint member"
 #: src/SprintTemplateMember.php:113
 msgid "Capacity"
 msgstr "Capacity"
-
-#: src/Backlog.php:724 src/SprintBoard.php:254 src/SprintItem.php:1026
-#: src/SprintItem.php:1471 src/SprintItem.php:2089
-#: templates/sprintmeeting.form.html.twig:1064
-#: templates/sprintmeeting.form.html.twig:1099
-msgid "Cancel"
-msgstr "Cancel"
 
 # --- v1.1.3 additions ---
 #: src/Backlog.php:725 src/SprintFastlaneMember.php:154 src/SprintItem.php:873
@@ -576,13 +466,6 @@ msgstr "Filter"
 msgid "Search by name"
 msgstr "Search by name"
 
-#: src/Backlog.php:1405 src/SprintOverview.php:629 src/SprintOverview.php:630
-#: src/SprintOverview.php:631 src/SprintOverview.php:632
-#: src/SprintOverview.php:633 src/SprintOverview.php:634
-#: src/SprintOverview.php:635 src/SprintOverview.php:636
-msgid "All"
-msgstr "All"
-
 #: src/Backlog.php:1405 src/SprintAgility.php:685 src/SprintDashboard.php:318
 #: src/SprintExport.php:615 src/SprintExport.php:935 src/SprintExport.php:1023
 #: src/SprintItem.php:780 src/SprintMeeting.php:112 src/SprintMeeting.php:169
@@ -631,10 +514,6 @@ msgstr "Only Scrum Master can edit capacity on sprint items"
 msgid "When enabled, only the sprint's Scrum Master may change the capacity % on regular sprint items. Fastlane item capacity remains editable by every sprint member."
 msgstr "When enabled, only the sprint's Scrum Master may change the capacity % on regular sprint items. Fastlane item capacity remains editable by every sprint member."
 
-#: src/Config.php:222 src/Config.php:239
-msgid "Enable"
-msgstr "Enable"
-
 #: src/Config.php:229
 msgid "Convert backlog capacity to story points on sprint assignment"
 msgstr "Convert backlog capacity to story points on sprint assignment"
@@ -660,12 +539,6 @@ msgstr "Sprint item tags"
 msgid "One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here."
 msgstr "One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here."
 
-#: src/Config.php:273 src/Profile.php:228 src/SprintAgility.php:629
-#: src/SprintItem.php:1473 src/SprintItem.php:2091
-#: templates/sprintmeeting.form.html.twig:1066
-msgid "Save"
-msgstr "Save"
-
 #: src/Profile.php:22 src/Profile.php:162
 msgid "Sprint plugin rights"
 msgstr "Sprint plugin rights"
@@ -673,30 +546,6 @@ msgstr "Sprint plugin rights"
 #: src/Profile.php:38
 msgid "Sprint management"
 msgstr "Sprint management"
-
-#: src/Profile.php:41 src/Profile.php:53
-msgid "Read"
-msgstr "Read"
-
-#: src/Profile.php:42 src/Profile.php:54
-msgid "Create"
-msgstr "Create"
-
-#: src/Profile.php:43 src/Profile.php:55 src/SprintFastlaneMember.php:198
-#: src/SprintItemDependency.php:260
-msgid "Update"
-msgstr "Update"
-
-#: src/Profile.php:44 src/Profile.php:56 src/SprintAgility.php:716
-#: src/SprintItem.php:988 src/SprintMeeting.php:199 src/SprintMember.php:312
-#: src/SprintStandup.php:204 src/SprintTemplateItem.php:120
-#: src/SprintTemplateMeeting.php:249 src/SprintTemplateMember.php:135
-msgid "Delete"
-msgstr "Delete"
-
-#: src/Profile.php:45 src/Profile.php:57
-msgid "Delete permanently"
-msgstr "Delete permanently"
 
 #: src/Profile.php:50 src/SprintDashboard.php:296 src/SprintExport.php:910
 msgid "Sprint items"
@@ -706,10 +555,6 @@ msgstr "Sprint items"
 msgid "Manage own items only"
 msgstr "Manage own items only"
 
-#: src/Profile.php:182
-msgid "Rights"
-msgstr "Rights"
-
 #: src/Profile.php:207
 msgid "Special"
 msgstr "Special"
@@ -717,28 +562,6 @@ msgstr "Special"
 #: src/Sprint.php:103 src/SprintOverview.php:87
 msgid "Settings"
 msgstr "Settings"
-
-#: src/Sprint.php:133 src/Sprint.php:659 src/SprintAgility.php:685
-#: src/SprintChange.php:102 src/SprintChange.php:177
-#: src/SprintDashboard.php:321 src/SprintDashboard.php:621
-#: src/SprintDashboard.php:787 src/SprintExport.php:133
-#: src/SprintExport.php:616 src/SprintExport.php:744 src/SprintExport.php:937
-#: src/SprintExport.php:1026 src/SprintFastlane.php:88 src/SprintItem.php:154
-#: src/SprintItem.php:846 src/SprintItem.php:915 src/SprintItem.php:1375
-#: src/SprintItem.php:2051 src/SprintItem.php:2059 src/SprintItem.php:2067
-#: src/SprintItem.php:2075 src/SprintItem.php:3082
-#: src/SprintItemDependency.php:214 src/SprintMeeting.php:652
-#: src/SprintProblem.php:99 src/SprintProblem.php:173
-#: src/SprintProjectTask.php:184 src/SprintStandup.php:103
-#: src/SprintStandup.php:163 src/SprintStandup.php:254 src/SprintTicket.php:102
-#: src/SprintTicket.php:179 templates/sprint.form.html.twig:39
-#: templates/sprintitem.form.html.twig:18
-#: templates/sprintmeeting.form.html.twig:124
-#: templates/sprintmeeting.form.html.twig:331
-#: templates/sprintmeeting.form.html.twig:960
-#: templates/sprintstandup.form.html.twig:28
-msgid "Status"
-msgstr "Status"
 
 #: src/Sprint.php:150 src/Sprint.php:687 src/SprintTicket.php:181
 #: templates/sprint.form.html.twig:53
@@ -756,14 +579,6 @@ msgstr "Sprint goal"
 #: templates/sprinttemplate.form.html.twig:22
 msgid "Duration (weeks)"
 msgstr "Duration (weeks)"
-
-#: src/Sprint.php:200 src/SprintTemplate.php:88
-msgid "Last update"
-msgstr "Last update"
-
-#: src/Sprint.php:208 src/SprintExport.php:1091 src/SprintTemplate.php:96
-msgid "Creation date"
-msgstr "Creation date"
 
 #: src/Sprint.php:221
 msgid "Planned"
@@ -890,24 +705,10 @@ msgstr "Only the current Scrum Master can reassign this role."
 msgid "Agility"
 msgstr "Agility"
 
-#: src/SprintAgility.php:91
-#, php-format
-msgid "WIP limit reached for this column (%d). Finish work before starting more."
-msgstr "WIP limit reached for this column (%d). Finish work before starting more."
-
-#: src/SprintAgility.php:105
-#, php-format
-msgid "Personal WIP limit reached (%d)."
-msgstr "Personal WIP limit reached (%d)."
-
 #: src/SprintAgility.php:114
 #, php-format
 msgid "Definition of Done incomplete: %s"
 msgstr "Definition of Done incomplete: %s"
-
-#: src/SprintAgility.php:129 src/SprintAgility.php:641
-msgid "Acceptance criteria"
-msgstr "Acceptance criteria"
 
 #: src/SprintAgility.php:184
 msgid "Create SprintManager reminders and escalation signals"
@@ -932,10 +733,6 @@ msgstr "Improvement action due: %s"
 msgid "Capacity overloaded: %s%% used of %s%% available."
 msgstr "Capacity overloaded: %s%% used of %s%% available."
 
-#: src/SprintAgility.php:322
-msgid "Use this page to test the sprint plan, protect flow and turn review findings into clear follow-up actions."
-msgstr "Use this page to test the sprint plan, protect flow and turn review findings into clear follow-up actions."
-
 #: src/SprintAgility.php:325
 msgid "Forecast"
 msgstr "Forecast"
@@ -943,10 +740,6 @@ msgstr "Forecast"
 #: src/SprintAgility.php:326
 msgid "Completion confidence"
 msgstr "Completion confidence"
-
-#: src/SprintAgility.php:327
-msgid "Ready items"
-msgstr "Ready items"
 
 #: src/SprintAgility.php:328
 msgid "Open improvements"
@@ -1138,14 +931,6 @@ msgstr "Risk radar (%d)"
 msgid "Items receive a higher risk score when they are blocked, waiting on a dependency, getting old or approaching a linked deadline. Start with the highest score."
 msgstr "Items receive a higher risk score when they are blocked, waiting on a dependency, getting old or approaching a linked deadline. Start with the highest score."
 
-#: src/SprintAgility.php:599
-msgid "Definition of Ready & Definition of Done"
-msgstr "Definition of Ready & Definition of Done"
-
-#: src/SprintAgility.php:601
-msgid "Define when work is ready to start and when it may be considered complete. These shared agreements make quality visible and consistent."
-msgstr "Define when work is ready to start and when it may be considered complete. These shared agreements make quality visible and consistent."
-
 #: src/SprintAgility.php:604 templates/sprinttemplate.form.html.twig:36
 msgid "Definition of Ready — one check per line"
 msgstr "Definition of Ready — one check per line"
@@ -1158,18 +943,10 @@ msgstr "Definition of Done — one check per line"
 msgid "Work in Progress (WIP) limits"
 msgstr "Work in Progress (WIP) limits"
 
-#: src/SprintAgility.php:607
-msgid "Work in Progress is work that has started but is not finished. Set limits to reduce multitasking, expose bottlenecks and help the team finish work before starting more."
-msgstr "Work in Progress is work that has started but is not finished. Set limits to reduce multitasking, expose bottlenecks and help the team finish work before starting more."
-
 #: src/SprintAgility.php:614 src/SprintTemplate.php:157
 #: templates/sprinttemplate.form.html.twig:42
 msgid "Enforce WIP limits"
 msgstr "Enforce WIP limits"
-
-#: src/SprintAgility.php:615 templates/sprinttemplate.form.html.twig:41
-msgid "WIP limit per person"
-msgstr "WIP limit per person"
 
 #: src/SprintAgility.php:616
 msgid "Linked status automation"
@@ -1200,23 +977,6 @@ msgstr "When solved/closed"
 msgid "Do nothing"
 msgstr "Do nothing"
 
-#: src/SprintAgility.php:636
-msgid "Readiness & Definition of Done"
-msgstr "Readiness & Definition of Done"
-
-#: src/SprintAgility.php:638
-msgid "Add acceptance criteria and record the required quality checks for each item. Ready also requires an owner and capacity. An incomplete Definition of Done prevents completion when quality gates are enforced."
-msgstr "Add acceptance criteria and record the required quality checks for each item. Ready also requires an owner and capacity. An incomplete Definition of Done prevents completion when quality gates are enforced."
-
-#: src/SprintAgility.php:641
-msgid "Quality checks"
-msgstr "Quality checks"
-
-#: src/SprintAgility.php:649
-#, php-format
-msgid "Missing %d"
-msgstr "Missing %d"
-
 #: src/SprintAgility.php:654
 msgid "No epic"
 msgstr "No epic"
@@ -1224,10 +984,6 @@ msgstr "No epic"
 #: src/SprintAgility.php:672
 msgid "Retrospective & improvement actions"
 msgstr "Retrospective & improvement actions"
-
-#: src/SprintAgility.php:674
-msgid "Capture what the team should start, stop or continue. Give actions an owner and due date so open improvements can follow the team into the next sprint."
-msgstr "Capture what the team should start, stop or continue. Give actions an owner and due date so open improvements can follow the team into the next sprint."
 
 #: src/SprintAgility.php:682 src/SprintAgility.php:687
 msgid "Anonymous"
@@ -1378,13 +1134,6 @@ msgstr "When"
 #: src/SprintAudit.php:95
 msgid "Area"
 msgstr "Area"
-
-#: src/SprintAudit.php:99 src/SprintFastlaneMember.php:167
-#: src/SprintMember.php:208 src/SprintMember.php:270 src/SprintMember.php:658
-#: src/SprintTemplateMember.php:83 src/SprintTemplateMember.php:111
-#: templates/sprintmember.form.html.twig:18
-msgid "User"
-msgstr "User"
 
 #: src/SprintAudit.php:105
 msgid "No audit entries yet"
@@ -1588,22 +1337,6 @@ msgstr "Link a change"
 msgid "Assign to member"
 msgstr "Assign to member"
 
-#: src/SprintChange.php:88 src/SprintProblem.php:85
-#: src/SprintProjectTask.php:88 src/SprintTicket.php:88
-msgid "Link"
-msgstr "Link"
-
-#: src/SprintChange.php:100 src/SprintProblem.php:97
-#: src/SprintProjectTask.php:100 src/SprintTicket.php:100
-msgid "ID"
-msgstr "ID"
-
-#: src/SprintChange.php:101 src/SprintMeeting.php:110 src/SprintMeeting.php:168
-#: src/SprintMeeting.php:509 src/SprintProblem.php:98
-#: src/SprintProjectTask.php:101 src/SprintTicket.php:101
-msgid "Title"
-msgstr "Title"
-
 #: src/SprintChange.php:103 src/SprintMember.php:36 src/SprintProblem.php:100
 #: src/SprintProjectTask.php:104 src/SprintTicket.php:104
 msgid "Sprint Member"
@@ -1657,22 +1390,6 @@ msgstr "Is Fastlane"
 #: src/SprintTicket.php:219
 msgid "Is Blocked"
 msgstr "Is Blocked"
-
-#: src/SprintChange.php:230 src/SprintChange.php:235 src/SprintExport.php:1066
-#: src/SprintExport.php:1104 src/SprintProblem.php:226
-#: src/SprintProblem.php:231 src/SprintProjectTask.php:237
-#: src/SprintProjectTask.php:242 src/SprintTicket.php:234
-#: src/SprintTicket.php:239 templates/sprinttemplate.form.html.twig:42
-msgid "Yes"
-msgstr "Yes"
-
-#: src/SprintChange.php:231 src/SprintChange.php:236 src/SprintExport.php:1066
-#: src/SprintExport.php:1104 src/SprintItem.php:3121 src/SprintProblem.php:227
-#: src/SprintProblem.php:232 src/SprintProjectTask.php:238
-#: src/SprintProjectTask.php:243 src/SprintTicket.php:235
-#: src/SprintTicket.php:240 templates/sprinttemplate.form.html.twig:42
-msgid "No"
-msgstr "No"
 
 #: src/SprintChange.php:240 src/SprintProblem.php:236
 #: src/SprintProjectTask.php:247 src/SprintTicket.php:244
@@ -1734,50 +1451,6 @@ msgstr "In Review"
 #: src/SprintMember.php:593
 msgid "To Do"
 msgstr "To Do"
-
-#: src/SprintDashboard.php:286 src/SprintDashboard.php:878
-#: src/SprintFastlane.php:73 src/SprintItem.php:868 src/SprintItem.php:893
-#: src/SprintItem.php:1328 src/SprintItem.php:3152 src/SprintItem.php:3163
-#: src/SprintMeeting.php:485 src/SprintTemplateItem.php:50
-msgid "Low"
-msgstr "Low"
-
-#: src/SprintDashboard.php:286 src/SprintDashboard.php:878
-#: src/SprintFastlane.php:73 src/SprintItem.php:868 src/SprintItem.php:893
-#: src/SprintItem.php:1328 src/SprintItem.php:3152 src/SprintItem.php:3163
-#: src/SprintMeeting.php:486 src/SprintTemplateItem.php:50
-msgid "Medium"
-msgstr "Medium"
-
-#: src/SprintDashboard.php:286 src/SprintDashboard.php:878
-#: src/SprintFastlane.php:73 src/SprintItem.php:868 src/SprintItem.php:893
-#: src/SprintItem.php:1328 src/SprintItem.php:3152 src/SprintItem.php:3163
-#: src/SprintMeeting.php:484 src/SprintTemplateItem.php:50
-msgid "Very low"
-msgstr "Very low"
-
-#: src/SprintDashboard.php:287 src/SprintDashboard.php:879
-#: src/SprintFastlane.php:74 src/SprintItem.php:869 src/SprintItem.php:894
-#: src/SprintItem.php:1329 src/SprintItem.php:3153 src/SprintItem.php:3164
-#: src/SprintMeeting.php:487 src/SprintTemplateItem.php:51
-msgid "High"
-msgstr "High"
-
-#: src/SprintDashboard.php:287 src/SprintDashboard.php:879
-#: src/SprintFastlane.php:74 src/SprintItem.php:869 src/SprintItem.php:894
-#: src/SprintItem.php:1329 src/SprintItem.php:3153 src/SprintItem.php:3164
-#: src/SprintMeeting.php:488 src/SprintTemplateItem.php:51
-msgid "Very high"
-msgstr "Very high"
-
-#: src/SprintDashboard.php:322 src/SprintFastlane.php:89 src/SprintItem.php:161
-#: src/SprintItem.php:865 src/SprintItem.php:916 src/SprintItem.php:1381
-#: src/SprintItem.php:3150 src/SprintItem.php:3161
-#: src/SprintTemplateItem.php:70 src/SprintTemplateItem.php:96
-#: src/SprintTicket.php:103 templates/sprintitem.form.html.twig:33
-#: templates/sprintmeeting.form.html.twig:968
-msgid "Priority"
-msgstr "Priority"
 
 #: src/SprintDashboard.php:443
 msgid "Team Capacity"
@@ -2171,10 +1844,6 @@ msgstr "No items in this sprint."
 msgid "Helper"
 msgstr "Helper"
 
-#: src/SprintExport.php:1090 src/SprintTemplate.php:160
-msgid "Comments"
-msgstr "Comments"
-
 #: src/SprintFastlane.php:81
 msgid "Items flagged as fastlane in the backlog. Open an entry to assign sprint members and capacity."
 msgstr "Items flagged as fastlane in the backlog. Open an entry to assign sprint members and capacity."
@@ -2208,12 +1877,6 @@ msgstr "No members assigned yet"
 #: src/SprintFastlaneMember.php:203 src/SprintItemDependency.php:280
 msgid "Remove"
 msgstr "Remove"
-
-#: src/SprintFastlaneMember.php:206 src/SprintItem.php:991
-#: src/SprintItemDependency.php:283 src/SprintMeeting.php:202
-#: src/SprintStandup.php:207 src/SprintTemplateItem.php:123
-msgid "Confirm deletion?"
-msgstr "Confirm deletion?"
 
 #: src/SprintItem.php:138 src/SprintStandup.php:91 src/SprintStandup.php:161
 #: src/SprintStandup.php:250 templates/sprintstandup.form.html.twig:10
@@ -2380,10 +2043,6 @@ msgstr "Remove dependency"
 msgid "Remove this dependency?"
 msgstr "Remove this dependency?"
 
-#: src/SprintItem.php:2083 src/SprintProjectTask.php:103
-msgid "Percent done"
-msgstr "Percent done"
-
 #: src/SprintItem.php:2307
 msgid "Only the Scrum Master can assign items to a sprint. The item was placed on the backlog with this sprint pre-selected."
 msgstr "Only the Scrum Master can assign items to a sprint. The item was placed on the backlog with this sprint pre-selected."
@@ -2498,12 +2157,6 @@ msgstr "Sprint Retrospective"
 msgid "Schedule a meeting"
 msgstr "Schedule a meeting"
 
-#: src/SprintMeeting.php:118 src/SprintMeeting.php:170
-#: src/SprintMeeting.php:519 src/SprintStandup.php:167
-#: templates/sprintmeeting.form.html.twig:25
-msgid "Date"
-msgstr "Date"
-
 #: src/SprintMeeting.php:124 src/SprintMeeting.php:521
 #: src/SprintTemplateMeeting.php:119 src/SprintTemplateMeeting.php:201
 #: templates/sprintmeeting.form.html.twig:32
@@ -2522,10 +2175,6 @@ msgstr "No meetings scheduled"
 #: src/SprintMeeting.php:536 templates/sprintmeeting.form.html.twig:51
 msgid "Meeting Notes"
 msgstr "Meeting Notes"
-
-#: src/SprintMeeting.php:639
-msgid "Move this item back to the backlog?"
-msgstr "Move this item back to the backlog?"
 
 #: src/SprintMeeting.php:686 templates/sprintmeeting.form.html.twig:284
 msgid "Sprint Items Review"
@@ -2571,11 +2220,6 @@ msgstr "Other"
 #: src/SprintMember.php:205
 msgid "Add a team member"
 msgstr "Add a team member"
-
-#: src/SprintMember.php:230 src/SprintMember.php:672
-#: templates/sprintmember.form.html.twig:43
-msgid "Comment"
-msgstr "Comment"
 
 #: src/SprintMember.php:268
 msgid "Member settings"
@@ -2821,10 +2465,6 @@ msgstr "Sprints over capacity"
 #: src/SprintOverview.php:625
 msgid "Filters and comparison"
 msgstr "Filters and comparison"
-
-#: src/SprintOverview.php:629 src/SprintOverview.php:646
-msgid "Entity"
-msgstr "Entity"
 
 #: src/SprintOverview.php:631 src/SprintOverview.php:647
 msgid "Team member"
@@ -3254,48 +2894,6 @@ msgid_plural "%d days ago"
 msgstr[0] "%d day ago"
 msgstr[1] "%d days ago"
 
-#: src/SprintStandup.php:27
-msgid "Standup Entry"
-msgid_plural "Standup Entries"
-msgstr[0] "Standup Entry"
-msgstr[1] "Standup Entries"
-
-#: src/SprintStandup.php:38
-msgid "On Track"
-msgstr "On Track"
-
-#: src/SprintStandup.php:39
-msgid "At Risk"
-msgstr "At Risk"
-
-#: src/SprintStandup.php:88
-msgid "Add standup entry"
-msgstr "Add standup entry"
-
-#: src/SprintStandup.php:95 src/SprintStandup.php:162 src/SprintStandup.php:260
-#: templates/sprintstandup.form.html.twig:18
-msgid "Reporter"
-msgstr "Reporter"
-
-#: src/SprintStandup.php:113 src/SprintStandup.php:164
-#: src/SprintStandup.php:274 templates/sprintstandup.form.html.twig:35
-msgid "Done yesterday"
-msgstr "Done yesterday"
-
-#: src/SprintStandup.php:119 src/SprintStandup.php:165
-#: src/SprintStandup.php:278 templates/sprintstandup.form.html.twig:42
-msgid "Plan today"
-msgstr "Plan today"
-
-#: src/SprintStandup.php:125 src/SprintStandup.php:166
-#: src/SprintStandup.php:282 templates/sprintstandup.form.html.twig:49
-msgid "Blockers"
-msgstr "Blockers"
-
-#: src/SprintStandup.php:176
-msgid "No standup entries yet"
-msgstr "No standup entries yet"
-
 #: src/SprintTemplate.php:22
 msgid "Sprint Template"
 msgid_plural "Sprint Templates"
@@ -3314,10 +2912,6 @@ msgstr "Definition of Done"
 #: src/SprintTemplate.php:156
 msgid "Definition of Ready"
 msgstr "Definition of Ready"
-
-#: src/SprintTemplate.php:157
-msgid "Per person"
-msgstr "Per person"
 
 #: src/SprintTemplate.php:157
 msgid "WIP limits: progress / review / dependency"
@@ -3437,10 +3031,6 @@ msgstr "Please select a sprint and a ticket."
 msgid "This ticket (#%d) is already linked to this sprint."
 msgstr "This ticket (#%d) is already linked to this sprint."
 
-#: templates/sprintitem.form.html.twig:41
-msgid "Assignee"
-msgstr "Assignee"
-
 #: templates/sprintmeeting.form.html.twig:184
 #: templates/sprintmeeting.form.html.twig:384
 msgid "Became blocked since the previous meeting"
@@ -3474,10 +3064,6 @@ msgstr "Fastlane allocations"
 #: templates/sprintmeeting.form.html.twig:1007
 msgid "Capacity changes are sent to the Scrum Master for approval."
 msgstr "Capacity changes are sent to the Scrum Master for approval."
-
-#: templates/sprintmeeting.form.html.twig:1078
-msgid "Close"
-msgstr "Close"
 
 #: templates/sprinttemplate.form.html.twig:15
 msgid "e.g. Sprint {{number}} - {{project}}"
@@ -3625,9 +3211,6 @@ msgstr "Set min/max capacity % per category for this sprint"
 msgid "Team"
 msgstr "Team"
 
-msgid "Total team capacity of the selected sprint"
-msgstr "Total team capacity of the selected sprint"
-
 msgid "Category"
 msgstr "Category"
 
@@ -3664,9 +3247,6 @@ msgstr "Ready to start (DoR)"
 msgid "Saved"
 msgstr "Saved"
 
-msgid "Every sprint member can add Start/Stop/Continue input and vote, before and during the retrospective. The Scrum Master runs the guided retrospective and closes items."
-msgstr "Every sprint member can add Start/Stop/Continue input and vote, before and during the retrospective. The Scrum Master runs the guided retrospective and closes items."
-
 msgid "Remove my vote"
 msgstr "Remove my vote"
 
@@ -3676,44 +3256,20 @@ msgstr "Vote"
 msgid "Start guided retrospective"
 msgstr "Start guided retrospective"
 
-msgid "1. Collect"
-msgstr "1. Collect"
-
-msgid "Everyone adds Start / Stop / Continue input (anonymous is fine). Take a few minutes in silence."
-msgstr "Everyone adds Start / Stop / Continue input (anonymous is fine). Take a few minutes in silence."
-
-msgid "2. Vote"
-msgstr "2. Vote"
-
-msgid "Each member votes on the input that matters most. Sorting follows the votes."
-msgstr "Each member votes on the input that matters most. Sorting follows the votes."
-
-msgid "3. Discuss & decide"
-msgstr "3. Discuss & decide"
-
-msgid "Discuss the top-voted input and convert the winners into actions with an owner and a due date."
-msgstr "Discuss the top-voted input and convert the winners into actions with an owner and a due date."
-
-msgid "4. Wrap up"
-msgstr "4. Wrap up"
-
-msgid "Mark treated input as done. Open actions follow the team into the next sprint."
-msgstr "Mark treated input as done. Open actions follow the team into the next sprint."
-
 msgid "Next phase"
 msgstr "Next phase"
 
 msgid "End retrospective"
 msgstr "End retrospective"
 
-msgid "Backlog capacity per category across the upcoming sprints, against optional min/max limits."
-msgstr "Backlog capacity per category across the upcoming sprints, against optional min/max limits."
+msgid "Capacity per category across the upcoming sprints: work already assigned plus backlog proposals, including dependencies and subcategories, against optional min/max limits."
+msgstr "Capacity per category across the upcoming sprints: work already assigned plus backlog proposals, including dependencies and subcategories, against optional min/max limits."
 
 msgid "Not yet planned"
 msgstr "Not yet planned"
 
-msgid "Backlog capacity divided by the average delivered capacity per sprint (last completed sprints)"
-msgstr "Backlog capacity divided by the average delivered capacity per sprint (last completed sprints)"
+msgid "Backlog capacity divided by the delivered capacity per sprint (last completed sprints). The range below runs from the best to the worst of those sprints."
+msgstr "Backlog capacity divided by the delivered capacity per sprint (last completed sprints). The range below runs from the best to the worst of those sprints."
 
 msgid "Work supply (sprints)"
 msgstr "Work supply (sprints)"
@@ -3842,6 +3398,7 @@ msgid "%d sprint"
 msgid_plural "%d sprints"
 msgstr[0] "%d sprint"
 msgstr[1] "%d sprints"
+
 #: src/SprintAgility.php:875
 msgid "The percentage the member IS still available during this period (0% = fully absent)"
 msgstr "The percentage the member IS still available during this period (0% = fully absent)"
@@ -3889,86 +3446,35 @@ msgstr "Epic"
 msgid "Definition of Ready incomplete. Confirm every check to assign this item."
 msgstr "Definition of Ready incomplete. Confirm every check to assign this item."
 
-msgid "1. Opening & check-in"
-msgstr "1. Opening & check-in"
-
 msgid "Everyone scores the sprint 1–5. Restate the goal: improve, no blame."
 msgstr "Everyone scores the sprint 1–5. Restate the goal: improve, no blame."
-
-msgid "2. Review previous actions"
-msgstr "2. Review previous actions"
 
 msgid "Walk through the previous retro's actions: what was done, what stalled and why."
 msgstr "Walk through the previous retro's actions: what was done, what stalled and why."
 
-msgid "3. Collect data"
-msgstr "3. Collect data"
-
 msgid "Everyone writes input in silence first (Start/Stop/Continue or Mad/Sad/Glad) before anyone speaks."
 msgstr "Everyone writes input in silence first (Start/Stop/Continue or Mad/Sad/Glad) before anyone speaks."
-
-msgid "4. Cluster & vote"
-msgstr "4. Cluster & vote"
 
 msgid "Group similar input and dot-vote the two or three themes that matter most."
 msgstr "Group similar input and dot-vote the two or three themes that matter most."
 
-msgid "5. Deep dive"
-msgstr "5. Deep dive"
-
-msgid "Discuss the chosen themes; hunt causes, not symptoms (ask why five times)."
-msgstr "Discuss the chosen themes; hunt causes, not symptoms (ask why five times)."
-
-msgid "6. Decide actions"
-msgstr "6. Decide actions"
-
 msgid "Define at most two or three actions with an owner and a due date — more usually means none get done."
 msgstr "Define at most two or three actions with an owner and a due date — more usually means none get done."
-
-msgid "7. Wrap up"
-msgstr "7. Wrap up"
 
 msgid "Short retro on the retro: was this useful, what do we change next time?"
 msgstr "Short retro on the retro: was this useful, what do we change next time?"
 
-msgid "1. Opening & sprint goal"
-msgstr "1. Opening & sprint goal"
-
 msgid "Restate the sprint goal and planned scope. Was the goal met — yes or no, and why in one sentence."
 msgstr "Restate the sprint goal and planned scope. Was the goal met — yes or no, and why in one sentence."
-
-msgid "2. Results overview"
-msgstr "2. Results overview"
 
 msgid "The numbers: planned vs done per the Definition of Done, plus carry-over. Name what is not done — no discussion yet."
 msgstr "The numbers: planned vs done per the Definition of Done, plus carry-over. Name what is not done — no discussion yet."
 
-msgid "3. Demo of the increment"
-msgstr "3. Demo of the increment"
-
 msgid "Each member briefly demos their own finished items — working functionality, no slides, done items only. Agree the order upfront so it tells one story."
 msgstr "Each member briefly demos their own finished items — working functionality, no slides, done items only. Agree the order upfront so it tells one story."
 
-msgid "4. Unfinished items"
-msgstr "4. Unfinished items"
-
-msgid "Per carry-over item: status, what blocked it, and whether it moves to the next sprint or back to the backlog."
-msgstr "Per carry-over item: status, what blocked it, and whether it moves to the next sprint or back to the backlog."
-
-msgid "5. Backlog & outlook"
-msgstr "5. Backlog & outlook"
-
-msgid "Look at the top of the backlog together: are priorities still right given what this sprint taught you? Capture new insights as items right away."
-msgstr "Look at the top of the backlog together: are priorities still right given what this sprint taught you? Capture new insights as items right away."
-
-msgid "6. Wrap up"
-msgstr "6. Wrap up"
-
 msgid "Summarise the key outcomes and confirm backlog changes. Then on to the retrospective."
 msgstr "Summarise the key outcomes and confirm backlog changes. Then on to the retrospective."
-
-msgid "%d min"
-msgstr "%d min"
 
 msgid "Time in this phase"
 msgstr "Time in this phase"
@@ -3978,9 +3484,6 @@ msgstr "Start guided review"
 
 msgid "End review"
 msgstr "End review"
-
-msgid "Every sprint member can add Start/Stop/Continue input and vote, before and during the retrospective. The guided retrospective and review run from their meetings on the Meetings tab."
-msgstr "Every sprint member can add Start/Stop/Continue input and vote, before and during the retrospective. The guided retrospective and review run from their meetings on the Meetings tab."
 
 # Guided meeting rail (v1.2.x)
 msgid "Opening & sprint goal"
@@ -4099,3 +3602,54 @@ msgstr "Phase notes"
 
 msgid "Notes for this phase..."
 msgstr "Notes for this phase..."
+
+msgid "Show or hide the subcategories"
+msgstr "Show or hide the subcategories"
+
+msgid "Totals include the subcategories"
+msgstr "Totals include the subcategories"
+
+msgid "incl. %d sub"
+msgstr "incl. %d sub"
+
+msgid "including %s%% dependency capacity"
+msgstr "including %s%% dependency capacity"
+
+msgid "Items in the subcategories"
+msgstr "Items in the subcategories"
+
+msgid "Total team capacity of the selected sprint, with the availability exceptions of that sprint applied"
+msgstr "Total team capacity of the selected sprint, with the availability exceptions of that sprint applied"
+
+msgid "Capacity dropped by leave, training or other availability exceptions"
+msgstr "Capacity dropped by leave, training or other availability exceptions"
+
+msgid "%1$s%% already assigned, %2$s%% still on the backlog"
+msgstr "%1$s%% already assigned, %2$s%% still on the backlog"
+
+msgid "Already assigned to this sprint"
+msgstr "Already assigned to this sprint"
+
+msgid "free %s%%"
+msgstr "free %s%%"
+
+msgid "Solid bar = already assigned to the sprint, faded = still a backlog proposal."
+msgstr "Solid bar = already assigned to the sprint, faded = still a backlog proposal."
+
+msgid "%s%% already assigned"
+msgstr "%s%% already assigned"
+
+msgid "Best to worst of the completed sprints used"
+msgstr "Best to worst of the completed sprints used"
+
+msgid "Oldest unplanned item in this category: %d days"
+msgstr "Oldest unplanned item in this category: %d days"
+
+msgid "Reserved for interrupt work: the average fastlane load of the completed sprints, minus what is already assigned here"
+msgstr "Reserved for interrupt work: the average fastlane load of the completed sprints, minus what is already assigned here"
+
+msgid "Team capacity left after the assigned work, the backlog proposals and the fastlane reservation"
+msgstr "Team capacity left after the assigned work, the backlog proposals and the fastlane reservation"
+
+msgid "Those sprints spent an average of %s%% on fastlane work, which is reserved up front."
+msgstr "Those sprints spent an average of %s%% on fastlane work, which is reserved up front."

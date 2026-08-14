@@ -190,30 +190,36 @@
         return null;
     }
 
-    function findTableForBar(bar) {
-        if (!bar) { return null; }
-        // Walk the DOM tree from the bar forward/up looking for the first
-        // <table> that actually contains `tr.sprint-filterable-row`.
+    function findTablesForBar(bar) {
+        if (!bar) { return []; }
+        // Walk the DOM tree from the bar forward/up looking for the <table>s
+        // that contain `tr.sprint-filterable-row`; every match at the first
+        // level that yields any is kept, as the backlog splits its rows over
+        // one table per category bucket.
         //
         // Global class lookup via `document.querySelector('table.<class>')`
         // is NOT reliable here: GLPI's tab machinery can leave stale copies
         // of tab HTML in the DOM when switching tabs, leaving two tables
         // with identical class lists where only one holds the live rows.
         // Walking from the bar's own subtree is deterministic.
+        var found  = [];
         var walker = bar;
-        while (walker) {
+        while (walker && found.length === 0) {
             var sib = walker.nextElementSibling;
             while (sib) {
-                if (sib.tagName === 'TABLE' && sib.querySelector('tr.sprint-filterable-row')) {
-                    return sib;
+                if (sib.tagName === 'TABLE') {
+                    if (sib.querySelector('tr.sprint-filterable-row')) { found.push(sib); }
+                } else if (sib.querySelectorAll) {
+                    var nested = sib.querySelectorAll('table');
+                    for (var n = 0; n < nested.length; n++) {
+                        if (nested[n].querySelector('tr.sprint-filterable-row')) { found.push(nested[n]); }
+                    }
                 }
-                var nested = sib.querySelector && sib.querySelector('table tr.sprint-filterable-row');
-                if (nested) { return nested.closest('table'); }
                 sib = sib.nextElementSibling;
             }
             walker = walker.parentElement;
         }
-        return null;
+        return found;
     }
 
     function applyFilter(bar) {
@@ -225,21 +231,27 @@
             applyAuditFilter(bar);
             return;
         }
-        var table = findTableForBar(bar);
-        if (!table) { return; }
+        var tables = findTablesForBar(bar);
+        if (!tables.length) { return; }
 
         var textEl   = bar.querySelector('.sf-text');
         var statusEl = bar.querySelector('.sf-status');
         var ownerEl  = bar.querySelector('.sf-owner');
         var typeEl   = bar.querySelector('.sf-type');
         var tagEl    = bar.querySelector('.sf-tag');
+        var sprintEl = bar.querySelector('.sf-sprint');
         var text   = textEl   ? (textEl.value   || '').toLowerCase().trim() : '';
         var status = statusEl ? (statusEl.value || '').toString()           : '';
         var owner  = ownerEl  ? (ownerEl.value  || '').toString()           : '';
         var type   = typeEl   ? (typeEl.value   || '').toString()           : '';
         var tag    = tagEl    ? (tagEl.value    || '').toLowerCase()        : '';
+        var sprint = sprintEl ? (sprintEl.value || '').toString()           : '';
 
-        var rows = table.querySelectorAll('tr.sprint-filterable-row');
+        var rows = [];
+        for (var t = 0; t < tables.length; t++) {
+            var found = tables[t].querySelectorAll('tr.sprint-filterable-row');
+            for (var f = 0; f < found.length; f++) { rows.push(found[f]); }
+        }
         for (var i = 0; i < rows.length; i++) {
             var row = rows[i];
             var show = true;
@@ -270,6 +282,14 @@
                 var tagBlob = String(row.getAttribute('data-item-tags') || '');
                 if (tagBlob.indexOf('|' + tag + '|') === -1) { show = false; }
             }
+            if (show && sprint) {
+                var rowSprint = String(row.getAttribute('data-proposed-sprint-id') || '0');
+                if (sprint === '__none__') {
+                    if (rowSprint !== '0' && rowSprint !== '') { show = false; }
+                } else if (rowSprint !== sprint) {
+                    show = false;
+                }
+            }
             // Some GLPI table row utility classes force `display: table-row`
             // with higher CSS priority than a plain inline style update.
             // Toggle a dedicated hidden class instead so filtering works on
@@ -281,6 +301,11 @@
             } else {
                 row.style.setProperty('display', 'none', 'important');
             }
+        }
+
+        // Backlog buckets keep their own header counts; let them resync.
+        if (typeof window.sprintBacklogRefreshSections === 'function') {
+            window.sprintBacklogRefreshSections();
         }
     }
 
@@ -308,7 +333,7 @@
     function resetFilter(bar) {
         bar = resolveBar(bar);
         if (!bar) { return; }
-        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sf-type, .sf-tag, .sprint-audit-kind');
+        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sf-type, .sf-tag, .sf-sprint, .sprint-audit-kind');
         for (var i = 0; i < inputs.length; i++) { inputs[i].value = ''; }
         applyFilter(bar);
     }
@@ -416,7 +441,7 @@
     document.addEventListener('change', function(ev) {
         var t = ev.target;
         if (!t || !t.classList) { return; }
-        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sf-type') || t.classList.contains('sf-tag') || t.classList.contains('sprint-audit-kind')) {
+        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sf-type') || t.classList.contains('sf-tag') || t.classList.contains('sf-sprint') || t.classList.contains('sprint-audit-kind')) {
             onSelectChange(t);
         }
     }, true);
@@ -463,7 +488,7 @@
     if (typeof window.jQuery === 'function') {
         window.jQuery(function($) {
             $(document).off('.sprintFilter')
-                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner, .sprint-filter-bar .sf-type, .sprint-filter-bar .sf-tag', function() {
+                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner, .sprint-filter-bar .sf-type, .sprint-filter-bar .sf-tag, .sprint-filter-bar .sf-sprint', function() {
                     applyFilter(this);
                 })
                 .on('input.sprintFilter', '.sprint-filter-bar .sf-text', function() {
@@ -477,7 +502,7 @@
         if (!bar || bar.dataset.sprintFilterWired === '1') { return; }
         bar.dataset.sprintFilterWired = '1';
 
-        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sf-type, .sf-tag, .sprint-audit-kind');
+        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sf-type, .sf-tag, .sf-sprint, .sprint-audit-kind');
         for (var i = 0; i < selects.length; i++) {
             selects[i].addEventListener('change', function() { applyFilter(this); });
         }

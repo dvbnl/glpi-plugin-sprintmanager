@@ -259,7 +259,7 @@ class Backlog
         }
         asort($owners);
 
-        self::renderFilterBar($typeLabels, $owners);
+        self::renderFilterBar($typeLabels, $owners, $sprintNames);
 
         // One collapsible section per admin-defined category ("mini kanban"),
         // plus a catch-all for uncategorized items. Empty categories still
@@ -362,7 +362,10 @@ class Backlog
         $indent   = $level > 0 ? "margin:8px 0 8px 28px;" : "margin:14px 0;";
         $folder   = $level > 0 ? 'fa-folder-open' : 'fa-folder';
 
+        $parentId = $level > 0 ? SprintCategory::getParentFor($catId) : 0;
+
         echo "<div class='sprint-backlog-cat-section' data-category-id='{$catId}' "
+            . "data-parent-category-id='{$parentId}' "
             . "style='{$indent}border:1px solid var(--tblr-border-color,#e2e8f0);border-left:4px solid {$colorEsc};border-radius:8px;overflow:hidden;'>";
         echo "<div class='sprint-backlog-cat-header' "
             . "style='display:flex;align-items:center;gap:8px;padding:9px 14px;font-weight:700;cursor:pointer;user-select:none;"
@@ -374,6 +377,8 @@ class Backlog
         echo "<i class='fas {$folder}' style='color:{$colorEsc};'></i>";
         echo "<span>" . htmlescape($name) . "</span>";
         echo "<span class='badge bg-secondary sprint-backlog-cat-count'>{$count}</span>";
+        echo "<span class='badge bg-secondary-lt sprint-backlog-cat-subcount' style='display:none;' title='"
+            . __s('Items in the subcategories', 'sprint') . "'></span>";
         echo "<span style='flex:1;'></span>";
         echo "<span class='text-muted small' style='font-weight:400;' title='"
             . __s('Total estimated capacity on the backlog in this category', 'sprint') . "'>"
@@ -1326,40 +1331,94 @@ HTML;
         });
     }
 
-    // Recompute per-section counts, capacity subtotals, ranks and empty rows.
+    // Counts follow the visible rows; ranks stay tied to the full list.
+    function backlogFilterActive() {
+        var active = false;
+        jQuery('.sprint-backlog-filter').find('.sf-text, .sf-type, .sf-owner, .sf-tag, .sf-sprint').each(function() {
+            if (jQuery(this).val()) { active = true; }
+        });
+        return active;
+    }
+    function backlogCollapseKey(\$sec) {
+        return 'sprint.backlog.cat.' + (\$sec.attr('data-category-id') || '0') + '.collapsed';
+    }
+    function backlogSubSections(\$sec) {
+        var id = \$sec.attr('data-category-id') || '0';
+        return id === '0'
+            ? jQuery()
+            : jQuery(".sprint-backlog-cat-section[data-parent-category-id='" + id + "']");
+    }
+    // Folding a parent takes its subcategory sections with it; unfolding hands
+    // each of them back its own state.
+    function backlogApplyCollapse(\$sec) {
+        var collapsed = localStorage.getItem(backlogCollapseKey(\$sec)) === '1';
+        \$sec.find('.sprint-backlog-cat-body').toggle(!collapsed);
+        \$sec.find('.sprint-backlog-cat-chevron').css('transform', collapsed ? 'rotate(-90deg)' : 'rotate(0deg)');
+        backlogSubSections(\$sec).each(function() {
+            var \$sub = jQuery(this);
+            \$sub.toggle(!collapsed);
+            if (!collapsed) { backlogApplyCollapse(\$sub); }
+        });
+    }
     window.sprintBacklogRefreshSections = function() {
+        var filtering = backlogFilterActive();
         jQuery('.sprint-backlog-cat-section').each(function() {
             var \$sec  = jQuery(this);
             var \$rows = \$sec.find('tr.sprint-backlog-row');
-            \$sec.find('.sprint-backlog-empty-row').toggle(\$rows.length === 0);
-            \$sec.find('.sprint-backlog-cat-count').text(\$rows.length);
+            var \$vis  = \$rows.not('.sprint-row-hidden');
+            \$sec.find('.sprint-backlog-empty-row').toggle(\$vis.length === 0);
+            \$sec.find('.sprint-backlog-cat-count').text(\$vis.length);
             var sum = 0;
-            \$rows.each(function() { sum += parseFloat(this.getAttribute('data-capacity')) || 0; });
+            \$vis.each(function() { sum += parseFloat(this.getAttribute('data-capacity')) || 0; });
             \$sec.find('.sprint-backlog-cat-capsum').text((Math.round(sum * 10) / 10) + '%');
             var i = 1;
             \$rows.each(function() { jQuery(this).find('.sprint-backlog-rank').text(i++); });
+            // While filtering, matches are always in view and empty buckets step aside.
+            if (filtering) {
+                \$sec.toggle(\$vis.length > 0);
+                \$sec.find('.sprint-backlog-cat-body').show();
+                \$sec.find('.sprint-backlog-cat-chevron').css('transform', 'rotate(0deg)');
+            } else if ((\$sec.attr('data-parent-category-id') || '0') === '0') {
+                // Subsections follow their parent's cascade, not their own turn.
+                \$sec.show();
+                backlogApplyCollapse(\$sec);
+            }
         });
+        jQuery('.sprint-backlog-cat-section').each(function() {
+            var \$sec = jQuery(this);
+            var subs = 0;
+            backlogSubSections(\$sec).each(function() {
+                subs += jQuery(this).find('tr.sprint-backlog-row').not('.sprint-row-hidden').length;
+            });
+            \$sec.find('.sprint-backlog-cat-subcount').text('+' + subs).toggle(subs > 0);
+        });
+        jQuery('.sprint-backlog-count').text(
+            jQuery('.sprint-backlog-cat-section tr.sprint-backlog-row').not('.sprint-row-hidden').length
+        );
     };
 
     // Collapsible category sections (state per category in localStorage).
     jQuery(function() {
-        jQuery('.sprint-backlog-cat-section').each(function() {
-            var \$sec = jQuery(this);
-            var key  = 'sprint.backlog.cat.' + (\$sec.attr('data-category-id') || '0') + '.collapsed';
-            if (localStorage.getItem(key) === '1') {
-                \$sec.find('.sprint-backlog-cat-body').hide();
-                \$sec.find('.sprint-backlog-cat-chevron').css('transform', 'rotate(-90deg)');
-            }
+        jQuery(".sprint-backlog-cat-section[data-parent-category-id='0']").each(function() {
+            backlogApplyCollapse(jQuery(this));
         });
     });
     jQuery(document).on('click', '.sprint-backlog-cat-header', function() {
         var \$sec  = jQuery(this).closest('.sprint-backlog-cat-section');
-        var key   = 'sprint.backlog.cat.' + (\$sec.attr('data-category-id') || '0') + '.collapsed';
         var \$body = \$sec.find('.sprint-backlog-cat-body');
         var collapsed = \$body.is(':visible');
         \$body.slideToggle(120);
         \$sec.find('.sprint-backlog-cat-chevron').css('transform', collapsed ? 'rotate(-90deg)' : 'rotate(0deg)');
-        localStorage.setItem(key, collapsed ? '1' : '0');
+        localStorage.setItem(backlogCollapseKey(\$sec), collapsed ? '1' : '0');
+        backlogSubSections(\$sec).each(function() {
+            var \$sub = jQuery(this);
+            if (collapsed) {
+                \$sub.slideUp(120);
+            } else {
+                \$sub.slideDown(120);
+                backlogApplyCollapse(\$sub);
+            }
+        });
     });
 
     // Multi-select: Ctrl/Cmd-click toggles a row, Shift-click extends from the
@@ -1510,7 +1569,7 @@ HTML;
         echo "<span style='font-weight:700;'><i class='fas fa-chart-simple me-1'></i>"
             . __('Capacity per category', 'sprint') . "</span>";
         echo "<span class='text-muted small'>"
-            . __('Backlog capacity per category across the upcoming sprints, against optional min/max limits.', 'sprint') . "</span>";
+            . __('Capacity per category across the upcoming sprints: work already assigned plus backlog proposals, including dependencies and subcategories, against optional min/max limits.', 'sprint') . "</span>";
         echo "<span style='flex:1;'></span>";
         echo "<label class='text-muted small mb-0' for='sprint-backlog-horizon'>" . __('Horizon', 'sprint') . "</label>";
         echo "<select id='sprint-backlog-horizon' class='form-select form-select-sm sprint-backlog-horizon' style='max-width:140px;'>";
@@ -1563,9 +1622,44 @@ HTML;
         jQuery.ajax({ url: "{$statsUrl}", type: 'GET', dataType: 'json', cache: false,
             data: { horizon: currentHorizon() } })
         .done(function(resp){
-            if (resp && resp.success) { jQuery('.sprint-backlog-dash-body').html(resp.html); }
+            if (resp && resp.success) {
+                jQuery('.sprint-backlog-dash-body').html(resp.html);
+                applyCollapsed();
+            }
         }).always(function(){ jQuery('.sprint-backlog-dash-body').css('opacity', 1); });
     }
+
+    // Subcategory rows show by default; collapsing a parent is remembered per
+    // user. The parent keeps showing the rolled-up totals either way.
+    function collapsedCats() {
+        try {
+            var raw = JSON.parse(localStorage.getItem('sprint.backlog.matrix.collapsed') || '[]');
+            return Array.isArray(raw) ? raw.map(String) : [];
+        } catch (e) { return []; }
+    }
+    function setCollapsed(catId, collapsed) {
+        jQuery(".sprint-backlog-dash-body .sprint-matrix-toggle[data-cat-id='" + catId + "']")
+            .toggleClass('collapsed', collapsed)
+            .attr('aria-expanded', collapsed ? 'false' : 'true');
+        jQuery(".sprint-backlog-dash-body .sprint-matrix-subrow[data-parent-cat='" + catId + "']")
+            .toggle(!collapsed);
+    }
+    function applyCollapsed() {
+        var list = collapsedCats();
+        jQuery('.sprint-backlog-dash-body .sprint-matrix-toggle').each(function(){
+            var id = String(jQuery(this).attr('data-cat-id') || '0');
+            setCollapsed(id, list.indexOf(id) !== -1);
+        });
+    }
+    jQuery(document).on('click', '.sprint-matrix-toggle', function(){
+        var id        = String(jQuery(this).attr('data-cat-id') || '0');
+        var collapsed = !jQuery(this).hasClass('collapsed');
+        setCollapsed(id, collapsed);
+        var list = collapsedCats().filter(function(v){ return v !== id; });
+        if (collapsed) { list.push(id); }
+        try { localStorage.setItem('sprint.backlog.matrix.collapsed', JSON.stringify(list)); } catch (e) {}
+    });
+    jQuery(function(){ applyCollapsed(); });
     // Row edits and drags elsewhere on the page keep the matrix in sync.
     window.sprintBacklogReloadMatrix = reloadMatrix;
 
@@ -1582,6 +1676,10 @@ HTML;
             if (stored !== 4) { reloadMatrix(); }
         }
     })();
+
+    // Cap 0 = no ceiling: that thumb parks at the far right, clear of the min.
+    function maxToSlider(max) { return max > 0 ? max : SLIDER_MAX; }
+    function sliderToMax(v)   { return v >= SLIDER_MAX ? 0 : v; }
 
     function updateFill(\$row) {
         var min   = parseFloat(\$row.find('.sprint-limit-min').val()) || 0;
@@ -1617,7 +1715,7 @@ HTML;
         \$row.find('.sprint-limit-min').val(cat.min > 0 ? cat.min : 0);
         \$row.find('.sprint-limit-max').val(cat.max > 0 ? cat.max : 0);
         \$row.find('.sprint-range-min').val(cat.min || 0);
-        \$row.find('.sprint-range-max').val(cat.max || 0);
+        \$row.find('.sprint-range-max').val(maxToSlider(cat.max || 0));
         updateFill(\$row);
         return \$row;
     }
@@ -1638,15 +1736,15 @@ HTML;
     jQuery(document).on('input', '#sprint-limits-modal .sprint-range-min', function(){
         var \$row = jQuery(this).closest('.sprint-limits-row');
         var v    = parseFloat(this.value) || 0;
-        var max  = parseFloat(\$row.find('.sprint-range-max').val()) || 0;
+        var max  = parseFloat(\$row.find('.sprint-limit-max').val()) || 0;
         if (max > 0 && v > max) { v = max; this.value = v; }
         \$row.find('.sprint-limit-min').val(v);
         updateFill(\$row);
     });
     jQuery(document).on('input', '#sprint-limits-modal .sprint-range-max', function(){
         var \$row = jQuery(this).closest('.sprint-limits-row');
-        var v    = parseFloat(this.value) || 0;
-        var min  = parseFloat(\$row.find('.sprint-range-min').val()) || 0;
+        var v    = sliderToMax(parseFloat(this.value) || 0);
+        var min  = parseFloat(\$row.find('.sprint-limit-min').val()) || 0;
         if (v > 0 && v < min) {
             \$row.find('.sprint-range-min').val(v);
             \$row.find('.sprint-limit-min').val(v);
@@ -1664,7 +1762,7 @@ HTML;
         \$row.find('.sprint-limit-min').val(min);
         \$row.find('.sprint-limit-max').val(max);
         \$row.find('.sprint-range-min').val(min);
-        \$row.find('.sprint-range-max').val(max);
+        \$row.find('.sprint-range-max').val(maxToSlider(max));
         updateFill(\$row);
     });
 
@@ -1712,6 +1810,16 @@ HTML;
 
         $horizon    = max(1, min(26, $horizon));
         $categories = SprintCategory::getAll();
+
+        // A parent row totals its own work plus its subcategories'.
+        $childrenOf = [];
+        foreach ($categories as $cid => $cat) {
+            $pid = (int)($cat['plugin_sprint_sprintcategories_id'] ?? 0);
+            if ((int)($cat['level'] ?? 0) > 0 && $pid > 0 && isset($categories[$pid])) {
+                $childrenOf[$pid][] = (int)$cid;
+            }
+        }
+
         $sprints    = array_slice((new Sprint())->find(
             ['status' => Sprint::STATUS_PLANNED]
                 + getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true),
@@ -1720,8 +1828,11 @@ HTML;
         $sprintIds  = array_map(fn($s) => (int)$s['id'], $sprints);
 
         // One pass over the active backlog: capacity + counts per category,
-        // split per proposed sprint (0 = unplanned).
-        $alloc = $count = $totalByCat = [];
+        // split per proposed sprint (0 = unplanned). Unplanned rows also feed
+        // the aging column — work nobody schedules is the mix problem you do
+        // not see in the percentages.
+        $alloc = $count = $totalByCat = $depAlloc = $slot = $oldest = [];
+        $today = time();
         foreach ((new SprintItem())->find([
             'plugin_sprint_sprints_id' => 0, 'is_blocked' => 0, 'is_parked' => 0,
         ]) as $row) {
@@ -1737,18 +1848,84 @@ HTML;
             $alloc[$cid][$sid] = ($alloc[$cid][$sid] ?? 0) + $cap;
             $count[$cid][$sid] = ($count[$cid][$sid] ?? 0) + 1;
             $totalByCat[$cid]  = ($totalByCat[$cid] ?? 0) + $cap;
+            $slot[(int)$row['id']] = [$cid, $sid];
+            if ($sid === 0 && !empty($row['date_creation'])) {
+                $days = (int)floor(($today - strtotime((string)$row['date_creation'])) / DAY_TIMESTAMP);
+                $oldest[$cid] = max($oldest[$cid] ?? 0, $days);
+            }
         }
 
-        $limits = $team = $canCap = [];
+        // A dependency claims the helper's capacity in the same sprint, so it
+        // belongs in the forecast under the parent item's category.
+        foreach (SprintItemDependency::getCapacityByItem(array_keys($slot)) as $iid => $depCap) {
+            [$cid, $sid]          = $slot[$iid];
+            $alloc[$cid][$sid]    = ($alloc[$cid][$sid] ?? 0) + $depCap;
+            $depAlloc[$cid][$sid] = ($depAlloc[$cid][$sid] ?? 0) + $depCap;
+            $totalByCat[$cid]     = ($totalByCat[$cid] ?? 0) + $depCap;
+        }
+
+        // Work already in those sprints is off the backlog, yet it is capacity
+        // the sprint no longer has to give.
+        $assign = $assignCount = $fastAssigned = [];
+        if ($sprintIds) {
+            $assignSlot = $fastIds = [];
+            foreach ((new SprintItem())->find([
+                'plugin_sprint_sprints_id' => $sprintIds, 'is_parked' => 0,
+            ]) as $row) {
+                $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
+                if ($cid > 0 && !isset($categories[$cid])) {
+                    $cid = 0;
+                }
+                $sid = (int)$row['plugin_sprint_sprints_id'];
+                $assignSlot[(int)$row['id']] = [$cid, $sid];
+                $assignCount[$cid][$sid]     = ($assignCount[$cid][$sid] ?? 0) + 1;
+                if ((int)($row['is_fastlane'] ?? 0) === 1) {
+                    $fastIds[] = (int)$row['id'];
+                } else {
+                    $assign[$cid][$sid] = ($assign[$cid][$sid] ?? 0) + (float)($row['capacity'] ?? 0);
+                }
+            }
+            foreach (SprintFastlaneMember::getCapacityByItem($fastIds) as $iid => $cap) {
+                [$cid, $sid]         = $assignSlot[$iid];
+                $assign[$cid][$sid]  = ($assign[$cid][$sid] ?? 0) + $cap;
+                $fastAssigned[$sid]  = ($fastAssigned[$sid] ?? 0) + $cap;
+            }
+            foreach (SprintItemDependency::getCapacityByItem(array_keys($assignSlot), false) as $iid => $cap) {
+                [$cid, $sid]          = $assignSlot[$iid];
+                $assign[$cid][$sid]   = ($assign[$cid][$sid] ?? 0) + $cap;
+                $depAlloc[$cid][$sid] = ($depAlloc[$cid][$sid] ?? 0) + $cap;
+            }
+        }
+
+        // Cell load = proposals + assigned; $totalByCat stays backlog-only,
+        // the work-supply column measures the backlog.
+        $load      = $alloc;
+        $loadCount = $count;
+        foreach ($assign as $cid => $bySid) {
+            foreach ($bySid as $sid => $v) {
+                $load[$cid][$sid] = ($load[$cid][$sid] ?? 0) + $v;
+            }
+        }
+        foreach ($assignCount as $cid => $bySid) {
+            foreach ($bySid as $sid => $v) {
+                $loadCount[$cid][$sid] = ($loadCount[$cid][$sid] ?? 0) + $v;
+            }
+        }
+
+        // Team capacity with availability exceptions applied, as everywhere else.
+        $limits = $team = $teamRaw = $canCap = [];
         foreach ($sprintIds as $sid) {
-            $limits[$sid] = SprintCategory::getEffectiveLimitsForSprint($sid);
-            $canCap[$sid] = Sprint::canUpdate();
-            $team[$sid]   = 0.0;
+            $limits[$sid]  = SprintCategory::getEffectiveLimitsForSprint($sid);
+            $canCap[$sid]  = Sprint::canUpdate();
+            $team[$sid]    = 0.0;
+            $teamRaw[$sid] = 0.0;
             foreach ($DB->request([
                 'FROM'  => SprintMember::getTable(),
                 'WHERE' => ['plugin_sprint_sprints_id' => $sid],
             ]) as $m) {
-                $team[$sid] += (float)($m['capacity_percent'] ?? 0);
+                $base = SprintMember::normalizeCapacity($m['capacity_percent'] ?? 0);
+                $teamRaw[$sid] += $base;
+                $team[$sid]    += SprintAgility::effectiveCapacity($sid, (int)($m['users_id'] ?? 0), $base);
             }
         }
 
@@ -1766,9 +1943,12 @@ HTML;
             $histIds[] = (int)$past['id'];
         }
         $histCount = count($histIds);
-        $delivered = [];
-        $deliveredTotal = 0.0;
+        // Per sprint, so the work-supply column can show a band instead of a
+        // single average: 30/70/40/65 and 50/52/48/51 both average out at 50,
+        // but only one of them supports a promise about a single sprint.
+        $perSprint = $fastPerSprint = [];
         if ($histIds) {
+            $doneSlot = [];
             foreach ($DB->request([
                 'FROM'  => SprintItem::getTable(),
                 'WHERE' => [
@@ -1778,29 +1958,104 @@ HTML;
                 ],
             ]) as $row) {
                 $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
-                $cap = (float)($row['capacity'] ?? 0);
-                $delivered[$cid] = ($delivered[$cid] ?? 0) + $cap;
-                $deliveredTotal += $cap;
+                $sid = (int)$row['plugin_sprint_sprints_id'];
+                $perSprint[$cid][$sid]         = ($perSprint[$cid][$sid] ?? 0) + (float)($row['capacity'] ?? 0);
+                $doneSlot[(int)$row['id']]     = [$cid, $sid];
+            }
+            // Helper capacity spent on those items was real delivery too.
+            foreach (SprintItemDependency::getCapacityByItem(array_keys($doneSlot), false) as $iid => $depCap) {
+                [$cid, $sid]           = $doneSlot[$iid];
+                $perSprint[$cid][$sid] = ($perSprint[$cid][$sid] ?? 0) + $depCap;
+            }
+            foreach ($histIds as $pastId) {
+                $fastPerSprint[$pastId] = SprintFastlaneMember::getTotalFastlaneCapacityForSprint($pastId);
             }
         }
-        $overallAvg = $histCount > 0 ? $deliveredTotal / $histCount : 0.0;
-        $supplyFor  = function (int $cid, float $backlogCap) use ($delivered, $histCount, $overallAvg): string {
-            if ($backlogCap <= 0) {
-                return '';
+        // Key -1 = every category together, the fallback for a category that
+        // has never delivered anything. Summed before the parent roll-up, or
+        // subcategory delivery would land in the total twice.
+        foreach ($perSprint as $cid => $bySprint) {
+            foreach ($bySprint as $sid => $v) {
+                $perSprint[-1][$sid] = ($perSprint[-1][$sid] ?? 0) + $v;
             }
-            $avg = $histCount > 0 ? (($delivered[$cid] ?? 0) / $histCount) : 0.0;
+        }
+        // Parent rows compare rolled-up demand against rolled-up delivery.
+        foreach ($childrenOf as $pid => $kids) {
+            foreach ($kids as $kid) {
+                foreach (($perSprint[$kid] ?? []) as $sid => $v) {
+                    $perSprint[$pid][$sid] = ($perSprint[$pid][$sid] ?? 0) + $v;
+                }
+            }
+        }
+        // Fastlane is interrupt work: it never sat on the backlog, so it stays
+        // out of the delivery figures and becomes a reservation instead.
+        $fastlaneAvg = $histCount > 0 ? array_sum($fastPerSprint) / $histCount : 0.0;
+
+        $series = function (int $cid) use ($perSprint, $histIds): array {
+            $out = [];
+            foreach ($histIds as $sid) {
+                $out[] = (float)($perSprint[$cid][$sid] ?? 0);
+            }
+            return $out;
+        };
+        $supplyFor = function (int $cid, float $backlogCap) use ($series, $histCount): array {
+            if ($backlogCap <= 0 || $histCount === 0) {
+                return ['', ''];
+            }
+            $values = $series($cid);
+            $avg    = array_sum($values) / $histCount;
             if ($avg <= 0) {
-                $avg = $overallAvg;
+                // Never delivered in this category: fall back to team-wide pace.
+                $values = $series(-1);
+                $avg    = array_sum($values) / $histCount;
             }
             if ($avg <= 0) {
-                return '—';
+                return ['—', ''];
             }
-            return '≈ ' . number_format($backlogCap / $avg, 1);
+            $main = '≈ ' . number_format($backlogCap / $avg, 1);
+            $best = max($values);
+            $worst = min($values);
+            if ($best <= 0) {
+                return [$main, ''];
+            }
+            $low = number_format($backlogCap / $best, 1);
+            // A sprint that delivered nothing makes the worst case open-ended.
+            $band = $worst > 0
+                ? $low . ' – ' . number_format($backlogCap / $worst, 1)
+                : $low . '+';
+            return [$main, $band];
         };
 
         $rows = $categories;
-        if (!empty($totalByCat[0])) {
+        if (!empty($totalByCat[0]) || !empty($load[0]) || !empty($assign[0])) {
             $rows[0] = ['name' => __('No category', 'sprint'), 'color' => '#6c757d'];
+        }
+
+        // Rolled-up display values; the raw arrays stay for the total row,
+        // which would otherwise count subcategory work twice.
+        $vLoad   = $load;
+        $vCount  = $loadCount;
+        $vDep    = $depAlloc;
+        $vAssign = $assign;
+        $vTotal  = $totalByCat;
+        $vOldest = $oldest;
+        foreach ($childrenOf as $pid => $kids) {
+            foreach ($kids as $kid) {
+                $vOldest[$pid] = max($vOldest[$pid] ?? 0, $oldest[$kid] ?? 0);
+                foreach (($load[$kid] ?? []) as $s => $v) {
+                    $vLoad[$pid][$s] = ($vLoad[$pid][$s] ?? 0) + $v;
+                }
+                foreach (($loadCount[$kid] ?? []) as $s => $v) {
+                    $vCount[$pid][$s] = ($vCount[$pid][$s] ?? 0) + $v;
+                }
+                foreach (($depAlloc[$kid] ?? []) as $s => $v) {
+                    $vDep[$pid][$s] = ($vDep[$pid][$s] ?? 0) + $v;
+                }
+                foreach (($assign[$kid] ?? []) as $s => $v) {
+                    $vAssign[$pid][$s] = ($vAssign[$pid][$s] ?? 0) + $v;
+                }
+                $vTotal[$pid] = ($vTotal[$pid] ?? 0) + ($totalByCat[$kid] ?? 0);
+            }
         }
 
         ob_start();
@@ -1836,23 +2091,41 @@ HTML;
         }
         echo "<th class='text-center'>" . __('Not yet planned', 'sprint') . "</th>";
         echo "<th class='text-center' title='"
-            . __s('Backlog capacity divided by the average delivered capacity per sprint (last completed sprints)', 'sprint') . "'>"
+            . __s('Backlog capacity divided by the delivered capacity per sprint (last completed sprints). The range below runs from the best to the worst of those sprints.', 'sprint') . "'>"
             . __('Work supply (sprints)', 'sprint') . "</th></tr></thead><tbody>";
 
+        $collapseTitle = __s('Show or hide the subcategories', 'sprint');
+        $agingDays     = Config::getBacklogAgingDays();
         foreach ($rows as $cid => $cat) {
-            $cid    = (int)$cid;
-            $color  = htmlescape((string)$cat['color']);
-            $child  = (int)($cat['level'] ?? 0) > 0;
-            $pad    = $child ? "padding-left:26px;" : '';
-            $prefix = $child ? "<i class='fas fa-turn-up fa-rotate-90 text-muted me-1' style='font-size:0.8em;'></i>" : '';
-            echo "<tr><td style='{$pad}'>{$prefix}<span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:{$color};margin-right:6px;'></span>"
+            $cid     = (int)$cid;
+            $color   = htmlescape((string)$cat['color']);
+            $child   = (int)($cat['level'] ?? 0) > 0;
+            $parent  = (int)($cat['plugin_sprint_sprintcategories_id'] ?? 0);
+            $hasKids = !empty($childrenOf[$cid]);
+            $pad     = $child ? "padding-left:26px;" : '';
+            $prefix  = $child ? "<i class='fas fa-turn-up fa-rotate-90 text-muted me-1' style='font-size:0.8em;'></i>" : '';
+            $attrs   = $child && $parent > 0
+                ? " class='sprint-matrix-subrow' data-parent-cat='{$parent}'"
+                : ($hasKids ? " data-cat-id='{$cid}'" : '');
+            echo "<tr{$attrs}><td style='{$pad}'>";
+            if ($hasKids) {
+                echo "<button type='button' class='sprint-matrix-toggle' data-cat-id='{$cid}' "
+                    . "aria-expanded='true' title='{$collapseTitle}'><i class='fas fa-chevron-down'></i></button>";
+            }
+            echo "{$prefix}<span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:{$color};margin-right:6px;'></span>"
                 . ($child
                     ? htmlescape((string)$cat['name'])
                     : "<strong>" . htmlescape((string)$cat['name']) . "</strong>")
+                . ($hasKids
+                    ? " <span class='text-muted small' title='" . __s('Totals include the subcategories', 'sprint') . "'>"
+                        . sprintf(__('incl. %d sub', 'sprint'), count($childrenOf[$cid])) . "</span>"
+                    : '')
                 . "</td>";
             foreach ($sprintIds as $sid) {
-                $a     = (float)($alloc[$cid][$sid] ?? 0);
-                $n     = (int)($count[$cid][$sid] ?? 0);
+                $a     = (float)($vLoad[$cid][$sid] ?? 0);
+                $n     = (int)($vCount[$cid][$sid] ?? 0);
+                $d     = (float)($vDep[$cid][$sid] ?? 0);
+                $as    = (float)($vAssign[$cid][$sid] ?? 0);
                 $min   = (float)($limits[$sid][$cid]['min'] ?? 0);
                 $max   = (float)($limits[$sid][$cid]['max'] ?? 0);
                 $over  = $max > 0 && $a > $max;
@@ -1860,23 +2133,52 @@ HTML;
                 $bg    = $over ? "background:color-mix(in srgb,#dc3545 12%,transparent);" : '';
                 echo "<td class='text-center sprint-matrix-cell' style='{$bg}'>";
                 if ($a > 0) {
+                    $tip = sprintf(_n('%d item', '%d items', $n, 'sprint'), $n);
+                    if ($as > 0) {
+                        $tip .= ' · ' . ($a - $as > 0.05
+                            ? sprintf(
+                                __('%1$s%% already assigned, %2$s%% still on the backlog', 'sprint'),
+                                SprintMember::formatCapacity($as),
+                                SprintMember::formatCapacity($a - $as)
+                            )
+                            : sprintf(__('%s%% already assigned', 'sprint'), SprintMember::formatCapacity($as)));
+                    }
+                    if ($d > 0) {
+                        $tip .= ' · ' . sprintf(
+                            __('including %s%% dependency capacity', 'sprint'),
+                            SprintMember::formatCapacity($d)
+                        );
+                    }
                     echo "<div class='fw-bold" . ($over ? " text-danger" : '') . "' title='"
-                        . htmlescape(sprintf(_n('%d item', '%d items', $n, 'sprint'), $n)) . "'>"
-                        . SprintMember::formatCapacity($a) . "%</div>";
+                        . htmlescape($tip) . "'>" . SprintMember::formatCapacity($a) . "%</div>";
                 } else {
                     echo "<div class='text-muted'>–</div>";
                 }
                 // Bar scales to the cap, or to the floor when no cap is set.
+                // Solid part = assigned, translucent part = backlog proposal.
                 $scale = $max > 0 ? $max : max($min, $a);
                 if (($min > 0 || $max > 0) && $scale > 0) {
-                    $pct  = round(min(100, 100 * $a / $scale), 1);
-                    echo "<div class='sprint-matrix-bar'><div style='width:{$pct}%;background:"
-                        . ($over ? '#dc3545' : $color) . ";'></div>";
+                    $fill = $over ? '#dc3545' : $color;
+                    $pctA = round(min(100, 100 * min($as, $a) / $scale), 1);
+                    $pctB = round(min(100 - $pctA, 100 * max(0, $a - $as) / $scale), 1);
+                    echo "<div class='sprint-matrix-bar' style='display:flex;'>";
+                    if ($pctA > 0) {
+                        echo "<div style='width:{$pctA}%;background:{$fill};'></div>";
+                    }
+                    if ($pctB > 0) {
+                        echo "<div style='width:{$pctB}%;background:{$fill};opacity:0.45;'></div>";
+                    }
                     if ($min > 0 && $min < $scale) {
                         $tick = round(100 * $min / $scale, 1);
                         echo "<span class='sprint-matrix-min-tick' style='left:{$tick}%;'></span>";
                     }
                     echo "</div>";
+                }
+                if ($as > 0) {
+                    echo "<div class='text-muted small' title='"
+                        . __s('Already assigned to this sprint', 'sprint') . "'>"
+                        . "<i class='fas fa-lock me-1' style='font-size:0.8em;'></i>"
+                        . SprintMember::formatCapacity($as) . "%</div>";
                 }
                 if ($min > 0 || $max > 0) {
                     $parts = [];
@@ -1895,12 +2197,26 @@ HTML;
                 }
                 echo "</td>";
             }
-            $u  = (float)($alloc[$cid][0] ?? 0) + (float)($alloc[$cid][-1] ?? 0);
-            $un = (int)($count[$cid][0] ?? 0) + (int)($count[$cid][-1] ?? 0);
+            $u  = (float)($vLoad[$cid][0] ?? 0) + (float)($vLoad[$cid][-1] ?? 0);
+            $un = (int)($vCount[$cid][0] ?? 0) + (int)($vCount[$cid][-1] ?? 0);
             echo "<td class='text-center'>" . ($u > 0
                 ? SprintMember::formatCapacity($u) . "% <span class='text-muted small'>(" . $un . ")</span>"
-                : "<span class='text-muted'>–</span>") . "</td>";
-            echo "<td class='text-center'>" . ($supplyFor($cid, (float)($totalByCat[$cid] ?? 0)) ?: "<span class='text-muted'>–</span>") . "</td>";
+                : "<span class='text-muted'>–</span>");
+            $age = (int)($vOldest[$cid] ?? 0);
+            if ($agingDays > 0 && $age >= $agingDays) {
+                $late = $age >= 2 * $agingDays;
+                echo "<div class='small' style='color:" . ($late ? '#dc3545' : '#d97706') . ";' title='"
+                    . htmlescape(sprintf(
+                        __('Oldest unplanned item in this category: %d days', 'sprint'),
+                        $age
+                    )) . "'><i class='fas fa-clock me-1'></i>" . sprintf(__('%dd', 'sprint'), $age) . "</div>";
+            }
+            echo "</td>";
+            [$supply, $band] = $supplyFor($cid, (float)($vTotal[$cid] ?? 0));
+            echo "<td class='text-center'>" . ($supply !== '' ? $supply : "<span class='text-muted'>–</span>")
+                . ($band !== '' ? "<div class='text-muted small' title='"
+                    . __s('Best to worst of the completed sprints used', 'sprint') . "'>{$band}</div>" : '')
+                . "</td>";
             echo "</tr>";
         }
 
@@ -1912,38 +2228,80 @@ HTML;
             $unplTotal += (float)($alloc[(int)$cid][0] ?? 0) + (float)($alloc[(int)$cid][-1] ?? 0);
         }
         foreach ($sprintIds as $sid) {
-            $t = 0.0;
+            $t = $tAssigned = 0.0;
             foreach ($rows as $cid => $cat) {
-                $t += (float)($alloc[(int)$cid][$sid] ?? 0);
+                $t         += (float)($load[(int)$cid][$sid] ?? 0);
+                $tAssigned += (float)($assign[(int)$cid][$sid] ?? 0);
             }
             // Overflow = more ambition than the linked members can take on. A
             // sprint without members counts too: 0% capacity with work planned
             // is exactly the signal the planner needs.
-            $noTeam = $team[$sid] <= 0;
-            $over   = $t > 0 && ($noTeam || $t > $team[$sid]);
-            $bg     = ($over && !$noTeam) ? "background:color-mix(in srgb,#dc3545 10%,transparent);" : '';
+            $noTeam  = $team[$sid] <= 0;
+            $reserve = max(0.0, $fastlaneAvg - (float)($fastAssigned[$sid] ?? 0));
+            $usable  = max(0.0, $team[$sid] - $reserve);
+            $over    = $t > 0 && ($noTeam || $t > $usable);
+            $bg      = ($over && !$noTeam) ? "background:color-mix(in srgb,#dc3545 10%,transparent);" : '';
             echo "<td class='text-center' style='{$bg}'>"
                 . "<span" . (($over && !$noTeam) ? " class='text-danger'" : '') . ">" . SprintMember::formatCapacity($t) . "%</span>";
+            if ($tAssigned > 0) {
+                echo "<div class='text-muted small fw-normal' title='"
+                    . __s('Already assigned to this sprint', 'sprint') . "'>"
+                    . "<i class='fas fa-lock me-1' style='font-size:0.8em;'></i>"
+                    . SprintMember::formatCapacity($tAssigned) . "%</div>";
+            }
             if ($over && !$noTeam) {
                 echo "<div><span class='badge bg-red-lt' title='"
                     . __s('More work planned for this sprint than the linked members can take on', 'sprint') . "'>"
                     . "<i class='fas fa-triangle-exclamation me-1'></i>+"
-                    . SprintMember::formatCapacity($t - $team[$sid]) . "%</span></div>";
+                    . SprintMember::formatCapacity($t - $usable) . "%</span></div>";
             } elseif ($over && $noTeam) {
                 echo "<div><span class='badge bg-orange-lt' title='"
                     . __s('Work is planned for this sprint but no members are linked yet', 'sprint') . "'>"
                     . "<i class='fas fa-user-slash me-1'></i>" . __('No members yet', 'sprint') . "</span></div>";
             }
-            echo "<div class='text-muted small fw-normal' title='" . __s('Total team capacity of the selected sprint', 'sprint') . "'>"
-                . __('Team', 'sprint') . " " . SprintMember::formatCapacity($team[$sid]) . "%</div></td>";
+            $away = $teamRaw[$sid] - $team[$sid];
+            echo "<div class='text-muted small fw-normal' title='"
+                . __s('Total team capacity of the selected sprint, with the availability exceptions of that sprint applied', 'sprint') . "'>"
+                . __('Team', 'sprint') . " " . SprintMember::formatCapacity($team[$sid]) . "%";
+            if ($away > 0.05) {
+                echo " <span style='color:#d97706;' title='"
+                    . __s('Capacity dropped by leave, training or other availability exceptions', 'sprint') . "'>"
+                    . "<i class='fas fa-calendar-minus'></i> -" . SprintMember::formatCapacity($away) . "%</span>";
+            }
+            echo "</div>";
+            if ($reserve > 0.05 && !$noTeam) {
+                echo "<div class='small fw-normal' style='color:#fd7e14;' title='"
+                    . __s('Reserved for interrupt work: the average fastlane load of the completed sprints, minus what is already assigned here', 'sprint') . "'>"
+                    . "<i class='fas fa-bolt me-1'></i>" . SprintMember::formatCapacity($reserve) . "%</div>";
+            }
+            if (!$noTeam) {
+                $free = $usable - $t;
+                echo "<div class='small fw-normal' style='color:" . ($free < 0 ? '#dc3545' : '#198754') . ";' title='"
+                    . __s('Team capacity left after the assigned work, the backlog proposals and the fastlane reservation', 'sprint') . "'>"
+                    . sprintf(__('free %s%%', 'sprint'), SprintMember::formatCapacity($free)) . "</div>";
+            }
+            echo "</td>";
         }
         echo "<td class='text-center'>" . SprintMember::formatCapacity($unplTotal) . "%</td>";
-        echo "<td class='text-center'>" . ($supplyFor(-1, $grandTotal) ?: "<span class='text-muted'>–</span>") . "</td>";
+        [$supply, $band] = $supplyFor(-1, $grandTotal);
+        echo "<td class='text-center'>" . ($supply !== '' ? $supply : "<span class='text-muted'>–</span>")
+            . ($band !== '' ? "<div class='text-muted small fw-normal'>{$band}</div>" : '') . "</td>";
         echo "</tr>";
         echo "</tbody></table>";
+        if ($assign) {
+            echo "<div class='text-muted small' style='padding:0 4px 2px;'>"
+                . __('Solid bar = already assigned to the sprint, faded = still a backlog proposal.', 'sprint') . "</div>";
+        }
         if ($histCount > 0) {
             echo "<div class='text-muted small' style='padding:0 4px 6px;'>"
-                . sprintf(__('Work supply based on the last %d completed sprints.', 'sprint'), $histCount) . "</div>";
+                . sprintf(__('Work supply based on the last %d completed sprints.', 'sprint'), $histCount);
+            if ($fastlaneAvg > 0.05) {
+                echo ' ' . sprintf(
+                    __('Those sprints spent an average of %s%% on fastlane work, which is reserved up front.', 'sprint'),
+                    SprintMember::formatCapacity($fastlaneAvg)
+                );
+            }
+            echo "</div>";
         }
         echo "</div>";
         return (string)ob_get_clean();
@@ -2367,7 +2725,7 @@ HTML;
         echo "</tr>";
     }
 
-    private static function renderFilterBar(array $typeLabels, array $owners = []): void
+    private static function renderFilterBar(array $typeLabels, array $owners = [], array $sprintNames = []): void
     {
         echo "<div class='sprint-filter-bar sprint-backlog-filter' "
             . "style='display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;"
@@ -2399,6 +2757,16 @@ HTML;
                     continue;
                 }
                 echo "<option value='" . (int)$uidOpt . "'>" . htmlescape((string)$name) . "</option>";
+            }
+            echo "</select>";
+        }
+
+        if (!empty($sprintNames)) {
+            echo "<select class='form-select form-select-sm sf-sprint' style='max-width:220px;'>";
+            echo "<option value=''>" . __('All sprints', 'sprint') . "</option>";
+            echo "<option value='__none__'>" . __('Not yet planned', 'sprint') . "</option>";
+            foreach ($sprintNames as $sidOpt => $name) {
+                echo "<option value='" . (int)$sidOpt . "'>" . htmlescape((string)$name) . "</option>";
             }
             echo "</select>";
         }

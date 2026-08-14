@@ -416,6 +416,34 @@ class SprintItemDependency extends CommonDBRelation
     }
 
     /**
+     * Dependency capacity per parent item, in one query. Forecasts need this:
+     * a dependency claims the helper's capacity on top of the item's own
+     * estimate, so any capacity total built from SprintItem.capacity alone
+     * understates the real load.
+     *
+     * @param int[] $itemIds
+     * @param bool  $openOnly  false also counts resolved rows (capacity already spent)
+     * @return array<int, float>  item id => capacity %
+     */
+    public static function getCapacityByItem(array $itemIds, bool $openOnly = true): array
+    {
+        $out = [];
+        $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+        if (empty($itemIds) || !self::isTableReady()) {
+            return $out;
+        }
+        $criteria = ['plugin_sprint_sprintitems_id' => $itemIds];
+        if ($openOnly) {
+            $criteria['is_resolved'] = 0;
+        }
+        foreach ((new self())->find($criteria) as $r) {
+            $iid       = (int)$r['plugin_sprint_sprintitems_id'];
+            $out[$iid] = ($out[$iid] ?? 0.0) + (float)$r['capacity'];
+        }
+        return $out;
+    }
+
+    /**
      * Sprint items where $userId is helper on an open dependency, with the
      * parent owner's name. Renders "Helpt op:" on the member card.
      *

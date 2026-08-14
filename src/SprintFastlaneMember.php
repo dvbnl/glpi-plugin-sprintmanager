@@ -267,6 +267,27 @@ class SprintFastlaneMember extends CommonDBRelation
     }
 
     /**
+     * Fastlane capacity per item — a fastlane item spreads its load over its
+     * members here, so its own `capacity` column says nothing.
+     *
+     * @param int[] $itemIds
+     * @return array<int, float>  item id => capacity %
+     */
+    public static function getCapacityByItem(array $itemIds): array
+    {
+        $out = [];
+        $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+        if (empty($itemIds)) {
+            return $out;
+        }
+        foreach ((new self())->find(['plugin_sprint_sprintitems_id' => $itemIds]) as $row) {
+            $iid       = (int)$row['plugin_sprint_sprintitems_id'];
+            $out[$iid] = ($out[$iid] ?? 0.0) + (float)$row['capacity'];
+        }
+        return $out;
+    }
+
+    /**
      * Sum the total fastlane capacity allocated across the whole sprint
      * (all members, all fastlane items).
      */

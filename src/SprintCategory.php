@@ -140,14 +140,19 @@ class SprintCategory extends CommonDBTM
         return $parent > 0 ? self::getNameFor($parent) . ' › ' . $name : $name;
     }
 
-    /** `<option>` list in tree order, subcategories indented. */
+    /** `<option>` list in tree order; subcategories indented as "Parent › Child". */
     public static function dropdownOptions(int $selected = 0, bool $onlyActive = true): string
     {
+        $all  = self::getAll($onlyActive);
         $html = '';
-        foreach (self::getAll($onlyActive) as $cid => $cat) {
-            $indent = ((int)($cat['level'] ?? 0) > 0) ? '&nbsp;&nbsp;&nbsp;— ' : '';
-            $html  .= "<option value='" . (int)$cid . "'" . ((int)$cid === $selected ? ' selected' : '') . ">"
-                . $indent . htmlescape((string)$cat['name']) . "</option>";
+        foreach ($all as $cid => $cat) {
+            $pid   = (int)($cat['plugin_sprint_sprintcategories_id'] ?? 0);
+            $isSub = (int)($cat['level'] ?? 0) > 0 && $pid > 0 && isset($all[$pid]);
+            $label = $isSub
+                ? '&nbsp;&nbsp;&nbsp;— ' . htmlescape((string)$all[$pid]['name']) . ' › ' . htmlescape((string)$cat['name'])
+                : htmlescape((string)$cat['name']);
+            $html .= "<option value='" . (int)$cid . "'" . ((int)$cid === $selected ? ' selected' : '') . ">"
+                . $label . "</option>";
         }
         return $html;
     }
