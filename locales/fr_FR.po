@@ -3265,12 +3265,6 @@ msgstr "Capacité du backlog par catégorie sur les prochains sprints, par rappo
 msgid "Not yet planned"
 msgstr "Pas encore planifié"
 
-msgid "Work supply (sprints)"
-msgstr "Réserve de travail (sprints)"
-
-msgid "Work supply based on the last %d completed sprints."
-msgstr "Réserve de travail basée sur les %d derniers sprints terminés."
-
 msgid "Backlog inflow vs outflow"
 msgstr "Entrées vs sorties du backlog"
 
@@ -3633,9 +3627,6 @@ msgstr "Barre pleine = déjà affecté au sprint, estompée = encore une proposi
 msgid "%s%% already assigned"
 msgstr "%s%% déjà affecté"
 
-msgid "Best to worst of the completed sprints used"
-msgstr "Du meilleur au pire des sprints terminés utilisés"
-
 msgid "Oldest unplanned item in this category: %d days"
 msgstr "Élément non planifié le plus ancien de cette catégorie : %d jours"
 
@@ -3660,9 +3651,6 @@ msgstr "Capacité réelle : ce que l’élément a réellement coûté, renseign
 msgid "Average over the sprints shown"
 msgstr "Moyenne sur les sprints affichés"
 
-msgid "Backlog capacity divided by the delivered capacity per sprint (last completed sprints), never less than the configured category minimum. The range below runs from the best to the worst of those sprints."
-msgstr "Capacité du backlog divisée par la capacité livrée par sprint (derniers sprints terminés), jamais inférieure au minimum configuré de la catégorie. La plage en dessous va du meilleur au pire de ces sprints."
-
 msgid "Backlog item updated"
 msgstr "Élément de backlog mis à jour"
 
@@ -3681,8 +3669,8 @@ msgstr "Les minimums configurés par catégorie servent de plancher au rythme de
 msgid "Follows planned"
 msgstr "Suit le planifié"
 
-msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent. Click a legend entry to isolate a category."
-msgstr "Par catégorie de backlog sur les sprints terminés de cette période : capacité allouée % par sprint (planifiée, ou réelle si ce réglage est actif) ou la part terminé/planifié. Les sous-catégories comptent pour leur parent. Cliquez sur une entrée de légende pour isoler une catégorie."
+msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category."
+msgstr "Par catégorie de backlog sur les sprints terminés de cette période : capacité allouée % par sprint (planifiée, ou réelle si ce réglage est actif) ou la part terminé/planifié. Les sous-catégories comptent pour leur parent, ou passez à la vue par sous-catégorie pour les voir comme des lignes séparées. Cliquez sur une entrée de légende pour isoler une catégorie."
 
 msgid "Planned / actual capacity"
 msgstr "Capacité planifiée / réelle"
@@ -3719,3 +3707,21 @@ msgstr "planifié"
 
 msgid "actual"
 msgstr "réel"
+
+msgid "Main categories"
+msgstr "Catégories principales"
+
+msgid "With subcategories"
+msgstr "Avec sous-catégories"
+
+msgid "avg. %s%%"
+msgstr "moy. %s%%"
+
+msgid "Backlog capacity divided by the capacity the team delivered per sprint, never less than the configured category minimums."
+msgstr "Capacité du backlog divisée par la capacité livrée par l'équipe par sprint, jamais inférieure aux minimums de catégorie configurés."
+
+msgid "Work supply: about %1$s sprints at the current pace, based on the last %2$d completed sprints."
+msgstr "Réserve de travail : environ %1$s sprints au rythme actuel, sur la base des %2$d derniers sprints terminés."
+
+msgid "Best to worst of those sprints: %s."
+msgstr "Du meilleur au pire de ces sprints : %s."

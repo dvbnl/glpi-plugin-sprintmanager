@@ -3269,12 +3269,6 @@ msgstr "Backlogcapaciteit per categorie over de komende sprints, afgezet tegen o
 msgid "Not yet planned"
 msgstr "Nog niet ingepland"
 
-msgid "Work supply (sprints)"
-msgstr "Werkvoorraad (sprints)"
-
-msgid "Work supply based on the last %d completed sprints."
-msgstr "Werkvoorraad gebaseerd op de laatste %d afgeronde sprints."
-
 msgid "Backlog inflow vs outflow"
 msgstr "Backlog instroom vs uitstroom"
 
@@ -3637,9 +3631,6 @@ msgstr "Massieve balk = al toegewezen aan de sprint, vervaagd = nog een backlogv
 msgid "%s%% already assigned"
 msgstr "%s%% al toegewezen"
 
-msgid "Best to worst of the completed sprints used"
-msgstr "Beste tot slechtste van de gebruikte afgeronde sprints"
-
 msgid "Oldest unplanned item in this category: %d days"
 msgstr "Oudste niet-ingeplande item in deze categorie: %d dagen"
 
@@ -3664,9 +3655,6 @@ msgstr "Werkelijke capaciteit: wat het item echt heeft gekost, ingevuld terwijl 
 msgid "Average over the sprints shown"
 msgstr "Gemiddelde over de getoonde sprints"
 
-msgid "Backlog capacity divided by the delivered capacity per sprint (last completed sprints), never less than the configured category minimum. The range below runs from the best to the worst of those sprints."
-msgstr "Backlogcapaciteit gedeeld door de geleverde capaciteit per sprint (laatste afgeronde sprints), nooit minder dan het ingestelde categorieminimum. De bandbreedte eronder loopt van de beste naar de slechtste van die sprints."
-
 msgid "Backlog item updated"
 msgstr "Backlogitem bijgewerkt"
 
@@ -3685,8 +3673,8 @@ msgstr "Ingestelde categorieminimums vormen een ondergrens voor het levertempo."
 msgid "Follows planned"
 msgstr "Volgt gepland"
 
-msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent. Click a legend entry to isolate a category."
-msgstr "Per backlogcategorie over de afgeronde sprints in deze periode: toegewezen capaciteit % per sprint (gepland, of werkelijk als die instelling aanstaat) of het aandeel voltooid t.o.v. gepland. Subcategorieën tellen mee bij hun hoofdcategorie. Klik op een legenda-item om een categorie uit te lichten."
+msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category."
+msgstr "Per backlogcategorie over de afgeronde sprints in deze periode: toegewezen capaciteit % per sprint (gepland, of werkelijk als die instelling aanstaat) of het aandeel voltooid t.o.v. gepland. Subcategorieën tellen mee bij hun hoofdcategorie, of schakel naar de subcategorieweergave om ze als aparte lijnen te zien. Klik op een legenda-item om een categorie uit te lichten."
 
 msgid "Planned / actual capacity"
 msgstr "Geplande / werkelijke capaciteit"
@@ -3723,3 +3711,21 @@ msgstr "gepland"
 
 msgid "actual"
 msgstr "werkelijk"
+
+msgid "Main categories"
+msgstr "Hoofdcategorieën"
+
+msgid "With subcategories"
+msgstr "Met subcategorieën"
+
+msgid "avg. %s%%"
+msgstr "gem. %s%%"
+
+msgid "Backlog capacity divided by the capacity the team delivered per sprint, never less than the configured category minimums."
+msgstr "Backlogcapaciteit gedeeld door de capaciteit die het team per sprint opleverde, nooit minder dan de ingestelde categorieminima."
+
+msgid "Work supply: about %1$s sprints at the current pace, based on the last %2$d completed sprints."
+msgstr "Werkvoorraad: ongeveer %1$s sprints bij het huidige tempo, op basis van de laatste %2$d afgeronde sprints."
+
+msgid "Best to worst of those sprints: %s."
+msgstr "Beste tot slechtste van die sprints: %s."

@@ -2129,8 +2129,10 @@ HTML;
             }
         }
 
-        // Work-supply: delivered capacity per sprint over the last completed
-        // sprints, per category with an overall fallback.
+        // Work supply: capacity the team delivered per completed sprint (last
+        // six), kept per sprint so the summary can show a best–worst band next
+        // to the average: 30/70/40/65 and 50/52/48/51 both average out at 50,
+        // but only one of them supports a promise about a single sprint.
         $histIds = [];
         foreach ($DB->request([
             'SELECT' => ['id'],
@@ -2143,12 +2145,10 @@ HTML;
             $histIds[] = (int)$past['id'];
         }
         $histCount = count($histIds);
-        // Per sprint, so the work-supply column can show a band instead of a
-        // single average: 30/70/40/65 and 50/52/48/51 both average out at 50,
-        // but only one of them supports a promise about a single sprint.
-        $perSprint = $fastPerSprint = [];
+        $delivered = array_fill_keys($histIds, 0.0);
+        $fastPerSprint = [];
         if ($histIds) {
-            $doneSlot = [];
+            $doneSprint = [];
             foreach ($DB->request([
                 'FROM'  => SprintItem::getTable(),
                 'WHERE' => [
@@ -2157,34 +2157,16 @@ HTML;
                     'is_fastlane'              => 0,
                 ],
             ]) as $row) {
-                $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
                 $sid = (int)$row['plugin_sprint_sprints_id'];
-                $perSprint[$cid][$sid]         = ($perSprint[$cid][$sid] ?? 0) + SprintItem::capacityFor($row, $actual);
-                $doneSlot[(int)$row['id']]     = [$cid, $sid];
+                $delivered[$sid]          += SprintItem::capacityFor($row, $actual);
+                $doneSprint[(int)$row['id']] = $sid;
             }
             // Helper capacity spent on those items was real delivery too.
-            foreach (SprintItemDependency::getCapacityByItem(array_keys($doneSlot), false) as $iid => $depCap) {
-                [$cid, $sid]           = $doneSlot[$iid];
-                $perSprint[$cid][$sid] = ($perSprint[$cid][$sid] ?? 0) + $depCap;
+            foreach (SprintItemDependency::getCapacityByItem(array_keys($doneSprint), false) as $iid => $depCap) {
+                $delivered[$doneSprint[$iid]] += $depCap;
             }
             foreach ($histIds as $pastId) {
                 $fastPerSprint[$pastId] = SprintFastlaneMember::getTotalFastlaneCapacityForSprint($pastId);
-            }
-        }
-        // Key -1 = every category together, the fallback for a category that
-        // has never delivered anything. Summed before the parent roll-up, or
-        // subcategory delivery would land in the total twice.
-        foreach ($perSprint as $cid => $bySprint) {
-            foreach ($bySprint as $sid => $v) {
-                $perSprint[-1][$sid] = ($perSprint[-1][$sid] ?? 0) + $v;
-            }
-        }
-        // Parent rows compare rolled-up demand against rolled-up delivery.
-        foreach ($childrenOf as $pid => $kids) {
-            foreach ($kids as $kid) {
-                foreach (($perSprint[$kid] ?? []) as $sid => $v) {
-                    $perSprint[$pid][$sid] = ($perSprint[$pid][$sid] ?? 0) + $v;
-                }
             }
         }
         // Fastlane is interrupt work: it never sat on the backlog, so it stays
@@ -2198,51 +2180,34 @@ HTML;
             $fastReserve[$sid] = $cap > 0 ? $cap : $fastlaneAvg;
         }
 
-        // The configured minimum per category is a floor under the delivery
-        // pace: a category with a reserved minimum gets at least that much
-        // per sprint, however little it delivered historically. Taken from
-        // the first upcoming sprint (falls back to the category defaults),
-        // parents add up their subcategories, -1 sums every category.
+        // The configured category minimums add up to a floor under the
+        // delivery pace: the team commits at least that much per sprint,
+        // however little it delivered historically. Taken from the first
+        // upcoming sprint (falls back to the category defaults).
         $minLimits = $sprintIds
             ? ($limits[$sprintIds[0]] ?? [])
             : Config::getCategoryDefaultLimits();
-        $minFor = [];
-        foreach ($categories as $cid => $cat) {
-            $minFor[(int)$cid] = (float)($minLimits[(int)$cid]['min'] ?? 0);
-        }
-        $minFor[-1] = array_sum($minFor);
-        foreach ($childrenOf as $pid => $kids) {
-            foreach ($kids as $kid) {
-                $minFor[$pid] = ($minFor[$pid] ?? 0) + ($minLimits[$kid]['min'] ?? 0);
-            }
+        $minTotal = 0.0;
+        foreach (array_keys($categories) as $cid) {
+            $minTotal += (float)($minLimits[(int)$cid]['min'] ?? 0);
         }
 
-        $series = function (int $cid) use ($perSprint, $histIds): array {
-            $out = [];
-            foreach ($histIds as $sid) {
-                $out[] = (float)($perSprint[$cid][$sid] ?? 0);
-            }
-            return $out;
-        };
-        $supplyFor = function (int $cid, float $backlogCap) use ($series, $histCount, $minFor): array {
+        /**
+         * Sprints of work the backlog represents at the team's pace: average
+         * plus a best–worst band. Empty strings when there is nothing to say.
+         */
+        $supplyFor = function (float $backlogCap) use ($delivered, $histCount, $minTotal): array {
             if ($backlogCap <= 0 || $histCount === 0) {
                 return ['', ''];
             }
-            $floor  = (float)($minFor[$cid] ?? 0);
-            $values = $series($cid);
-            $avg    = array_sum($values) / $histCount;
-            if ($avg <= 0 && $floor <= 0) {
-                // Never delivered in this category: fall back to team-wide pace.
-                $values = $series(-1);
-                $avg    = array_sum($values) / $histCount;
-            }
-            $avg = max($avg, $floor);
+            $values = array_values($delivered);
+            $avg    = max(array_sum($values) / $histCount, $minTotal);
             if ($avg <= 0) {
-                return ['—', ''];
+                return ['', ''];
             }
-            $main  = '≈ ' . number_format($backlogCap / $avg, 1);
-            $best  = max(max($values), $floor);
-            $worst = max(min($values), $floor);
+            $main  = number_format($backlogCap / $avg, 1);
+            $best  = max(max($values), $minTotal);
+            $worst = max(min($values), $minTotal);
             if ($best <= 0) {
                 return [$main, ''];
             }
@@ -2321,10 +2286,7 @@ HTML;
             }
             echo "</th>";
         }
-        echo "<th class='text-center'>" . __('Not yet planned', 'sprint') . "</th>";
-        echo "<th class='text-center' title='"
-            . __s('Backlog capacity divided by the delivered capacity per sprint (last completed sprints), never less than the configured category minimum. The range below runs from the best to the worst of those sprints.', 'sprint') . "'>"
-            . __('Work supply (sprints)', 'sprint') . "</th></tr></thead><tbody>";
+        echo "<th class='text-center'>" . __('Not yet planned', 'sprint') . "</th></tr></thead><tbody>";
 
         $collapseTitle = __s('Show or hide the subcategories', 'sprint');
         $agingDays     = Config::getBacklogAgingDays();
@@ -2444,11 +2406,6 @@ HTML;
                     )) . "'><i class='fas fa-clock me-1'></i>" . sprintf(__('%dd', 'sprint'), $age) . "</div>";
             }
             echo "</td>";
-            [$supply, $band] = $supplyFor($cid, (float)($vTotal[$cid] ?? 0));
-            echo "<td class='text-center'>" . ($supply !== '' ? $supply : "<span class='text-muted'>–</span>")
-                . ($band !== '' ? "<div class='text-muted small' title='"
-                    . __s('Best to worst of the completed sprints used', 'sprint') . "'>{$band}</div>" : '')
-                . "</td>";
             echo "</tr>";
         }
 
@@ -2517,25 +2474,36 @@ HTML;
             echo "</td>";
         }
         echo "<td class='text-center'>" . SprintMember::formatCapacity($unplTotal) . "%</td>";
-        [$supply, $band] = $supplyFor(-1, $grandTotal);
-        echo "<td class='text-center'>" . ($supply !== '' ? $supply : "<span class='text-muted'>–</span>")
-            . ($band !== '' ? "<div class='text-muted small fw-normal'>{$band}</div>" : '') . "</td>";
         echo "</tr>";
         echo "</tbody></table>";
         if ($assign) {
             echo "<div class='text-muted small' style='padding:0 4px 2px;'>"
                 . __('Solid bar = already assigned to the sprint, faded = still a backlog proposal.', 'sprint') . "</div>";
         }
+        // Work supply: how many sprints the whole backlog represents at the
+        // team's delivery pace. One line for the total only — per-category
+        // figures explode for categories that rarely deliver.
+        [$supply, $band] = $supplyFor($grandTotal);
         if ($histCount > 0) {
-            echo "<div class='text-muted small' style='padding:0 4px 6px;'>"
-                . sprintf(__('Work supply based on the last %d completed sprints.', 'sprint'), $histCount);
+            echo "<div class='text-muted small' style='padding:0 4px 6px;'>";
+            if ($supply !== '') {
+                echo "<span title='"
+                    . __s('Backlog capacity divided by the capacity the team delivered per sprint, never less than the configured category minimums.', 'sprint') . "'>"
+                    . htmlescape(sprintf(
+                        __('Work supply: about %1$s sprints at the current pace, based on the last %2$d completed sprints.', 'sprint'),
+                        $supply,
+                        $histCount
+                    ))
+                    . ($band !== '' ? ' ' . htmlescape(sprintf(__('Best to worst of those sprints: %s.', 'sprint'), $band)) : '')
+                    . "</span>";
+            }
             if ($fastlaneAvg > 0.05) {
                 echo ' ' . sprintf(
                     __('Those sprints spent an average of %s%% on fastlane work; that average is reserved up front on sprints without a fastlane limit of their own.', 'sprint'),
                     SprintMember::formatCapacity($fastlaneAvg)
                 );
             }
-            if (($minFor[-1] ?? 0) > 0) {
+            if ($minTotal > 0) {
                 echo ' ' . __('Configured category minimums act as a floor under the delivery pace.', 'sprint');
             }
             echo "</div>";

@@ -3268,12 +3268,6 @@ msgstr "Capacity per category across the upcoming sprints: work already assigned
 msgid "Not yet planned"
 msgstr "Not yet planned"
 
-msgid "Work supply (sprints)"
-msgstr "Work supply (sprints)"
-
-msgid "Work supply based on the last %d completed sprints."
-msgstr "Work supply based on the last %d completed sprints."
-
 msgid "Backlog inflow vs outflow"
 msgstr "Backlog inflow vs outflow"
 
@@ -3636,9 +3630,6 @@ msgstr "Solid bar = already assigned to the sprint, faded = still a backlog prop
 msgid "%s%% already assigned"
 msgstr "%s%% already assigned"
 
-msgid "Best to worst of the completed sprints used"
-msgstr "Best to worst of the completed sprints used"
-
 msgid "Oldest unplanned item in this category: %d days"
 msgstr "Oldest unplanned item in this category: %d days"
 
@@ -3663,9 +3654,6 @@ msgstr "Actual capacity: what the item really took, filled in as the work is don
 msgid "Average over the sprints shown"
 msgstr "Average over the sprints shown"
 
-msgid "Backlog capacity divided by the delivered capacity per sprint (last completed sprints), never less than the configured category minimum. The range below runs from the best to the worst of those sprints."
-msgstr "Backlog capacity divided by the delivered capacity per sprint (last completed sprints), never less than the configured category minimum. The range below runs from the best to the worst of those sprints."
-
 msgid "Backlog item updated"
 msgstr "Backlog item updated"
 
@@ -3684,8 +3672,8 @@ msgstr "Configured category minimums act as a floor under the delivery pace."
 msgid "Follows planned"
 msgstr "Follows planned"
 
-msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent. Click a legend entry to isolate a category."
-msgstr "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent. Click a legend entry to isolate a category."
+msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category."
+msgstr "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category."
 
 msgid "Planned / actual capacity"
 msgstr "Planned / actual capacity"
@@ -3722,3 +3710,21 @@ msgstr "planned"
 
 msgid "actual"
 msgstr "actual"
+
+msgid "Main categories"
+msgstr "Main categories"
+
+msgid "With subcategories"
+msgstr "With subcategories"
+
+msgid "avg. %s%%"
+msgstr "avg. %s%%"
+
+msgid "Backlog capacity divided by the capacity the team delivered per sprint, never less than the configured category minimums."
+msgstr "Backlog capacity divided by the capacity the team delivered per sprint, never less than the configured category minimums."
+
+msgid "Work supply: about %1$s sprints at the current pace, based on the last %2$d completed sprints."
+msgstr "Work supply: about %1$s sprints at the current pace, based on the last %2$d completed sprints."
+
+msgid "Best to worst of those sprints: %s."
+msgstr "Best to worst of those sprints: %s."

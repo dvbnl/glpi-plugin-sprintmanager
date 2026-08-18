@@ -1473,43 +1473,71 @@ class SprintOverview extends CommonGLPI
         }
         $window = array_slice($sprints, -self::CHART_SPRINTS);
         $labels = [];
-        $rows   = [];
+        $rows   = [];   // rolled up into the top-level category
+        $detail = [];   // every category on its own (parent = own items only)
+        $blank  = static fn(int $id, string $label, string $color, bool $sub) => [
+            'id'          => $id,
+            'label'       => $label,
+            'color'       => $color,
+            'sub'         => $sub,
+            'cap_planned' => array_fill(0, count($window), 0.0),
+            'cap_actual'  => array_fill(0, count($window), 0.0),
+            'pts_planned' => array_fill(0, count($window), 0),
+            'pts_done'    => array_fill(0, count($window), 0),
+        ];
         foreach ($window as $i => $sprint) {
             $sid      = (int)$sprint['id'];
             $labels[] = (string)$sprint['name'];
             foreach ($catBySprint[$sid] ?? [] as $cid => $bucket) {
-                $top = $parentOf[(int)$cid] ?? 0;
+                $cid = (int)$cid;
+                $top = $parentOf[$cid] ?? 0;
                 if ($top > 0 && !isset($cats[$top])) {
                     $top = 0;
                 }
                 if (!isset($rows[$top])) {
-                    $rows[$top] = [
-                        'id'          => $top,
-                        'label'       => $top > 0 ? (string)$cats[$top]['name'] : __('No category', 'sprint'),
-                        'color'       => $top > 0 ? (string)$cats[$top]['color'] : '#6c757d',
-                        'cap_planned' => array_fill(0, count($window), 0.0),
-                        'cap_actual'  => array_fill(0, count($window), 0.0),
-                        'pts_planned' => array_fill(0, count($window), 0),
-                        'pts_done'    => array_fill(0, count($window), 0),
-                    ];
+                    $rows[$top] = $blank(
+                        $top,
+                        $top > 0 ? (string)$cats[$top]['name'] : __('No category', 'sprint'),
+                        $top > 0 ? (string)$cats[$top]['color'] : '#6c757d',
+                        false
+                    );
                 }
-                $rows[$top]['cap_planned'][$i] += (float)$bucket['cap_planned'];
-                $rows[$top]['cap_actual'][$i]  += (float)$bucket['cap_actual'];
-                $rows[$top]['pts_planned'][$i] += (int)$bucket['pts_planned'];
-                $rows[$top]['pts_done'][$i]    += (int)$bucket['pts_done'];
+                $own = isset($cats[$cid]) ? $cid : 0;
+                if (!isset($detail[$own])) {
+                    $isSub = $own > 0 && $top !== $own;
+                    $detail[$own] = $blank(
+                        $own,
+                        $own > 0
+                            ? ($isSub ? $cats[$top]['name'] . ' › ' . $cats[$own]['name'] : (string)$cats[$own]['name'])
+                            : __('No category', 'sprint'),
+                        $own > 0 ? (string)$cats[$own]['color'] : '#6c757d',
+                        $isSub
+                    );
+                }
+                foreach ([&$rows[$top], &$detail[$own]] as &$target) {
+                    $target['cap_planned'][$i] += (float)$bucket['cap_planned'];
+                    $target['cap_actual'][$i]  += (float)$bucket['cap_actual'];
+                    $target['pts_planned'][$i] += (int)$bucket['pts_planned'];
+                    $target['pts_done'][$i]    += (int)$bucket['pts_done'];
+                }
+                unset($target);
             }
         }
-        // Category order as configured, "no category" last.
-        $ordered = [];
-        foreach ($cats as $cid => $cat) {
-            if (isset($rows[(int)$cid])) {
-                $ordered[] = $rows[(int)$cid];
+        // Category order as configured (tree order: parent, then its
+        // children), "no category" last.
+        $order = static function (array $set) use ($cats): array {
+            $ordered = [];
+            foreach ($cats as $cid => $cat) {
+                if (isset($set[(int)$cid])) {
+                    $ordered[] = $set[(int)$cid];
+                }
             }
-        }
-        if (isset($rows[0])) {
-            $ordered[] = $rows[0];
-        }
-        return ['labels' => $labels, 'rows' => $ordered];
+            if (isset($set[0])) {
+                $ordered[] = $set[0];
+            }
+            return $ordered;
+        };
+        return ['labels' => $labels, 'rows' => $order($rows), 'detail' => $order($detail)];
     }
 
     /**
@@ -1530,58 +1558,73 @@ class SprintOverview extends CommonGLPI
         self::renderCard(
             __('Category trend', 'sprint'),
             'fas fa-chart-line',
-            __('Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent. Click a legend entry to isolate a category.', 'sprint'),
+            __('Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category.', 'sprint'),
             function () use ($trend, $rows, $plannedActual) {
                 $labels  = $trend['labels'];
                 $n       = count($labels);
+                $detail  = $trend['detail'] ?? [];
+                $hasSubs = (bool)array_filter($detail, static fn($r) => !empty($r['sub']));
+                $levels  = ['top' => $rows];
+                if ($hasSubs) {
+                    $levels['sub'] = $detail;
+                }
                 $metrics = ['cap_planned' => __('Planned capacity %', 'sprint')];
                 if ($plannedActual) {
                     $metrics['cap_actual'] = __('Actual capacity %', 'sprint');
                 }
                 $metrics['done_pct'] = __('Completed vs planned %', 'sprint');
 
-                // One dataset per metric; the picker swaps the visible one.
+                // One dataset per level × metric; the pickers swap the visible one.
                 $datasets = [];
-                foreach (array_keys($metrics) as $metric) {
-                    $series = [];
-                    $max    = 0.0;
-                    foreach ($rows as $row) {
-                        $values = [];
-                        for ($i = 0; $i < $n; $i++) {
-                            if ($metric === 'done_pct') {
-                                $planned = (int)$row['pts_planned'][$i];
-                                $v = $planned > 0 ? round(100 * (int)$row['pts_done'][$i] / $planned) : null;
-                            } else {
-                                $v = round((float)$row[$metric][$i], 1);
+                foreach ($levels as $level => $levelRows) {
+                    foreach (array_keys($metrics) as $metric) {
+                        $series = [];
+                        $max    = 0.0;
+                        foreach ($levelRows as $row) {
+                            $values = [];
+                            for ($i = 0; $i < $n; $i++) {
+                                if ($metric === 'done_pct') {
+                                    $planned = (int)$row['pts_planned'][$i];
+                                    $v = $planned > 0 ? round(100 * (int)$row['pts_done'][$i] / $planned) : null;
+                                } else {
+                                    $v = round((float)$row[$metric][$i], 1);
+                                }
+                                $values[] = $v;
+                                if ($v !== null && $v > $max) {
+                                    $max = $v;
+                                }
                             }
-                            $values[] = $v;
-                            if ($v !== null && $v > $max) {
-                                $max = $v;
-                            }
+                            $series[] = ['label' => $row['label'], 'color' => $row['color'], 'values' => $values, 'sub' => !empty($row['sub'])];
                         }
-                        $series[] = ['label' => $row['label'], 'color' => $row['color'], 'values' => $values];
+                        $datasets[] = ['level' => $level, 'metric' => $metric, 'series' => $series, 'max' => $max];
                     }
-                    $datasets[$metric] = ['series' => $series, 'max' => $max];
                 }
 
                 echo "<div class='sprint-category-trend'>";
-                echo "<div class='d-flex justify-content-end mb-2'>";
+                echo "<div class='d-flex justify-content-end gap-2 mb-2'>";
+                if ($hasSubs) {
+                    echo "<select class='form-select form-select-sm sprint-category-trend-level' style='max-width:240px;'>";
+                    echo "<option value='top'>" . __s('Main categories', 'sprint') . "</option>";
+                    echo "<option value='sub'>" . __s('With subcategories', 'sprint') . "</option>";
+                    echo "</select>";
+                }
                 echo "<select class='form-select form-select-sm sprint-category-trend-metric' style='max-width:240px;'>";
                 foreach ($metrics as $key => $label) {
                     echo "<option value='" . htmlescape($key) . "'>" . htmlescape($label) . "</option>";
                 }
                 echo "</select></div>";
-                foreach ($datasets as $metric => $set) {
-                    $yMax = $metric === 'done_pct'
+                foreach ($datasets as $set) {
+                    $yMax = $set['metric'] === 'done_pct'
                         ? max(100.0, ceil($set['max'] / 20) * 20)
                         : max(20.0, ceil($set['max'] / 20) * 20);
-                    echo "<div class='sprint-category-trend-pane' data-metric='" . htmlescape($metric) . "'"
-                        . ($metric === 'cap_planned' ? '' : " style='display:none;'") . ">";
+                    $visible = $set['metric'] === 'cap_planned' && $set['level'] === 'top';
+                    echo "<div class='sprint-category-trend-pane' data-metric='" . htmlescape($set['metric']) . "' data-level='" . htmlescape($set['level']) . "'"
+                        . ($visible ? '' : " style='display:none;'") . ">";
                     self::renderCategoryLines($labels, $set['series'], (float)$yMax);
                     echo "</div>";
                 }
                 echo "</div>";
-                echo "<script>(function(){var wrap=document.currentScript.previousElementSibling;if(!wrap)return;var sel=wrap.querySelector('.sprint-category-trend-metric');if(!sel)return;var key='sprint-overview-category-metric';try{var saved=localStorage.getItem(key);if(saved&&sel.querySelector('option[value='+JSON.stringify(saved)+']'))sel.value=saved;}catch(e){}function apply(){wrap.querySelectorAll('.sprint-category-trend-pane').forEach(function(p){p.style.display=p.getAttribute('data-metric')===sel.value?'':'none';});}sel.addEventListener('change',function(){apply();try{localStorage.setItem(key,sel.value);}catch(e){}});apply();})();</script>";
+                echo "<script>(function(){var wrap=document.currentScript.previousElementSibling;if(!wrap)return;var sel=wrap.querySelector('.sprint-category-trend-metric');var lvl=wrap.querySelector('.sprint-category-trend-level');if(!sel)return;var key='sprint-overview-category-metric',lkey='sprint-overview-category-level';try{var saved=localStorage.getItem(key);if(saved&&sel.querySelector('option[value='+JSON.stringify(saved)+']'))sel.value=saved;if(lvl){var sl=localStorage.getItem(lkey);if(sl&&lvl.querySelector('option[value='+JSON.stringify(sl)+']'))lvl.value=sl;}}catch(e){}function apply(){var level=lvl?lvl.value:'top';wrap.querySelectorAll('.sprint-category-trend-pane').forEach(function(p){p.style.display=(p.getAttribute('data-metric')===sel.value&&p.getAttribute('data-level')===level)?'':'none';});}sel.addEventListener('change',function(){apply();try{localStorage.setItem(key,sel.value);}catch(e){}});if(lvl){lvl.addEventListener('change',function(){apply();try{localStorage.setItem(lkey,lvl.value);}catch(e){}});}apply();})();</script>";
             }
         );
     }
@@ -1635,6 +1678,7 @@ class SprintOverview extends CommonGLPI
 
         foreach ($series as $idx => $s) {
             $color = htmlescape($s['color']);
+            $dash  = !empty($s['sub']) ? " stroke-dasharray='6 4'" : '';
             // A null (no planned points that sprint) breaks the line rather
             // than drawing a misleading zero.
             $segments = [[]];
@@ -1650,7 +1694,7 @@ class SprintOverview extends CommonGLPI
                     continue;
                 }
                 echo "<polyline class='sprint-activity-line' data-member-idx='" . (int)$idx . "' points='" . implode(' ', $seg) . "' "
-                    . "fill='none' stroke='{$color}' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' />";
+                    . "fill='none' stroke='{$color}' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'{$dash} />";
             }
             foreach ($s['values'] as $i => $v) {
                 if ($v === null) {
@@ -1670,9 +1714,11 @@ class SprintOverview extends CommonGLPI
             echo "<div class='sprint-activity-legend' data-member-idx='" . (int)$idx . "' "
                 . "title='" . htmlescape(__('Click to isolate — hover to preview', 'sprint')) . "' "
                 . "style='display:flex;align-items:center;gap:6px;cursor:pointer;'>"
-                . "<span style='display:inline-block;width:14px;height:3px;background:" . htmlescape($s['color']) . ";border-radius:2px;'></span>"
-                . "<span>" . htmlescape($s['label']) . " <span class='text-muted' title='" . __s('Average over the sprints shown', 'sprint') . "'>(Ø "
-                . SprintMember::formatCapacity($avg) . "%)</span></span>"
+                . (!empty($s['sub'])
+                    ? "<span style='display:inline-block;width:14px;height:0;border-top:3px dashed " . htmlescape($s['color']) . ";'></span>"
+                    : "<span style='display:inline-block;width:14px;height:3px;background:" . htmlescape($s['color']) . ";border-radius:2px;'></span>")
+                . "<span>" . htmlescape($s['label']) . " <span class='text-muted' title='" . __s('Average over the sprints shown', 'sprint') . "'>("
+                . htmlescape(sprintf(__('avg. %s%%', 'sprint'), SprintMember::formatCapacity($avg))) . ")</span></span>"
                 . "</div>";
         }
         echo "</div>";
