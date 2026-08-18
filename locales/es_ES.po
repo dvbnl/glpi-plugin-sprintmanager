@@ -3265,9 +3265,6 @@ msgstr "Capacidad del backlog por categoría en los próximos sprints, frente a 
 msgid "Not yet planned"
 msgstr "Aún sin planificar"
 
-msgid "Backlog capacity divided by the delivered capacity per sprint (last completed sprints). The range below runs from the best to the worst of those sprints."
-msgstr "Capacidad del backlog dividida por la capacidad media entregada por sprint (últimos sprints completados)"
-
 msgid "Work supply (sprints)"
 msgstr "Trabajo pendiente (sprints)"
 
@@ -3642,11 +3639,83 @@ msgstr "Del mejor al peor de los sprints completados utilizados"
 msgid "Oldest unplanned item in this category: %d days"
 msgstr "Elemento sin planificar más antiguo de esta categoría: %d días"
 
-msgid "Reserved for interrupt work: the average fastlane load of the completed sprints, minus what is already assigned here"
-msgstr "Reservado para trabajo de interrupción: la carga media de fastlane de los sprints completados, menos lo ya asignado aquí"
-
 msgid "Team capacity left after the assigned work, the backlog proposals and the fastlane reservation"
 msgstr "Capacidad del equipo restante tras el trabajo asignado, las propuestas del backlog y la reserva de fastlane"
 
-msgid "Those sprints spent an average of %s%% on fastlane work, which is reserved up front."
-msgstr "Esos sprints dedicaron de media un %s%% a trabajo fastlane, que se reserva por adelantado."
+msgid "Actual"
+msgstr "Real"
+
+msgid "Actual capacity"
+msgstr "Capacidad real"
+
+msgid "Actual capacity %"
+msgstr "Capacidad real %"
+
+msgid "Actual capacity (%)"
+msgstr "Capacidad real (%)"
+
+msgid "Actual capacity: what the item really took, filled in as the work is done. Empty = follows the planned figure."
+msgstr "Capacidad real: lo que realmente costó el elemento, rellenado a medida que avanza el trabajo. Vacío = sigue el valor planificado."
+
+msgid "Average over the sprints shown"
+msgstr "Promedio de los sprints mostrados"
+
+msgid "Backlog capacity divided by the delivered capacity per sprint (last completed sprints), never less than the configured category minimum. The range below runs from the best to the worst of those sprints."
+msgstr "Capacidad del backlog dividida por la capacidad entregada por sprint (últimos sprints completados), nunca inferior al mínimo configurado de la categoría. El rango inferior va del mejor al peor de esos sprints."
+
+msgid "Backlog item updated"
+msgstr "Elemento del backlog actualizado"
+
+msgid "Backlog planning"
+msgstr "Planificación del backlog"
+
+msgid "Category trend"
+msgstr "Tendencia por categoría"
+
+msgid "Completed vs planned %"
+msgstr "Completado vs planificado %"
+
+msgid "Configured category minimums act as a floor under the delivery pace."
+msgstr "Los mínimos configurados por categoría actúan como suelo del ritmo de entrega."
+
+msgid "Follows planned"
+msgstr "Sigue lo planificado"
+
+msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent. Click a legend entry to isolate a category."
+msgstr "Por categoría de backlog en los sprints completados de este periodo: capacidad asignada % por sprint (planificada, o real si esa opción está activa) o la proporción completado/planificado. Las subcategorías cuentan para su categoría principal. Haga clic en una entrada de la leyenda para aislar una categoría."
+
+msgid "Planned / actual capacity"
+msgstr "Capacidad planificada / real"
+
+msgid "Planned capacity %"
+msgstr "Capacidad planificada %"
+
+msgid "Reserved for interrupt work: no fastlane limit set on this sprint, so the average fastlane load of the completed sprints is used, minus what is already assigned here"
+msgstr "Reservado para trabajo de interrupción: sin límite de fastlane en este sprint, se usa la carga media de fastlane de los sprints completados, menos lo ya asignado aquí"
+
+msgid "Reserved for interrupt work: the fastlane capacity limit of this sprint, minus what is already assigned here"
+msgstr "Reservado para trabajo de interrupción: el límite de capacidad fastlane de este sprint, menos lo ya asignado aquí"
+
+msgid "Show the planned or the actual capacity per item (items without an actual figure keep their planned one)"
+msgstr "Mostrar la capacidad planificada o real por elemento (los elementos sin valor real conservan la planificada)"
+
+msgid "Showing actual capacity; items without an actual figure count with their planned capacity."
+msgstr "Mostrando capacidad real; los elementos sin valor real cuentan con su capacidad planificada."
+
+msgid "Those sprints spent an average of %s%% on fastlane work; that average is reserved up front on sprints without a fastlane limit of their own."
+msgstr "Esos sprints dedicaron de media un %s%% al trabajo fastlane; esa media se reserva por adelantado en los sprints sin límite fastlane propio."
+
+msgid "When enabled, every sprint item gets a second capacity figure: the planned % is estimated up front, the actual % is filled in as the work is done and may deviate. The capacity-per-category matrix and the category trend chart can be flipped between the two."
+msgstr "Si está activado, cada elemento del sprint tiene un segundo valor de capacidad: el % planificado se estima por adelantado, el % real se rellena a medida que avanza el trabajo y puede diferir. La matriz de capacidad por categoría y el gráfico de tendencia por categoría pueden alternar entre ambos."
+
+msgid "You are not allowed to edit this backlog item"
+msgstr "No tiene permiso para editar este elemento del backlog"
+
+msgid "You are not allowed to add items to the backlog"
+msgstr "No tiene permiso para añadir elementos al backlog"
+
+msgid "planned"
+msgstr "planificado"
+
+msgid "actual"
+msgstr "real"

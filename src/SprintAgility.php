@@ -362,7 +362,6 @@ class SprintAgility extends CommonGLPI
         echo '</div>';
 
         self::lifecycleHeading(__('Before the sprint', 'sprint'), __('Set the conditions for a realistic and controlled sprint.', 'sprint'));
-        self::renderAvailability($id, $form, $canEdit);
         self::renderEpics($id, $items, $form, $canEdit);
         self::renderPolicies($sprint, $limits, $form, $canEdit);
 
@@ -903,8 +902,14 @@ HTML;
         echo '</tbody></table></div>'; self::endCard();
     }
 
-    private static function renderAvailability(int $id, string $form, bool $edit): void
+    /**
+     * Availability exceptions (leave, training, ...) per member. Lives on the
+     * Sprint Members tab next to the capacity settings; the POST handler stays
+     * in front/sprintagility.form.php and lands back on that tab.
+     */
+    public static function renderAvailability(int $id, bool $edit): void
     {
+        $form = Plugin::getWebDir('sprint') . '/front/sprintagility.form.php';
         $rows = self::rows('glpi_plugin_sprint_sprintavailabilities', ['plugin_sprint_sprints_id' => $id], ['users_id ASC', 'date_start ASC']);
         self::beginCard(
             __('Availability exceptions', 'sprint'),
@@ -913,7 +918,7 @@ HTML;
         );
         if ($edit) {
             $pctHelp = __('The percentage the member IS still available during this period (0% = fully absent)', 'sprint');
-            echo "<form method='post' action='" . htmlescape($form) . "' class='row g-2 mb-1'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('action', ['value' => 'availability']);
+            echo "<form method='post' action='" . htmlescape($form) . "' class='row g-2 mb-1'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('action', ['value' => 'availability']) . Html::hidden('_tab', ['value' => 'members']);
             echo "<div class='col-md-3'><select class='form-select' name='users_id'>" . self::memberOptions($id) . "</select></div><div class='col-md-2'><input required type='date' class='form-control' name='date_start'></div><div class='col-md-2'><input required type='date' class='form-control' name='date_end'></div><div class='col-md-2'><input type='number' min='0' max='100' step='.5' value='0' class='form-control' name='availability_percent' title='" . htmlescape($pctHelp) . "'></div><div class='col-md-2'><input class='form-control' name='comment' placeholder='" . htmlescape(__('Reason', 'sprint')) . "'></div><div class='col-md-1'><button class='btn btn-primary'><i class='fas fa-plus'></i></button></div>";
             Html::closeForm();
             echo "<div class='text-muted small mb-3'><i class='fas fa-circle-info me-1'></i>" . htmlescape($pctHelp) . '</div>';
@@ -938,7 +943,7 @@ HTML;
             echo '<td>' . htmlescape((string)$row['comment']) . '</td>';
             if ($edit) {
                 echo '<td>';
-                echo "<form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'availability_delete']) . "<button class='btn btn-sm btn-link p-0 text-danger' title='" . __('Delete') . "'><i class='fas fa-times'></i></button>";
+                echo "<form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'availability_delete']) . Html::hidden('_tab', ['value' => 'members']) . "<button class='btn btn-sm btn-link p-0 text-danger' title='" . __('Delete') . "'><i class='fas fa-times'></i></button>";
                 Html::closeForm();
                 echo '</td>';
             }

@@ -293,6 +293,7 @@
                     data-owner-name="{{ owner_name }}"
                     data-story-points="{{ si.story_points }}"
                     data-capacity="{{ si.capacity }}"
+                    data-capacity-actual="{{ si.capacity_actual|default('') }}"
                     data-is-fastlane="0"
                     data-is-adhoc="{{ si.is_adhoc ? '1' : '0' }}"
                     data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"

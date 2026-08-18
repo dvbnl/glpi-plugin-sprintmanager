@@ -45,6 +45,10 @@ class Config extends CommonDBTM
      *  Applied to sprints that have no explicit limits for that category. */
     const CFG_CATEGORY_DEFAULT_LIMITS = 'category_default_limits';
 
+    /** Track a planned and an actual capacity %% per sprint item. Off = a
+     *  single capacity figure, as before. */
+    const CFG_PLANNED_ACTUAL = 'planned_actual_capacity';
+
     /** Global Definition of Ready / Definition of Done, one check per line. */
     const CFG_DEFINITION_READY = 'definition_ready';
     const CFG_DEFINITION_DONE  = 'definition_done';
@@ -74,6 +78,7 @@ class Config extends CommonDBTM
             self::CFG_BACKLOG_AUTO_CLEANUP  => 1,
             self::CFG_BACKLOG_AGING_DAYS    => 21,
             self::CFG_CATEGORY_DEFAULT_LIMITS => '{}',
+            self::CFG_PLANNED_ACTUAL        => 0,
             self::CFG_DEFINITION_READY      => '',
             self::CFG_DEFINITION_DONE       => '',
         ];
@@ -158,6 +163,13 @@ class Config extends CommonDBTM
         return (int)($cfg[self::CFG_BACKLOG_AUTO_CLEANUP] ?? 1) === 1;
     }
 
+    /** Whether every sprint item carries a planned and an actual capacity %. */
+    public static function isPlannedActualEnabled(): bool
+    {
+        $cfg = self::getConfig();
+        return (int)($cfg[self::CFG_PLANNED_ACTUAL] ?? 0) === 1;
+    }
+
     /** Aging badge threshold in days, 0 = disabled. */
     public static function getBacklogAgingDays(): int
     {
@@ -221,6 +233,7 @@ class Config extends CommonDBTM
             self::CFG_CAPACITY_TO_POINTS    => (int)(bool)($input[self::CFG_CAPACITY_TO_POINTS] ?? 0),
             self::CFG_BACKLOG_AUTO_CLEANUP  => (int)(bool)($input[self::CFG_BACKLOG_AUTO_CLEANUP] ?? 0),
             self::CFG_BACKLOG_AGING_DAYS    => max(0, min(365, (int)($input[self::CFG_BACKLOG_AGING_DAYS] ?? 21))),
+            self::CFG_PLANNED_ACTUAL        => (int)(bool)($input[self::CFG_PLANNED_ACTUAL] ?? 0),
             self::CFG_DEFINITION_READY      => implode("\n", SprintAgility::checklist((string)($input[self::CFG_DEFINITION_READY] ?? ''))),
             self::CFG_DEFINITION_DONE       => implode("\n", SprintAgility::checklist((string)($input[self::CFG_DEFINITION_DONE] ?? ''))),
         ];
@@ -350,6 +363,23 @@ class Config extends CommonDBTM
         echo "<label class='form-check form-switch'>";
         echo "<input class='form-check-input' type='checkbox' role='switch' "
             . "name='" . self::CFG_BACKLOG_AUTO_CLEANUP . "' value='1' {$checkedCleanup}"
+            . ($canedit ? '' : ' disabled') . ">";
+        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
+        echo "</label>";
+        echo "</td></tr>";
+
+        // Planned vs actual capacity per item
+        $checkedPa = (int)$cfg[self::CFG_PLANNED_ACTUAL] === 1 ? 'checked' : '';
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Planned / actual capacity', 'sprint') . "<br>";
+        echo "<span class='text-muted' style='font-size:0.85em;'>" .
+            __('When enabled, every sprint item gets a second capacity figure: the planned % is estimated up front, the actual % is filled in as the work is done and may deviate. The capacity-per-category matrix and the category trend chart can be flipped between the two.', 'sprint') .
+            "</span></td>";
+        echo "<td>";
+        echo "<input type='hidden' name='" . self::CFG_PLANNED_ACTUAL . "' value='0'>";
+        echo "<label class='form-check form-switch'>";
+        echo "<input class='form-check-input' type='checkbox' role='switch' "
+            . "name='" . self::CFG_PLANNED_ACTUAL . "' value='1' {$checkedPa}"
             . ($canedit ? '' : ' disabled') . ">";
         echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
         echo "</label>";

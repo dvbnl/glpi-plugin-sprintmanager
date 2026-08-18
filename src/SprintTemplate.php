@@ -5,7 +5,6 @@ namespace GlpiPlugin\Sprint;
 use CommonDBTM;
 use Html;
 use Dropdown;
-use Log;
 
 /**
  * SprintTemplate - Blueprint for creating sprints with pre-defined settings
@@ -223,7 +222,7 @@ class SprintTemplate extends CommonDBTM
             return;
         }
 
-        // Safety net for the JS pre-fill (Sprint::showTemplateLoadScript):
+        // Safety net for the JS pre-fill (window.sprintLoadTemplate in js/sprint.js):
         // backfill goal/comment only when the user left them empty.
         $sprint = new Sprint();
         if ($sprint->getFromDB($sprintId)) {

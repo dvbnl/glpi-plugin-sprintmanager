@@ -5,9 +5,6 @@ namespace GlpiPlugin\Sprint;
 use CommonGLPI;
 use Html;
 use Session;
-use Ticket;
-use Change;
-use ProjectTask;
 
 /**
  * SprintDashboard - Consolidated overview tab for a Sprint
@@ -359,6 +356,7 @@ class SprintDashboard extends CommonGLPI
                 . ' data-owner-name="' . htmlescape($ownerNameRaw) . '"'
                 . ' data-story-points="' . (int)$row['story_points'] . '"'
                 . ' data-capacity="' . SprintMember::formatCapacity($row['capacity'] ?? 0) . '"'
+                . ' data-capacity-actual="' . SprintItem::formatActualCapacity($row['capacity_actual'] ?? null) . '"'
                 . ' data-is-fastlane="0"'
                 . ' data-is-adhoc="' . ($isAdhoc ? 1 : 0) . '"'
                 . ' data-item-tags="' . htmlescape(SprintItem::tagsToBlob($rowTags)) . '"'
@@ -942,6 +940,7 @@ class SprintDashboard extends CommonGLPI
                 'raw_priority'  => (int)($row['priority'] ?? 3),
                 'story_points'  => (int)$row['story_points'],
                 'capacity'      => (float)($row['capacity'] ?? 0),
+                'capacity_actual' => $row['capacity_actual'] ?? null,
                 'users_id'      => (int)$row['users_id'],
                 'is_adhoc'      => (int)($row['is_adhoc'] ?? 0),
                 'note'          => (string)($row['note'] ?? ''),

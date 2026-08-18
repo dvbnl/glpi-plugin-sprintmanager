@@ -206,6 +206,7 @@ class SprintOverview extends CommonGLPI
         );
 
         self::renderCategoryDelivery($data);
+        self::renderCategoryTrend($data);
 
         self::renderCard(
             __('Fastlane & adhoc', 'sprint'),
@@ -1103,6 +1104,7 @@ class SprintOverview extends CommonGLPI
             'per_member'     => [],
             'per_type'       => [],
             'per_category'   => [],
+            'category_trend' => [],
             'workload'       => [],
             'workload_trend' => ['labels' => [], 'team' => [], 'over' => [], 'members' => 0, 'drift' => 0.0, 'direction' => 'stable'],
             'flow'           => ['cycle_days' => 0.0, 'blocked_days' => 0.0, 'rework_pct' => 0, 'measured' => 0, 'blocked_items' => 0],
@@ -1136,6 +1138,10 @@ class SprintOverview extends CommonGLPI
         $perMember   = [];
         $perType     = [];
         $perCategory = [];
+        // [sprint][category] => capacity (planned/actual) and points, for the
+        // per-category trend chart. Fastlane items count their member
+        // allocations, regular items their own capacity plus dependencies.
+        $catBySprint = [];
         foreach ($items as $item) {
             $sid  = (int)$item['plugin_sprint_sprints_id'];
             $done = (string)$item['status'] === SprintItem::STATUS_DONE;
@@ -1148,6 +1154,21 @@ class SprintOverview extends CommonGLPI
             if ($done) {
                 $perCategory[$cid]['pts_done'] += $pts;
                 $perCategory[$cid]['items_done']++;
+            }
+
+            $catBySprint[$sid][$cid] ??= ['cap_planned' => 0.0, 'cap_actual' => 0.0, 'pts_planned' => 0, 'pts_done' => 0];
+            $depCap = array_sum($depByUser[(int)$item['id']] ?? []);
+            if ((int)($item['is_fastlane'] ?? 0) === 1) {
+                $flItemCap = (float)($flCap[(int)$item['id']] ?? 0);
+                $catBySprint[$sid][$cid]['cap_planned'] += $flItemCap;
+                $catBySprint[$sid][$cid]['cap_actual']  += $flItemCap;
+            } else {
+                $catBySprint[$sid][$cid]['cap_planned'] += SprintItem::capacityFor($item, false) + $depCap;
+                $catBySprint[$sid][$cid]['cap_actual']  += SprintItem::capacityFor($item, true) + $depCap;
+            }
+            $catBySprint[$sid][$cid]['pts_planned'] += $pts;
+            if ($done) {
+                $catBySprint[$sid][$cid]['pts_done'] += $pts;
             }
 
             $bySprint[$sid] ??= [
@@ -1274,6 +1295,8 @@ class SprintOverview extends CommonGLPI
             $velocities[]        = $bucket['pts_done'];
         }
 
+        $out['category_trend'] = self::categoryTrend($sprints, $catBySprint);
+
         $count = $out['sprint_count'];
         $out['avg_velocity']   = $out['pts_done'] / $count;
         $out['avg_fl_cap']     = $out['avg_fl_cap'] / $count;
@@ -1308,7 +1331,7 @@ class SprintOverview extends CommonGLPI
         $rows = [];
         foreach ($DB->request([
             'SELECT' => [
-                'id', 'plugin_sprint_sprints_id', 'status', 'story_points', 'capacity',
+                'id', 'plugin_sprint_sprints_id', 'status', 'story_points', 'capacity', 'capacity_actual',
                 'users_id', 'itemtype', 'items_id', 'is_fastlane', 'is_adhoc', 'is_blocked',
                 'plugin_sprint_sprintepics_id', 'plugin_sprint_sprintcategories_id',
                 'date_creation', 'date_mod', 'name',
@@ -1433,6 +1456,229 @@ class SprintOverview extends CommonGLPI
      * `loads` is the per-sprint load in $sprints order, null where the member did
      * not take part.
      */
+    /**
+     * Per-category series over the sprints (chart window): allocated capacity
+     * planned/actual and completed-vs-planned %. Subcategories are rolled up
+     * into their parent, so one line per top-level category.
+     *
+     * @return array{labels:array<int,string>,rows:array<int,array>}
+     */
+    private static function categoryTrend(array $sprints, array $catBySprint): array
+    {
+        $cats     = SprintCategory::getAll(false);
+        $parentOf = [];
+        foreach ($cats as $cid => $cat) {
+            $pid = (int)($cat['plugin_sprint_sprintcategories_id'] ?? 0);
+            $parentOf[(int)$cid] = ((int)($cat['level'] ?? 0) > 0 && $pid > 0 && isset($cats[$pid])) ? $pid : (int)$cid;
+        }
+        $window = array_slice($sprints, -self::CHART_SPRINTS);
+        $labels = [];
+        $rows   = [];
+        foreach ($window as $i => $sprint) {
+            $sid      = (int)$sprint['id'];
+            $labels[] = (string)$sprint['name'];
+            foreach ($catBySprint[$sid] ?? [] as $cid => $bucket) {
+                $top = $parentOf[(int)$cid] ?? 0;
+                if ($top > 0 && !isset($cats[$top])) {
+                    $top = 0;
+                }
+                if (!isset($rows[$top])) {
+                    $rows[$top] = [
+                        'id'          => $top,
+                        'label'       => $top > 0 ? (string)$cats[$top]['name'] : __('No category', 'sprint'),
+                        'color'       => $top > 0 ? (string)$cats[$top]['color'] : '#6c757d',
+                        'cap_planned' => array_fill(0, count($window), 0.0),
+                        'cap_actual'  => array_fill(0, count($window), 0.0),
+                        'pts_planned' => array_fill(0, count($window), 0),
+                        'pts_done'    => array_fill(0, count($window), 0),
+                    ];
+                }
+                $rows[$top]['cap_planned'][$i] += (float)$bucket['cap_planned'];
+                $rows[$top]['cap_actual'][$i]  += (float)$bucket['cap_actual'];
+                $rows[$top]['pts_planned'][$i] += (int)$bucket['pts_planned'];
+                $rows[$top]['pts_done'][$i]    += (int)$bucket['pts_done'];
+            }
+        }
+        // Category order as configured, "no category" last.
+        $ordered = [];
+        foreach ($cats as $cid => $cat) {
+            if (isset($rows[(int)$cid])) {
+                $ordered[] = $rows[(int)$cid];
+            }
+        }
+        if (isset($rows[0])) {
+            $ordered[] = $rows[0];
+        }
+        return ['labels' => $labels, 'rows' => $ordered];
+    }
+
+    /**
+     * Line chart per category over the sprints — same interaction as the
+     * team-activity chart (click a legend entry to isolate a line, hover to
+     * preview). Metric picker: capacity % (planned, and actual when that
+     * setting is on) or completed-vs-planned %.
+     */
+    private static function renderCategoryTrend(array $data): void
+    {
+        $trend = $data['category_trend'] ?? [];
+        $rows  = $trend['rows'] ?? [];
+        if (!$rows || count($trend['labels'] ?? []) === 0) {
+            return;
+        }
+        $plannedActual = Config::isPlannedActualEnabled();
+
+        self::renderCard(
+            __('Category trend', 'sprint'),
+            'fas fa-chart-line',
+            __('Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent. Click a legend entry to isolate a category.', 'sprint'),
+            function () use ($trend, $rows, $plannedActual) {
+                $labels  = $trend['labels'];
+                $n       = count($labels);
+                $metrics = ['cap_planned' => __('Planned capacity %', 'sprint')];
+                if ($plannedActual) {
+                    $metrics['cap_actual'] = __('Actual capacity %', 'sprint');
+                }
+                $metrics['done_pct'] = __('Completed vs planned %', 'sprint');
+
+                // One dataset per metric; the picker swaps the visible one.
+                $datasets = [];
+                foreach (array_keys($metrics) as $metric) {
+                    $series = [];
+                    $max    = 0.0;
+                    foreach ($rows as $row) {
+                        $values = [];
+                        for ($i = 0; $i < $n; $i++) {
+                            if ($metric === 'done_pct') {
+                                $planned = (int)$row['pts_planned'][$i];
+                                $v = $planned > 0 ? round(100 * (int)$row['pts_done'][$i] / $planned) : null;
+                            } else {
+                                $v = round((float)$row[$metric][$i], 1);
+                            }
+                            $values[] = $v;
+                            if ($v !== null && $v > $max) {
+                                $max = $v;
+                            }
+                        }
+                        $series[] = ['label' => $row['label'], 'color' => $row['color'], 'values' => $values];
+                    }
+                    $datasets[$metric] = ['series' => $series, 'max' => $max];
+                }
+
+                echo "<div class='sprint-category-trend'>";
+                echo "<div class='d-flex justify-content-end mb-2'>";
+                echo "<select class='form-select form-select-sm sprint-category-trend-metric' style='max-width:240px;'>";
+                foreach ($metrics as $key => $label) {
+                    echo "<option value='" . htmlescape($key) . "'>" . htmlescape($label) . "</option>";
+                }
+                echo "</select></div>";
+                foreach ($datasets as $metric => $set) {
+                    $yMax = $metric === 'done_pct'
+                        ? max(100.0, ceil($set['max'] / 20) * 20)
+                        : max(20.0, ceil($set['max'] / 20) * 20);
+                    echo "<div class='sprint-category-trend-pane' data-metric='" . htmlescape($metric) . "'"
+                        . ($metric === 'cap_planned' ? '' : " style='display:none;'") . ">";
+                    self::renderCategoryLines($labels, $set['series'], (float)$yMax);
+                    echo "</div>";
+                }
+                echo "</div>";
+                echo "<script>(function(){var wrap=document.currentScript.previousElementSibling;if(!wrap)return;var sel=wrap.querySelector('.sprint-category-trend-metric');if(!sel)return;var key='sprint-overview-category-metric';try{var saved=localStorage.getItem(key);if(saved&&sel.querySelector('option[value='+JSON.stringify(saved)+']'))sel.value=saved;}catch(e){}function apply(){wrap.querySelectorAll('.sprint-category-trend-pane').forEach(function(p){p.style.display=p.getAttribute('data-metric')===sel.value?'':'none';});}sel.addEventListener('change',function(){apply();try{localStorage.setItem(key,sel.value);}catch(e){}});apply();})();</script>";
+            }
+        );
+    }
+
+    /**
+     * SVG line chart, one polyline per category, y axis in %. Reuses the
+     * member-activity classes so sprint.js drives legend hover/click focus.
+     *
+     * @param array<int,string> $labels
+     * @param array<int,array{label:string,color:string,values:array<int,float|null>}> $series
+     */
+    private static function renderCategoryLines(array $labels, array $series, float $yMax): void
+    {
+        $n      = count($labels);
+        $width  = 820;
+        $height = 240;
+        $padL   = 44;
+        $padR   = 20;
+        $padT   = 16;
+        $padB   = 40;
+        $plotW  = $width - $padL - $padR;
+        $plotH  = $height - $padT - $padB;
+        $yMax   = max(1.0, $yMax);
+        $xStep  = $n > 1 ? $plotW / ($n - 1) : 0;
+        $xAt    = fn(int $i) => $n > 1 ? $padL + $xStep * $i : $padL + $plotW / 2;
+        $yAt    = fn(float $v) => $padT + $plotH - $plotH * ($v / $yMax);
+        $fmt    = fn(float $v) => number_format($v, 2, '.', '');
+
+        echo "<div class='sprint-member-activity'>";
+        echo "<div style='overflow-x:auto;'>";
+        echo "<svg class='sprint-responsive-chart' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
+            . "preserveAspectRatio='xMinYMin meet' style='width:100%;height:auto;display:block;font-family:sans-serif;font-size:11px;'>";
+        for ($t = 0; $t <= 4; $t++) {
+            $yv = $yMax * $t / 4;
+            $y  = $fmt($yAt($yv));
+            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($padL + $plotW) . "' y2='{$y}' stroke='#e9ecef' stroke-width='1' />";
+            echo "<text x='" . ($padL - 6) . "' y='" . $fmt($yAt($yv) + 3) . "' text-anchor='end' fill='#6c757d'>"
+                . SprintMember::formatCapacity($yv) . "%</text>";
+        }
+        $labelEvery = max(1, (int)ceil($n / 10));
+        for ($i = 0; $i < $n; $i++) {
+            if ($i % $labelEvery !== 0 && $i !== $n - 1) {
+                continue;
+            }
+            $label = mb_strlen($labels[$i]) > 14 ? mb_substr($labels[$i], 0, 13) . '…' : $labels[$i];
+            echo "<text x='" . $fmt($xAt($i)) . "' y='" . ($padT + $plotH + 16) . "' text-anchor='middle' fill='#6c757d'>"
+                . "<title>" . htmlescape($labels[$i]) . "</title>" . htmlescape($label) . "</text>";
+        }
+        echo "<line x1='{$padL}' y1='{$padT}' x2='{$padL}' y2='" . ($padT + $plotH) . "' stroke='#adb5bd' stroke-width='1' />";
+        echo "<line x1='{$padL}' y1='" . ($padT + $plotH) . "' x2='" . ($padL + $plotW) . "' y2='" . ($padT + $plotH) . "' stroke='#adb5bd' stroke-width='1' />";
+
+        foreach ($series as $idx => $s) {
+            $color = htmlescape($s['color']);
+            // A null (no planned points that sprint) breaks the line rather
+            // than drawing a misleading zero.
+            $segments = [[]];
+            foreach ($s['values'] as $i => $v) {
+                if ($v === null) {
+                    $segments[] = [];
+                    continue;
+                }
+                $segments[count($segments) - 1][] = $fmt($xAt($i)) . ',' . $fmt($yAt(min((float)$v, $yMax)));
+            }
+            foreach ($segments as $seg) {
+                if (count($seg) < 2) {
+                    continue;
+                }
+                echo "<polyline class='sprint-activity-line' data-member-idx='" . (int)$idx . "' points='" . implode(' ', $seg) . "' "
+                    . "fill='none' stroke='{$color}' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' />";
+            }
+            foreach ($s['values'] as $i => $v) {
+                if ($v === null) {
+                    continue;
+                }
+                $title = htmlescape($s['label'] . ' — ' . $labels[$i] . ': ' . SprintMember::formatCapacity((float)$v) . '%');
+                echo "<circle class='sprint-activity-dot' data-member-idx='" . (int)$idx . "' cx='" . $fmt($xAt($i)) . "' cy='" . $fmt($yAt(min((float)$v, $yMax))) . "' r='3' fill='{$color}'>"
+                    . "<title>{$title}</title></circle>";
+            }
+        }
+        echo "</svg></div>";
+
+        echo "<div class='sprint-activity-legend-wrap' style='display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.9em;'>";
+        foreach ($series as $idx => $s) {
+            $nonNull = array_filter($s['values'], static fn($v) => $v !== null);
+            $avg     = $nonNull ? array_sum($nonNull) / count($nonNull) : 0;
+            echo "<div class='sprint-activity-legend' data-member-idx='" . (int)$idx . "' "
+                . "title='" . htmlescape(__('Click to isolate — hover to preview', 'sprint')) . "' "
+                . "style='display:flex;align-items:center;gap:6px;cursor:pointer;'>"
+                . "<span style='display:inline-block;width:14px;height:3px;background:" . htmlescape($s['color']) . ";border-radius:2px;'></span>"
+                . "<span>" . htmlescape($s['label']) . " <span class='text-muted' title='" . __s('Average over the sprints shown', 'sprint') . "'>(Ø "
+                . SprintMember::formatCapacity($avg) . "%)</span></span>"
+                . "</div>";
+        }
+        echo "</div>";
+        echo "</div>";
+    }
+
     private static function workload(array $sprints, array $items, array $flByUser, array $depByUser): array
     {
         global $DB;

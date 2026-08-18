@@ -43,6 +43,7 @@ $update = ['id' => (int)$_POST['id']];
 // is_adhoc is additionally restricted to the sprint's Scrum Master inside
 // SprintItem::prepareInputForUpdate().
 $allowed = ['name', 'status', 'priority', 'users_id', 'story_points', 'capacity', 'note',
+    'capacity_actual',
     'proposed_sprints_id', 'is_fastlane', 'is_blocked', 'is_adhoc', 'is_parked',
     'plugin_sprint_sprintcategories_id'];
 
@@ -212,6 +213,7 @@ echo json_encode([
     'users_id'             => (int)$item->fields['users_id'],
     'story_points'         => (int)$item->fields['story_points'],
     'capacity'             => GlpiPlugin\Sprint\SprintMember::formatCapacity($item->fields['capacity'] ?? 0),
+    'capacity_actual'      => GlpiPlugin\Sprint\SprintItem::formatActualCapacity($item->fields['capacity_actual'] ?? null),
     'note'                 => (string)($item->fields['note'] ?? ''),
     'is_fastlane'          => (int)($item->fields['is_fastlane'] ?? 0),
     'is_blocked'           => (int)($item->fields['is_blocked'] ?? 0),

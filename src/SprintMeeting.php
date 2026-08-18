@@ -757,6 +757,7 @@ class SprintMeeting extends CommonDBTM
                     5 => __('Very high'),
                 ],
                 'capacity_choices'  => SprintMember::getCapacityChoices(),
+                'planned_actual'    => \GlpiPlugin\Sprint\Config::isPlannedActualEnabled(),
                 'backlog_url'       => \GlpiPlugin\Sprint\Backlog::getFormURL(),
                 'meeting_url'       => static::getFormURLWithID($ID),
                 'meeting_id'        => $ID,

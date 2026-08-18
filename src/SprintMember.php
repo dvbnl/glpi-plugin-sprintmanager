@@ -268,6 +268,12 @@ class SprintMember extends CommonDBRelation
 
         self::renderMembersDashboard($ID, $members, $memberStatusCounts);
 
+        // Leave / training per member sits next to the capacity settings; the
+        // effective capacity in the cards above already accounts for it.
+        echo "<div style='margin:16px 0;text-align:left;'>";
+        SprintAgility::renderAvailability($ID, $canedit && Config::isCurrentUserScrumMaster($ID));
+        echo "</div>";
+
         $roleIcons = [
             self::ROLE_SCRUM_MASTER  => 'fas fa-hat-wizard',
             self::ROLE_PRODUCT_OWNER => 'fas fa-briefcase',

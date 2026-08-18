@@ -126,6 +126,14 @@
                         }
                     }
 
+                    // Pre-fill comment
+                    if (data.comment) {
+                        var commentField = document.querySelector('textarea[name="comment"]');
+                        if (commentField && !commentField.value) {
+                            commentField.value = data.comment;
+                        }
+                    }
+
                     // Pre-fill duration_weeks dropdown
                     if (data.duration_weeks) {
                         var durationSelect = document.querySelector('select[name="duration_weeks"]');

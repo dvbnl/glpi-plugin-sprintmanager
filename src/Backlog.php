@@ -6,10 +6,6 @@ use Html;
 use Session;
 use Dropdown;
 use Plugin;
-use Ticket;
-use Change;
-use Problem;
-use ProjectTask;
 use User;
 
 /**
@@ -57,9 +53,13 @@ class Backlog
 
 
     /**
-     * Build a 1-click "Add to backlog" form for a Ticket/Change/ProjectTask.
-     * Renders nothing when the item is already in a sprint: backlog and sprint
-     * membership are mutually exclusive (use "Carry over to sprint" instead).
+     * Sprint tab of a Ticket/Change/Problem/ProjectTask. Not on the backlog
+     * yet: a 1-click "Add to backlog" button. On the backlog: a compact
+     * planning line (owner, capacity, sprint, category, fastlane) with a
+     * quick-edit dialog carrying the same fields as the backlog edit dialog,
+     * so planning does not need a detour via the backlog page.
+     * Renders a notice instead when the item is already in a sprint: backlog
+     * and sprint membership are mutually exclusive (use "Carry over" instead).
      */
     public static function showAddToBacklogButton(string $itemtype, int $itemId): void
     {
@@ -83,17 +83,161 @@ class Backlog
             return;
         }
 
-        // Real <button> instead of Html::submit() so the icon survives
-        // (Html::submit escapes its value).
-        echo "<div class='center' style='margin:8px 0;'>";
-        echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
+        $existing = null;
+        foreach ((new SprintItem())->find([
+            'plugin_sprint_sprints_id' => 0,
+            'itemtype'                 => $itemtype,
+            'items_id'                 => $itemId,
+        ], ['id ASC'], 1) as $row) {
+            $existing = $row;
+        }
+
+        if ($existing === null) {
+            // Real <button> instead of Html::submit() so the icon survives
+            // (Html::submit escapes its value).
+            echo "<div class='center' style='margin:8px 0;'>";
+            echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
+            echo Html::hidden('itemtype', ['value' => $itemtype]);
+            echo Html::hidden('items_id', ['value' => $itemId]);
+            echo "<button type='submit' name='add_to_backlog' value='1' class='btn btn-outline-secondary'>"
+                . "<i class='fas fa-layer-group'></i> " . __('Add to backlog', 'sprint')
+                . "</button>";
+            Html::closeForm();
+            echo "</div>";
+            return;
+        }
+
+        // Editing mirrors ajax/updateitemquick.php: the UPDATE right, or the
+        // "own items" right on a row you own.
+        $isOwner = (int)($existing['users_id'] ?? 0) === (int)Session::getLoginUserID();
+        $canEdit = Session::haveRight(SprintItem::$rightname, UPDATE)
+            || ($isOwner && Session::haveRight(SprintItem::$rightname, Profile::RIGHT_OWN_ITEMS));
+
+        $plannedActual = Config::isPlannedActualEnabled();
+        $ownerId       = (int)($existing['users_id'] ?? 0);
+        $capacity      = (float)($existing['capacity'] ?? 0);
+        $actualRaw     = $existing['capacity_actual'] ?? null;
+        $actualStr     = SprintItem::formatActualCapacity($actualRaw);
+        $proposedId    = (int)($existing['proposed_sprints_id'] ?? 0);
+        $categoryId    = (int)($existing['plugin_sprint_sprintcategories_id'] ?? 0);
+        $isFastlane    = (int)($existing['is_fastlane'] ?? 0) === 1;
+        $sprintName    = '';
+        if ($proposedId > 0) {
+            $sp = new Sprint();
+            $sprintName = $sp->getFromDB($proposedId) ? (string)$sp->fields['name'] : ('#' . $proposedId);
+        }
+        $muted = "<span class='text-muted'>-</span>";
+        $chip  = function (string $icon, string $label, string $value): string {
+            return "<span class='sprint-plan-chip' title='" . htmlescape($label) . "'>"
+                . "<i class='{$icon} text-muted me-1'></i>{$value}</span>";
+        };
+
+        // Compact planning line.
+        echo "<div class='sprint-plan-panel' style='margin:8px auto 14px;max-width:980px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;"
+            . "padding:8px 14px;border:1px solid var(--tblr-border-color,#e2e8f0);border-radius:8px;text-align:left;'>";
+        echo "<span class='fw-bold'><i class='fas fa-layer-group me-1'></i>" . __('Backlog planning', 'sprint') . "</span>";
+        echo $chip('fas fa-user', __('Owner', 'sprint'), $ownerId > 0 ? htmlescape(SprintCache::userName($ownerId)) : $muted);
+        $capValue = $capacity > 0 ? SprintMember::formatCapacity($capacity) . '%' : $muted;
+        if ($plannedActual) {
+            $capValue .= " <span class='text-muted small'>" . __('planned', 'sprint') . "</span>"
+                . " · " . ($actualStr !== '' ? $actualStr . '%' : $muted)
+                . " <span class='text-muted small'>" . __('actual', 'sprint') . "</span>";
+        }
+        echo $chip('fas fa-gauge-high', __('Est. capacity', 'sprint'), $capValue);
+        echo $chip('fas fa-flag-checkered', __('Assign to sprint', 'sprint'), $sprintName !== '' ? htmlescape($sprintName) : $muted);
+        echo $chip('fas fa-folder', __('Category', 'sprint'), $categoryId > 0 ? SprintCategory::renderPill($categoryId) : $muted);
+        if ($isFastlane) {
+            echo "<span class='sprint-plan-chip'><i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Fastlane', 'sprint') . "</span>";
+        }
+        echo "<span style='flex:1;'></span>";
+        if ($canEdit) {
+            echo "<button type='button' class='btn btn-sm btn-outline-primary' data-bs-toggle='modal' data-bs-target='#sprint-plan-modal'>"
+                . "<i class='fas fa-pen me-1'></i>" . __('Quick edit', 'sprint') . "</button>";
+        }
+        echo "</div>";
+
+        if (!$canEdit) {
+            return;
+        }
+
+        // Quick-edit dialog: same fields as the backlog edit dialog, plain
+        // POST (front/backlog.form.php update_backlog_item) so it works
+        // without the backlog page's scripts.
+        $rand = mt_rand();
+        echo "<div class='modal fade' id='sprint-plan-modal' tabindex='-1' aria-hidden='true'>";
+        echo "<div class='modal-dialog modal-dialog-centered modal-lg'><div class='modal-content'>";
+        echo "<form method='post' action='" . self::getFormURL() . "'>";
+        echo "<div class='modal-header'><h5 class='modal-title'><i class='fas fa-pen me-1'></i> " . __('Backlog planning', 'sprint') . "</h5>"
+            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button></div>";
+        echo "<div class='modal-body'>";
         echo Html::hidden('itemtype', ['value' => $itemtype]);
         echo Html::hidden('items_id', ['value' => $itemId]);
-        echo "<button type='submit' name='add_to_backlog' value='1' class='btn btn-outline-secondary'>"
-            . "<i class='fas fa-layer-group'></i> " . __('Add to backlog', 'sprint')
-            . "</button>";
-        Html::closeForm();
+        echo Html::hidden('id', ['value' => (int)$existing['id']]);
+        echo "<div class='row g-3'>";
+
+        echo "<div class='col-md-6 mb-2'><label class='form-label'>" . __('Owner', 'sprint') . "</label>";
+        User::dropdown([
+            'name'   => 'users_id',
+            'value'  => $ownerId,
+            'right'  => 'all',
+            'entity' => $_SESSION['glpiactiveentities'] ?? -1,
+            'rand'   => $rand,
+            'width'  => '100%',
+        ]);
         echo "</div>";
+
+        echo "<div class='" . ($plannedActual ? 'col-md-3' : 'col-md-6') . " mb-2'><label class='form-label'>" . __('Est. capacity', 'sprint') . " %</label>";
+        Dropdown::showFromArray('capacity', ['0' => '-----'] + SprintMember::getCapacityChoices(), [
+            'value' => $capacity > 0 ? SprintMember::capacityKey($capacity) : '0',
+            'rand'  => $rand,
+            'width' => '100%',
+        ]);
+        echo "</div>";
+        if ($plannedActual) {
+            echo "<div class='col-md-3 mb-2'><label class='form-label text-nowrap' title='" . __s('Actual capacity (%)', 'sprint') . "'>" . __('Actual', 'sprint') . " %</label>";
+            Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
+                'value' => $actualStr === '' ? '' : SprintMember::capacityKey($actualRaw),
+                'rand'  => $rand,
+                'width' => '100%',
+            ]);
+            echo "</div>";
+        }
+
+        echo "<div class='col-md-6 mb-2'><label class='form-label'>" . __('Assign to sprint', 'sprint') . "</label>";
+        Sprint::dropdown([
+            'name'  => 'proposed_sprints_id',
+            'value' => $proposedId,
+            'rand'  => $rand,
+            'width' => '100%',
+        ]);
+        echo "<div class='form-text small text-muted'>"
+            . __('Pre-selecting a sprint marks the item for the Scrum Master to assign at kick-off.', 'sprint') . "</div>";
+        echo "</div>";
+
+        echo "<div class='col-md-6 mb-2'><label class='form-label'><i class='fas fa-folder me-1'></i>" . __('Category', 'sprint') . "</label>";
+        echo "<select class='form-select' name='plugin_sprint_sprintcategories_id'>";
+        echo "<option value='0'>-----</option>";
+        echo SprintCategory::dropdownOptions($categoryId);
+        echo "</select></div>";
+
+        echo "<div class='col-12'>";
+        echo "<input type='hidden' name='is_fastlane' value='0'>";
+        echo "<label class='form-check form-switch mb-0'>";
+        echo "<input class='form-check-input' type='checkbox' name='is_fastlane' value='1'" . ($isFastlane ? ' checked' : '') . ">";
+        echo "<span class='form-check-label'><i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Fastlane', 'sprint') . "</span>";
+        echo "</label></div>";
+
+        echo "</div></div>";
+        echo "<div class='modal-footer'>";
+        echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __('Cancel') . "</button>";
+        echo "<button type='submit' name='update_backlog_item' value='1' class='btn btn-primary'>"
+            . "<i class='fas fa-save me-1'></i>" . __('Save') . "</button>";
+        echo "</div>";
+        Html::closeForm();
+        echo "</div></div></div>";
+        // Modals nested in the tab content get clipped by the tab's
+        // stacking context; move it to <body> like the other dialogs.
+        echo "<script>(function(){var m=document.getElementById('sprint-plan-modal');if(m&&m.parentNode!==document.body){document.body.appendChild(m);}})();</script>";
     }
 
     /** True when the linked GLPI item is in a real sprint (sprints_id > 0). */
@@ -510,13 +654,23 @@ class Backlog
             'width'  => '100%',
         ]);
         echo "</div>";
-        echo "<div class='col-md-6 mb-3'><label class='form-label'>{$lblCapacity} %</label>";
+        $plannedActual = Config::isPlannedActualEnabled();
+        echo "<div class='" . ($plannedActual ? 'col-md-3' : 'col-md-6') . " mb-3'><label class='form-label'>{$lblCapacity} %</label>";
         Dropdown::showFromArray('_backlog_modal_capacity', SprintMember::getCapacityChoices(), [
             'value' => 0,
             'rand'  => 424244,
             'width' => '100%',
         ]);
         echo "</div>";
+        if ($plannedActual) {
+            echo "<div class='col-md-3 mb-3'><label class='form-label text-nowrap' title='" . __s('Actual capacity (%)', 'sprint') . "'>" . __s('Actual', 'sprint') . " %</label>";
+            echo "<select class='form-select' name='_backlog_modal_capacity_actual'>";
+            echo "<option value=''>" . __s('Follows planned', 'sprint') . "</option>";
+            foreach (SprintMember::getCapacityChoices() as $val => $label) {
+                echo "<option value='" . htmlescape((string)$val) . "'>" . htmlescape((string)$label) . "</option>";
+            }
+            echo "</select></div>";
+        }
         echo "</div>";
 
         echo "<div class='row g-3'>";
@@ -724,6 +878,19 @@ class Backlog
             });
             \$sel.val(match).trigger('change');
         })();
+        (function() {
+            var \$sel = \$modal.find("select[name='_backlog_modal_capacity_actual']");
+            if (!\$sel.length) { return; }
+            var raw = \$row.attr('data-capacity-actual');
+            var num = parseFloat(raw);
+            var match = '';
+            if (raw !== undefined && raw !== '' && !isNaN(num)) {
+                \$sel.find('option').each(function() {
+                    if (this.value !== '' && parseFloat(this.value) === num) { match = this.value; return false; }
+                });
+            }
+            \$sel.val(match);
+        })();
 
         refreshPreview();
         updateDepsButton();
@@ -747,6 +914,9 @@ class Backlog
                     name: \$modal.find('input[name=name]').val(),
                     users_id: parseInt(\$modal.find("select[name='_backlog_modal_users_id']").val(), 10) || 0,
                     capacity: parseFloat(\$modal.find("select[name='_backlog_modal_capacity']").val()) || 0,
+                    capacity_actual: \$modal.find("select[name='_backlog_modal_capacity_actual']").length
+                        ? \$modal.find("select[name='_backlog_modal_capacity_actual']").val()
+                        : undefined,
                     proposed_sprints_id: parseInt(\$modal.find("select[name='_backlog_modal_sprint_id']").val(), 10) || 0,
                     is_fastlane: \$modal.find('input[name=is_fastlane]').is(':checked') ? 1 : 0,
                     is_blocked: \$modal.find('input[name=is_blocked]').is(':checked') ? 1 : 0,
@@ -1571,6 +1741,17 @@ HTML;
         echo "<span class='text-muted small'>"
             . __('Capacity per category across the upcoming sprints: work already assigned plus backlog proposals, including dependencies and subcategories, against optional min/max limits.', 'sprint') . "</span>";
         echo "<span style='flex:1;'></span>";
+        if (Config::isPlannedActualEnabled()) {
+            // Planned = the estimated capacity, actual = the recorded actual
+            // capacity where an item has one (planned fills the gaps).
+            echo "<div class='sprint-backlog-capmode btn-group btn-group-sm' role='group' title='"
+                . __s('Show the planned or the actual capacity per item (items without an actual figure keep their planned one)', 'sprint') . "'>";
+            echo "<input type='radio' class='btn-check' name='sprint-backlog-capmode' id='sprint-capmode-planned' value='planned' checked>"
+                . "<label class='btn btn-outline-secondary' for='sprint-capmode-planned'><i class='fas fa-pen-ruler me-1'></i>" . __('Planned', 'sprint') . "</label>";
+            echo "<input type='radio' class='btn-check' name='sprint-backlog-capmode' id='sprint-capmode-actual' value='actual'>"
+                . "<label class='btn btn-outline-secondary' for='sprint-capmode-actual'><i class='fas fa-stopwatch me-1'></i>" . __('Actual', 'sprint') . "</label>";
+            echo "</div>";
+        }
         echo "<label class='text-muted small mb-0' for='sprint-backlog-horizon'>" . __('Horizon', 'sprint') . "</label>";
         echo "<select id='sprint-backlog-horizon' class='form-select form-select-sm sprint-backlog-horizon' style='max-width:140px;'>";
         foreach ([4, 8, 13] as $h) {
@@ -1616,11 +1797,29 @@ HTML;
     function currentHorizon() {
         return parseInt(jQuery('.sprint-backlog-horizon').val(), 10) || 4;
     }
+    function currentCapMode() {
+        return jQuery('input[name="sprint-backlog-capmode"]:checked').val() === 'actual' ? 'actual' : 'planned';
+    }
+    // Remember the planned/actual choice per user.
+    (function(){
+        var \$mode = jQuery('input[name="sprint-backlog-capmode"]');
+        if (!\$mode.length) { return; }
+        try {
+            if (localStorage.getItem('sprint.backlog.matrix.capmode') === 'actual') {
+                \$mode.filter('[value="actual"]').prop('checked', true);
+            }
+        } catch (e) {}
+        \$mode.on('change', function(){
+            try { localStorage.setItem('sprint.backlog.matrix.capmode', currentCapMode()); } catch (e) {}
+            reloadMatrix();
+        });
+        if (currentCapMode() === 'actual') { jQuery(reloadMatrix); }
+    })();
 
     function reloadMatrix() {
         jQuery('.sprint-backlog-dash-body').css('opacity', 0.5);
         jQuery.ajax({ url: "{$statsUrl}", type: 'GET', dataType: 'json', cache: false,
-            data: { horizon: currentHorizon() } })
+            data: { horizon: currentHorizon(), mode: currentCapMode() } })
         .done(function(resp){
             if (resp && resp.success) {
                 jQuery('.sprint-backlog-dash-body').html(resp.html);
@@ -1804,11 +2003,12 @@ HTML;
     }
 
     /** Matrix fragment: categories × upcoming sprints (+ unplanned + work-supply). */
-    public static function renderCategoryMatrixFragment(int $horizon = 4): string
+    public static function renderCategoryMatrixFragment(int $horizon = 4, bool $actual = false): string
     {
         global $DB;
 
         $horizon    = max(1, min(26, $horizon));
+        $actual     = $actual && Config::isPlannedActualEnabled();
         $categories = SprintCategory::getAll();
 
         // A parent row totals its own work plus its subcategories'.
@@ -1844,7 +2044,7 @@ HTML;
             if ($sid > 0 && !in_array($sid, $sprintIds, true)) {
                 $sid = -1; // proposed for a sprint outside the horizon
             }
-            $cap = (float)($row['capacity'] ?? 0);
+            $cap = SprintItem::capacityFor($row, $actual);
             $alloc[$cid][$sid] = ($alloc[$cid][$sid] ?? 0) + $cap;
             $count[$cid][$sid] = ($count[$cid][$sid] ?? 0) + 1;
             $totalByCat[$cid]  = ($totalByCat[$cid] ?? 0) + $cap;
@@ -1882,7 +2082,7 @@ HTML;
                 if ((int)($row['is_fastlane'] ?? 0) === 1) {
                     $fastIds[] = (int)$row['id'];
                 } else {
-                    $assign[$cid][$sid] = ($assign[$cid][$sid] ?? 0) + (float)($row['capacity'] ?? 0);
+                    $assign[$cid][$sid] = ($assign[$cid][$sid] ?? 0) + SprintItem::capacityFor($row, $actual);
                 }
             }
             foreach (SprintFastlaneMember::getCapacityByItem($fastIds) as $iid => $cap) {
@@ -1959,7 +2159,7 @@ HTML;
             ]) as $row) {
                 $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
                 $sid = (int)$row['plugin_sprint_sprints_id'];
-                $perSprint[$cid][$sid]         = ($perSprint[$cid][$sid] ?? 0) + (float)($row['capacity'] ?? 0);
+                $perSprint[$cid][$sid]         = ($perSprint[$cid][$sid] ?? 0) + SprintItem::capacityFor($row, $actual);
                 $doneSlot[(int)$row['id']]     = [$cid, $sid];
             }
             // Helper capacity spent on those items was real delivery too.
@@ -1988,8 +2188,34 @@ HTML;
             }
         }
         // Fastlane is interrupt work: it never sat on the backlog, so it stays
-        // out of the delivery figures and becomes a reservation instead.
+        // out of the delivery figures and becomes a reservation instead. The
+        // sprint's own fastlane cap is that reservation; the historical
+        // average only fills in for sprints without a cap.
         $fastlaneAvg = $histCount > 0 ? array_sum($fastPerSprint) / $histCount : 0.0;
+        $fastReserve = [];
+        foreach ($sprintIds as $sid) {
+            $cap = (float)($sprints[$sid]['fastlane_capacity'] ?? 0);
+            $fastReserve[$sid] = $cap > 0 ? $cap : $fastlaneAvg;
+        }
+
+        // The configured minimum per category is a floor under the delivery
+        // pace: a category with a reserved minimum gets at least that much
+        // per sprint, however little it delivered historically. Taken from
+        // the first upcoming sprint (falls back to the category defaults),
+        // parents add up their subcategories, -1 sums every category.
+        $minLimits = $sprintIds
+            ? ($limits[$sprintIds[0]] ?? [])
+            : Config::getCategoryDefaultLimits();
+        $minFor = [];
+        foreach ($categories as $cid => $cat) {
+            $minFor[(int)$cid] = (float)($minLimits[(int)$cid]['min'] ?? 0);
+        }
+        $minFor[-1] = array_sum($minFor);
+        foreach ($childrenOf as $pid => $kids) {
+            foreach ($kids as $kid) {
+                $minFor[$pid] = ($minFor[$pid] ?? 0) + ($minLimits[$kid]['min'] ?? 0);
+            }
+        }
 
         $series = function (int $cid) use ($perSprint, $histIds): array {
             $out = [];
@@ -1998,23 +2224,25 @@ HTML;
             }
             return $out;
         };
-        $supplyFor = function (int $cid, float $backlogCap) use ($series, $histCount): array {
+        $supplyFor = function (int $cid, float $backlogCap) use ($series, $histCount, $minFor): array {
             if ($backlogCap <= 0 || $histCount === 0) {
                 return ['', ''];
             }
+            $floor  = (float)($minFor[$cid] ?? 0);
             $values = $series($cid);
             $avg    = array_sum($values) / $histCount;
-            if ($avg <= 0) {
+            if ($avg <= 0 && $floor <= 0) {
                 // Never delivered in this category: fall back to team-wide pace.
                 $values = $series(-1);
                 $avg    = array_sum($values) / $histCount;
             }
+            $avg = max($avg, $floor);
             if ($avg <= 0) {
                 return ['—', ''];
             }
-            $main = '≈ ' . number_format($backlogCap / $avg, 1);
-            $best = max($values);
-            $worst = min($values);
+            $main  = '≈ ' . number_format($backlogCap / $avg, 1);
+            $best  = max(max($values), $floor);
+            $worst = max(min($values), $floor);
             if ($best <= 0) {
                 return [$main, ''];
             }
@@ -2060,6 +2288,10 @@ HTML;
 
         ob_start();
         echo "<div class='table-responsive' style='padding:6px 10px;'>";
+        if ($actual) {
+            echo "<div class='small mb-1' style='color:#fd7e14;'><i class='fas fa-stopwatch me-1'></i>"
+                . __('Showing actual capacity; items without an actual figure count with their planned capacity.', 'sprint') . "</div>";
+        }
         echo "<table class='table table-sm mb-1 sprint-backlog-matrix' style='min-width:640px;'>";
         echo "<thead><tr><th style='min-width:150px;'>" . __('Category', 'sprint') . "</th>";
         $limitsTitle = __s('Set min/max capacity % per category for this sprint', 'sprint');
@@ -2091,7 +2323,7 @@ HTML;
         }
         echo "<th class='text-center'>" . __('Not yet planned', 'sprint') . "</th>";
         echo "<th class='text-center' title='"
-            . __s('Backlog capacity divided by the delivered capacity per sprint (last completed sprints). The range below runs from the best to the worst of those sprints.', 'sprint') . "'>"
+            . __s('Backlog capacity divided by the delivered capacity per sprint (last completed sprints), never less than the configured category minimum. The range below runs from the best to the worst of those sprints.', 'sprint') . "'>"
             . __('Work supply (sprints)', 'sprint') . "</th></tr></thead><tbody>";
 
         $collapseTitle = __s('Show or hide the subcategories', 'sprint');
@@ -2237,7 +2469,7 @@ HTML;
             // sprint without members counts too: 0% capacity with work planned
             // is exactly the signal the planner needs.
             $noTeam  = $team[$sid] <= 0;
-            $reserve = max(0.0, $fastlaneAvg - (float)($fastAssigned[$sid] ?? 0));
+            $reserve = max(0.0, (float)($fastReserve[$sid] ?? 0) - (float)($fastAssigned[$sid] ?? 0));
             $usable  = max(0.0, $team[$sid] - $reserve);
             $over    = $t > 0 && ($noTeam || $t > $usable);
             $bg      = ($over && !$noTeam) ? "background:color-mix(in srgb,#dc3545 10%,transparent);" : '';
@@ -2270,8 +2502,10 @@ HTML;
             }
             echo "</div>";
             if ($reserve > 0.05 && !$noTeam) {
-                echo "<div class='small fw-normal' style='color:#fd7e14;' title='"
-                    . __s('Reserved for interrupt work: the average fastlane load of the completed sprints, minus what is already assigned here', 'sprint') . "'>"
+                $reserveTip = (float)($sprints[$sid]['fastlane_capacity'] ?? 0) > 0
+                    ? __s('Reserved for interrupt work: the fastlane capacity limit of this sprint, minus what is already assigned here', 'sprint')
+                    : __s('Reserved for interrupt work: no fastlane limit set on this sprint, so the average fastlane load of the completed sprints is used, minus what is already assigned here', 'sprint');
+                echo "<div class='small fw-normal' style='color:#fd7e14;' title='{$reserveTip}'>"
                     . "<i class='fas fa-bolt me-1'></i>" . SprintMember::formatCapacity($reserve) . "%</div>";
             }
             if (!$noTeam) {
@@ -2297,9 +2531,12 @@ HTML;
                 . sprintf(__('Work supply based on the last %d completed sprints.', 'sprint'), $histCount);
             if ($fastlaneAvg > 0.05) {
                 echo ' ' . sprintf(
-                    __('Those sprints spent an average of %s%% on fastlane work, which is reserved up front.', 'sprint'),
+                    __('Those sprints spent an average of %s%% on fastlane work; that average is reserved up front on sprints without a fastlane limit of their own.', 'sprint'),
                     SprintMember::formatCapacity($fastlaneAvg)
                 );
+            }
+            if (($minFor[-1] ?? 0) > 0) {
+                echo ' ' . __('Configured category minimums act as a floor under the delivery pace.', 'sprint');
             }
             echo "</div>";
         }
@@ -2583,6 +2820,7 @@ HTML;
             . "data-users-id='" . $ownerId . "' "
             . "data-owner-name='" . htmlescape($ownerName) . "' "
             . "data-capacity='" . SprintMember::formatCapacity($estCapacity) . "' "
+            . "data-capacity-actual='" . SprintItem::formatActualCapacity($row['capacity_actual'] ?? null) . "' "
             . "data-proposed-sprint-id='" . $proposedId . "' "
             . "data-proposed-sprint-name='" . htmlescape($proposedName) . "' "
             . "data-is-fastlane='" . ($isFastlane ? 1 : 0) . "' "
@@ -2847,7 +3085,7 @@ HTML;
      * SprintItem ID, or 0 if it could not be created. An existing backlog
      * entry for the same linked item is reused instead of duplicated.
      */
-    public static function addFromLinkedItem(string $itemtype, int $itemId): int
+    public static function addFromLinkedItem(string $itemtype, int $itemId, array $extra = []): int
     {
         $allowed = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
         if (!in_array($itemtype, $allowed, true) || $itemId <= 0) {
@@ -2867,6 +3105,9 @@ HTML;
         ]);
         if (count($existing) > 0) {
             $first = reset($existing);
+            if ($extra) {
+                (new SprintItem())->update(['id' => (int)$first['id']] + $extra);
+            }
             return (int)$first['id'];
         }
 
@@ -2879,7 +3120,7 @@ HTML;
         $priority = (int)($linked->fields['priority'] ?? 3);
 
         $sprintItem = new SprintItem();
-        $newId = $sprintItem->add([
+        $newId = $sprintItem->add($extra + [
             'plugin_sprint_sprints_id' => 0,
             'name'                     => $name,
             'itemtype'                 => $itemtype,

@@ -16,6 +16,7 @@ Session::checkRight('plugin_sprint_item', READ);
 echo json_encode([
     'success' => true,
     'html'    => GlpiPlugin\Sprint\Backlog::renderCategoryMatrixFragment(
-        max(1, min(26, (int)($_GET['horizon'] ?? 4)))
+        max(1, min(26, (int)($_GET['horizon'] ?? 4))),
+        (string)($_GET['mode'] ?? 'planned') === 'actual'
     ),
 ]);

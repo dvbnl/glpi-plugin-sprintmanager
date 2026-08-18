@@ -22,8 +22,8 @@ foreach (['sprintepics', 'sprintavailabilities', 'sprintimprovements', 'sprintsi
     }
 }
 $setup = file_get_contents($root . '/setup.php');
-if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.2.1")) {
-    fwrite(STDERR, "Version was not advanced to 1.2.1\n");
+if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.2.2")) {
+    fwrite(STDERR, "Version was not advanced to 1.2.2\n");
     exit(1);
 }
 $endpoint = file_get_contents($root . '/front/sprintagility.form.php');

@@ -1063,3 +1063,11 @@ table.tab_cadre_fixe.sprint-themed {
 .sprint-imp-item .sprint-imp-vote-btn {
     text-decoration: none;
 }
+
+/* Sprint-tab planning line (Backlog::showAddToBacklogButton) */
+.sprint-plan-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    white-space: nowrap;
+}

@@ -6,7 +6,6 @@ use CommonDBTM;
 use Html;
 use Session;
 use User;
-use Project;
 use Dropdown;
 
 /**
@@ -719,10 +718,6 @@ class Sprint extends CommonDBTM
             $this->showSaveAsTemplateForm();
         }
 
-        if ($isNew) {
-            $this->showTemplateLoadScript();
-        }
-
         return true;
     }
 
@@ -823,45 +818,6 @@ class Sprint extends CommonDBTM
                 });
             });
         });
-        </script>";
-    }
-
-    private function showTemplateLoadScript(): void
-    {
-        echo "<script>
-        function sprintLoadTemplate(templateId) {
-            if (!templateId || templateId == 0) return;
-
-            $.ajax({
-                url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/gettemplate.php',
-                type: 'POST',
-                dataType: 'json',
-                data: {
-                    id: templateId,
-                    _glpi_csrf_token: $('input[name=\"_glpi_csrf_token\"]').first().val()
-                },
-                success: function(resp) {
-                    if (resp.success && resp.data) {
-                        var d = resp.data;
-                        if (d.name_pattern) {
-                            $('input[name=\"name\"]').val(d.name_pattern);
-                        }
-                        if (d.goal) {
-                            $('textarea[name=\"goal\"]').val(d.goal);
-                        }
-                        if (d.comment) {
-                            $('textarea[name=\"comment\"]').val(d.comment);
-                        }
-                        if (d.duration_weeks) {
-                            var dw = $('select[name=\"duration_weeks\"]');
-                            if (dw.length) {
-                                dw.val(d.duration_weeks).trigger('change');
-                            }
-                        }
-                    }
-                }
-            });
-        }
         </script>";
     }
 

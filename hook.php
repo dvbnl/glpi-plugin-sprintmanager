@@ -89,6 +89,7 @@ function plugin_sprint_install(): bool
             `users_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owner/Assignee',
             `sort_order`               INT NOT NULL DEFAULT 0,
             `capacity`                 DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Capacity usage in %',
+            `capacity_actual`          DECIMAL(5,1) NULL DEFAULT NULL COMMENT 'Actual capacity in %, NULL = follows planned',
             `note`                     TEXT COMMENT 'Standup note',
             `date_creation`            TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                 TIMESTAMP NULL DEFAULT NULL,
@@ -181,6 +182,14 @@ function plugin_sprint_install(): bool
         // work kept out of the active planning sections and capacity totals.
         $migration->addField('glpi_plugin_sprint_sprintitems', 'is_parked', 'bool', ['value' => 0, 'after' => 'is_adhoc']);
         $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_parked');
+        // Planned / actual capacity (plugin setting): NULL = no actual figure
+        // recorded yet, the item follows its planned capacity.
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitems',
+            'capacity_actual',
+            'DECIMAL(5,1) NULL DEFAULT NULL',
+            ['after' => 'capacity', 'nodefault' => true]
+        );
     }
 
     // =========================================================================

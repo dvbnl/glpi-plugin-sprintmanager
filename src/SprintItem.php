@@ -178,6 +178,15 @@ class SprintItem extends CommonDBTM
             // DECIMAL(5,1) column; 'integer' would strip the decimal point in filterValues() ("0.5" → 5)
             'datatype' => 'decimal',
         ];
+        if (Config::isPlannedActualEnabled()) {
+            $tab[] = [
+                'id'       => 12,
+                'table'    => $this->getTable(),
+                'field'    => 'capacity_actual',
+                'name'     => __('Actual capacity (%)', 'sprint'),
+                'datatype' => 'decimal',
+            ];
+        }
         $tab[] = [
             'id'       => 7,
             'table'    => 'glpi_users',
@@ -411,6 +420,24 @@ class SprintItem extends CommonDBTM
             . "title='" . htmlescape(__('Project')) . "'>"
             . "<i class='fas fa-folder-open' style='opacity:0.7;font-size:0.85em;'></i> "
             . htmlescape($projectName) . "</span>";
+    }
+
+    /**
+     * Capacity of a row for the requested view: the actual figure when the
+     * planned/actual setting is on and one was recorded, else the planned one.
+     */
+    public static function capacityFor(array $row, bool $actual): float
+    {
+        if ($actual && isset($row['capacity_actual']) && $row['capacity_actual'] !== '' && $row['capacity_actual'] !== 'NULL') {
+            return (float)$row['capacity_actual'];
+        }
+        return (float)($row['capacity'] ?? 0);
+    }
+
+    /** '' when no actual capacity was recorded, else the formatted figure. */
+    public static function formatActualCapacity($value): string
+    {
+        return ($value === null || $value === '' || $value === 'NULL') ? '' : SprintMember::formatCapacity($value);
     }
 
     /**
@@ -861,6 +888,12 @@ class SprintItem extends CommonDBTM
             Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
                 'value' => 0,
             ]);
+            if (Config::isPlannedActualEnabled()) {
+                echo " <span class='text-muted small ms-2'>" . __('Actual', 'sprint') . "</span> ";
+                Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
+                    'value' => '',
+                ]);
+            }
             echo "</td>";
             echo "<td>" . __('Priority') . "</td>";
             echo "<td>";
@@ -889,6 +922,7 @@ class SprintItem extends CommonDBTM
         );
 
         $statuses   = self::getAllStatuses();
+        $plannedActual = Config::isPlannedActualEnabled();
         $priorities = [
             1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
             4 => __('High'), 5 => __('Very high'),
@@ -956,7 +990,12 @@ class SprintItem extends CommonDBTM
                 $statusLabel . "</span></td>";
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td class='center sprint-cell-story-points'>" . (int)$row['story_points'] . "</td>";
-            echo "<td class='center sprint-cell-capacity'>" . SprintMember::formatCapacity($row['capacity'] ?? 0) . "%</td>";
+            echo "<td class='center sprint-cell-capacity'>" . SprintMember::formatCapacity($row['capacity'] ?? 0) . "%";
+            if ($plannedActual && self::formatActualCapacity($row['capacity_actual'] ?? null) !== '') {
+                echo " <span class='text-muted small' title='" . __s('Actual capacity', 'sprint') . "'>/ "
+                    . SprintMember::formatCapacity($row['capacity_actual']) . "%</span>";
+            }
+            echo "</td>";
             echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? htmlescape(SprintCache::userName($row['users_id'])) :
                 '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
             if ($canedit) {
@@ -1157,6 +1196,7 @@ HTML;
             'data-owner-name'        => $ownerName,
             'data-story-points'      => (int)($row['story_points'] ?? 0),
             'data-capacity'          => SprintMember::formatCapacity($row['capacity'] ?? 0),
+            'data-capacity-actual'   => self::formatActualCapacity($row['capacity_actual'] ?? null),
             'data-is-fastlane'       => (int)($row['is_fastlane'] ?? 0),
             'data-is-adhoc'          => (int)($row['is_adhoc'] ?? 0),
             'data-note'              => (string)($row['note'] ?? ''),
@@ -1331,6 +1371,7 @@ HTML;
             4 => __('High'), 5 => __('Very high'),
         ];
         $capacityChoices = SprintMember::getCapacityChoices();
+        $plannedActual   = Config::isPlannedActualEnabled();
         $memberOptions  = $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [];
         $moveTargets    = $sprintId > 0 ? Sprint::getMoveTargetOptions($sprintId) : [];
         $definedTags    = Config::getDefinedTags();
@@ -1448,6 +1489,15 @@ HTML;
                 . "<i class='fas fa-user-shield me-1'></i>{$capacityRequestHint}</div>";
         }
         echo "</div>";
+        if ($plannedActual) {
+            echo "<div class='col-md-3 mb-3 sprint-qe-capacity-actual'><label class='form-label text-nowrap' title='" . __s('Actual capacity (%)', 'sprint') . "'>" . __('Actual', 'sprint') . " %</label>";
+            echo "<select name='capacity_actual' class='form-select'>";
+            echo "<option value=''>" . __('Follows planned', 'sprint') . "</option>";
+            foreach ($capacityChoices as $val => $label) {
+                echo "<option value='" . htmlescape((string)$val) . "'>" . htmlescape((string)$label) . "</option>";
+            }
+            echo "</select></div>";
+        }
         echo "</div>";
 
         echo "<div class='mb-3'><label class='form-label'>" . __('Note', 'sprint') . "</label>";
@@ -1604,10 +1654,23 @@ $(function() {
             // Baseline for the guarded-capacity reason dialog on save.
             \$modal.data('qe-orig-capacity', num);
         })();
+        (function() {
+            var \$sel = \$modal.find('select[name=capacity_actual]');
+            if (!\$sel.length) { return; }
+            var raw = \$row.attr('data-capacity-actual');
+            var num = parseFloat(raw);
+            var match = '';
+            if (raw !== undefined && raw !== '' && !isNaN(num)) {
+                \$sel.find('option').each(function() {
+                    if (this.value !== '' && parseFloat(this.value) === num) { match = this.value; return false; }
+                });
+            }
+            \$sel.val(match);
+        })();
         \$modal.find('textarea[name=note]').val(note);
         \$modal.find('select[name=carry_over_to_sprint_id]').val('0');
         \$modal.find('.sprint-qe-error').hide().text('');
-        \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
+        \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity, .sprint-qe-capacity-actual').toggle(!isFastlane);
         \$modal.data('qe-is-fastlane', isFastlane ? 1 : 0);
         \$modal.removeData('qe-capacity-reason');
         \$modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
@@ -1702,6 +1765,9 @@ $(function() {
                     users_id: \$modal.find('select[name=users_id]').val(),
                     story_points: \$modal.find('input[name=story_points]').val(),
                     capacity: \$modal.find('select[name=capacity]').val(),
+                    capacity_actual: \$modal.find('select[name=capacity_actual]').length
+                        ? \$modal.find('select[name=capacity_actual]').val()
+                        : undefined,
                     note: \$modal.find('textarea[name=note]').val(),
                     carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
                     capacity_reason: \$modal.data('qe-capacity-reason') || undefined,
@@ -1759,6 +1825,9 @@ $(function() {
                 \$row.attr('data-owner-name', ownerLabel).data('owner-name', ownerLabel);
                 \$row.attr('data-story-points', resp.story_points).data('story-points', resp.story_points);
                 \$row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
+                if (typeof resp.capacity_actual !== 'undefined') {
+                    \$row.attr('data-capacity-actual', resp.capacity_actual);
+                }
                 \$row.attr('data-note', resp.note).data('note', resp.note);
 
                 if (typeof resp.is_adhoc !== 'undefined') {
@@ -3008,6 +3077,13 @@ JS;
         if (isset($input['users_id']))    $input['users_id']    = (int)$input['users_id'];
         if (isset($input['story_points'])) $input['story_points'] = max(0, (int)$input['story_points']);
         if (isset($input['capacity']))    $input['capacity']    = SprintMember::normalizeCapacity($input['capacity']);
+        // '' / -1 = no actual figure recorded: the item follows its planned capacity.
+        if (array_key_exists('capacity_actual', $input)) {
+            $raw = $input['capacity_actual'];
+            $input['capacity_actual'] = ($raw === '' || $raw === null || (float)$raw < 0)
+                ? 'NULL'
+                : SprintMember::normalizeCapacity($raw);
+        }
         if (isset($input['priority']))    $input['priority']    = max(1, min(5, (int)$input['priority']));
         if (isset($input['plugin_sprint_sprints_id'])) $input['plugin_sprint_sprints_id'] = (int)$input['plugin_sprint_sprints_id'];
         if (isset($input['is_fastlane']))  $input['is_fastlane'] = (int)(bool)$input['is_fastlane'];
@@ -3309,6 +3385,15 @@ JS;
             Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
                 'value' => SprintMember::capacityKey($this->fields['capacity'] ?? 0),
             ]);
+            if (Config::isPlannedActualEnabled()) {
+                $actualRaw = $this->fields['capacity_actual'] ?? null;
+                echo " <span class='text-muted small ms-2' title='"
+                    . __s('Actual capacity: what the item really took, filled in as the work is done. Empty = follows the planned figure.', 'sprint')
+                    . "'>" . __('Actual', 'sprint') . "</span> ";
+                Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
+                    'value' => self::formatActualCapacity($actualRaw) === '' ? '' : SprintMember::capacityKey($actualRaw),
+                ]);
+            }
             echo "</td><td>" . __('Owner', 'sprint') . "</td><td>";
             Dropdown::showFromArray('users_id', $memberOptions, [
                 'value' => $this->fields['users_id'] ?? 0,

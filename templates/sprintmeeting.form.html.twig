@@ -241,10 +241,23 @@
                     });
                     $sel.val(match);
                 })();
+                (function() {
+                    var $sel = $modal.find('select[name=capacity_actual]');
+                    if (!$sel.length) { return; }
+                    var raw = $row.attr('data-capacity-actual');
+                    var num = parseFloat(raw);
+                    var match = '';
+                    if (raw !== undefined && raw !== '' && !isNaN(num)) {
+                        $sel.find('option').each(function() {
+                            if (this.value !== '' && parseFloat(this.value) === num) { match = this.value; return false; }
+                        });
+                    }
+                    $sel.val(match);
+                })();
                 $modal.find('textarea[name=note]').val(note);
                 $modal.find('select[name=carry_over_to_sprint_id]').val('0');
                 $modal.find('.sprint-qe-error').hide().text('');
-                $modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
+                $modal.find('.sprint-qe-story-points, .sprint-qe-capacity, .sprint-qe-capacity-actual').toggle(!isFastlane);
                 $modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
                 $modal.find('.sprint-qe-dep-user').val('0');
                 $modal.find('.sprint-qe-dep-manage').attr(
@@ -338,6 +351,9 @@
                             users_id:     $modal.find('select[name=users_id]').val(),
                             story_points: $modal.find('input[name=story_points]').val(),
                             capacity:     $modal.find('select[name=capacity]').val(),
+                            capacity_actual: $modal.find('select[name=capacity_actual]').length
+                                ? $modal.find('select[name=capacity_actual]').val()
+                                : undefined,
                             note:         $modal.find('textarea[name=note]').val(),
                             carry_over_to_sprint_id: $modal.find('select[name=carry_over_to_sprint_id]').val(),
                             meeting_id:   {{ meeting_id|default(0) }},
@@ -381,6 +397,9 @@
                         $row.attr('data-owner-name', ownerLabel).data('owner-name', ownerLabel);
                         $row.attr('data-story-points', resp.story_points).data('story-points', resp.story_points);
                         $row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
+                        if (typeof resp.capacity_actual !== 'undefined') {
+                            $row.attr('data-capacity-actual', resp.capacity_actual);
+                        }
                         $row.attr('data-note', resp.note).data('note', resp.note);
 
                         $row.find('.sprint-review-status')
@@ -613,6 +632,17 @@
                                     <i class="fas fa-user-shield me-1"></i>{{ __('Capacity changes are sent to the Scrum Master for approval.', 'sprint') }}
                                 </div>
                             </div>
+                            {% if planned_actual|default(false) %}
+                            <div class="col-md-3 mb-3 sprint-qe-capacity-actual">
+                                <label class="form-label text-nowrap" title="{{ __('Actual capacity (%)', 'sprint') }}">{{ __('Actual', 'sprint') }} %</label>
+                                <select name="capacity_actual" class="form-select">
+                                    <option value="">{{ __('Follows planned', 'sprint') }}</option>
+                                    {% for val, label in capacity_choices %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            {% endif %}
                         </div>
 
                         <div class="mb-3">

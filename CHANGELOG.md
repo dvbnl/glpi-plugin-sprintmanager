@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-08-18
+
+### Added
+- **Quick edit on the Sprints tab** of every Ticket / Change / Problem / Project Task: once an item is on the backlog the tab shows a compact planning line (owner, planned/actual capacity, target sprint, category, fastlane) with a quick-edit dialog carrying the same fields as the backlog edit dialog — no detour via the backlog page.
+- **Planned / actual capacity** (Setup > General config > SprintManager): when enabled, every sprint item gets a second capacity figure. The planned % is estimated up front, the actual % is filled in as the work is done (item form, quick-edit dialog on dashboard/board/meeting, backlog edit dialog); an empty actual figure follows the planned one.
+- **Planned / actual toggle** on the backlog capacity-per-category matrix, remembered per user.
+- **Category trend chart** on the Overview: one line per backlog category over the completed sprints (category colours), switchable between planned capacity %, actual capacity % (when enabled) and completed-vs-planned %. Click a legend entry to isolate a category, hover to preview — the same interaction as the team-activity chart.
+
+### Changed
+- **Availability exceptions** (leave, training, ...) moved from the Agility tab to the **Sprint Members** tab, next to the member capacity settings. Saving lands back on that tab.
+- Prognosis matrix: the fastlane reservation per sprint is now the sprint's own **fastlane capacity limit**; the historical average is only used for sprints without a limit.
+- Prognosis matrix: the **work supply** per category is capped by the configured category minimum (per sprint, or the defaults) — a category with a reserved minimum can no longer show "68+ sprints" of work.
+
+### Fixed
+- Fastlane reservation showed the same historical average (e.g. 38%) on every upcoming sprint regardless of the configured limit.
+
+### Security
+- The planning fields sent with "Add to backlog" are only honoured for users allowed to edit the resulting row (CREATE for new rows, the backlog edit rule for existing rows; own-items users create rows for themselves).
+
+### Removed
+- Dead code: the never-reachable `showForSprint()` in the Ticket/Change/Problem/ProjectTask link classes, the duplicate inline template-prefill script on the sprint form (js/sprint.js keeps the single copy, now also pre-filling the comment) and unused class imports.
+
 ## [1.2.1] - 2026-08-07
 
 ### Added

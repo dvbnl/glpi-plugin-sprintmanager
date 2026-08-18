@@ -7,7 +7,6 @@ use CommonGLPI;
 use Html;
 use Session;
 use Change;
-use Dropdown;
 
 /**
  * SprintChange - Link table between Sprints and Changes
@@ -54,97 +53,6 @@ class SprintChange extends CommonDBRelation
             return true;
         }
         return false;
-    }
-
-    public static function showForSprint(Sprint $sprint): void
-    {
-        $ID      = $sprint->getID();
-        // Linking work into a sprint is the Scrum Master's call.
-        $canedit = Sprint::canUpdate() && SprintItem::currentUserIsScrumMasterOf($ID);
-
-        if ($canedit) {
-            $memberOptions = SprintMember::getSprintMemberOptions($ID);
-
-            echo "<div class='center'>";
-            echo "<form method='post' action='" . static::getFormURL() . "'>";
-            echo Html::hidden('plugin_sprint_sprints_id', ['value' => $ID]);
-
-            echo "<table class='tab_cadre_fixe sprint-themed'>";
-            echo "<tr class='tab_bg_2'><th colspan='4'>" .
-                __('Link a change', 'sprint') . "</th></tr>";
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('Change') . "</td>";
-            echo "<td>";
-            Change::dropdown([
-                'name'        => 'changes_id',
-                'displaywith' => ['id'],
-            ]);
-            echo "</td>";
-            echo "<td>" . __('Assign to member', 'sprint') . "</td>";
-            echo "<td>";
-            Dropdown::showFromArray('users_id', $memberOptions);
-            echo "</td></tr>";
-            echo "<tr class='tab_bg_1'><td colspan='4' class='center'>";
-            echo Html::submit(__('Link'), ['name' => 'add', 'class' => 'btn btn-primary']);
-            echo "</td></tr>";
-            echo "</table>";
-            Html::closeForm();
-            echo "</div>";
-        }
-
-        $link  = new self();
-        $links = $link->find(['plugin_sprint_sprints_id' => $ID]);
-
-        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
-        echo "<tr class='tab_bg_2'>";
-        echo "<th>" . __('ID') . "</th>";
-        echo "<th>" . __('Title') . "</th>";
-        echo "<th>" . __('Status') . "</th>";
-        echo "<th>" . __('Sprint Member', 'sprint') . "</th>";
-        if ($canedit) {
-            echo "<th>" . __('Actions') . "</th>";
-        }
-        echo "</tr>";
-
-        if (count($links) === 0) {
-            $cols = $canedit ? 5 : 4;
-            echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
-                __('No changes linked', 'sprint') . "</td></tr>";
-        }
-
-        foreach ($links as $row) {
-            $change = new Change();
-            if (!$change->getFromDB($row['changes_id'])) {
-                continue;
-            }
-
-            $assignedMember = ((int)$row['users_id'] > 0)
-                ? htmlescape(SprintCache::userName($row['users_id']))
-                : '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>';
-
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . $change->getID() . "</td>";
-            echo "<td><a href='" . Change::getFormURLWithID($change->getID()) . "'>" .
-                htmlescape($change->fields['name']) . "</a></td>";
-            echo "<td>" . Change::getStatus($change->fields['status']) . "</td>";
-            echo "<td>" . $assignedMember . "</td>";
-            if ($canedit) {
-                echo "<td class='center'>";
-                echo "<form method='post' action='" . static::getFormURL() .
-                    "' style='display:inline;'>";
-                echo Html::hidden('id', ['value' => $row['id']]);
-                echo Html::submit(__('Unlink', 'sprint'), [
-                    'name'    => 'purge',
-                    'class'   => 'btn btn-sm btn-outline-danger',
-                    'confirm' => __('Remove this link?', 'sprint'),
-                ]);
-                Html::closeForm();
-                echo "</td>";
-            }
-            echo "</tr>";
-        }
-
-        echo "</table></div>";
     }
 
     public static function showForChange(Change $change): void

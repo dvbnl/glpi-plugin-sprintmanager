@@ -34,5 +34,7 @@ Session::addMessageAfterRedirect(
     false,
     $ok ? INFO : ERROR
 );
+// Availability exceptions are edited from the Sprint Members tab.
+$tab = (string)($input['_tab'] ?? '') === 'members' ? 'SprintMember' : 'SprintAgility';
 Html::redirect(GlpiPlugin\Sprint\Sprint::getFormURLWithID((int)($input['sprint_id'] ?? 0))
-    . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintAgility$1'));
+    . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\' . $tab . '$1'));

@@ -26,18 +26,74 @@ function plugin_sprint_safe_redirect(string $target): void
     Html::redirect($target);
 }
 
+/**
+ * Planning fields from the Sprint-tab panel (owner, capacity, sprint,
+ * category, fastlane). Only the whitelisted keys reach the item; the values
+ * are normalized inside SprintItem::prepareInputForAdd/Update.
+ */
+function plugin_sprint_backlog_plan_fields(array $post): array
+{
+    $out = [];
+    foreach (['users_id', 'capacity', 'proposed_sprints_id', 'plugin_sprint_sprintcategories_id', 'is_fastlane'] as $key) {
+        if (array_key_exists($key, $post)) {
+            $out[$key] = $key === 'capacity' ? (float)$post[$key] : (int)$post[$key];
+        }
+    }
+    // '' = no actual figure (follows planned); normalized in SprintItem.
+    if (array_key_exists('capacity_actual', $post)) {
+        $out['capacity_actual'] = (string)$post['capacity_actual'] === '' ? '' : (float)$post['capacity_actual'];
+    }
+    return $out;
+}
+
+/**
+ * May the current user edit this backlog row? Same rule as
+ * ajax/updateitemquick.php: full UPDATE right, or the "own items" right on a
+ * row you own.
+ */
+function plugin_sprint_backlog_can_edit_row(array $row): bool
+{
+    $isOwner = (int)($row['users_id'] ?? 0) === (int)Session::getLoginUserID();
+    return Session::haveRight('plugin_sprint_item', UPDATE)
+        || ($isOwner && Session::haveRight('plugin_sprint_item', GlpiPlugin\Sprint\Profile::RIGHT_OWN_ITEMS));
+}
+
 if (isset($_POST['add_to_backlog'])) {
     $itemtype = (string)($_POST['itemtype'] ?? '');
     $itemId   = (int)($_POST['items_id'] ?? 0);
+    $hasCreate = Session::haveRight('plugin_sprint_item', CREATE);
+    $ownOnly   = !$hasCreate && Session::haveRight('plugin_sprint_item', GlpiPlugin\Sprint\Profile::RIGHT_OWN_ITEMS);
 
-    if (GlpiPlugin\Sprint\Backlog::isLinkedItemInAnySprint($itemtype, $itemId)) {
+    // The planning fields are only honoured for someone allowed to edit the
+    // resulting row: an existing row follows the edit rule, a new row needs
+    // CREATE (own-items users may only create rows they own themselves).
+    $plan     = plugin_sprint_backlog_plan_fields($_POST);
+    $existing = null;
+    foreach ((new GlpiPlugin\Sprint\SprintItem())->find([
+        'plugin_sprint_sprints_id' => 0, 'itemtype' => $itemtype, 'items_id' => $itemId,
+    ], ['id ASC'], 1) as $row) {
+        $existing = $row;
+    }
+    if ($existing !== null) {
+        if (!plugin_sprint_backlog_can_edit_row($existing)) {
+            $plan = [];
+        }
+    } elseif ($ownOnly) {
+        $plan['users_id'] = (int)Session::getLoginUserID();
+    } elseif (!$hasCreate) {
+        $plan = [];
+    }
+
+    if (!$hasCreate && !$ownOnly) {
+        Session::addMessageAfterRedirect(__('You are not allowed to add items to the backlog', 'sprint'), false, ERROR);
+    } elseif (GlpiPlugin\Sprint\Backlog::isLinkedItemInAnySprint($itemtype, $itemId)) {
         Session::addMessageAfterRedirect(
             __('This item is already linked to a sprint — use "Carry over to sprint" to move it between sprints.', 'sprint'),
             false,
             ERROR
         );
     } else {
-        $newId = GlpiPlugin\Sprint\Backlog::addFromLinkedItem($itemtype, $itemId);
+        $newId = GlpiPlugin\Sprint\Backlog::addFromLinkedItem($itemtype, $itemId, $plan);
         if ($newId > 0) {
             Session::addMessageAfterRedirect(__('Added to backlog', 'sprint'));
         } else {
@@ -46,6 +102,21 @@ if (isset($_POST['add_to_backlog'])) {
                 false,
                 ERROR
             );
+        }
+    }
+    Html::back();
+}
+
+if (isset($_POST['update_backlog_item'])) {
+    $id   = (int)($_POST['id'] ?? 0);
+    $item = new GlpiPlugin\Sprint\SprintItem();
+    if ($id > 0 && $item->getFromDB($id) && (int)$item->fields['plugin_sprint_sprints_id'] === 0) {
+        if (plugin_sprint_backlog_can_edit_row($item->fields)) {
+            if ($item->update(['id' => $id] + plugin_sprint_backlog_plan_fields($_POST))) {
+                Session::addMessageAfterRedirect(__('Backlog item updated', 'sprint'));
+            }
+        } else {
+            Session::addMessageAfterRedirect(__('You are not allowed to edit this backlog item', 'sprint'), false, ERROR);
         }
     }
     Html::back();
