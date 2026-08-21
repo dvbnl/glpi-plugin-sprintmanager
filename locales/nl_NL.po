@@ -3729,3 +3729,66 @@ msgstr "Werkvoorraad: ongeveer %1$s sprints bij het huidige tempo, op basis van 
 
 msgid "Best to worst of those sprints: %s."
 msgstr "Beste tot slechtste van die sprints: %s."
+
+msgid "Categories"
+msgstr "Categorieën"
+
+msgid "Signals"
+msgstr "Signalen"
+
+msgid "No owner yet"
+msgstr "Nog geen eigenaar"
+
+msgid "No sprints to show yet."
+msgstr "Nog geen sprints om te tonen."
+
+msgid "%1$d of %2$d sprints above the maximum share"
+msgstr "%1$d van %2$d sprints boven het maximale aandeel"
+
+msgid "%1$d of %2$d sprints below the minimum share"
+msgstr "%1$d van %2$d sprints onder het minimale aandeel"
+
+msgid "%1$s%% of %2$s%% capacity"
+msgstr "%1$s%% van %2$s%% capaciteit"
+
+msgid "%s%% planned, no capacity in this sprint"
+msgstr "%s%% gepland, geen capaciteit in deze sprint"
+
+msgid "of which %s%% still a backlog proposal"
+msgstr "waarvan %s%% nog een backlogvoorstel"
+
+msgid "Above the maximum share for this category"
+msgstr "Boven het maximale aandeel voor deze categorie"
+
+msgid "Below the minimum share for this category"
+msgstr "Onder het minimale aandeel voor deze categorie"
+
+msgid "Sprints in this window where the member sits above the maximum or below the minimum share of a category"
+msgstr "Sprints in dit venster waarin het lid boven het maximale of onder het minimale aandeel van een categorie zit"
+
+msgid "Switch between the capacity per category and the capacity per member"
+msgstr "Wissel tussen de capaciteit per categorie en de capaciteit per lid"
+
+msgid "Window: the next %d planned sprints. Realised work per member is on the sprint overview."
+msgstr "Venster: de komende %d geplande sprints. Gerealiseerd werk per lid staat op het sprintoverzicht."
+
+msgid "Bar = share of the member's own capacity per category (subcategories rolled up). Percentages are the load against that capacity; the arrows compare the member's share with the sprint's category limits, read as a share of the team capacity. Backlog proposals that already have an owner are included."
+msgstr "Balk = aandeel van de eigen capaciteit van het lid per categorie (subcategorieën opgeteld). Percentages zijn de belasting ten opzichte van die capaciteit; de pijlen vergelijken het aandeel van het lid met de categorielimieten van de sprint, gelezen als aandeel van de teamcapaciteit. Backlogvoorstellen die al een eigenaar hebben tellen mee."
+
+msgid "Delivered per member"
+msgstr "Gerealiseerd per lid"
+
+msgid "Where the capacity went"
+msgstr "Waar de capaciteit heen ging"
+
+msgid "Share of the team"
+msgstr "Aandeel van het team"
+
+msgid "No capacity recorded"
+msgstr "Geen capaciteit vastgelegd"
+
+msgid "Where each member's capacity went per backlog category across the completed sprints in this period, actual capacity where an item has one. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
+msgstr "Waar de capaciteit van elk lid heen ging per backlogcategorie over de afgeronde sprints in deze periode, werkelijke capaciteit waar een item die heeft. Een hoofdcategorie telt de subcategorieën mee; fastlane- en afhankelijkheidswerk telt bij elk daaraan toegewezen lid."
+
+msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
+msgstr "Waar de capaciteit van elk lid heen ging per backlogcategorie over de afgeronde sprints in deze periode. Een hoofdcategorie telt de subcategorieën mee; fastlane- en afhankelijkheidswerk telt bij elk daaraan toegewezen lid."

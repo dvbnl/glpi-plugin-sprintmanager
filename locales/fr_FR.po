@@ -3725,3 +3725,66 @@ msgstr "Réserve de travail : environ %1$s sprints au rythme actuel, sur la base
 
 msgid "Best to worst of those sprints: %s."
 msgstr "Du meilleur au pire de ces sprints : %s."
+
+msgid "Categories"
+msgstr "Catégories"
+
+msgid "Signals"
+msgstr "Signaux"
+
+msgid "No owner yet"
+msgstr "Pas encore de responsable"
+
+msgid "No sprints to show yet."
+msgstr "Aucun sprint à afficher pour l'instant."
+
+msgid "%1$d of %2$d sprints above the maximum share"
+msgstr "%1$d des %2$d sprints au-dessus de la part maximale"
+
+msgid "%1$d of %2$d sprints below the minimum share"
+msgstr "%1$d des %2$d sprints en dessous de la part minimale"
+
+msgid "%1$s%% of %2$s%% capacity"
+msgstr "%1$s%% sur %2$s%% de capacité"
+
+msgid "%s%% planned, no capacity in this sprint"
+msgstr "%s%% planifié, aucune capacité dans ce sprint"
+
+msgid "of which %s%% still a backlog proposal"
+msgstr "dont %s%% encore une proposition du backlog"
+
+msgid "Above the maximum share for this category"
+msgstr "Au-dessus de la part maximale pour cette catégorie"
+
+msgid "Below the minimum share for this category"
+msgstr "En dessous de la part minimale pour cette catégorie"
+
+msgid "Sprints in this window where the member sits above the maximum or below the minimum share of a category"
+msgstr "Sprints de cette fenêtre où le membre se situe au-dessus de la part maximale ou en dessous de la part minimale d'une catégorie"
+
+msgid "Switch between the capacity per category and the capacity per member"
+msgstr "Basculer entre la capacité par catégorie et la capacité par membre"
+
+msgid "Window: the next %d planned sprints. Realised work per member is on the sprint overview."
+msgstr "Fenêtre : les %d prochains sprints planifiés. Le travail réalisé par membre se trouve dans la vue d'ensemble des sprints."
+
+msgid "Bar = share of the member's own capacity per category (subcategories rolled up). Percentages are the load against that capacity; the arrows compare the member's share with the sprint's category limits, read as a share of the team capacity. Backlog proposals that already have an owner are included."
+msgstr "Barre = part de la capacité propre du membre par catégorie (sous-catégories cumulées). Les pourcentages sont la charge par rapport à cette capacité ; les flèches comparent la part du membre aux limites de catégorie du sprint, lues comme part de la capacité de l'équipe. Les propositions du backlog qui ont déjà un responsable sont incluses."
+
+msgid "Delivered per member"
+msgstr "Réalisé par membre"
+
+msgid "Where the capacity went"
+msgstr "Où est passée la capacité"
+
+msgid "Share of the team"
+msgstr "Part de l'équipe"
+
+msgid "No capacity recorded"
+msgstr "Aucune capacité enregistrée"
+
+msgid "Where each member's capacity went per backlog category across the completed sprints in this period, actual capacity where an item has one. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
+msgstr "Où est passée la capacité de chaque membre par catégorie de backlog sur les sprints terminés de cette période, capacité réelle lorsqu'un élément en a une. Une catégorie parente inclut ses sous-catégories ; le travail fastlane et de dépendance compte pour chaque membre qui y est affecté."
+
+msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
+msgstr "Où est passée la capacité de chaque membre par catégorie de backlog sur les sprints terminés de cette période. Une catégorie parente inclut ses sous-catégories ; le travail fastlane et de dépendance compte pour chaque membre qui y est affecté."

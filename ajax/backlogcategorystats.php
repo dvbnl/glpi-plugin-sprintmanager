@@ -1,7 +1,8 @@
 <?php
 
 /**
- * Backlog prognosis matrix fragment (categories × upcoming sprints).
+ * Backlog prognosis matrix fragment: categories × upcoming sprints, or the
+ * members × sprints breakdown when view=members.
  * Entity restriction is applied inside the fragment's sprint queries.
  */
 
@@ -13,10 +14,12 @@ header('Content-Type: application/json');
 
 Session::checkRight('plugin_sprint_item', READ);
 
+$horizon = max(1, min(26, (int)($_GET['horizon'] ?? 4)));
+$actual  = (string)($_GET['mode'] ?? 'planned') === 'actual';
+
 echo json_encode([
     'success' => true,
-    'html'    => GlpiPlugin\Sprint\Backlog::renderCategoryMatrixFragment(
-        max(1, min(26, (int)($_GET['horizon'] ?? 4))),
-        (string)($_GET['mode'] ?? 'planned') === 'actual'
-    ),
+    'html'    => (string)($_GET['view'] ?? 'categories') === 'members'
+        ? GlpiPlugin\Sprint\Backlog::renderMemberMatrixFragment($horizon, $actual)
+        : GlpiPlugin\Sprint\Backlog::renderCategoryMatrixFragment($horizon, $actual),
 ]);

@@ -1071,3 +1071,22 @@ table.tab_cadre_fixe.sprint-themed {
     gap: 2px;
     white-space: nowrap;
 }
+
+/* Backlog dashboard, member view: stacked bar per member × sprint. */
+.sprint-member-matrix .sprint-member-bar {
+    height: 8px;
+    max-width: 110px;
+    border-radius: 3px;
+}
+.sprint-member-matrix .sprint-member-bar > div { border-radius: 0; }
+.sprint-member-matrix th.sprint-member-now,
+.sprint-member-matrix td.sprint-member-now {
+    border-left: 2px solid var(--tblr-primary, #1c5ec3);
+}
+.sprint-member-flags { line-height: 1.2; margin-top: 2px; }
+.sprint-member-flag {
+    font-size: 0.72em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.sprint-member-flag i { font-size: 0.85em; margin-right: 2px; }

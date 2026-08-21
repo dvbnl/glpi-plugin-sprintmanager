@@ -206,6 +206,7 @@ class SprintOverview extends CommonGLPI
         );
 
         self::renderCategoryDelivery($data);
+        self::renderMemberDelivery($data);
         self::renderCategoryTrend($data);
 
         self::renderCard(
@@ -376,6 +377,149 @@ class SprintOverview extends CommonGLPI
                     echo "<td class='text-end text-nowrap'>" . (int)$row['items_done'] . " / " . (int)$row['items_total'] . "</td>";
                     echo "</tr>";
                 }
+                echo "</tbody></table></div>";
+            }
+        );
+    }
+
+    /**
+     * Where the time went per member: the capacity each member spent per
+     * backlog category over the completed sprints in the period, next to the
+     * points and items they finished. Subcategories roll up into their parent.
+     */
+    private static function renderMemberDelivery(array $data): void
+    {
+        $per = $data['per_member_category'] ?? [];
+        if (!$per) {
+            return;
+        }
+        $actual = Config::isPlannedActualEnabled();
+
+        self::renderCard(
+            __('Delivered per member', 'sprint'),
+            'fas fa-user-clock',
+            $actual
+                ? __('Where each member\'s capacity went per backlog category across the completed sprints in this period, actual capacity where an item has one. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it.', 'sprint')
+                : __('Where each member\'s capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it.', 'sprint'),
+            function () use ($per, $actual) {
+                $cats  = SprintCategory::getAll(false);
+                $topOf = [];
+                foreach ($cats as $cid => $cat) {
+                    $cid = (int)$cid;
+                    $pid = (int)($cat['plugin_sprint_sprintcategories_id'] ?? 0);
+                    $topOf[$cid] = ((int)($cat['level'] ?? 0) > 0 && $pid > 0 && isset($cats[$pid]))
+                        ? ($topOf[$pid] ?? $pid)
+                        : $cid;
+                }
+                $capKey  = $actual ? 'cap_actual' : 'cap_planned';
+                $noCat   = __('No category', 'sprint');
+                $nameOf  = static fn(int $cid) => $cid > 0 ? (string)($cats[$cid]['name'] ?? $noCat) : $noCat;
+                $colorOf = static fn(int $cid) => $cid > 0 ? (string)($cats[$cid]['color'] ?? '#6c757d') : '#6c757d';
+
+                // Per member: capacity rolled up to top level, with the
+                // subcategory split kept for the tooltip.
+                $rows = [];
+                $teamTop = $teamSub = [];
+                $teamTotal = 0.0;
+                foreach ($per as $uid => $byCat) {
+                    $top = $sub = [];
+                    $total = 0.0;
+                    $ptsDone = $ptsPlanned = $itemsDone = $itemsTotal = 0;
+                    foreach ($byCat as $cid => $bucket) {
+                        $cid = (int)$cid;
+                        $t   = ($cid > 0 && isset($cats[$cid])) ? ($topOf[$cid] ?? $cid) : 0;
+                        $cap = (float)$bucket[$capKey];
+                        if ($cap > 0) {
+                            $top[$t]     = ($top[$t] ?? 0) + $cap;
+                            $teamTop[$t] = ($teamTop[$t] ?? 0) + $cap;
+                            $total      += $cap;
+                            $teamTotal  += $cap;
+                            if ($t !== $cid) {
+                                $sub[$t][$cid]     = ($sub[$t][$cid] ?? 0) + $cap;
+                                $teamSub[$t][$cid] = ($teamSub[$t][$cid] ?? 0) + $cap;
+                            }
+                        }
+                        $ptsDone    += (int)$bucket['pts_done'];
+                        $ptsPlanned += (int)$bucket['pts_planned'];
+                        $itemsDone  += (int)$bucket['items_done'];
+                        $itemsTotal += (int)$bucket['items_total'];
+                    }
+                    if ($total <= 0 && $itemsTotal === 0) {
+                        continue;
+                    }
+                    arsort($top);
+                    $rows[] = [
+                        'label' => SprintCache::userName((int)$uid),
+                        'top' => $top, 'sub' => $sub, 'total' => $total,
+                        'pts_done' => $ptsDone, 'pts_planned' => $ptsPlanned,
+                        'items_done' => $itemsDone, 'items_total' => $itemsTotal,
+                    ];
+                }
+                if (!$rows) {
+                    echo "<div class='text-muted py-3'>" . __('No data for this period.', 'sprint') . "</div>";
+                    return;
+                }
+                usort($rows, static fn($a, $b) => [$b['total'], $b['pts_done']] <=> [$a['total'], $a['pts_done']]);
+                arsort($teamTop);
+
+                /** Stacked bar over the categories plus the readable shares under it. */
+                $distribution = static function (array $top, array $sub, float $total) use ($nameOf, $colorOf): string {
+                    if ($total <= 0) {
+                        return "<span class='text-muted'>" . __('No capacity recorded', 'sprint') . "</span>";
+                    }
+                    $bar = "<div class='progress progress-sm' style='height:10px;'>";
+                    $chips = [];
+                    foreach ($top as $cid => $cap) {
+                        $cid   = (int)$cid;
+                        $pct   = 100 * $cap / $total;
+                        $width = number_format($pct, 1, '.', '');
+                        $tip   = $nameOf($cid) . ': ' . round($pct) . '% (' . SprintMember::formatCapacity($cap) . '%)';
+                        foreach ($sub[$cid] ?? [] as $scid => $scap) {
+                            $tip .= "\n" . $nameOf((int)$scid) . ': ' . round(100 * $scap / $total) . '%';
+                        }
+                        $bar .= "<div class='progress-bar' role='progressbar' style='width:{$width}%;background:"
+                            . htmlescape($colorOf($cid)) . ";' title='" . htmlescape($tip) . "' "
+                            . "aria-valuenow='{$width}' aria-valuemin='0' aria-valuemax='100'></div>";
+                        if ($pct >= 1) {
+                            $chips[] = "<span class='text-nowrap'><span style='display:inline-block;width:8px;height:8px;border-radius:2px;background:"
+                                . htmlescape($colorOf($cid)) . ";margin-right:4px;'></span>"
+                                . htmlescape($nameOf($cid)) . ' ' . round($pct) . '%</span>';
+                        }
+                    }
+                    $bar .= "</div>";
+                    return $bar . "<div class='text-muted small mt-1 d-flex flex-wrap' style='gap:2px 12px;'>"
+                        . implode('', $chips) . "</div>";
+                };
+
+                echo "<div class='table-responsive'><table class='table table-vcenter mb-0'>";
+                echo "<thead><tr>";
+                echo "<th>" . __('Member', 'sprint') . "</th>";
+                echo "<th style='width:40%;'>" . __('Where the capacity went', 'sprint') . "</th>";
+                echo "<th class='text-end'>" . __('Share of the team', 'sprint') . "</th>";
+                echo "<th class='text-end'>" . __('Completed points', 'sprint') . "</th>";
+                echo "<th class='text-end'>" . __('Items completed', 'sprint') . "</th>";
+                echo "</tr></thead><tbody>";
+                foreach ($rows as $row) {
+                    $share = $teamTotal > 0 ? (int)round(100 * $row['total'] / $teamTotal) : 0;
+                    echo "<tr>";
+                    echo "<td><i class='fas fa-user text-muted me-2' style='font-size:0.85em;'></i>" . htmlescape($row['label']) . "</td>";
+                    echo "<td>" . $distribution($row['top'], $row['sub'], $row['total']) . "</td>";
+                    echo "<td class='text-end'>{$share}%</td>";
+                    echo "<td class='text-end'>" . (int)$row['pts_done'] . " / " . (int)$row['pts_planned'] . "</td>";
+                    echo "<td class='text-end text-nowrap'>" . (int)$row['items_done'] . " / " . (int)$row['items_total'] . "</td>";
+                    echo "</tr>";
+                }
+                $teamPtsDone = array_sum(array_column($rows, 'pts_done'));
+                $teamPtsPlan = array_sum(array_column($rows, 'pts_planned'));
+                $teamDone    = array_sum(array_column($rows, 'items_done'));
+                $teamItems   = array_sum(array_column($rows, 'items_total'));
+                echo "<tr class='fw-bold' style='border-top:2px solid var(--tblr-border-color,#e2e8f0);'>";
+                echo "<td>" . __('Team', 'sprint') . "</td>";
+                echo "<td>" . $distribution($teamTop, $teamSub, $teamTotal) . "</td>";
+                echo "<td class='text-end'>100%</td>";
+                echo "<td class='text-end'>" . (int)$teamPtsDone . " / " . (int)$teamPtsPlan . "</td>";
+                echo "<td class='text-end text-nowrap'>" . (int)$teamDone . " / " . (int)$teamItems . "</td>";
+                echo "</tr>";
                 echo "</tbody></table></div>";
             }
         );
@@ -1104,6 +1248,7 @@ class SprintOverview extends CommonGLPI
             'per_member'     => [],
             'per_type'       => [],
             'per_category'   => [],
+            'per_member_category' => [],
             'category_trend' => [],
             'workload'       => [],
             'workload_trend' => ['labels' => [], 'team' => [], 'over' => [], 'members' => 0, 'drift' => 0.0, 'direction' => 'stable'],
@@ -1307,6 +1452,7 @@ class SprintOverview extends CommonGLPI
         $out['per_member']     = self::rankMembers($perMember);
         $out['per_type']       = self::rankTypes($perType);
         $out['per_category']   = $perCategory;
+        $out['per_member_category'] = self::memberCategoryUsage($items, $flByUser, $depByUser);
         $out['workload']       = self::workload($sprints, $items, $flByUser, $depByUser);
         $out['workload_trend'] = self::workloadTrend($out['labels'], $out['workload']);
 
@@ -1456,6 +1602,63 @@ class SprintOverview extends CommonGLPI
      * `loads` is the per-sprint load in $sprints order, null where the member did
      * not take part.
      */
+    /**
+     * Where each member's time went: allocated capacity per backlog category
+     * over the collected items, plus the points and items they owned. Regular
+     * items count their capacity on the owner; fastlane and dependency work
+     * counts on the member the allocation names, so shared work lands on
+     * everyone involved.
+     *
+     * @return array<int,array<int,array>> [user][category] => capacity/points bucket
+     */
+    private static function memberCategoryUsage(array $items, array $flByUser, array $depByUser): array
+    {
+        $blank = [
+            'cap_planned' => 0.0, 'cap_actual' => 0.0,
+            'pts_planned' => 0, 'pts_done' => 0, 'items_total' => 0, 'items_done' => 0,
+        ];
+        $out   = [];
+        $catOf = [];
+        $addCap = static function (int $uid, int $cid, float $planned, float $actual) use (&$out, $blank): void {
+            if ($uid <= 0 || ($planned <= 0 && $actual <= 0)) {
+                return;
+            }
+            $out[$uid][$cid] ??= $blank;
+            $out[$uid][$cid]['cap_planned'] += $planned;
+            $out[$uid][$cid]['cap_actual']  += $actual;
+        };
+
+        foreach ($items as $item) {
+            $cid = (int)($item['plugin_sprint_sprintcategories_id'] ?? 0);
+            $uid = (int)$item['users_id'];
+            $catOf[(int)$item['id']] = $cid;
+            // A fastlane item carries no capacity of its own; its member rows do.
+            if ((int)($item['is_fastlane'] ?? 0) !== 1) {
+                $addCap($uid, $cid, SprintItem::capacityFor($item, false), SprintItem::capacityFor($item, true));
+            }
+            if ($uid > 0) {
+                $out[$uid][$cid] ??= $blank;
+                $out[$uid][$cid]['items_total']++;
+                $out[$uid][$cid]['pts_planned'] += (int)$item['story_points'];
+                if ((string)$item['status'] === SprintItem::STATUS_DONE) {
+                    $out[$uid][$cid]['items_done']++;
+                    $out[$uid][$cid]['pts_done'] += (int)$item['story_points'];
+                }
+            }
+        }
+        foreach ([$flByUser, $depByUser] as $source) {
+            foreach ($source as $itemId => $perUser) {
+                if (!isset($catOf[(int)$itemId])) {
+                    continue;
+                }
+                foreach ($perUser as $uid => $capacity) {
+                    $addCap((int)$uid, $catOf[(int)$itemId], (float)$capacity, (float)$capacity);
+                }
+            }
+        }
+        return $out;
+    }
+
     /**
      * Per-category series over the sprints (chart window): allocated capacity
      * planned/actual and completed-vs-planned %. Subcategories are rolled up

@@ -3894,3 +3894,66 @@ msgstr ""
 
 msgid "Best to worst of those sprints: %s."
 msgstr ""
+
+msgid "Categories"
+msgstr ""
+
+msgid "Signals"
+msgstr ""
+
+msgid "No owner yet"
+msgstr ""
+
+msgid "No sprints to show yet."
+msgstr ""
+
+msgid "%1$d of %2$d sprints above the maximum share"
+msgstr ""
+
+msgid "%1$d of %2$d sprints below the minimum share"
+msgstr ""
+
+msgid "%1$s%% of %2$s%% capacity"
+msgstr ""
+
+msgid "%s%% planned, no capacity in this sprint"
+msgstr ""
+
+msgid "of which %s%% still a backlog proposal"
+msgstr ""
+
+msgid "Above the maximum share for this category"
+msgstr ""
+
+msgid "Below the minimum share for this category"
+msgstr ""
+
+msgid "Sprints in this window where the member sits above the maximum or below the minimum share of a category"
+msgstr ""
+
+msgid "Switch between the capacity per category and the capacity per member"
+msgstr ""
+
+msgid "Window: the next %d planned sprints. Realised work per member is on the sprint overview."
+msgstr ""
+
+msgid "Bar = share of the member's own capacity per category (subcategories rolled up). Percentages are the load against that capacity; the arrows compare the member's share with the sprint's category limits, read as a share of the team capacity. Backlog proposals that already have an owner are included."
+msgstr ""
+
+msgid "Delivered per member"
+msgstr ""
+
+msgid "Where the capacity went"
+msgstr ""
+
+msgid "Share of the team"
+msgstr ""
+
+msgid "No capacity recorded"
+msgstr ""
+
+msgid "Where each member's capacity went per backlog category across the completed sprints in this period, actual capacity where an item has one. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
+msgstr ""
+
+msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
+msgstr ""

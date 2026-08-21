@@ -1741,6 +1741,15 @@ HTML;
         echo "<span class='text-muted small'>"
             . __('Capacity per category across the upcoming sprints: work already assigned plus backlog proposals, including dependencies and subcategories, against optional min/max limits.', 'sprint') . "</span>";
         echo "<span style='flex:1;'></span>";
+        // Two views over the same window: category × sprint (the mix against
+        // the limits) and member × sprint (each person's share of that mix).
+        echo "<div class='sprint-backlog-view btn-group btn-group-sm' role='group' title='"
+            . __s('Switch between the capacity per category and the capacity per member', 'sprint') . "'>";
+        echo "<input type='radio' class='btn-check' name='sprint-backlog-view' id='sprint-view-categories' value='categories' checked>"
+            . "<label class='btn btn-outline-secondary' for='sprint-view-categories'><i class='fas fa-layer-group me-1'></i>" . __('Categories', 'sprint') . "</label>";
+        echo "<input type='radio' class='btn-check' name='sprint-backlog-view' id='sprint-view-members' value='members'>"
+            . "<label class='btn btn-outline-secondary' for='sprint-view-members'><i class='fas fa-users me-1'></i>" . __('Members', 'sprint') . "</label>";
+        echo "</div>";
         if (Config::isPlannedActualEnabled()) {
             // Planned = the estimated capacity, actual = the recorded actual
             // capacity where an item has one (planned fills the gaps).
@@ -1800,6 +1809,23 @@ HTML;
     function currentCapMode() {
         return jQuery('input[name="sprint-backlog-capmode"]:checked').val() === 'actual' ? 'actual' : 'planned';
     }
+    function currentView() {
+        return jQuery('input[name="sprint-backlog-view"]:checked').val() === 'members' ? 'members' : 'categories';
+    }
+    // Remember the categories/members view per user.
+    (function(){
+        var \$view = jQuery('input[name="sprint-backlog-view"]');
+        if (!\$view.length) { return; }
+        try {
+            if (localStorage.getItem('sprint.backlog.matrix.view') === 'members') {
+                \$view.filter('[value="members"]').prop('checked', true);
+            }
+        } catch (e) {}
+        \$view.on('change', function(){
+            try { localStorage.setItem('sprint.backlog.matrix.view', currentView()); } catch (e) {}
+            reloadMatrix();
+        });
+    })();
     // Remember the planned/actual choice per user.
     (function(){
         var \$mode = jQuery('input[name="sprint-backlog-capmode"]');
@@ -1813,13 +1839,14 @@ HTML;
             try { localStorage.setItem('sprint.backlog.matrix.capmode', currentCapMode()); } catch (e) {}
             reloadMatrix();
         });
-        if (currentCapMode() === 'actual') { jQuery(reloadMatrix); }
     })();
+    // The server renders the default view; any stored preference needs a fetch.
+    if (currentCapMode() === 'actual' || currentView() === 'members') { jQuery(reloadMatrix); }
 
     function reloadMatrix() {
         jQuery('.sprint-backlog-dash-body').css('opacity', 0.5);
         jQuery.ajax({ url: "{$statsUrl}", type: 'GET', dataType: 'json', cache: false,
-            data: { horizon: currentHorizon(), mode: currentCapMode() } })
+            data: { horizon: currentHorizon(), mode: currentCapMode(), view: currentView() } })
         .done(function(resp){
             if (resp && resp.success) {
                 jQuery('.sprint-backlog-dash-body').html(resp.html);
@@ -2508,6 +2535,354 @@ HTML;
             }
             echo "</div>";
         }
+        echo "</div>";
+        return (string)ob_get_clean();
+    }
+
+    /**
+     * Members × sprints: each member's capacity split by top-level category,
+     * over the upcoming planned sprints (same window as the category view).
+     * The category limits of a sprint are read as a share of the team
+     * capacity and held against each member's own share, so "four sprints
+     * too much internal work" shows as a count. Realised work per member sits
+     * on the sprint overview, not here.
+     */
+    public static function renderMemberMatrixFragment(int $horizon = 4, bool $actual = false): string
+    {
+        global $DB;
+
+        $horizon    = max(1, min(26, $horizon));
+        $actual     = $actual && Config::isPlannedActualEnabled();
+        $categories = SprintCategory::getAll();
+
+        // Every category rolls up to its top-level ancestor; that is the
+        // level the limits live on and the level a stacked bar can still show.
+        $topOf = [];
+        foreach ($categories as $cid => $cat) {
+            $cid = (int)$cid;
+            $pid = (int)($cat['plugin_sprint_sprintcategories_id'] ?? 0);
+            $topOf[$cid] = ((int)($cat['level'] ?? 0) > 0 && $pid > 0 && isset($categories[$pid]))
+                ? ($topOf[$pid] ?? $pid)
+                : $cid;
+        }
+        $topCats = array_filter($categories, fn($c) => (int)($c['level'] ?? 0) === 0);
+        $entity  = getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true);
+
+        $sprints = (new Sprint())->find(
+            ['status' => Sprint::STATUS_PLANNED] + $entity,
+            ['date_start ASC'],
+            $horizon
+        );
+        $sprintIds   = array_map('intval', array_keys($sprints));
+        $futureIds   = $sprintIds;
+        $firstFuture = $sprintIds[0] ?? 0;
+
+        // Member capacity per sprint, availability exceptions applied.
+        $avail = $team = [];
+        if ($sprintIds) {
+            foreach ($DB->request([
+                'FROM'  => SprintMember::getTable(),
+                'WHERE' => ['plugin_sprint_sprints_id' => $sprintIds],
+            ]) as $m) {
+                $sid  = (int)$m['plugin_sprint_sprints_id'];
+                $uid  = (int)($m['users_id'] ?? 0);
+                $base = SprintMember::normalizeCapacity($m['capacity_percent'] ?? 0);
+                $eff  = SprintAgility::effectiveCapacity($sid, $uid, $base);
+                $avail[$sid][$uid] = ($avail[$sid][$uid] ?? 0) + $eff;
+                $team[$sid]        = ($team[$sid] ?? 0) + $eff;
+            }
+        }
+
+        // cell[sid][uid][topCat] = capacity; prop[sid][uid] = the part that
+        // is still a backlog proposal. uid 0 collects proposals without owner.
+        $cell = $prop = [];
+        $add = function (int $sid, int $uid, int $cid, float $cap, bool $proposal = false) use (&$cell, &$prop, $topOf, $categories) {
+            if ($cap <= 0) {
+                return;
+            }
+            $top = ($cid > 0 && isset($categories[$cid])) ? ($topOf[$cid] ?? $cid) : 0;
+            $cell[$sid][$uid][$top] = ($cell[$sid][$uid][$top] ?? 0) + $cap;
+            if ($proposal) {
+                $prop[$sid][$uid] = ($prop[$sid][$uid] ?? 0) + $cap;
+            }
+        };
+
+        if ($sprintIds) {
+            $slot = $fastIds = [];
+            foreach ((new SprintItem())->find([
+                'plugin_sprint_sprints_id' => $sprintIds, 'is_parked' => 0,
+            ]) as $row) {
+                $iid = (int)$row['id'];
+                $sid = (int)$row['plugin_sprint_sprints_id'];
+                $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
+                $slot[$iid] = [$sid, $cid];
+                if ((int)($row['is_fastlane'] ?? 0) === 1) {
+                    $fastIds[] = $iid;
+                } else {
+                    $add($sid, (int)($row['users_id'] ?? 0), $cid, SprintItem::capacityFor($row, $actual));
+                }
+            }
+            if ($fastIds) {
+                foreach ((new SprintFastlaneMember())->find(['plugin_sprint_sprintitems_id' => $fastIds]) as $r) {
+                    [$sid, $cid] = $slot[(int)$r['plugin_sprint_sprintitems_id']];
+                    $add($sid, (int)$r['users_id'], $cid, (float)$r['capacity']);
+                }
+            }
+            if ($slot && SprintItemDependency::isTableReady()) {
+                foreach ((new SprintItemDependency())->find(['plugin_sprint_sprintitems_id' => array_keys($slot)]) as $r) {
+                    [$sid, $cid] = $slot[(int)$r['plugin_sprint_sprintitems_id']];
+                    $add($sid, (int)$r['users_id'], $cid, (float)$r['capacity']);
+                }
+            }
+        }
+        // Backlog proposals for the upcoming sprints, same as the category view.
+        if ($futureIds) {
+            $pslot = [];
+            foreach ((new SprintItem())->find([
+                'plugin_sprint_sprints_id' => 0, 'is_blocked' => 0, 'is_parked' => 0,
+                'proposed_sprints_id'      => $futureIds,
+            ]) as $row) {
+                $sid = (int)$row['proposed_sprints_id'];
+                $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
+                $pslot[(int)$row['id']] = [$sid, $cid];
+                $add($sid, (int)($row['users_id'] ?? 0), $cid, SprintItem::capacityFor($row, $actual), true);
+            }
+            if ($pslot && SprintItemDependency::isTableReady()) {
+                foreach ((new SprintItemDependency())->find([
+                    'plugin_sprint_sprintitems_id' => array_keys($pslot), 'is_resolved' => 0,
+                ]) as $r) {
+                    [$sid, $cid] = $pslot[(int)$r['plugin_sprint_sprintitems_id']];
+                    $add($sid, (int)$r['users_id'], $cid, (float)$r['capacity'], true);
+                }
+            }
+        }
+
+        // Rows: every member of any shown sprint plus anyone holding work.
+        $userIds = [];
+        foreach ($avail as $byUser) {
+            foreach ($byUser as $uid => $v) {
+                $userIds[$uid] = true;
+            }
+        }
+        foreach ($cell as $byUser) {
+            foreach ($byUser as $uid => $v) {
+                $userIds[$uid] = true;
+            }
+        }
+        $hasUnowned = isset($userIds[0]);
+        unset($userIds[0]);
+        $names = [];
+        foreach (array_keys($userIds) as $uid) {
+            $names[$uid] = SprintCache::userName((int)$uid);
+        }
+        asort($names, SORT_NATURAL | SORT_FLAG_CASE);
+
+        // Limits as a share of the team: min 150% on a 385% team means every
+        // member is expected to spend ~39% of their own capacity there.
+        $limits = [];
+        foreach ($sprintIds as $sid) {
+            $limits[$sid] = SprintCategory::getEffectiveLimitsForSprint($sid);
+        }
+        $shareLimit = function (int $sid, int $top, string $key) use ($limits, $team): float {
+            $lim  = (float)($limits[$sid][$top][$key] ?? 0);
+            $tcap = (float)($team[$sid] ?? 0);
+            return ($lim > 0 && $tcap > 0) ? $lim / $tcap : 0.0;
+        };
+
+        // Signals per member: how many of the shown sprints exceed the max or
+        // fall short of the min share of a category. Sprints without a
+        // capacity for that member do not count.
+        $overCnt = $underCnt = [];
+        foreach ($names as $uid => $n) {
+            foreach ($sprintIds as $sid) {
+                $cap = (float)($avail[$sid][$uid] ?? 0);
+                if ($cap <= 0) {
+                    continue;
+                }
+                foreach ($topCats as $top => $c) {
+                    $top   = (int)$top;
+                    $share = (float)($cell[$sid][$uid][$top] ?? 0) / $cap;
+                    $maxS  = $shareLimit($sid, $top, 'max');
+                    $minS  = $shareLimit($sid, $top, 'min');
+                    if ($maxS > 0 && $share > $maxS + 0.005) {
+                        $overCnt[$uid][$top] = ($overCnt[$uid][$top] ?? 0) + 1;
+                    }
+                    if ($minS > 0 && $share < $minS - 0.005) {
+                        $underCnt[$uid][$top] = ($underCnt[$uid][$top] ?? 0) + 1;
+                    }
+                }
+            }
+        }
+
+        $catName  = fn(int $top) => $top > 0 ? (string)($categories[$top]['name'] ?? '') : __('No category', 'sprint');
+        $catColor = fn(int $top) => $top > 0 ? (string)($categories[$top]['color'] ?? '#6c757d') : '#6c757d';
+        $fmt      = fn($v) => SprintMember::formatCapacity($v);
+        $lblOver  = __s('Above the maximum share for this category', 'sprint');
+        $lblUnder = __s('Below the minimum share for this category', 'sprint');
+
+        /** One member/team cell: figure, stacked bar, limit flags. */
+        $renderCell = function (int $sid, array $byCat, float $cap, float $proposal, bool $isTeam) use ($topCats, $catName, $catColor, $fmt, $shareLimit, $limits, $lblOver, $lblUnder, $firstFuture): string {
+            $nowCls = $sid === $firstFuture ? ' sprint-member-now' : '';
+            $sum = array_sum($byCat);
+            if ($sum <= 0 && $cap <= 0) {
+                return "<td class='text-center sprint-matrix-cell{$nowCls}'><div class='text-muted'>–</div></td>";
+            }
+            $loadPct = $cap > 0 ? 100 * $sum / $cap : 0.0;
+            $over    = $cap > 0 ? $sum > $cap + 0.05 : $sum > 0;
+            $tip     = [];
+            if ($cap > 0) {
+                $tip[] = sprintf(__('%1$s%% of %2$s%% capacity', 'sprint'), $fmt($sum), $fmt($cap));
+            } else {
+                $tip[] = sprintf(__('%s%% planned, no capacity in this sprint', 'sprint'), $fmt($sum));
+            }
+            $order = array_keys($topCats);
+            $order[] = 0;
+            $flags = [];
+            foreach ($order as $top) {
+                $top = (int)$top;
+                $v   = (float)($byCat[$top] ?? 0);
+                $maxS = $isTeam ? (float)($limits[$sid][$top]['max'] ?? 0) : $shareLimit($sid, $top, 'max');
+                $minS = $isTeam ? (float)($limits[$sid][$top]['min'] ?? 0) : $shareLimit($sid, $top, 'min');
+                $share = $isTeam ? $v : ($cap > 0 ? $v / $cap : 0.0);
+                if ($v > 0) {
+                    $tip[] = $catName($top) . ': ' . $fmt($v) . '%'
+                        . ($cap > 0 ? ' (' . (int)round(100 * $v / $cap) . '%)' : '');
+                }
+                if ($cap > 0 || $isTeam) {
+                    if ($maxS > 0 && $share > $maxS + ($isTeam ? 0.05 : 0.005)) {
+                        $flags[] = "<span class='sprint-member-flag' style='color:#dc3545;' title='{$lblOver}: "
+                            . htmlescape($catName($top)) . "'><i class='fas fa-arrow-up'></i>" . htmlescape($catName($top)) . "</span>";
+                    } elseif ($minS > 0 && $share < $minS - ($isTeam ? 0.05 : 0.005)) {
+                        $flags[] = "<span class='sprint-member-flag' style='color:#d97706;' title='{$lblUnder}: "
+                            . htmlescape($catName($top)) . "'><i class='fas fa-arrow-down'></i>" . htmlescape($catName($top)) . "</span>";
+                    }
+                }
+            }
+            if ($proposal > 0.05) {
+                $tip[] = sprintf(__('of which %s%% still a backlog proposal', 'sprint'), $fmt($proposal));
+            }
+            $bg  = $over && $cap > 0 ? "background:color-mix(in srgb,#dc3545 12%,transparent);" : '';
+            $out = "<td class='text-center sprint-matrix-cell{$nowCls}' style='{$bg}' title='" . htmlescape(implode("\n", $tip)) . "'>";
+            $out .= "<div class='fw-bold" . ($over ? ' text-danger' : '') . "'>"
+                . ($cap > 0 ? (int)round($loadPct) . '%' : $fmt($sum) . '%') . "</div>";
+            $scale = max($cap, $sum);
+            if ($sum > 0 && $scale > 0) {
+                $out .= "<div class='sprint-matrix-bar sprint-member-bar' style='display:flex;'>";
+                foreach ($order as $top) {
+                    $v = (float)($byCat[(int)$top] ?? 0);
+                    if ($v <= 0) {
+                        continue;
+                    }
+                    $w = round(100 * $v / $scale, 1);
+                    $out .= "<div style='width:{$w}%;background:" . htmlescape($catColor((int)$top)) . ";'></div>";
+                }
+                if ($cap > 0 && $sum > $cap) {
+                    $tick = round(100 * $cap / $scale, 1);
+                    $out .= "<span class='sprint-matrix-min-tick' style='left:{$tick}%;background:#dc3545;'></span>";
+                }
+                $out .= "</div>";
+            }
+            if ($cap > 0 && $sum > 0) {
+                $out .= "<div class='text-muted small'>" . $fmt($sum) . " / " . $fmt($cap) . "%</div>";
+            }
+            if ($flags) {
+                $out .= "<div class='sprint-member-flags'>" . implode(' ', $flags) . "</div>";
+            }
+            return $out . "</td>";
+        };
+
+        ob_start();
+        echo "<div class='table-responsive' style='padding:6px 10px;'>";
+        if ($actual) {
+            echo "<div class='small mb-1' style='color:#fd7e14;'><i class='fas fa-stopwatch me-1'></i>"
+                . __('Showing actual capacity; items without an actual figure count with their planned capacity.', 'sprint') . "</div>";
+        }
+        if (!$sprintIds) {
+            echo "<div class='text-muted'>" . __('No sprints to show yet.', 'sprint') . "</div></div>";
+            return (string)ob_get_clean();
+        }
+        echo "<table class='table table-sm mb-1 sprint-backlog-matrix sprint-member-matrix' style='min-width:640px;'>";
+        echo "<thead><tr><th style='min-width:150px;'>" . __('Member', 'sprint') . "</th>";
+        foreach ($sprints as $sid => $s) {
+            $sid = (int)$sid;
+            $sub = !empty($s['date_start']) ? substr((string)$s['date_start'], 0, 10) : '';
+            $cls = 'text-center' . ($sid === $firstFuture ? ' sprint-member-now' : '');
+            echo "<th class='{$cls}'>" . htmlescape((string)$s['name'])
+                . ($sub !== '' ? "<div class='text-muted small fw-normal'>{$sub}</div>" : '')
+                . "</th>";
+        }
+        echo "<th class='text-center' title='" . __s('Sprints in this window where the member sits above the maximum or below the minimum share of a category', 'sprint') . "'>"
+            . __('Signals', 'sprint') . "</th></tr></thead><tbody>";
+
+        $shown = count($sprintIds);
+        foreach ($names as $uid => $name) {
+            $uid = (int)$uid;
+            echo "<tr><td><i class='fas fa-user text-muted me-1' style='font-size:0.85em;'></i>" . htmlescape($name) . "</td>";
+            foreach ($sprintIds as $sid) {
+                echo $renderCell($sid, $cell[$sid][$uid] ?? [], (float)($avail[$sid][$uid] ?? 0), (float)($prop[$sid][$uid] ?? 0), false);
+            }
+            $sig = [];
+            foreach ($topCats as $top => $c) {
+                $top = (int)$top;
+                $o   = (int)($overCnt[$uid][$top] ?? 0);
+                $u   = (int)($underCnt[$uid][$top] ?? 0);
+                if ($o === 0 && $u === 0) {
+                    continue;
+                }
+                $dot = "<span style='display:inline-block;width:8px;height:8px;border-radius:2px;background:" . htmlescape($catColor($top)) . ";margin-right:4px;'></span>";
+                $parts = [];
+                if ($o > 0) {
+                    $parts[] = "<span style='color:#dc3545;' title='" . htmlescape(sprintf(__('%1$d of %2$d sprints above the maximum share', 'sprint'), $o, $shown)) . "'>"
+                        . "<i class='fas fa-arrow-up'></i> {$o}×</span>";
+                }
+                if ($u > 0) {
+                    $parts[] = "<span style='color:#d97706;' title='" . htmlescape(sprintf(__('%1$d of %2$d sprints below the minimum share', 'sprint'), $u, $shown)) . "'>"
+                        . "<i class='fas fa-arrow-down'></i> {$u}×</span>";
+                }
+                $sig[] = "<div class='small text-nowrap'>{$dot}" . htmlescape($catName($top)) . " " . implode(' ', $parts) . "</div>";
+            }
+            echo "<td class='text-start'>" . ($sig ? implode('', $sig) : "<span class='text-muted'>–</span>") . "</td>";
+            echo "</tr>";
+        }
+        if ($hasUnowned) {
+            echo "<tr><td class='text-muted'><i class='fas fa-user-slash me-1' style='font-size:0.85em;'></i>" . __('No owner yet', 'sprint') . "</td>";
+            foreach ($sprintIds as $sid) {
+                echo $renderCell($sid, $cell[$sid][0] ?? [], 0.0, (float)($prop[$sid][0] ?? 0), false);
+            }
+            echo "<td></td></tr>";
+        }
+
+        // Team row: the same stacked bar for the whole sprint, flags against
+        // the absolute limits as in the category view.
+        echo "<tr class='fw-bold' style='border-top:2px solid var(--tblr-border-color,#e2e8f0);'><td>" . __('Team', 'sprint') . "</td>";
+        foreach ($sprintIds as $sid) {
+            $byCat = $tprop = [];
+            foreach (($cell[$sid] ?? []) as $uid => $cats) {
+                foreach ($cats as $top => $v) {
+                    $byCat[$top] = ($byCat[$top] ?? 0) + $v;
+                }
+            }
+            echo $renderCell($sid, $byCat, (float)($team[$sid] ?? 0), (float)array_sum($prop[$sid] ?? []), true);
+        }
+        echo "<td></td></tr>";
+        echo "</tbody></table>";
+
+        // Legend + reading aid.
+        echo "<div class='text-muted small' style='padding:0 4px 2px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;'>";
+        foreach ($topCats as $top => $c) {
+            echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:" . htmlescape((string)$c['color']) . ";margin-right:5px;vertical-align:middle;'></span>"
+                . htmlescape((string)$c['name']) . "</span>";
+        }
+        echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:#6c757d;margin-right:5px;vertical-align:middle;'></span>"
+            . __('No category', 'sprint') . "</span>";
+        echo "</div>";
+        echo "<div class='text-muted small' style='padding:0 4px 6px;'>"
+            . __('Bar = share of the member\'s own capacity per category (subcategories rolled up). Percentages are the load against that capacity; the arrows compare the member\'s share with the sprint\'s category limits, read as a share of the team capacity. Backlog proposals that already have an owner are included.', 'sprint')
+            . ' ' . sprintf(
+                __('Window: the next %d planned sprints. Realised work per member is on the sprint overview.', 'sprint'),
+                count($sprints)
+            )
+            . "</div>";
         echo "</div>";
         return (string)ob_get_clean();
     }
