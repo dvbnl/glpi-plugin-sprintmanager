@@ -1097,7 +1097,7 @@ class SprintOverview extends CommonGLPI
         echo "<div class='row g-2 mb-3'>";
         foreach ($tiles as $tile) {
             echo "<div class='col-12 col-sm-6 col-xl-3'>";
-            echo "<div class='card card-sm h-100'><div class='card-body d-flex align-items-center'>";
+            echo "<div class='card card-sm h-100'><div class='card-body d-flex align-items-center sprint-overview-tile'>";
             echo "<span class='avatar bg-" . $tile['color'] . "-lt me-3'><i class='" . $tile['icon'] . "'></i></span>";
             echo "<div class='sprint-overview-tile-content'>";
             echo "<div class='h3 m-0 text-nowrap'>" . htmlescape($tile['value']) . "</div>";

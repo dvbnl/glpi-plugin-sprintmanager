@@ -73,6 +73,13 @@ foreach (['blocked_only', 'over_only', 'predictability_below', 'compare_period']
         exit(1);
     }
 }
+$css = file_get_contents($root . '/css/sprint.css');
+if (!str_contains($overview, 'align-items-center sprint-overview-tile')
+    || !str_contains($css, '.sprint-overview-tile > .avatar { flex: 0 0 auto; }')
+    || !str_contains($css, '.sprint-overview-tile-content { flex: 1 1 0; min-width: 0; }')) {
+    fwrite(STDERR, "Overview tiles must reserve the avatar width and give remaining space to their labels\n");
+    exit(1);
+}
 // Retro input has no owner picker: the contributor must become the owner,
 // while unassigned actions stay unowned for the readiness check.
 if (!str_contains($agility, "if (\$owner <= 0 && \$category !== 'action') \$owner = (int)Session::getLoginUserID();")) {
@@ -90,6 +97,11 @@ if (!str_contains($rail, 'data-current-user=')
 $backlog = file_get_contents($root . '/src/Backlog.php');
 if (!str_contains($backlog, 'setFocusTrap') || !str_contains($backlog, "addClass('modal-open')")) {
     fwrite(STDERR, "Dependency modal must stack on top of the backlog edit modal\n");
+    exit(1);
+}
+if (!str_contains($backlog, 'sprint-backlog-blocked-hint')
+    || !str_contains($css, '.sprint-backlog-blocked-header > .sprint-backlog-blocked-hint')) {
+    fwrite(STDERR, "Blocked backlog hint must retain its readable intrinsic width\n");
     exit(1);
 }
 foreach (['js/sprint.js' => 'public/sprint.js', 'css/sprint.css' => 'public/sprint.css'] as $source => $copy) {

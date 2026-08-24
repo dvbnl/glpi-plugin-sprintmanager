@@ -3026,7 +3026,7 @@ HTML;
         echo "<span>" . __('Blocked items', 'sprint') . "</span>";
         echo "<span class='badge bg-danger'>" . $count . "</span>";
         echo "<span style='flex:1;'></span>";
-        echo "<span class='text-muted small' style='font-weight:400;'>"
+        echo "<span class='text-muted small sprint-backlog-blocked-hint' style='font-weight:400;'>"
             . __('Review periodically and unblock when ready.', 'sprint') . "</span>";
         echo "</div>";
 

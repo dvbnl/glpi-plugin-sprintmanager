@@ -837,6 +837,16 @@ table.tab_cadre_fixe.sprint-themed {
     white-space: nowrap;
 }
 
+/* Keep the blocked hint readable under broad theme overrides. */
+.sprint-backlog-blocked-header > .sprint-backlog-blocked-hint {
+    flex: 0 1 auto;
+    min-width: min-content;
+    width: auto;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
 /* Kanban card quick-edit button + soft WIP warning */
 .sprint-kanban-card { position: relative; }
 .sk-card-edit { position: absolute; top: 6px; right: 6px; color: var(--tblr-secondary, #6c757d); line-height: 1; }
@@ -909,7 +919,14 @@ table.tab_cadre_fixe.sprint-themed {
 }
 .sprint-nav-layout .list-group-item i { font-size: 1.05rem; }
 
-.sprint-overview-tile-content { min-width: 0; }
+/* Keep tile icons fixed and give labels the remaining width. */
+.sprint-overview-tile > .avatar { flex: 0 0 auto; }
+.sprint-overview-tile-content { flex: 1 1 0; min-width: 0; }
+.sprint-overview-tile-content > .text-muted.small {
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+}
 
 .sprint-overview-ranked { table-layout: fixed; width: 100%; }
 .sprint-overview-ranked .sprint-overview-ranked-label {
