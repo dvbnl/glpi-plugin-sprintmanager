@@ -21,9 +21,11 @@ if (!$sprint->getFromDB($sprintId)) {
     Html::displayErrorAndDie(__('Sprint not found', 'sprint'));
 }
 
-// CSV download — must run before any HTML chrome is emitted.
+// CSV download — must run before any HTML chrome is emitted. The section /
+// column / category selection comes from the export dialog as query params;
+// SprintExport::parseCsvOptions() validates them.
 if (($_GET['format'] ?? '') === 'csv') {
-    GlpiPlugin\Sprint\SprintExport::streamCsv($sprint);
+    GlpiPlugin\Sprint\SprintExport::streamCsv($sprint, $_GET);
     exit;
 }
 

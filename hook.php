@@ -775,18 +775,19 @@ function plugin_sprint_install(): bool
     // =========================================================================
     // Table: glpi_plugin_sprint_sprintrequests
     // Approval requests from non-Scrum-Masters: assigning a backlog item to a
-    // sprint, or changing an item's capacity % inside a sprint. The target
-    // sprint's Scrum Master accepts (which performs the action) or rejects.
+    // sprint, or changing an item's capacity % or category inside a sprint.
+    // The target sprint's Scrum Master accepts (performs it) or rejects.
     // Name must match SprintRequest::getTable() (class SprintRequest).
     // =========================================================================
     if (!$DB->tableExists('glpi_plugin_sprint_sprintrequests')) {
         $query = "CREATE TABLE `glpi_plugin_sprint_sprintrequests` (
             `id`                           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity',
+            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity | category',
             `plugin_sprint_sprintitems_id` INT UNSIGNED NOT NULL DEFAULT 0,
-            `plugin_sprint_sprints_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Target sprint (assign) or the item sprint (capacity)',
+            `plugin_sprint_sprints_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Target sprint (assign) or the item sprint (capacity/category)',
             `users_id`                     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requester',
             `requested_capacity`           DECIMAL(5,1) NOT NULL DEFAULT 0,
+            `requested_category_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requested backlog category for a category request',
             `reason`                       TEXT NULL COMMENT 'Requester motivation shown to the Scrum Master',
             `status`                       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending | accepted | rejected',
             `users_id_validate`            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master who handled it',
@@ -807,6 +808,17 @@ function plugin_sprint_install(): bool
         $DB->doQueryOrDie(
             "ALTER TABLE `glpi_plugin_sprint_sprintrequests` ADD COLUMN `reason` TEXT NULL "
             . "COMMENT 'Requester motivation shown to the Scrum Master'",
+            $DB->error()
+        );
+    }
+
+    // Migration: target category for 'category' approval requests (also
+    // applied lazily by SprintRequest::ensureTable() for running installations).
+    if ($DB->tableExists('glpi_plugin_sprint_sprintrequests')
+        && !$DB->fieldExists('glpi_plugin_sprint_sprintrequests', 'requested_category_id')) {
+        $DB->doQueryOrDie(
+            "ALTER TABLE `glpi_plugin_sprint_sprintrequests` ADD COLUMN `requested_category_id` INT UNSIGNED NOT NULL DEFAULT 0 "
+            . "COMMENT 'Requested backlog category for a category request'",
             $DB->error()
         );
     }

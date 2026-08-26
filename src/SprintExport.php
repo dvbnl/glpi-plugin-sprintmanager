@@ -74,9 +74,9 @@ class SprintExport extends CommonGLPI
         }
         echo "</div>";
         echo "<div style='display:flex;gap:8px;'>";
-        echo "<a href='" . htmlescape(self::getExportURL($sprintId) . '&format=csv') . "' class='btn btn-outline-success'>"
+        echo "<button type='button' class='btn btn-outline-success sprint-csv-open'>"
             . "<i class='fas fa-file-csv me-1'></i>" . __('Download CSV', 'sprint')
-            . "</a>";
+            . "</button>";
         echo "<button type='button' class='btn btn-primary' onclick='window.print()'>"
             . "<i class='fas fa-print me-1'></i>" . __('Print / Save as PDF', 'sprint')
             . "</button>";
@@ -101,6 +101,7 @@ class SprintExport extends CommonGLPI
 
         echo "</div>"; // .sprint-export-page
 
+        self::renderCsvOptionsUI($sprintId);
         self::renderPrintStyles();
     }
 
@@ -938,6 +939,7 @@ class SprintExport extends CommonGLPI
         echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #dee2e6;width:24px;'></th>";
         echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #dee2e6;'>" . __('Name') . "</th>";
         echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #dee2e6;'>" . __('Type') . "</th>";
+        echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #dee2e6;'>" . __('Category', 'sprint') . "</th>";
         echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #dee2e6;'>" . __('Owner', 'sprint') . "</th>";
         echo "<th style='text-align:left;padding:6px 8px;border-bottom:1px solid #dee2e6;'>" . __('Status') . "</th>";
         echo "<th style='text-align:right;padding:6px 8px;border-bottom:1px solid #dee2e6;'>" . __('Story Points', 'sprint') . "</th>";
@@ -965,6 +967,10 @@ class SprintExport extends CommonGLPI
             $rowDeps = $depsById[(int)$row['id']] ?? [];
             echo "<td style='padding:5px 8px;'>" . htmlescape((string)$row['name']) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td style='padding:5px 8px;color:#6c757d;'>" . htmlescape((string)$type) . "</td>";
+            $catId = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
+            echo "<td style='padding:5px 8px;color:#6c757d;'>"
+                . ($catId > 0 ? htmlescape(SprintCategory::getFullNameFor($catId)) : '-')
+                . "</td>";
             echo "<td style='padding:5px 8px;'>" . htmlescape((string)$owner) . "</td>";
             echo "<td style='padding:5px 8px;'>"
                 . "<span style='display:inline-block;padding:2px 8px;border-radius:12px;color:#fff;background:{$statusBg};font-size:0.78em;'>"
@@ -978,24 +984,274 @@ class SprintExport extends CommonGLPI
     }
 
     /**
-     * Stream the sprint items as a CSV download (one row per item, with tags,
-     * owner and capacity %). Fastlane items list every member with their share
-     * and the summed capacity; regular items use their single owner + capacity.
+     * "Download CSV" dialog: pick the sections, the item columns and the
+     * categories to include, and whether the item rows are split into one
+     * block per category. The choice is turned into a query string and handed
+     * to front/sprint.export.php, which streams the file.
+     *
+     * Deliberately not a <form>: this tab renders inside GLPI's own form on
+     * some pages, and nested forms do not submit.
+     */
+    private static function renderCsvOptionsUI(int $sprintId): void
+    {
+        $baseUrl    = self::getExportURL($sprintId);
+        $categories = SprintCategory::getAll(false);
+
+        echo "<div class='modal fade sprint-csv-modal' id='sprint-csv-modal' tabindex='-1' aria-hidden='true'>";
+        echo "<div class='modal-dialog modal-dialog-centered modal-lg'>";
+        echo "<div class='modal-content'>";
+        echo "<div class='modal-header'>";
+        echo "<h5 class='modal-title'><i class='fas fa-file-csv me-1'></i>" . __('Download CSV', 'sprint') . "</h5>";
+        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
+        echo "</div>";
+        echo "<div class='modal-body'>";
+        echo "<p class='text-muted small'>"
+            . htmlescape(__('Tick what the file should contain. Every ticked section is written as its own block, one after another.', 'sprint'))
+            . "</p>";
+
+        // --- Sections ---------------------------------------------------
+        echo "<div class='mb-3'><label class='form-label fw-bold'>"
+            . "<i class='fas fa-layer-group me-1'></i>" . __('Sections', 'sprint') . "</label>";
+        echo "<div class='d-flex flex-wrap gap-3'>";
+        foreach (self::getCsvSections() as $key => $label) {
+            $checked = in_array($key, self::CSV_DEFAULT_SECTIONS, true) ? ' checked' : '';
+            echo "<label class='form-check' style='display:inline-flex;align-items:center;gap:6px;'>"
+                . "<input type='checkbox' class='form-check-input sprint-csv-section' value='" . htmlescape($key) . "'{$checked}>"
+                . "<span class='form-check-label'>" . htmlescape($label) . "</span></label>";
+        }
+        echo "</div></div>";
+
+        // --- Item columns -----------------------------------------------
+        echo "<div class='mb-3 sprint-csv-columns-block'><label class='form-label fw-bold'>"
+            . "<i class='fas fa-table-columns me-1'></i>" . __('Columns for the item rows', 'sprint')
+            . " <button type='button' class='btn btn-sm btn-link p-0 ms-2 sprint-csv-toggle-all'>"
+            . htmlescape(__('Select all / none', 'sprint')) . "</button></label>";
+        echo "<div class='d-flex flex-wrap gap-3'>";
+        foreach (self::getCsvColumns() as $key => $label) {
+            $checked = in_array($key, self::CSV_DEFAULT_COLUMNS, true) ? ' checked' : '';
+            echo "<label class='form-check' style='display:inline-flex;align-items:center;gap:6px;'>"
+                . "<input type='checkbox' class='form-check-input sprint-csv-col' value='" . htmlescape($key) . "'{$checked}>"
+                . "<span class='form-check-label'>" . htmlescape($label) . "</span></label>";
+        }
+        echo "</div>";
+        echo "<div class='form-text small text-muted'>"
+            . htmlescape(__('Planned is the estimate the item was taken in with; realised is the actual figure, which falls back to the planned one where nothing was recorded.', 'sprint'))
+            . "</div></div>";
+
+        // --- Category filter --------------------------------------------
+        echo "<div class='mb-3'><label class='form-label fw-bold'>"
+            . "<i class='fas fa-folder me-1'></i>" . __('Categories', 'sprint')
+            . " <button type='button' class='btn btn-sm btn-link p-0 ms-2 sprint-csv-toggle-cats'>"
+            . htmlescape(__('Select all / none', 'sprint')) . "</button></label>";
+        echo "<div class='d-flex flex-wrap gap-3'>";
+        foreach ($categories as $cid => $cat) {
+            $indent = (int)($cat['level'] ?? 0) > 0 ? 'margin-left:18px;' : '';
+            echo "<label class='form-check' style='display:inline-flex;align-items:center;gap:6px;{$indent}'>"
+                . "<input type='checkbox' class='form-check-input sprint-csv-cat' value='" . (int)$cid . "' checked>"
+                . "<span class='form-check-label'>" . htmlescape((string)$cat['name']) . "</span></label>";
+        }
+        echo "<label class='form-check' style='display:inline-flex;align-items:center;gap:6px;'>"
+            . "<input type='checkbox' class='form-check-input sprint-csv-cat' value='0' checked>"
+            . "<span class='form-check-label fst-italic'>" . htmlescape(__('No category', 'sprint')) . "</span></label>";
+        echo "</div>";
+        echo "<div class='form-check form-switch mt-2'>";
+        echo "<input class='form-check-input' type='checkbox' id='sprint-csv-split'>";
+        echo "<label class='form-check-label' for='sprint-csv-split'>"
+            . htmlescape(__('Split the item rows into one block per category, each with its own subtotal', 'sprint'))
+            . "</label>";
+        echo "</div></div>";
+
+        echo "<div class='alert alert-warning py-2 small sprint-csv-error' style='display:none;'></div>";
+        echo "</div>"; // modal-body
+
+        echo "<div class='modal-footer'>";
+        echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __('Cancel') . "</button>";
+        echo "<button type='button' class='btn btn-success sprint-csv-download'>"
+            . "<i class='fas fa-download me-1'></i>" . __('Download CSV', 'sprint') . "</button>";
+        echo "</div>";
+        echo "</div></div></div>";
+
+        $errNothing = addslashes(__('Pick at least one section and one column.', 'sprint'));
+        $errNoCats  = addslashes(__('Pick at least one category.', 'sprint'));
+        $baseUrlJs  = addslashes($baseUrl);
+
+        echo <<<HTML
+<script>
+(function(){
+    if (typeof jQuery === 'undefined') { return; }
+
+    // Move the dialog to <body> so it stacks above the tab container; a GLPI
+    // ajax-tab reload re-echoes it, so drop any stale copy from an earlier
+    // load first.
+    jQuery(function(){
+        var all = jQuery('#sprint-csv-modal, body > #sprint-csv-modal');
+        if (all.length > 1) { all.slice(0, all.length - 1).remove(); }
+        var last = jQuery('#sprint-csv-modal').last();
+        if (last.length && !last.parent().is('body')) { last.detach().appendTo('body'); }
+    });
+
+    if (window.__sprintCsvDialogBound) { return; }
+    window.__sprintCsvDialogBound = true;
+
+    function modal() { return jQuery('#sprint-csv-modal').last(); }
+
+    jQuery(document).on('click', '.sprint-csv-open', function(){
+        var \$m = modal();
+        if (!\$m.length) { return; }
+        \$m.find('.sprint-csv-error').hide().text('');
+        bootstrap.Modal.getOrCreateInstance(\$m[0]).show();
+    });
+
+    // Both "select all / none" links flip to whatever the majority is not,
+    // so a half-ticked list resolves to "all" on the first click.
+    function toggleGroup(\$boxes) {
+        var allOn = \$boxes.length > 0 && \$boxes.filter(':checked').length === \$boxes.length;
+        \$boxes.prop('checked', !allOn);
+    }
+    jQuery(document).on('click', '.sprint-csv-toggle-all', function(){
+        toggleGroup(modal().find('.sprint-csv-col'));
+    });
+    jQuery(document).on('click', '.sprint-csv-toggle-cats', function(){
+        toggleGroup(modal().find('.sprint-csv-cat'));
+    });
+
+    jQuery(document).on('click', '.sprint-csv-download', function(){
+        var \$m = modal();
+        var params = [];
+        var cols = [], sections = [], cats = [];
+        \$m.find('.sprint-csv-section:checked').each(function(){ sections.push(this.value); });
+        \$m.find('.sprint-csv-col:checked').each(function(){ cols.push(this.value); });
+        \$m.find('.sprint-csv-cat:checked').each(function(){ cats.push(this.value); });
+
+        var wantsItems = sections.indexOf('items') !== -1;
+        if (!sections.length || (wantsItems && !cols.length)) {
+            \$m.find('.sprint-csv-error').text('{$errNothing}').show();
+            return;
+        }
+        if (!cats.length) {
+            \$m.find('.sprint-csv-error').text('{$errNoCats}').show();
+            return;
+        }
+
+        params.push('format=csv');
+        sections.forEach(function(v){ params.push('sections[]=' + encodeURIComponent(v)); });
+        cols.forEach(function(v){ params.push('cols[]=' + encodeURIComponent(v)); });
+        // Every category ticked means "no filter" — leave the parameter out so
+        // items carrying a category deleted since are not silently dropped.
+        if (cats.length !== \$m.find('.sprint-csv-cat').length) {
+            cats.forEach(function(v){ params.push('cats[]=' + encodeURIComponent(v)); });
+        }
+        if (\$m.find('#sprint-csv-split').is(':checked')) { params.push('split=1'); }
+
+        \$m.find('.sprint-csv-error').hide().text('');
+        bootstrap.Modal.getOrCreateInstance(\$m[0]).hide();
+        window.location.href = '{$baseUrlJs}&' + params.join('&');
+    });
+})();
+</script>
+HTML;
+    }
+
+    /**
+     * Every column the item section can carry, in the order they are written.
+     * Keys are the values submitted by the export dialog.
+     *
+     * @return array<string,string> key => header label
+     */
+    public static function getCsvColumns(): array
+    {
+        return [
+            'name'             => __('Name'),
+            'type'             => __('Type'),
+            'category'         => __('Category', 'sprint'),
+            'fastlane'         => __('Fastlane', 'sprint'),
+            'adhoc'            => __('Adhoc', 'sprint'),
+            'owner'            => __('Owner', 'sprint'),
+            'status'           => __('Status'),
+            'priority'         => __('Priority'),
+            'story_points'     => __('Story Points', 'sprint'),
+            'capacity_planned' => __('Planned capacity', 'sprint') . ' %',
+            'capacity_actual'  => __('Realised capacity', 'sprint') . ' %',
+            'tags'             => __('Tags', 'sprint'),
+            'linked'           => __('Linked item', 'sprint'),
+            'note'             => __('Note', 'sprint'),
+        ];
+    }
+
+    /** Columns pre-ticked in the export dialog (the pre-1.2.3 fixed layout). */
+    public const CSV_DEFAULT_COLUMNS = [
+        'name', 'type', 'category', 'fastlane', 'owner', 'status',
+        'story_points', 'capacity_planned', 'tags', 'linked',
+    ];
+
+    /**
+     * Blocks the CSV can contain, each written as its own titled section.
+     *
+     * @return array<string,string> key => label
+     */
+    public static function getCsvSections(): array
+    {
+        return [
+            'items'        => __('Sprint items', 'sprint'),
+            'categories'   => __('Totals per category', 'sprint'),
+            'members'      => __('Workload per member', 'sprint'),
+            'dependencies' => __('Dependencies', 'sprint'),
+        ];
+    }
+
+    /** Sections pre-ticked in the export dialog. */
+    public const CSV_DEFAULT_SECTIONS = ['items', 'dependencies'];
+
+    /**
+     * Turn raw request parameters into a validated export configuration.
+     * Anything unknown is dropped and anything empty falls back to the
+     * defaults, so a hand-written URL can never produce an empty file.
+     *
+     * @param array<string,mixed> $params usually $_GET
+     * @return array{columns:string[],sections:string[],categories:int[]|null,split:bool}
+     */
+    public static function parseCsvOptions(array $params): array
+    {
+        // array_intersect against the registry keys keeps the canonical order,
+        // so the column sequence never depends on checkbox click order.
+        $columns = array_values(array_intersect(
+            array_keys(self::getCsvColumns()),
+            array_map('strval', (array)($params['cols'] ?? []))
+        ));
+        $sections = array_values(array_intersect(
+            array_keys(self::getCsvSections()),
+            array_map('strval', (array)($params['sections'] ?? []))
+        ));
+
+        // No category filter at all (absent or "everything ticked") stays null
+        // so the query is not constrained; 0 is a real value ("no category").
+        $categories = null;
+        if (isset($params['cats']) && is_array($params['cats']) && count($params['cats']) > 0) {
+            $categories = array_values(array_unique(array_map('intval', $params['cats'])));
+        }
+
+        return [
+            'columns'    => $columns ?: self::CSV_DEFAULT_COLUMNS,
+            'sections'   => $sections ?: self::CSV_DEFAULT_SECTIONS,
+            'categories' => $categories,
+            'split'      => (int)($params['split'] ?? 0) === 1,
+        ];
+    }
+
+    /**
+     * Stream a sprint report as a CSV download. The dialog in render() decides
+     * which sections and which item columns are written, which categories are
+     * included and whether the item rows are split into one block per category.
      *
      * Caller must NOT have emitted any HTML/headers yet (see
      * front/sprint.export.php, which branches on ?format=csv before Html::header()).
+     *
+     * @param array<string,mixed> $options raw request params, see parseCsvOptions()
      */
-    public static function streamCsv(Sprint $sprint): void
+    public static function streamCsv(Sprint $sprint, array $options = []): void
     {
-        $sprintId   = (int)$sprint->getID();
-        $statuses   = SprintItem::getAllStatuses();
-        $typeLabels = [
-            ''            => __('Manual', 'sprint'),
-            'Ticket'      => __('Ticket'),
-            'Change'      => __('Change'),
-            'Problem'     => __('Problem'),
-            'ProjectTask' => __('Project task'),
-        ];
+        $sprintId = (int)$sprint->getID();
+        $opt      = self::parseCsvOptions($options);
 
         $si    = new SprintItem();
         $items = $si->find(
@@ -1003,9 +1259,16 @@ class SprintExport extends CommonGLPI
             ['is_fastlane DESC', 'priority DESC', 'sort_order ASC']
         );
 
-        $itemIds  = array_map(fn($r) => (int)$r['id'], $items);
+        if ($opt['categories'] !== null) {
+            $wanted = array_flip($opt['categories']);
+            $items  = array_filter(
+                $items,
+                static fn($r) => isset($wanted[(int)($r['plugin_sprint_sprintcategories_id'] ?? 0)])
+            );
+        }
+
+        $itemIds  = array_map(static fn($r) => (int)$r['id'], $items);
         $tagsById = SprintItem::getTagsForItems($itemIds);
-        $rel      = new SprintFastlaneMember();
 
         // Sanitised filename: sprint-<name>-<timestamp>.csv
         $slug = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string)($sprint->fields['name'] ?? 'sprint'));
@@ -1022,98 +1285,411 @@ class SprintExport extends CommonGLPI
         // UTF-8 BOM so Excel reads accented characters correctly.
         fwrite($out, "\xEF\xBB\xBF");
 
-        // Explicit escape arg ('') keeps output RFC-compliant and silences the PHP 8.4+ escape-default deprecation.
-        fputcsv($out, [
-            __('Name'),
-            __('Type'),
-            __('Fastlane', 'sprint'),
-            __('Owner', 'sprint'),
-            __('Status'),
-            __('Story Points', 'sprint'),
-            __('Capacity', 'sprint') . ' %',
-            __('Tags', 'sprint'),
-            __('Linked item', 'sprint'),
-        ], ',', '"', '');
-
-        foreach ($items as $row) {
-            $itemId = (int)$row['id'];
-            $isFast = !empty($row['is_fastlane']);
-            $type   = $typeLabels[$row['itemtype']] ?? $row['itemtype'];
-
-            if ($isFast) {
-                $names    = [];
-                $capacity = 0.0;
-                foreach ($rel->find(['plugin_sprint_sprintitems_id' => $itemId]) as $alloc) {
-                    $uid       = (int)$alloc['users_id'];
-                    $cap       = (float)$alloc['capacity'];
-                    $capacity += $cap;
-                    $names[]   = SprintCache::userName($uid) . ' (' . SprintMember::formatCapacity($cap) . '%)';
-                }
-                $owner = $names
-                    ? implode(', ', $names)
-                    : (((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : __('Unassigned', 'sprint'));
-            } else {
-                $owner    = ((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : __('Unassigned', 'sprint');
-                $capacity = (float)($row['capacity'] ?? 0);
+        $first = true;
+        foreach ($opt['sections'] as $section) {
+            if (!$first) {
+                self::csvRow($out, ['']);
             }
-
-            $linkedName = '';
-            $itemtype   = (string)($row['itemtype'] ?? '');
-            $itemsId    = (int)($row['items_id'] ?? 0);
-            $linked = SprintCache::getObject($itemtype, $itemsId);
-            if ($linked !== null) {
-                $linkedName = (string)($linked->fields['name'] ?? '');
-            }
-
-            fputcsv($out, [
-                (string)$row['name'],
-                (string)$type,
-                $isFast ? __('Yes') : __('No'),
-                $owner,
-                (string)($statuses[$row['status']] ?? $row['status']),
-                (int)$row['story_points'],
-                SprintMember::formatCapacity($capacity),
-                implode('; ', $tagsById[$itemId] ?? []),
-                $linkedName,
-            ], ',', '"', '');
-        }
-
-        // Dependency rows as a second section: one row per helper, so
-        // capacity and resolution state stay analysable in a spreadsheet.
-        $depRows = (SprintItemDependency::isTableReady() && count($itemIds) > 0)
-            ? (new SprintItemDependency())->find(['plugin_sprint_sprintitems_id' => $itemIds], ['date_creation ASC'])
-            : [];
-        if (count($depRows) > 0) {
-            fputcsv($out, [''], ',', '"', '');
-            fputcsv($out, [__('Dependencies', 'sprint')], ',', '"', '');
-            fputcsv($out, [
-                __('Name'),
-                __('Owner', 'sprint'),
-                __('Helper', 'sprint'),
-                __('Capacity', 'sprint') . ' %',
-                __('Resolved', 'sprint'),
-                __('Comments'),
-                __('Creation date'),
-            ], ',', '"', '');
-
-            foreach ($depRows as $r) {
-                $parent = $items[(int)$r['plugin_sprint_sprintitems_id']] ?? null;
-                if ($parent === null) {
-                    continue;
-                }
-                fputcsv($out, [
-                    (string)$parent['name'],
-                    ((int)$parent['users_id'] > 0) ? SprintCache::userName((int)$parent['users_id']) : __('Unassigned', 'sprint'),
-                    SprintCache::userName((int)$r['users_id']),
-                    SprintMember::formatCapacity($r['capacity']),
-                    ((int)($r['is_resolved'] ?? 0) === 1) ? __('Yes') : __('No'),
-                    (string)($r['comment'] ?? ''),
-                    (string)($r['date_creation'] ?? ''),
-                ], ',', '"', '');
+            $first = false;
+            switch ($section) {
+                case 'items':
+                    self::writeCsvItems($out, $items, $tagsById, $opt);
+                    break;
+                case 'categories':
+                    self::writeCsvCategoryTotals($out, $items);
+                    break;
+                case 'members':
+                    self::writeCsvMembers($out, $sprintId);
+                    break;
+                case 'dependencies':
+                    self::writeCsvDependencies($out, $items, $itemIds);
+                    break;
             }
         }
 
         fclose($out);
+    }
+
+    /**
+     * One CSV line. Explicit escape arg ('') keeps output RFC-compliant and
+     * silences the PHP 8.4+ escape-default deprecation.
+     *
+     * @param resource $out
+     */
+    private static function csvRow($out, array $fields): void
+    {
+        fputcsv($out, $fields, ',', '"', '');
+    }
+
+    /**
+     * Item rows, optionally split into one titled block per category so a
+     * single export can still be sliced per category in a spreadsheet.
+     *
+     * @param resource $out
+     */
+    private static function writeCsvItems($out, array $items, array $tagsById, array $opt): void
+    {
+        $allColumns = self::getCsvColumns();
+        $header     = array_map(static fn($c) => $allColumns[$c], $opt['columns']);
+
+        self::csvRow($out, [__('Sprint items', 'sprint')]);
+
+        if (!$opt['split']) {
+            self::csvRow($out, $header);
+            foreach ($items as $row) {
+                self::csvRow($out, self::csvItemFields($row, $tagsById, $opt['columns']));
+            }
+            return;
+        }
+
+        // Group by category, keeping the categories in their configured tree
+        // order and "no category" last.
+        $grouped = [];
+        foreach ($items as $row) {
+            $grouped[(int)($row['plugin_sprint_sprintcategories_id'] ?? 0)][] = $row;
+        }
+        $order = array_keys(SprintCategory::getAll(false));
+        $order[] = 0;
+        foreach (array_keys($grouped) as $cid) {
+            if (!in_array($cid, $order, true)) {
+                $order[] = $cid;
+            }
+        }
+
+        foreach ($order as $cid) {
+            if (empty($grouped[$cid])) {
+                continue;
+            }
+            $label = $cid > 0 ? SprintCategory::getFullNameFor($cid) : __('No category', 'sprint');
+            if ($label === '') {
+                $label = '#' . $cid;
+            }
+            self::csvRow($out, ['']);
+            self::csvRow($out, [__('Category', 'sprint') . ': ' . $label]);
+            self::csvRow($out, $header);
+            $plannedTotal = 0.0;
+            $actualTotal  = 0.0;
+            $pointsTotal  = 0;
+            foreach ($grouped[$cid] as $row) {
+                self::csvRow($out, self::csvItemFields($row, $tagsById, $opt['columns']));
+                $plannedTotal += self::csvItemCapacity($row, false);
+                $actualTotal  += self::csvItemCapacity($row, true);
+                $pointsTotal  += (int)$row['story_points'];
+            }
+            // Subtotal line mirroring the selected columns, so it lines up
+            // underneath the figures it sums.
+            $subtotal = [];
+            foreach ($opt['columns'] as $col) {
+                switch ($col) {
+                    case 'name':             $subtotal[] = __('Subtotal', 'sprint'); break;
+                    case 'story_points':     $subtotal[] = $pointsTotal; break;
+                    case 'capacity_planned': $subtotal[] = SprintMember::formatCapacity($plannedTotal); break;
+                    case 'capacity_actual':  $subtotal[] = SprintMember::formatCapacity($actualTotal); break;
+                    default:                 $subtotal[] = ''; break;
+                }
+            }
+            self::csvRow($out, $subtotal);
+        }
+    }
+
+    /**
+     * Allocated capacity for one item. Fastlane items have no single figure of
+     * their own — their capacity is the sum of the member allocations, which
+     * carry no separate realised value, so planned and realised match there.
+     */
+    private static function csvItemCapacity(array $row, bool $actual): float
+    {
+        if ((int)($row['is_fastlane'] ?? 0) === 1) {
+            $total = 0.0;
+            foreach ((new SprintFastlaneMember())->find([
+                'plugin_sprint_sprintitems_id' => (int)$row['id'],
+            ]) as $alloc) {
+                $total += (float)$alloc['capacity'];
+            }
+            return $total;
+        }
+        return SprintItem::capacityFor($row, $actual);
+    }
+
+    /**
+     * One item as the selected columns, in registry order.
+     *
+     * @return array<int,string|int>
+     */
+    private static function csvItemFields(array $row, array $tagsById, array $columns): array
+    {
+        static $statuses   = null;
+        static $typeLabels = null;
+        static $priorities = null;
+        if ($statuses === null) {
+            $statuses   = SprintItem::getAllStatuses();
+            $typeLabels = [
+                ''            => __('Manual', 'sprint'),
+                'Ticket'      => __('Ticket'),
+                'Change'      => __('Change'),
+                'Problem'     => __('Problem'),
+                'ProjectTask' => __('Project task'),
+            ];
+            $priorities = [
+                1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
+                4 => __('High'), 5 => __('Very high'),
+            ];
+        }
+
+        $itemId   = (int)$row['id'];
+        $isFast   = (int)($row['is_fastlane'] ?? 0) === 1;
+        $catId    = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
+        $itemtype = (string)($row['itemtype'] ?? '');
+
+        $fields = [];
+        foreach ($columns as $col) {
+            switch ($col) {
+                case 'name':
+                    $fields[] = (string)$row['name'];
+                    break;
+                case 'type':
+                    $fields[] = (string)($typeLabels[$itemtype] ?? $itemtype);
+                    break;
+                case 'category':
+                    $fields[] = $catId > 0
+                        ? SprintCategory::getFullNameFor($catId)
+                        : __('No category', 'sprint');
+                    break;
+                case 'fastlane':
+                    $fields[] = $isFast ? __('Yes') : __('No');
+                    break;
+                case 'adhoc':
+                    $fields[] = (int)($row['is_adhoc'] ?? 0) === 1 ? __('Yes') : __('No');
+                    break;
+                case 'owner':
+                    $fields[] = self::csvItemOwner($row);
+                    break;
+                case 'status':
+                    $fields[] = (string)($statuses[$row['status']] ?? $row['status']);
+                    break;
+                case 'priority':
+                    $fields[] = (string)($priorities[(int)($row['priority'] ?? 3)] ?? $row['priority']);
+                    break;
+                case 'story_points':
+                    $fields[] = (int)$row['story_points'];
+                    break;
+                case 'capacity_planned':
+                    $fields[] = SprintMember::formatCapacity(self::csvItemCapacity($row, false));
+                    break;
+                case 'capacity_actual':
+                    $fields[] = SprintMember::formatCapacity(self::csvItemCapacity($row, true));
+                    break;
+                case 'tags':
+                    $fields[] = implode('; ', $tagsById[$itemId] ?? []);
+                    break;
+                case 'linked':
+                    $linked   = SprintCache::getObject($itemtype, (int)($row['items_id'] ?? 0));
+                    $fields[] = $linked !== null ? (string)($linked->fields['name'] ?? '') : '';
+                    break;
+                case 'note':
+                    $fields[] = (string)($row['note'] ?? '');
+                    break;
+                default:
+                    $fields[] = '';
+                    break;
+            }
+        }
+        return $fields;
+    }
+
+    /**
+     * Owner cell: fastlane items list every member with their share, regular
+     * items their single owner.
+     */
+    private static function csvItemOwner(array $row): string
+    {
+        if ((int)($row['is_fastlane'] ?? 0) !== 1) {
+            return ((int)$row['users_id'] > 0)
+                ? SprintCache::userName((int)$row['users_id'])
+                : __('Unassigned', 'sprint');
+        }
+        $names = [];
+        foreach ((new SprintFastlaneMember())->find([
+            'plugin_sprint_sprintitems_id' => (int)$row['id'],
+        ]) as $alloc) {
+            $names[] = SprintCache::userName((int)$alloc['users_id'])
+                . ' (' . SprintMember::formatCapacity($alloc['capacity']) . '%)';
+        }
+        if ($names) {
+            return implode(', ', $names);
+        }
+        return ((int)$row['users_id'] > 0)
+            ? SprintCache::userName((int)$row['users_id'])
+            : __('Unassigned', 'sprint');
+    }
+
+    /**
+     * Per-category totals over the exported items, so the category split can be
+     * read without pivoting the item rows.
+     *
+     * @param resource $out
+     */
+    private static function writeCsvCategoryTotals($out, array $items): void
+    {
+        $totals = [];
+        foreach ($items as $row) {
+            $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
+            $totals[$cid] ??= [
+                'items' => 0, 'done' => 0, 'points' => 0, 'points_done' => 0,
+                'planned' => 0.0, 'actual' => 0.0,
+            ];
+            $done = (string)$row['status'] === SprintItem::STATUS_DONE;
+            $totals[$cid]['items']++;
+            $totals[$cid]['points']  += (int)$row['story_points'];
+            $totals[$cid]['planned'] += self::csvItemCapacity($row, false);
+            $totals[$cid]['actual']  += self::csvItemCapacity($row, true);
+            if ($done) {
+                $totals[$cid]['done']++;
+                $totals[$cid]['points_done'] += (int)$row['story_points'];
+            }
+        }
+
+        self::csvRow($out, [__('Totals per category', 'sprint')]);
+        self::csvRow($out, [
+            __('Category', 'sprint'),
+            __('Items', 'sprint'),
+            __('Done', 'sprint'),
+            __('Story Points', 'sprint'),
+            __('Story points done', 'sprint'),
+            __('Planned capacity', 'sprint') . ' %',
+            __('Realised capacity', 'sprint') . ' %',
+        ]);
+
+        if (count($totals) === 0) {
+            return;
+        }
+
+        // Configured tree order first, "no category" last, unknown ids appended.
+        $order = array_keys(SprintCategory::getAll(false));
+        $order[] = 0;
+        foreach (array_keys($totals) as $cid) {
+            if (!in_array($cid, $order, true)) {
+                $order[] = $cid;
+            }
+        }
+        foreach ($order as $cid) {
+            if (!isset($totals[$cid])) {
+                continue;
+            }
+            $t     = $totals[$cid];
+            $label = $cid > 0 ? SprintCategory::getFullNameFor($cid) : __('No category', 'sprint');
+            self::csvRow($out, [
+                $label !== '' ? $label : ('#' . $cid),
+                $t['items'],
+                $t['done'],
+                $t['points'],
+                $t['points_done'],
+                SprintMember::formatCapacity($t['planned']),
+                SprintMember::formatCapacity($t['actual']),
+            ]);
+        }
+    }
+
+    /**
+     * Capacity per sprint member: what they can take, what is planned on them
+     * and what it really took. Mirrors the workload table in the HTML report.
+     *
+     * @param resource $out
+     */
+    private static function writeCsvMembers($out, int $sprintId): void
+    {
+        self::csvRow($out, [__('Workload per member', 'sprint')]);
+        self::csvRow($out, [
+            __('Member', 'sprint'),
+            __('Role', 'sprint'),
+            __('Capacity', 'sprint') . ' %',
+            __('Planned capacity', 'sprint') . ' %',
+            __('Realised capacity', 'sprint') . ' %',
+            __('Fastlane', 'sprint') . ' %',
+            __('Used', 'sprint') . ' %',
+            __('Free', 'sprint') . ' %',
+        ]);
+
+        $roles = SprintMember::getAllRoles();
+        $si    = new SprintItem();
+
+        foreach ((new SprintMember())->find(['plugin_sprint_sprints_id' => $sprintId], ['role ASC']) as $row) {
+            $userId = (int)$row['users_id'];
+            // Effective capacity (availability exceptions applied), matching
+            // the dashboard and the HTML report.
+            $totalCap = SprintAgility::effectiveCapacity(
+                $sprintId,
+                $userId,
+                SprintMember::normalizeCapacity($row['capacity_percent'])
+            );
+
+            $planned = 0.0;
+            $actual  = 0.0;
+            foreach ($si->find([
+                'plugin_sprint_sprints_id' => $sprintId,
+                'users_id'                 => $userId,
+                'is_fastlane'              => 0,
+            ]) as $r) {
+                $planned += SprintItem::capacityFor($r, false);
+                $actual  += SprintItem::capacityFor($r, true);
+            }
+            $fastlane = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
+            $used     = $planned + $fastlane;
+
+            self::csvRow($out, [
+                SprintCache::userName($userId),
+                (string)($roles[$row['role']] ?? $row['role']),
+                SprintMember::formatCapacity($totalCap),
+                SprintMember::formatCapacity($planned),
+                SprintMember::formatCapacity($actual),
+                SprintMember::formatCapacity($fastlane),
+                SprintMember::formatCapacity($used),
+                SprintMember::formatCapacity(max($totalCap - $used, 0)),
+            ]);
+        }
+    }
+
+    /**
+     * One row per helper, so capacity and resolution state stay analysable in
+     * a spreadsheet. Limited to the exported items.
+     *
+     * @param resource $out
+     */
+    private static function writeCsvDependencies($out, array $items, array $itemIds): void
+    {
+        self::csvRow($out, [__('Dependencies', 'sprint')]);
+        self::csvRow($out, [
+            __('Name'),
+            __('Category', 'sprint'),
+            __('Owner', 'sprint'),
+            __('Helper', 'sprint'),
+            __('Capacity', 'sprint') . ' %',
+            __('Resolved', 'sprint'),
+            __('Comments'),
+            __('Creation date'),
+        ]);
+
+        $depRows = (SprintItemDependency::isTableReady() && count($itemIds) > 0)
+            ? (new SprintItemDependency())->find(['plugin_sprint_sprintitems_id' => $itemIds], ['date_creation ASC'])
+            : [];
+
+        foreach ($depRows as $r) {
+            $parent = $items[(int)$r['plugin_sprint_sprintitems_id']] ?? null;
+            if ($parent === null) {
+                continue;
+            }
+            $catId = (int)($parent['plugin_sprint_sprintcategories_id'] ?? 0);
+            self::csvRow($out, [
+                (string)$parent['name'],
+                $catId > 0 ? SprintCategory::getFullNameFor($catId) : __('No category', 'sprint'),
+                ((int)$parent['users_id'] > 0) ? SprintCache::userName((int)$parent['users_id']) : __('Unassigned', 'sprint'),
+                SprintCache::userName((int)$r['users_id']),
+                SprintMember::formatCapacity($r['capacity']),
+                ((int)($r['is_resolved'] ?? 0) === 1) ? __('Yes') : __('No'),
+                (string)($r['comment'] ?? ''),
+                (string)($r['date_creation'] ?? ''),
+            ]);
+        }
     }
 
     private static function renderPrintStyles(): void
@@ -1151,7 +1727,7 @@ class SprintExport extends CommonGLPI
             [aria-label*=\"notification\" i], [title*=\"notification\" i],
             .nav-tabs, .nav.nav-tabs, ul.nav-tabs, .nav-tabs-container,
             .tab-content > .nav, .glpi-form-tabs, .tabs-bg,
-            .sprint-export-toolbar, .alert.alert-info { display: none !important; }
+            .sprint-export-toolbar, .alert.alert-info, .sprint-csv-modal { display: none !important; }
             body, .container, .container-fluid, #page, #page > .container-fluid,
             main, .main-content, .tab-content, .tab-pane, .card, .card-body {
                 margin: 0 !important;

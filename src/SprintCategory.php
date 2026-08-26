@@ -157,6 +157,25 @@ class SprintCategory extends CommonDBTM
         return $html;
     }
 
+    /**
+     * Active-category <option> list, extended with $selected when that
+     * category has since been deactivated — so editing an item never silently
+     * drops a category the admin took out of circulation.
+     */
+    public static function dropdownOptionsPreserving(int $selected): string
+    {
+        $html   = self::dropdownOptions($selected);
+        $active = self::getAll(true);
+        if ($selected > 0 && !isset($active[$selected])) {
+            $name = self::getFullNameFor($selected);
+            if ($name !== '') {
+                $html .= "<option value='" . $selected . "' selected>"
+                    . htmlescape($name) . ' (' . __('inactive', 'sprint') . ")</option>";
+            }
+        }
+        return $html;
+    }
+
     public static function getColorFor(int $id): string
     {
         $all = self::getAll(false);

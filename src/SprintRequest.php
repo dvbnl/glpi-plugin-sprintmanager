@@ -13,6 +13,7 @@ use Session;
  * Scrum Master:
  *  - 'assign':   move a backlog item into its pre-selected sprint
  *  - 'capacity': change an item's capacity % inside a sprint
+ *  - 'category': change an item's backlog category inside a sprint
  * Accepting performs the action; rejecting only closes the request.
  */
 class SprintRequest extends CommonDBTM
@@ -21,6 +22,10 @@ class SprintRequest extends CommonDBTM
 
     const TYPE_ASSIGN   = 'assign';
     const TYPE_CAPACITY = 'capacity';
+    const TYPE_CATEGORY = 'category';
+
+    /** Every request type this class knows how to create and accept. */
+    const ALL_TYPES = [self::TYPE_ASSIGN, self::TYPE_CAPACITY, self::TYPE_CATEGORY];
 
     const STATUS_PENDING  = 'pending';
     const STATUS_ACCEPTED = 'accepted';
@@ -135,6 +140,13 @@ class SprintRequest extends CommonDBTM
                     . "COMMENT 'Requester motivation shown to the Scrum Master'"
                 );
             }
+            // Lazy migration: target category for 'category' requests.
+            if (!$DB->fieldExists($table, 'requested_category_id')) {
+                $DB->doQuery(
+                    "ALTER TABLE `{$table}` ADD COLUMN `requested_category_id` INT UNSIGNED NOT NULL DEFAULT 0 "
+                    . "COMMENT 'Requested backlog category for a category request'"
+                );
+            }
             return $ready = true;
         }
 
@@ -142,11 +154,12 @@ class SprintRequest extends CommonDBTM
         $default_collation = \DBConnection::getDefaultCollation();
         $query = "CREATE TABLE IF NOT EXISTS `{$table}` (
             `id`                           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity',
+            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity | category',
             `plugin_sprint_sprintitems_id` INT UNSIGNED NOT NULL DEFAULT 0,
-            `plugin_sprint_sprints_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Target sprint (assign) or the item sprint (capacity)',
+            `plugin_sprint_sprints_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Target sprint (assign) or the item sprint (capacity/category)',
             `users_id`                     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requester',
             `requested_capacity`           DECIMAL(5,1) NOT NULL DEFAULT 0,
+            `requested_category_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requested backlog category for a category request',
             `reason`                       TEXT NULL COMMENT 'Requester motivation shown to the Scrum Master',
             `status`                       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending | accepted | rejected',
             `users_id_validate`            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master who handled it',
@@ -170,10 +183,11 @@ class SprintRequest extends CommonDBTM
         int $itemId,
         int $sprintId,
         float $requestedCapacity = 0.0,
-        string $reason = ''
+        string $reason = '',
+        int $requestedCategoryId = 0
     ): int {
         if ($itemId <= 0 || $sprintId <= 0
-            || !in_array($type, [self::TYPE_ASSIGN, self::TYPE_CAPACITY], true)
+            || !in_array($type, self::ALL_TYPES, true)
             || !self::ensureTable()) {
             return 0;
         }
@@ -194,6 +208,7 @@ class SprintRequest extends CommonDBTM
                 'id'                       => (int)$first['id'],
                 'plugin_sprint_sprints_id' => $sprintId,
                 'requested_capacity'       => $requestedCapacity,
+                'requested_category_id'    => $requestedCategoryId,
                 'reason'                   => $reason,
                 'users_id'                 => (int)Session::getLoginUserID(),
             ]);
@@ -207,6 +222,7 @@ class SprintRequest extends CommonDBTM
             'plugin_sprint_sprints_id'     => $sprintId,
             'users_id'                     => (int)Session::getLoginUserID(),
             'requested_capacity'           => $requestedCapacity,
+            'requested_category_id'        => $requestedCategoryId,
             'reason'                       => $reason,
             'status'                       => self::STATUS_PENDING,
             'date_creation'                => $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s'),
@@ -329,6 +345,33 @@ class SprintRequest extends CommonDBTM
             return ['ok' => true, 'message' => __('Item assigned to sprint', 'sprint')];
         }
 
+        if ($type === self::TYPE_CATEGORY) {
+            if ((int)$item->fields['plugin_sprint_sprints_id'] !== $sprintId) {
+                $req->closeAs(self::STATUS_REJECTED);
+                return ['ok' => false, 'message' => __('The item is no longer part of this sprint.', 'sprint')];
+            }
+            $targetCategory = (int)$req->fields['requested_category_id'];
+            // A category purged while the request sat in the queue would
+            // silently reset the item to "no category"; refuse instead.
+            if ($targetCategory > 0 && SprintCategory::getNameFor($targetCategory) === '') {
+                $req->closeAs(self::STATUS_REJECTED);
+                return ['ok' => false, 'message' => __('The requested category no longer exists.', 'sprint')];
+            }
+            if (!$item->update([
+                'id'                                => (int)$item->getID(),
+                'plugin_sprint_sprintcategories_id' => $targetCategory,
+            ])) {
+                return ['ok' => false, 'message' => __('Could not update the category', 'sprint')];
+            }
+            $req->closeAs(self::STATUS_ACCEPTED);
+            return ['ok' => true, 'message' => sprintf(
+                __('Category updated to %s', 'sprint'),
+                $targetCategory > 0
+                    ? SprintCategory::getFullNameFor($targetCategory)
+                    : __('No category', 'sprint')
+            )];
+        }
+
         if ($type === self::TYPE_CAPACITY) {
             if ((int)$item->fields['plugin_sprint_sprints_id'] !== $sprintId) {
                 $req->closeAs(self::STATUS_REJECTED);
@@ -447,6 +490,7 @@ class SprintRequest extends CommonDBTM
         $typeLabels  = [
             self::TYPE_ASSIGN   => __('Assign to sprint', 'sprint'),
             self::TYPE_CAPACITY => __('Capacity change', 'sprint'),
+            self::TYPE_CATEGORY => __('Category change', 'sprint'),
         ];
 
         echo "<table class='tab_cadre_fixe sprint-themed' style='margin:0;'>";
@@ -487,6 +531,12 @@ class SprintRequest extends CommonDBTM
                     SprintMember::formatCapacity($current),
                     SprintMember::formatCapacity($row['requested_capacity'])
                 );
+            } elseif ($type === self::TYPE_CATEGORY) {
+                $noCategory = __('No category', 'sprint');
+                $currentCat = (int)($item->fields['plugin_sprint_sprintcategories_id'] ?? 0);
+                $targetCat  = (int)($row['requested_category_id'] ?? 0);
+                $details    = ($currentCat > 0 ? SprintCategory::getFullNameFor($currentCat) : $noCategory)
+                    . ' → ' . ($targetCat > 0 ? SprintCategory::getFullNameFor($targetCat) : $noCategory);
             }
 
             echo "<tr class='tab_bg_1 sprint-request-row' data-request-id='" . (int)$row['id'] . "'>";

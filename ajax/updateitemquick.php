@@ -93,6 +93,11 @@ if (array_key_exists('capacity_reason', $_POST)) {
     $update['_capacity_request_reason'] = (string)$_POST['capacity_reason'];
 }
 
+// Same for a guarded category edit (Scrum Master-only inside a sprint).
+if (array_key_exists('category_reason', $_POST)) {
+    $update['_category_request_reason'] = (string)$_POST['category_reason'];
+}
+
 // Meeting-view edits send the active meeting id; tag the resulting log rows
 // as meeting-sourced (activity chart skips them, audit shows a "via Meeting" badge).
 $meetingId = (int)($_POST['meeting_id'] ?? 0);
@@ -220,6 +225,9 @@ echo json_encode([
     'is_adhoc'             => (int)($item->fields['is_adhoc'] ?? 0),
     'is_parked'            => (int)($item->fields['is_parked'] ?? 0),
     'category_id'          => (int)($item->fields['plugin_sprint_sprintcategories_id'] ?? 0),
+    'category_name'        => GlpiPlugin\Sprint\SprintCategory::getFullNameFor((int)($item->fields['plugin_sprint_sprintcategories_id'] ?? 0)),
+    'category_pill_html'   => GlpiPlugin\Sprint\SprintCategory::renderPill((int)($item->fields['plugin_sprint_sprintcategories_id'] ?? 0)),
+    'category_cell_html'   => GlpiPlugin\Sprint\SprintItem::renderCategoryCell((int)($item->fields['plugin_sprint_sprintcategories_id'] ?? 0)),
     'tags'                 => $updatedTags,
     'done_checks_blob'     => implode('|', GlpiPlugin\Sprint\SprintAgility::checklist((string)($item->fields['done_checks'] ?? ''))),
     'epic_id'              => (int)($item->fields['plugin_sprint_sprintepics_id'] ?? 0),

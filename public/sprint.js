@@ -248,12 +248,14 @@
         var typeEl   = bar.querySelector('.sf-type');
         var tagEl    = bar.querySelector('.sf-tag');
         var sprintEl = bar.querySelector('.sf-sprint');
+        var catEl    = bar.querySelector('.sf-category');
         var text   = textEl   ? (textEl.value   || '').toLowerCase().trim() : '';
         var status = statusEl ? (statusEl.value || '').toString()           : '';
         var owner  = ownerEl  ? (ownerEl.value  || '').toString()           : '';
         var type   = typeEl   ? (typeEl.value   || '').toString()           : '';
         var tag    = tagEl    ? (tagEl.value    || '').toLowerCase()        : '';
         var sprint = sprintEl ? (sprintEl.value || '').toString()           : '';
+        var cat    = catEl    ? (catEl.value    || '').toString()           : '';
 
         var rows = [];
         for (var t = 0; t < tables.length; t++) {
@@ -289,6 +291,11 @@
             if (show && tag) {
                 var tagBlob = String(row.getAttribute('data-item-tags') || '');
                 if (tagBlob.indexOf('|' + tag + '|') === -1) { show = false; }
+            }
+            // '' = all categories; '0' explicitly means "no category", so the
+            // check is on !== '' rather than on truthiness.
+            if (show && cat !== '') {
+                if (String(parseInt(row.getAttribute('data-category-id'), 10) || 0) !== cat) { show = false; }
             }
             if (show && sprint) {
                 var rowSprint = String(row.getAttribute('data-proposed-sprint-id') || '0');
@@ -341,7 +348,7 @@
     function resetFilter(bar) {
         bar = resolveBar(bar);
         if (!bar) { return; }
-        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sf-type, .sf-tag, .sf-sprint, .sprint-audit-kind');
+        var inputs = bar.querySelectorAll('.sf-text, .sf-status, .sf-owner, .sf-type, .sf-tag, .sf-category, .sf-sprint, .sprint-audit-kind');
         for (var i = 0; i < inputs.length; i++) { inputs[i].value = ''; }
         applyFilter(bar);
     }
@@ -362,6 +369,7 @@
             case 'priority':     return parseInt(row.getAttribute('data-item-priority'),  10) || 0;
             case 'capacity':     return parseFloat(row.getAttribute('data-capacity')) || 0;
             case 'story_points': return parseInt(row.getAttribute('data-story-points'),  10) || 0;
+            case 'category':     return (row.getAttribute('data-category-name')      || '').toLowerCase();
             default: return '';
         }
     }
@@ -449,7 +457,7 @@
     document.addEventListener('change', function(ev) {
         var t = ev.target;
         if (!t || !t.classList) { return; }
-        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sf-type') || t.classList.contains('sf-tag') || t.classList.contains('sf-sprint') || t.classList.contains('sprint-audit-kind')) {
+        if (t.classList.contains('sf-status') || t.classList.contains('sf-owner') || t.classList.contains('sf-type') || t.classList.contains('sf-tag') || t.classList.contains('sf-category') || t.classList.contains('sf-sprint') || t.classList.contains('sprint-audit-kind')) {
             onSelectChange(t);
         }
     }, true);
@@ -496,7 +504,7 @@
     if (typeof window.jQuery === 'function') {
         window.jQuery(function($) {
             $(document).off('.sprintFilter')
-                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner, .sprint-filter-bar .sf-type, .sprint-filter-bar .sf-tag, .sprint-filter-bar .sf-sprint', function() {
+                .on('change.sprintFilter', '.sprint-filter-bar .sf-status, .sprint-filter-bar .sf-owner, .sprint-filter-bar .sf-type, .sprint-filter-bar .sf-tag, .sprint-filter-bar .sf-category, .sprint-filter-bar .sf-sprint', function() {
                     applyFilter(this);
                 })
                 .on('input.sprintFilter', '.sprint-filter-bar .sf-text', function() {
@@ -510,7 +518,7 @@
         if (!bar || bar.dataset.sprintFilterWired === '1') { return; }
         bar.dataset.sprintFilterWired = '1';
 
-        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sf-type, .sf-tag, .sf-sprint, .sprint-audit-kind');
+        var selects = bar.querySelectorAll('.sf-status, .sf-owner, .sf-type, .sf-tag, .sf-category, .sf-sprint, .sprint-audit-kind');
         for (var i = 0; i < selects.length; i++) {
             selects[i].addEventListener('change', function() { applyFilter(this); });
         }

@@ -132,7 +132,9 @@ class SprintFastlane extends CommonGLPI
 
             echo "<tr class='tab_bg_1' " . SprintItem::buildItemDataAttrs($row, $rowTags) . ">";
             echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
-                htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
+                htmlescape($row['name']) . "</a>"
+                . SprintCategory::renderPill((int)($row['plugin_sprint_sprintcategories_id'] ?? 0))
+                . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td>" . $linkedDisplay . "</td>";
             echo "<td><span class='sprint-badge {$statusClass}'>" . $statusLabel . "</span></td>";
             echo "<td>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";

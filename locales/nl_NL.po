@@ -3792,3 +3792,65 @@ msgstr "Waar de capaciteit van elk lid heen ging per backlogcategorie over de af
 
 msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
 msgstr "Waar de capaciteit van elk lid heen ging per backlogcategorie over de afgeronde sprints in deze periode. Een hoofdcategorie telt de subcategorieën mee; fastlane- en afhankelijkheidswerk telt bij elk daaraan toegewezen lid."
+
+msgid "Category change"
+msgstr "Categoriewijziging"
+
+#, php-format
+msgid "Category change to %s sent to the Scrum Master for approval."
+msgstr "Categoriewijziging naar %s ter goedkeuring naar de Scrum Master gestuurd."
+
+msgid "Category changes are sent to the Scrum Master for approval."
+msgstr "Categoriewijzigingen worden ter goedkeuring naar de Scrum Master gestuurd."
+
+#, php-format
+msgid "Category updated to %s"
+msgstr "Categorie gewijzigd naar %s"
+
+msgid "Columns for the item rows"
+msgstr "Kolommen voor de itemregels"
+
+msgid "Could not update the category"
+msgstr "Categorie kon niet worden bijgewerkt"
+
+msgid "Pick at least one category."
+msgstr "Kies minimaal één categorie."
+
+msgid "Pick at least one section and one column."
+msgstr "Kies minimaal één sectie en één kolom."
+
+msgid "Planned capacity"
+msgstr "Geplande capaciteit"
+
+msgid "Planned is the estimate the item was taken in with; realised is the actual figure, which falls back to the planned one where nothing was recorded."
+msgstr "Gepland is de schatting waarmee het item is opgenomen; gerealiseerd is het werkelijke cijfer, dat terugvalt op het geplande cijfer als er niets is vastgelegd."
+
+msgid "Realised capacity"
+msgstr "Gerealiseerde capaciteit"
+
+msgid "Sections"
+msgstr "Secties"
+
+msgid "Select all / none"
+msgstr "Alles / niets selecteren"
+
+msgid "Split the item rows into one block per category, each with its own subtotal"
+msgstr "Splits de itemregels in één blok per categorie, elk met een eigen subtotaal"
+
+msgid "Story points done"
+msgstr "Afgeronde story points"
+
+msgid "Subtotal"
+msgstr "Subtotaal"
+
+msgid "The requested category no longer exists."
+msgstr "De gevraagde categorie bestaat niet meer."
+
+msgid "Tick what the file should contain. Every ticked section is written as its own block, one after another."
+msgstr "Vink aan wat het bestand moet bevatten. Elke aangevinkte sectie wordt als een eigen blok weggeschreven, na elkaar."
+
+msgid "Totals per category"
+msgstr "Totalen per categorie"
+
+msgid "inactive"
+msgstr "inactief"

@@ -713,6 +713,9 @@ class SprintMeeting extends CommonDBTM
                     'fastlane_url'         => SprintItem::getFormURLWithID((int)$row['id']) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintFastlaneMember$1'),
                     'tags_blob'            => SprintItem::tagsToBlob($rowTags),
                     'tags_pills_html'      => SprintItem::renderTagPills($rowTags),
+                    'category_id'          => (int)($row['plugin_sprint_sprintcategories_id'] ?? 0),
+                    'category_name'        => SprintCategory::getFullNameFor((int)($row['plugin_sprint_sprintcategories_id'] ?? 0)),
+                    'category_pill_html'   => SprintCategory::renderPill((int)($row['plugin_sprint_sprintcategories_id'] ?? 0)),
                     'deps_open'            => $rowDeps,
                     'deps_open_count'      => count($rowDeps),
                     'newly_blocked'        => $newlyBlocked,
@@ -766,6 +769,10 @@ class SprintMeeting extends CommonDBTM
                 'capacity_locked'   => \GlpiPlugin\Sprint\Config::isScrumMasterOnlyCapacity()
                     && !SprintItem::currentUserIsScrumMasterOf($sprintId),
                 'is_scrum_master'   => SprintItem::currentUserIsScrumMasterOf($sprintId),
+                // Category is Scrum Master territory inside a sprint; everyone
+                // else raises an approval request (see SprintRequest).
+                'categories'        => SprintCategory::getAll(),
+                'category_locked'   => $sprintId > 0 && !SprintItem::currentUserIsScrumMasterOf($sprintId),
                 'defined_tags'      => \GlpiPlugin\Sprint\Config::getDefinedTags(),
                 'guided'            => $guided,
             ]

@@ -91,6 +91,8 @@
                     data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"
                     data-note="{{ si.note }}"
                     data-item-tags="{{ si.tags_blob|default('|') }}"
+                    data-category-id="{{ si.category_id|default(0) }}"
+                    data-category-name="{{ si.category_name|default('') }}"
                     data-linked-itemtype="{{ si.itemtype }}"
                     data-fastlane-url="{{ si.fastlane_url }}"
                     data-fastlane-allocations="{{ si.fastlane_allocations|default([])|json_encode|e('html_attr') }}">
@@ -111,6 +113,7 @@
                         <i class="fas fa-bolt" style="color:#fd7e14;margin-right:4px;"></i>
                         <a href="{{ si.url }}">{{ si.name }}</a>{{ si.project_suffix_html|default('')|raw }}
                         {% if si.is_adhoc %}<span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>{% endif %}
+                        {{ si.category_pill_html|default('')|raw }}
                         {{ si.tags_pills_html|default('')|raw }}
                     </td>
                     <td class="sprint-review-linked">{{ si.linked_display|raw }}</td>
@@ -298,6 +301,8 @@
                     data-is-adhoc="{{ si.is_adhoc ? '1' : '0' }}"
                     data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"
                     data-item-tags="{{ si.tags_blob|default('|') }}"
+                    data-category-id="{{ si.category_id|default(0) }}"
+                    data-category-name="{{ si.category_name|default('') }}"
                     data-linked-itemtype="{{ si.itemtype }}"
                     data-note="{{ si.note }}">
                     <td class="text-center" style="white-space:nowrap;">
@@ -313,7 +318,7 @@
                             <i class="fas fa-clipboard-list" style="color:#6c757d;" title="{{ __('Manual', 'sprint') }}"></i>
                         {% endif %}
                     </td>
-                    <td><a href="{{ si.url }}">{{ si.name }}</a>{{ si.project_suffix_html|default('')|raw }}{% if si.is_adhoc %} <span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>{% endif %}{{ si.tags_pills_html|default('')|raw }}</td>
+                    <td><a href="{{ si.url }}">{{ si.name }}</a>{{ si.project_suffix_html|default('')|raw }}{% if si.is_adhoc %} <span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>{% endif %}{{ si.category_pill_html|default('')|raw }}{{ si.tags_pills_html|default('')|raw }}</td>
                     <td class="sprint-review-linked">{{ si.linked_display|raw }}</td>
                     <td>
                         <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">

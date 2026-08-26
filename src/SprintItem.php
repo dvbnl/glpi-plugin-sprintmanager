@@ -223,6 +223,17 @@ class SprintItem extends CommonDBTM
             'name'     => __('Is Blocked', 'sprint'),
             'datatype' => 'bool',
         ];
+        // Also what names the field in the audit tab: history rows carry the
+        // search-option id, so without this a category change reads as a bare
+        // "Modified".
+        $tab[] = [
+            'id'        => 13,
+            'table'     => SprintCategory::getTable(),
+            'field'     => 'name',
+            'linkfield' => 'plugin_sprint_sprintcategories_id',
+            'name'      => __('Category', 'sprint'),
+            'datatype'  => 'dropdown',
+        ];
 
         return $tab;
     }
@@ -932,9 +943,10 @@ class SprintItem extends CommonDBTM
 
         // Filter bar for the items list (handled by window.SprintFilter).
         self::renderFilterBar('sprint-items-list-table', [
-            'statuses' => $statuses,
-            'owners'   => SprintMember::getSprintMemberOptions($ID),
-            'tags'     => Config::getDefinedTags(),
+            'statuses'   => $statuses,
+            'owners'     => SprintMember::getSprintMemberOptions($ID),
+            'tags'       => Config::getDefinedTags(),
+            'categories' => SprintCategory::getAll(),
         ]);
 
         $itemIds  = array_map(fn($r) => (int)$r['id'], $items);
@@ -946,6 +958,7 @@ class SprintItem extends CommonDBTM
         $sc = self::sortClickAttr('sprint-items-list-table');
         echo "<th class='sprint-sortable' data-sort-type='name' style='cursor:pointer;' {$sc}>" . __('Name') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
+        echo "<th class='sprint-sortable' data-sort-type='category' style='cursor:pointer;' {$sc}>" . __('Category', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th class='sprint-sortable' data-sort-type='status' style='cursor:pointer;' {$sc}>" . __('Status') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th class='sprint-sortable' data-sort-type='priority' style='cursor:pointer;' {$sc}>" . __('Priority') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th class='sprint-sortable' data-sort-type='story_points' style='cursor:pointer;' {$sc}>" . __('Story Points', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
@@ -957,7 +970,7 @@ class SprintItem extends CommonDBTM
         echo "</tr>";
 
         if (count($items) === 0) {
-            $cols = $canedit ? 8 : 7;
+            $cols = $canedit ? 9 : 8;
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
                 __('No items found', 'sprint') . "</td></tr>";
         }
@@ -986,6 +999,7 @@ class SprintItem extends CommonDBTM
                 . self::renderAdhocBadge($isAdhoc) . self::renderTagPills($rowTags) . self::renderDependencyBadge($rowDeps)
                 . self::renderLinkedItemOpenBadge($row) . "</td>";
             echo "<td class='sprint-row-linked'>" . $linkedDisplay . "</td>";
+            echo "<td class='sprint-cell-category'>" . self::renderCategoryCell((int)($row['plugin_sprint_sprintcategories_id'] ?? 0)) . "</td>";
             echo "<td class='sprint-cell-status'><span class='sprint-badge {$statusClass}'>" .
                 $statusLabel . "</span></td>";
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
@@ -1204,6 +1218,8 @@ HTML;
             'data-linked-itemtype'   => (string)($row['itemtype'] ?? ''),
             'data-done-checks'       => implode('|', SprintAgility::checklist((string)($row['done_checks'] ?? ''))),
             'data-epic-id'           => (int)($row['plugin_sprint_sprintepics_id'] ?? 0),
+            'data-category-id'       => (int)($row['plugin_sprint_sprintcategories_id'] ?? 0),
+            'data-category-name'     => SprintCategory::getFullNameFor((int)($row['plugin_sprint_sprintcategories_id'] ?? 0)),
         ];
 
         $parts = [];
@@ -1236,6 +1252,16 @@ HTML;
         return " <span class='sprint-adhoc-badge' title='"
             . htmlescape(__('Added to the sprint after kick-off', 'sprint')) . "'>"
             . "<i class='fas fa-plus-circle'></i> " . __('Adhoc', 'sprint') . "</span>";
+    }
+
+    /**
+     * Category cell/pill for a sprint item. Falls back to a muted dash so a
+     * categoryless item still reads as "deliberately empty".
+     */
+    public static function renderCategoryCell(int $categoryId): string
+    {
+        $pill = SprintCategory::renderPill($categoryId);
+        return $pill !== '' ? ltrim($pill) : "<span class='text-muted'>-</span>";
     }
 
     /** Inline tag-pill markup appended to the name cell. */
@@ -1297,9 +1323,10 @@ HTML;
      */
     public static function renderFilterBar(string $tableClass, array $options): void
     {
-        $statuses = $options['statuses'] ?? [];
-        $owners   = $options['owners']   ?? [];
-        $tags     = $options['tags']     ?? [];
+        $statuses   = $options['statuses']   ?? [];
+        $owners     = $options['owners']     ?? [];
+        $tags       = $options['tags']       ?? [];
+        $categories = $options['categories'] ?? [];
         $barId    = 'sprint-filter-' . mt_rand();
         $tc       = htmlescape($tableClass);
 
@@ -1340,6 +1367,14 @@ HTML;
             foreach ($tags as $tag) {
                 echo "<option value='" . htmlescape(mb_strtolower($tag)) . "'>" . htmlescape($tag) . "</option>";
             }
+            echo "</select>";
+        }
+
+        if (!empty($categories)) {
+            echo "<select class='form-select form-select-sm sf-category' style='max-width:200px;'>";
+            echo "<option value=''>" . __('All categories', 'sprint') . "</option>";
+            echo "<option value='0'>" . __('No category', 'sprint') . "</option>";
+            echo SprintCategory::dropdownOptions();
             echo "</select>";
         }
 
@@ -1401,6 +1436,14 @@ HTML;
             && !self::currentUserIsScrumMasterOf($sprintId);
         $capacityLockedJs = $capacityLocked ? 'true' : 'false';
         $capacityRequestHint = __s('Capacity changes are sent to the Scrum Master for approval.', 'sprint');
+
+        // Category guard: the category feeds the per-category limits and every
+        // category figure on the dashboard, so inside a sprint only the Scrum
+        // Master applies it directly — everyone else raises a request.
+        $categoryOptions = SprintCategory::getAll();
+        $categoryLocked  = $sprintId > 0 && !self::currentUserIsScrumMasterOf($sprintId);
+        $categoryLockedJs = $categoryLocked ? 'true' : 'false';
+        $categoryRequestHint = __s('Category changes are sent to the Scrum Master for approval.', 'sprint');
         $lblNameFollows = addslashes(__('The name follows the linked item and cannot be edited here.', 'sprint'));
 
         $cfgRoot = 'CFG_GLPI.root_doc';
@@ -1455,6 +1498,20 @@ HTML;
                 echo "<label class='form-check d-block'>"
                     . "<input type='checkbox' class='form-check-input sprint-qe-dod' value='" . htmlescape($check) . "'>"
                     . "<span class='form-check-label'>" . htmlescape($check) . "</span></label>";
+            }
+            echo "</div>";
+        }
+
+        if (!empty($categoryOptions)) {
+            echo "<div class='mb-3 sprint-qe-category-block'><label class='form-label'>"
+                . "<i class='fas fa-folder me-1'></i>" . __('Category', 'sprint') . "</label>";
+            echo "<select name='plugin_sprint_sprintcategories_id' class='form-select'>";
+            echo "<option value='0'>" . __('No category', 'sprint') . "</option>";
+            echo SprintCategory::dropdownOptions();
+            echo "</select>";
+            if ($categoryLocked) {
+                echo "<div class='form-text small text-warning sprint-qe-category-hint'>"
+                    . "<i class='fas fa-user-shield me-1'></i>{$categoryRequestHint}</div>";
             }
             echo "</div>";
         }
@@ -1672,7 +1729,7 @@ $(function() {
         \$modal.find('.sprint-qe-error').hide().text('');
         \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity, .sprint-qe-capacity-actual').toggle(!isFastlane);
         \$modal.data('qe-is-fastlane', isFastlane ? 1 : 0);
-        \$modal.removeData('qe-capacity-reason');
+        \$modal.removeData('qe-request-reason');
         \$modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
         \$modal.find('.sprint-qe-dep-user').val('0');
         \$modal.find('.sprint-qe-dep-manage').attr(
@@ -1699,6 +1756,33 @@ $(function() {
 
         \$modal.find('select[name=plugin_sprint_sprintepics_id]').val(String(\$row.attr('data-epic-id') || '0'));
 
+        // Category + baseline for the guarded-category reason dialog on save.
+        (function() {
+            var \$cat = \$modal.find('select[name=plugin_sprint_sprintcategories_id]');
+            if (!\$cat.length) { return; }
+            // A row that carries no category attribute at all cannot be edited
+            // safely — submitting the select would write "no category" over
+            // whatever the item really has. Hide the block for those rows.
+            var known = typeof \$row.attr('data-category-id') !== 'undefined';
+            \$modal.data('qe-category-known', known ? 1 : 0);
+            \$modal.find('.sprint-qe-category-block').toggle(known);
+            if (!known) { \$modal.removeData('qe-orig-category'); return; }
+            var cur = String(parseInt(\$row.attr('data-category-id'), 10) || 0);
+            // Drop the placeholder a previous row may have left behind, then
+            // re-add one when this row carries a deactivated category — without
+            // it the select would fall back to "no category" and saving would
+            // silently clear a category the admin only took out of circulation.
+            \$cat.find('option.sprint-qe-cat-legacy').remove();
+            if (cur !== '0' && !\$cat.find("option[value='" + cur + "']").length) {
+                \$cat.append(\$('<option class="sprint-qe-cat-legacy"></option>')
+                    .val(cur)
+                    .text(\$row.attr('data-category-name') || ('#' + cur)));
+            }
+            \$cat.val(cur);
+            if (\$cat.val() === null) { \$cat.val('0'); }
+            \$modal.data('qe-orig-category', \$cat.val());
+        })();
+
         // Guarded capacity for non-scrum-master users: the select stays
         // enabled, but a change is sent to the Scrum Master as an approval
         // request (see the hint under the select) — fastlane items stay free.
@@ -1715,25 +1799,39 @@ $(function() {
         var id = \$modal.find('input[name=id]').val();
         \$modal.find('.sprint-qe-error').hide().text('');
 
-        // Guarded capacity edits become an approval request: collect the
-        // requester's motivation for the Scrum Master first. Dismissing the
-        // dialog aborts the save; fastlane items are exempt like the guard.
+        // Guarded capacity/category edits become approval requests: collect
+        // the requester's motivation for the Scrum Master first. Dismissing the
+        // dialog aborts the save. Fastlane items are exempt from the capacity
+        // guard only — their category is still Scrum Master territory.
         var capacityGuarded = {$capacityLockedJs};
-        if (capacityGuarded
-            && parseInt(\$modal.data('qe-is-fastlane'), 10) !== 1
-            && !\$modal.data('qe-capacity-reason')
-            && typeof window.sprintRequestReason === 'function') {
+        var categoryGuarded = {$categoryLockedJs};
+        var isFastlaneItem  = parseInt(\$modal.data('qe-is-fastlane'), 10) === 1;
+
+        var capChanged = false;
+        if (capacityGuarded && !isFastlaneItem) {
             var origCap = parseFloat(\$modal.data('qe-orig-capacity'));
             if (isNaN(origCap)) { origCap = 0; }
             var newCap = parseFloat(\$modal.find('select[name=capacity]').val());
             if (isNaN(newCap)) { newCap = 0; }
-            if (newCap !== origCap) {
-                window.sprintRequestReason(function(reason){
-                    \$modal.data('qe-capacity-reason', reason);
-                    \$btn.trigger('click');
-                });
-                return;
-            }
+            capChanged = newCap !== origCap;
+        }
+        var categoryKnown = parseInt(\$modal.data('qe-category-known'), 10) === 1;
+        var \$catSel = \$modal.find('select[name=plugin_sprint_sprintcategories_id]');
+        var catChanged = categoryGuarded
+            && categoryKnown
+            && \$catSel.length > 0
+            && String(\$catSel.val()) !== String(\$modal.data('qe-orig-category'));
+
+        // One dialog covers both: a single motivation is stored against every
+        // request this save raises.
+        if ((capChanged || catChanged)
+            && !\$modal.data('qe-request-reason')
+            && typeof window.sprintRequestReason === 'function') {
+            window.sprintRequestReason(function(reason){
+                \$modal.data('qe-request-reason', reason);
+                \$btn.trigger('click');
+            });
+            return;
         }
 
         function runSave(confirmOverflow) {
@@ -1770,7 +1868,11 @@ $(function() {
                         : undefined,
                     note: \$modal.find('textarea[name=note]').val(),
                     carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
-                    capacity_reason: \$modal.data('qe-capacity-reason') || undefined,
+                    capacity_reason: \$modal.data('qe-request-reason') || undefined,
+                    category_reason: \$modal.data('qe-request-reason') || undefined,
+                    plugin_sprint_sprintcategories_id: (categoryKnown && \$catSel.length)
+                        ? \$catSel.val()
+                        : undefined,
                     plugin_sprint_sprintepics_id: \$modal.find('select[name=plugin_sprint_sprintepics_id]').length
                         ? \$modal.find('select[name=plugin_sprint_sprintepics_id]').val()
                         : undefined,
@@ -1851,6 +1953,31 @@ $(function() {
                 }
                 if (typeof resp.epic_id !== 'undefined') {
                     \$row.attr('data-epic-id', resp.epic_id).data('epic-id', resp.epic_id);
+                }
+                // Category: refresh the row attrs plus whichever presentation
+                // this page uses — a dedicated column on the items list, an
+                // inline pill on Kanban cards and fastlane rows. A guarded edit
+                // leaves the item untouched, so the server value always wins.
+                if (typeof resp.category_id !== 'undefined') {
+                    var \$catCard = \$('.sprint-kanban-card[data-item-id="' + id + '"]');
+                    \$row.add(\$catCard)
+                        .attr('data-category-id', resp.category_id)
+                        .attr('data-category-name', resp.category_name || '');
+                    \$row.add(\$catCard).each(function() {
+                        var \$r    = \$(this);
+                        var \$cell = \$r.find('.sprint-cell-category');
+                        if (\$cell.length) {
+                            \$cell.html(resp.category_cell_html || '');
+                            return;
+                        }
+                        // Inline pill: drop the old one, re-anchor the fresh
+                        // one right after the item link so it lands where the
+                        // server-side renderer would have put it.
+                        \$r.find('.sprint-category-pill').remove();
+                        if (!resp.category_pill_html) { return; }
+                        var \$anchor = \$r.find("a[href*='sprintitem.form.php']").first();
+                        if (\$anchor.length) { \$anchor.after(resp.category_pill_html); }
+                    });
                 }
                 // Live "Linked item open" badge: shows/hides with the fresh
                 // status instead of waiting for a page reload.
@@ -2145,7 +2272,7 @@ $(function() {
 });
 </script>
 JS;
-        // Reason dialog for guarded capacity edits (approval requests).
+        // Reason dialog for guarded capacity/category edits (approval requests).
         SprintRequest::renderReasonModalUI();
     }
 
@@ -2618,6 +2745,42 @@ JS;
                     );
                 }
                 unset($input['capacity']);
+            }
+        }
+
+        // Category drives the per-category capacity limits and every
+        // category figure on the dashboard, so inside a sprint it is a Scrum
+        // Master decision. A change by anyone else becomes a pending
+        // SprintRequest instead of being applied; on the backlog the category
+        // stays freely editable by everyone with edit rights.
+        if (array_key_exists('plugin_sprint_sprintcategories_id', $input)) {
+            $sprintId    = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+            $currentCat  = (int)($this->fields['plugin_sprint_sprintcategories_id'] ?? 0);
+            $requestedCat = (int)$input['plugin_sprint_sprintcategories_id'];
+            if (
+                $sprintId > 0
+                && $requestedCat !== $currentCat
+                && !self::currentUserIsScrumMasterOf($sprintId)
+            ) {
+                SprintRequest::createPending(
+                    SprintRequest::TYPE_CATEGORY,
+                    (int)$this->getID(),
+                    $sprintId,
+                    0.0,
+                    trim((string)($input['_category_request_reason'] ?? '')),
+                    $requestedCat
+                );
+                Session::addMessageAfterRedirect(
+                    sprintf(
+                        __('Category change to %s sent to the Scrum Master for approval.', 'sprint'),
+                        $requestedCat > 0
+                            ? SprintCategory::getFullNameFor($requestedCat)
+                            : __('No category', 'sprint')
+                    ),
+                    false,
+                    INFO
+                );
+                unset($input['plugin_sprint_sprintcategories_id']);
             }
         }
 
@@ -3410,6 +3573,26 @@ JS;
                 . "</div>";
         }
         echo "</td><td colspan='2'></td></tr>";
+
+        // Category. On the backlog anyone with edit rights sets it; inside a
+        // sprint it is Scrum Master territory and a change by anyone else
+        // becomes an approval request (enforced in prepareInputForUpdate()).
+        $categoryOptions = SprintCategory::getAll();
+        if (!empty($categoryOptions)) {
+            $currentCategory = (int)($this->fields['plugin_sprint_sprintcategories_id'] ?? 0);
+            echo "<tr class='tab_bg_1'>";
+            echo "<td><i class='fas fa-folder me-1'></i>" . __('Category', 'sprint') . "</td><td colspan='3'>";
+            echo "<select name='plugin_sprint_sprintcategories_id' class='form-select' style='max-width:340px;display:inline-block;'>";
+            echo "<option value='0'>" . __('No category', 'sprint') . "</option>";
+            echo SprintCategory::dropdownOptionsPreserving($currentCategory);
+            echo "</select>";
+            if ($sprintId > 0 && !self::currentUserIsScrumMasterOf($sprintId)) {
+                echo "<div class='text-muted small'><i class='fas fa-user-shield me-1'></i>"
+                    . htmlescape(__('Category changes are sent to the Scrum Master for approval.', 'sprint'))
+                    . "</div>";
+            }
+            echo "</td></tr>";
+        }
 
         echo "<tr class='tab_bg_1'><td>" . __('Description') . "</td>";
         echo "<td colspan='3'><textarea name='description' class='form-control' rows='6' cols='80'>" .

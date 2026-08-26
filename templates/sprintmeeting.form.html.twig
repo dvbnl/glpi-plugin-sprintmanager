@@ -254,6 +254,22 @@
                     }
                     $sel.val(match);
                 })();
+                // Category: a row carrying a deactivated category has no
+                // matching option — inject one so saving cannot silently reset
+                // it to "no category".
+                (function() {
+                    var $cat = $modal.find('select[name=plugin_sprint_sprintcategories_id]');
+                    if (!$cat.length) { return; }
+                    var cur = String(parseInt($row.attr('data-category-id'), 10) || 0);
+                    $cat.find('option.sprint-qe-cat-legacy').remove();
+                    if (cur !== '0' && !$cat.find("option[value='" + cur + "']").length) {
+                        $cat.append($('<option class="sprint-qe-cat-legacy"></option>')
+                            .val(cur)
+                            .text($row.attr('data-category-name') || ('#' + cur)));
+                    }
+                    $cat.val(cur);
+                    if ($cat.val() === null) { $cat.val('0'); }
+                })();
                 $modal.find('textarea[name=note]').val(note);
                 $modal.find('select[name=carry_over_to_sprint_id]').val('0');
                 $modal.find('.sprint-qe-error').hide().text('');
@@ -355,6 +371,9 @@
                                 ? $modal.find('select[name=capacity_actual]').val()
                                 : undefined,
                             note:         $modal.find('textarea[name=note]').val(),
+                            plugin_sprint_sprintcategories_id: $modal.find('select[name=plugin_sprint_sprintcategories_id]').length
+                                ? $modal.find('select[name=plugin_sprint_sprintcategories_id]').val()
+                                : undefined,
                             carry_over_to_sprint_id: $modal.find('select[name=carry_over_to_sprint_id]').val(),
                             meeting_id:   {{ meeting_id|default(0) }},
                             confirm_overflow: confirmOverflow ? 1 : 0,
@@ -433,6 +452,22 @@
                                 $nameLink.after(
                                     $('<span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint')|e('js') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint')|e('js') }}</span>')
                                 );
+                            }
+                        }
+
+                        // Category pill + attrs. A guarded edit leaves the item
+                        // untouched and only queues a request, so the server
+                        // value is always the one to render.
+                        if (typeof resp.category_id !== 'undefined') {
+                            $row.attr('data-category-id', resp.category_id).data('category-id', resp.category_id);
+                            $row.attr('data-category-name', resp.category_name || '').data('category-name', resp.category_name || '');
+                            $row.find('.sprint-category-pill').remove();
+                            if (resp.category_pill_html) {
+                                var $catAnchor = $row.find('td a').filter(function() {
+                                    var href = $(this).attr('href');
+                                    return !$(this).hasClass('btn') && href && href.indexOf('sprintitem.form.php') !== -1;
+                                }).first();
+                                if ($catAnchor.length) { $catAnchor.after(resp.category_pill_html); }
                             }
                         }
 
@@ -577,6 +612,23 @@
                                 <span class="sprint-adhoc-badge"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>
                                 {{ __('Added to the sprint after kick-off (highlights the item)', 'sprint') }}
                             </label>
+                        </div>
+                        {% endif %}
+
+                        {% if categories|default([])|length > 0 %}
+                        <div class="mb-3 sprint-qe-category-block">
+                            <label class="form-label"><i class="fas fa-folder me-1"></i>{{ __('Category', 'sprint') }}</label>
+                            <select name="plugin_sprint_sprintcategories_id" class="form-select">
+                                <option value="0">{{ __('No category', 'sprint') }}</option>
+                                {% for cid, cat in categories %}
+                                <option value="{{ cid }}">{% if cat.level|default(0) > 0 %}&nbsp;&nbsp;&nbsp;— {% endif %}{{ cat.name }}</option>
+                                {% endfor %}
+                            </select>
+                            {% if category_locked|default(false) %}
+                            <div class="form-text small text-warning">
+                                <i class="fas fa-user-shield me-1"></i>{{ __('Category changes are sent to the Scrum Master for approval.', 'sprint') }}
+                            </div>
+                            {% endif %}
                         </div>
                         {% endif %}
 

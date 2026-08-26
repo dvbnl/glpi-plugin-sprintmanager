@@ -202,6 +202,7 @@ class SprintBoard extends CommonGLPI
             echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;' title='" . __('Fastlane', 'sprint') . "'></i>";
         }
         echo "<a href='" . SprintItem::getFormURLWithID($itemId) . "'>" . htmlescape($row['name']) . "</a>";
+        echo SprintCategory::renderPill((int)($row['plugin_sprint_sprintcategories_id'] ?? 0));
         echo SprintItem::renderTagPills($rowTags);
         echo SprintItem::renderDependencyBadge($rowDeps);
         echo SprintItem::renderLinkedItemOpenBadge($row);

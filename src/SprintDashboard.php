@@ -362,7 +362,11 @@ class SprintDashboard extends CommonGLPI
                 . ' data-item-tags="' . htmlescape(SprintItem::tagsToBlob($rowTags)) . '"'
                 . ' data-note="' . htmlescape((string)($row['note'] ?? '')) . '"'
                 . ' data-done-checks="' . htmlescape(implode('|', SprintAgility::checklist((string)($row['done_checks'] ?? '')))) . '"'
-                . ' data-epic-id="' . (int)($row['epic_id'] ?? 0) . '"';
+                . ' data-epic-id="' . (int)($row['epic_id'] ?? 0) . '"'
+                // Quick edit writes the category back from this attribute — a
+                // row without it would save "no category" over a real one.
+                . ' data-category-id="' . (int)($row['category_id'] ?? 0) . '"'
+                . ' data-category-name="' . htmlescape(SprintCategory::getFullNameFor((int)($row['category_id'] ?? 0))) . '"';
 
             $rowDeps = $depsById[(int)$row['item_id']] ?? [];
             $linkedOpenBadge = SprintItem::renderLinkedItemOpenBadge([
@@ -379,7 +383,7 @@ class SprintDashboard extends CommonGLPI
                 (int)($row['items_id'] ?? 0)
             );
             $capacityChip = SprintItem::renderCapacityChip($row['capacity'] ?? 0);
-            echo "<td class='sprint-cell-name'><a href='{$row['url']}'>" . htmlescape($row['name']) . "</a>" . $projectSuffix . SprintItem::renderAdhocBadge($isAdhoc) . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . $linkedOpenBadge . $capacityChip . "</td>";
+            echo "<td class='sprint-cell-name'><a href='{$row['url']}'>" . htmlescape($row['name']) . "</a>" . $projectSuffix . SprintItem::renderAdhocBadge($isAdhoc) . SprintCategory::renderPill((int)($row['category_id'] ?? 0)) . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . $linkedOpenBadge . $capacityChip . "</td>";
             echo "<td>{$linkedDisplay}</td>";
             echo "<td class='sprint-cell-status'>{$row['status']}</td>";
             echo "<td class='sprint-cell-priority'>{$row['priority']}</td>";
@@ -669,7 +673,9 @@ class SprintDashboard extends CommonGLPI
             echo "<tr class='tab_bg_1' " . SprintItem::buildItemDataAttrs($row, $rowTags) . ">";
             echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
                 "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" .
-                htmlescape($row['name']) . "</a>" . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
+                htmlescape($row['name']) . "</a>"
+                . SprintCategory::renderPill((int)($row['plugin_sprint_sprintcategories_id'] ?? 0))
+                . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td>{$linkedDisplay}</td>";
             echo "<td><span class='sprint-badge' style='display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{$statusBg};'>" .
                 $statusLabel . "</span></td>";
@@ -946,6 +952,7 @@ class SprintDashboard extends CommonGLPI
                 'note'          => (string)($row['note'] ?? ''),
                 'done_checks'   => (string)($row['done_checks'] ?? ''),
                 'epic_id'       => (int)($row['plugin_sprint_sprintepics_id'] ?? 0),
+                'category_id'   => (int)($row['plugin_sprint_sprintcategories_id'] ?? 0),
                 'member_name'   => ((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : '',
                 'status'        => '<span class="sprint-badge ' . $statusClass . '" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:' . $statusBg . ';">' .
                                    ($statuses[$row['status']] ?? $row['status']) . '</span>',

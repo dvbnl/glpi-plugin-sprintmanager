@@ -3791,3 +3791,65 @@ msgstr "Where each member's capacity went per backlog category across the comple
 
 msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
 msgstr "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
+
+msgid "Category change"
+msgstr "Category change"
+
+#, php-format
+msgid "Category change to %s sent to the Scrum Master for approval."
+msgstr "Category change to %s sent to the Scrum Master for approval."
+
+msgid "Category changes are sent to the Scrum Master for approval."
+msgstr "Category changes are sent to the Scrum Master for approval."
+
+#, php-format
+msgid "Category updated to %s"
+msgstr "Category updated to %s"
+
+msgid "Columns for the item rows"
+msgstr "Columns for the item rows"
+
+msgid "Could not update the category"
+msgstr "Could not update the category"
+
+msgid "Pick at least one category."
+msgstr "Pick at least one category."
+
+msgid "Pick at least one section and one column."
+msgstr "Pick at least one section and one column."
+
+msgid "Planned capacity"
+msgstr "Planned capacity"
+
+msgid "Planned is the estimate the item was taken in with; realised is the actual figure, which falls back to the planned one where nothing was recorded."
+msgstr "Planned is the estimate the item was taken in with; realised is the actual figure, which falls back to the planned one where nothing was recorded."
+
+msgid "Realised capacity"
+msgstr "Realised capacity"
+
+msgid "Sections"
+msgstr "Sections"
+
+msgid "Select all / none"
+msgstr "Select all / none"
+
+msgid "Split the item rows into one block per category, each with its own subtotal"
+msgstr "Split the item rows into one block per category, each with its own subtotal"
+
+msgid "Story points done"
+msgstr "Story points done"
+
+msgid "Subtotal"
+msgstr "Subtotal"
+
+msgid "The requested category no longer exists."
+msgstr "The requested category no longer exists."
+
+msgid "Tick what the file should contain. Every ticked section is written as its own block, one after another."
+msgstr "Tick what the file should contain. Every ticked section is written as its own block, one after another."
+
+msgid "Totals per category"
+msgstr "Totals per category"
+
+msgid "inactive"
+msgstr "inactive"
