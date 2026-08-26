@@ -13,6 +13,12 @@
   <img src="https://img.shields.io/badge/GLPI-10.0%20%7C%2011.0-blue" alt="GLPI 10/11">
   <img src="https://img.shields.io/badge/PHP-8.1+-purple" alt="PHP 8.1+">
   <img src="https://img.shields.io/badge/License-GPLv3-green" alt="GPLv3">
+  <a href="https://buymeacoffee.com/therealdvb"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
+</p>
+
+<p align="center">
+  SprintManager is free and GPLv3. If it saves your team time, you can
+  <a href="https://buymeacoffee.com/therealdvb">buy me a coffee</a> ☕
 </p>
 
 ---
