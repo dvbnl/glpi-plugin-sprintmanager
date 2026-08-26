@@ -735,7 +735,7 @@ class Sprint extends CommonDBTM
             . htmlescape(__('Danger zone', 'sprint'))
             . "</div>";
         echo "<div class='card-body'>";
-        echo "<p class='mb-3 small text-muted'>"
+        echo "<p class='mb-3 sprint-small text-muted'>"
             . htmlescape(__('Permanent deletion is restricted to the Scrum Master and bypasses the trash. Use this only when the sprint should leave no trace.', 'sprint'))
             . "</p>";
         echo "<form method='post' action='" . htmlescape(self::getFormURL()) . "'>";

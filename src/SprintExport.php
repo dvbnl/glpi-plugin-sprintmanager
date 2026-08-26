@@ -1005,7 +1005,7 @@ class SprintExport extends CommonGLPI
         echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
         echo "</div>";
         echo "<div class='modal-body'>";
-        echo "<p class='text-muted small'>"
+        echo "<p class='text-muted sprint-small'>"
             . htmlescape(__('Tick what the file should contain. Every ticked section is written as its own block, one after another.', 'sprint'))
             . "</p>";
 
@@ -1034,7 +1034,7 @@ class SprintExport extends CommonGLPI
                 . "<span class='form-check-label'>" . htmlescape($label) . "</span></label>";
         }
         echo "</div>";
-        echo "<div class='form-text small text-muted'>"
+        echo "<div class='form-text sprint-small text-muted'>"
             . htmlescape(__('Planned is the estimate the item was taken in with; realised is the actual figure, which falls back to the planned one where nothing was recorded.', 'sprint'))
             . "</div></div>";
 
@@ -1061,7 +1061,7 @@ class SprintExport extends CommonGLPI
             . "</label>";
         echo "</div></div>";
 
-        echo "<div class='alert alert-warning py-2 small sprint-csv-error' style='display:none;'></div>";
+        echo "<div class='alert alert-warning py-2 sprint-small sprint-csv-error' style='display:none;'></div>";
         echo "</div>"; // modal-body
 
         echo "<div class='modal-footer'>";

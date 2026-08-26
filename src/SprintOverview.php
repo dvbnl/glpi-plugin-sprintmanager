@@ -159,7 +159,7 @@ class SprintOverview extends CommonGLPI
 
         $chart = self::trimToChartWindow($data);
         if ($chart['dropped'] > 0) {
-            echo "<div class='text-muted small mb-2'><i class='fas fa-info-circle me-1'></i>"
+            echo "<div class='text-muted sprint-small mb-2'><i class='fas fa-info-circle me-1'></i>"
                 . sprintf(
                     __('Charts show the last %1$d of %2$d sprints in this period. The tiles cover all of them.', 'sprint'),
                     self::CHART_SPRINTS,
@@ -370,7 +370,7 @@ class SprintOverview extends CommonGLPI
                     echo "<td><div class='d-flex align-items-center gap-2'>"
                         . "<div class='progress progress-sm flex-grow-1'><div class='progress-bar bg-{$bar}' role='progressbar' "
                         . "style='width:{$width}%' aria-valuenow='{$width}' aria-valuemin='0' aria-valuemax='100'></div></div>"
-                        . "<span class='text-nowrap small'>{$pct}%</span>"
+                        . "<span class='text-nowrap sprint-small'>{$pct}%</span>"
                         . "</div></td>";
                     echo "<td class='text-end'>" . (int)$row['pts_done'] . "</td>";
                     echo "<td class='text-end'>" . (int)$row['pts_planned'] . "</td>";
@@ -487,7 +487,7 @@ class SprintOverview extends CommonGLPI
                         }
                     }
                     $bar .= "</div>";
-                    return $bar . "<div class='text-muted small mt-1 d-flex flex-wrap' style='gap:2px 12px;'>"
+                    return $bar . "<div class='text-muted sprint-small mt-1 d-flex flex-wrap' style='gap:2px 12px;'>"
                         . implode('', $chips) . "</div>";
                 };
 
@@ -943,7 +943,7 @@ class SprintOverview extends CommonGLPI
         }
         $sprints = array_values((new Sprint())->find($criteria, ['date_end ASC']));
         if (!$sprints) return;
-        echo "<div class='d-flex align-items-center justify-content-between mt-3 mb-2'><h3 class='m-0'><i class='fas fa-heart-pulse me-2 text-red'></i>" . __('Live sprint status', 'sprint') . "</h3><span class='text-muted small'>" . __('Kept separate from completed sprint statistics', 'sprint') . '</span></div>';
+        echo "<div class='d-flex align-items-center justify-content-between mt-3 mb-2'><h3 class='m-0'><i class='fas fa-heart-pulse me-2 text-red'></i>" . __('Live sprint status', 'sprint') . "</h3><span class='text-muted sprint-small'>" . __('Kept separate from completed sprint statistics', 'sprint') . '</span></div>';
         echo "<div class='row g-2 mb-4'>";
         foreach ($sprints as $sprint) {
             $sid = (int)$sprint['id'];
@@ -972,7 +972,7 @@ class SprintOverview extends CommonGLPI
             $url = Sprint::getFormURLWithID($sid);
             echo "<div class='col-12 col-xl-6'><a class='card card-sm h-100 text-reset text-decoration-none' href='" . htmlescape($url) . "'><div class='card-body'><div class='d-flex justify-content-between'><strong>" . htmlescape((string)$sprint['name']) . "</strong><span>" . $progress . "%</span></div>";
             echo "<div class='progress progress-sm my-2'><div class='progress-bar bg-blue' style='width:" . min(100, $progress) . "%'></div><span class='position-absolute border-start border-dark' style='left:" . $elapsed . "%'></span></div>";
-            echo "<div class='small text-muted mb-2'>" . sprintf(__('Progress %1$d%% · time elapsed %2$d%% · expected %3$d story points', 'sprint'), $progress, $elapsed, $expected) . "</div><div class='d-flex flex-wrap gap-2'>";
+            echo "<div class='sprint-small text-muted mb-2'>" . sprintf(__('Progress %1$d%% · time elapsed %2$d%% · expected %3$d story points', 'sprint'), $progress, $elapsed, $expected) . "</div><div class='d-flex flex-wrap gap-2'>";
             echo "<span class='badge bg-blue-lt'>" . sprintf(__('%d points remaining', 'sprint'), $remainingPoints) . "</span><span class='badge bg-red-lt'>" . sprintf(__('%d blocked', 'sprint'), $blocked) . "</span><span class='badge bg-teal-lt'>" . sprintf(__('%d dependencies', 'sprint'), $dependency) . "</span><span class='badge bg-orange-lt'>" . sprintf(__('%d WIP breaches', 'sprint'), $wipBreaches) . '</span>';
             if ($nextMeeting !== '') echo "<span class='badge bg-purple-lt'><i class='fas fa-calendar me-1'></i>" . Html::convDateTime($nextMeeting) . '</span>';
             echo '</div></div></a></div>';
@@ -1062,7 +1062,7 @@ class SprintOverview extends CommonGLPI
                 'value' => number_format($data['flow']['cycle_days'], 1),
                 'label' => __('Avg cycle time (days)', 'sprint'),
                 'delta' => $data['flow']['measured'] > 0
-                    ? "<div class='small text-muted'>" . sprintf(__('over %d items', 'sprint'), $data['flow']['measured']) . "</div>"
+                    ? "<div class='sprint-small text-muted'>" . sprintf(__('over %d items', 'sprint'), $data['flow']['measured']) . "</div>"
                     : '',
             ],
             [
@@ -1085,7 +1085,7 @@ class SprintOverview extends CommonGLPI
                 'value' => number_format($data['requests']['wait_days'], 1),
                 'label' => __('Avg approval wait (days)', 'sprint'),
                 'delta' => $data['requests']['total'] > 0
-                    ? "<div class='small text-muted'>" . sprintf(
+                    ? "<div class='sprint-small text-muted'>" . sprintf(
                         __('%1$d requests, %2$d%% accepted', 'sprint'),
                         $data['requests']['total'],
                         $data['requests']['accepted_pct']
@@ -1101,7 +1101,7 @@ class SprintOverview extends CommonGLPI
             echo "<span class='avatar bg-" . $tile['color'] . "-lt me-3'><i class='" . $tile['icon'] . "'></i></span>";
             echo "<div class='sprint-overview-tile-content'>";
             echo "<div class='h3 m-0 text-nowrap'>" . htmlescape($tile['value']) . "</div>";
-            echo "<div class='text-muted small'>" . htmlescape($tile['label']) . "</div>";
+            echo "<div class='text-muted sprint-small'>" . htmlescape($tile['label']) . "</div>";
             echo $tile['delta'];
             echo "</div></div></div></div>";
         }
@@ -1116,12 +1116,12 @@ class SprintOverview extends CommonGLPI
         }
         $pct = (($now - $before) / $before) * 100;
         if (abs($pct) < 1) {
-            return "<div class='small text-muted'>" . __('unchanged vs. previous period', 'sprint') . "</div>";
+            return "<div class='sprint-small text-muted'>" . __('unchanged vs. previous period', 'sprint') . "</div>";
         }
         $up    = $pct > 0;
         $good  = $lowerIsBetter ? !$up : $up;
         $arrow = $up ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
-        return "<div class='small " . ($good ? 'text-success' : 'text-danger') . "'>"
+        return "<div class='sprint-small " . ($good ? 'text-success' : 'text-danger') . "'>"
             . "<i class='fas " . $arrow . "'></i> " . sprintf('%+.0f%%', $pct)
             . " <span class='text-muted'>" . __('vs. previous period', 'sprint') . "</span></div>";
     }
@@ -2404,7 +2404,7 @@ class SprintOverview extends CommonGLPI
             }
             echo "<text x='" . ($l + $pw / 2) . "' y='" . ($h - 6) . "' text-anchor='middle' fill='var(--tblr-secondary)'>" . htmlescape(__('Average team load', 'sprint')) . "</text><text transform='translate(13 " . ($t + $ph / 2) . ") rotate(-90)' text-anchor='middle' fill='var(--tblr-secondary)'>" . htmlescape(__('Predictability', 'sprint')) . '</text></svg></div>';
 
-            echo "<div class='d-flex flex-wrap gap-3 mt-1 small text-muted'>";
+            echo "<div class='d-flex flex-wrap gap-3 mt-1 sprint-small text-muted'>";
             echo "<span><span style='display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid {$okColor};vertical-align:-2px;'></span> " . __('No blocked work', 'sprint') . "</span>";
             echo "<span><span style='display:inline-block;width:11px;height:11px;border-radius:50%;background:{$blockedColor};vertical-align:-2px;'></span> " . __('Blocked work', 'sprint') . "</span>";
             echo "<span>" . __('Bubble size = adhoc items', 'sprint') . "</span>";
@@ -2423,7 +2423,7 @@ class SprintOverview extends CommonGLPI
                 [__('Average waiting time', 'sprint'), number_format($dep['avg_age'], 1) . ' ' . __('days', 'sprint'), 'orange'],
                 [__('Linked work across sprints', 'sprint'), $dep['multi_sprint'], 'blue'],
                 [__('Without owner', 'sprint'), $dep['without_owner'], 'purple'],
-            ] as [$label, $value, $color]) echo "<div class='col-6 col-lg'><div class='border rounded p-3 h-100'><div class='h2 text-{$color} mb-1'>" . htmlescape((string)$value) . "</div><div class='text-muted small'>" . htmlescape($label) . '</div></div></div>';
+            ] as [$label, $value, $color]) echo "<div class='col-6 col-lg'><div class='border rounded p-3 h-100'><div class='h2 text-{$color} mb-1'>" . htmlescape((string)$value) . "</div><div class='text-muted sprint-small'>" . htmlescape($label) . '</div></div></div>';
             echo '</div>';
         });
     }
@@ -2471,7 +2471,7 @@ class SprintOverview extends CommonGLPI
         echo "<div class='" . $classes . "'><div class='card-body'>";
         echo "<h3 class='card-title'><i class='" . htmlescape($icon) . " me-2'></i>" . htmlescape($title) . "</h3>";
         if ($subtitle !== '') {
-            echo "<div class='text-muted small mb-2'>" . htmlescape($subtitle) . "</div>";
+            echo "<div class='text-muted sprint-small mb-2'>" . htmlescape($subtitle) . "</div>";
         }
         $body();
         echo "</div></div>";
@@ -2647,7 +2647,7 @@ class SprintOverview extends CommonGLPI
             echo "<td><div class='progress progress-sm'><div class='progress-bar bg-" . $color . "' "
                 . "role='progressbar' style='width:{$share}%' aria-valuenow='{$share}' aria-valuemin='0' aria-valuemax='100'></div></div></td>";
             echo "<td class='text-end text-nowrap'>" . (int)$row['value']
-                . " <span class='text-muted small'>" . htmlescape($unit) . "</span></td>";
+                . " <span class='text-muted sprint-small'>" . htmlescape($unit) . "</span></td>";
             echo "</tr>";
         }
         echo "</tbody></table>";

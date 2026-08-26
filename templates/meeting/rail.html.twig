@@ -20,8 +20,8 @@
     <span class="badge bg-blue-lt sprint-imp-cat">{{ categories[row.category]|default(row.category) }}</span>
     <span class="sprint-imp-desc flex-grow-1">{{ row.description|nl2br }}</span>
     {% if opts.show_owner|default(false) %}
-    <span class="sprint-imp-owner text-muted small"><i class="fas fa-user me-1"></i>{{ row.owner_name|default('') != '' ? row.owner_name : '—' }}</span>
-    {% if row.due_date %}<span class="sprint-imp-due text-muted small"><i class="far fa-calendar me-1"></i>{{ row.due_date }}</span>{% endif %}
+    <span class="sprint-imp-owner text-muted sprint-small"><i class="fas fa-user me-1"></i>{{ row.owner_name|default('') != '' ? row.owner_name : '—' }}</span>
+    {% if row.due_date %}<span class="sprint-imp-due text-muted sprint-small"><i class="far fa-calendar me-1"></i>{{ row.due_date }}</span>{% endif %}
     {% endif %}
     {% if opts.show_vote_btn|default(false) and opts.can_vote|default(false) %}
     <button type="button" class="btn btn-sm btn-link sprint-imp-vote-btn{{ row.voted_by_me|default(false) ? '' : ' text-muted' }}"
@@ -77,9 +77,9 @@
                   data-lbl-open="{{ __('Not started', 'sprint') }}"
                   data-lbl-in-progress="{{ __('In progress', 'sprint') }}"
                   data-lbl-completed="{{ __('Completed', 'sprint') }}"></span>
-            <span class="small text-muted sprint-meeting-step"></span>
-            <span class="small fw-bold sprint-meeting-timer" title="{{ __('Time in this phase', 'sprint') }}"></span>
-            <span class="sprint-meeting-phase-title small text-muted d-none d-md-inline"></span>
+            <span class="sprint-small text-muted sprint-meeting-step"></span>
+            <span class="sprint-small fw-bold sprint-meeting-timer" title="{{ __('Time in this phase', 'sprint') }}"></span>
+            <span class="sprint-meeting-phase-title sprint-small text-muted d-none d-md-inline"></span>
             <span style="flex:1;"></span>
             {% if guided.can_drive %}
             <button type="button" class="btn btn-sm btn-primary sprint-meeting-btn-start" data-sprint-action="meeting-start"
@@ -100,7 +100,7 @@
             {% endif %}
         </div>
         {% if guided.started_at or guided.ended_at %}
-        <div class="small text-muted mt-1 sprint-meeting-times">
+        <div class="sprint-small text-muted mt-1 sprint-meeting-times">
             {% if guided.started_at %}<span>{{ __('Started', 'sprint') }}: {{ guided.started_at }}</span>{% endif %}
             {% if guided.ended_at %}<span class="ms-2">{{ __('Ended', 'sprint') }}: {{ guided.ended_at }}</span>{% endif %}
         </div>
@@ -121,13 +121,13 @@
             <span class="sprint-phase-done-icon text-success ms-auto"><i class="fas fa-check-circle"></i></span>
         </div>
         <div class="sprint-phase-card-body">
-            <div class="text-muted small mb-2 sprint-phase-description">{{ phase.description }}</div>
+            <div class="text-muted sprint-small mb-2 sprint-phase-description">{{ phase.description }}</div>
 
             {% for block in phase.blocks %}
 
                 {% if block == 'sprint_goal' %}
                 <div class="sprint-phase-block sprint-phase-goal">
-                    <div class="d-flex flex-wrap gap-3 mb-2 small">
+                    <div class="d-flex flex-wrap gap-3 mb-2 sprint-small">
                         <span><i class="fas fa-flag-checkered me-1 text-primary"></i><strong>{{ guided.sprint_name }}</strong></span>
                         {% if guided.sprint_start or guided.sprint_end %}
                         <span class="text-muted"><i class="far fa-calendar me-1"></i>{{ guided.sprint_start }} → {{ guided.sprint_end }}</span>
@@ -188,7 +188,7 @@
                                     {% for si in items %}
                                     <li class="mb-1">
                                         <a href="{{ si.url }}">{{ si.name }}</a>
-                                        <span class="text-muted small">({{ si.story_points }} SP)</span>
+                                        <span class="text-muted sprint-small">({{ si.story_points }} SP)</span>
                                     </li>
                                     {% endfor %}
                                 </ul>
@@ -218,13 +218,13 @@
                                     <td><a href="{{ si.url }}">{{ si.name }}</a></td>
                                     <td><span class="sprint-badge" style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_bg[si.status]|default('#6c757d') }};">{{ item_statuses[si.status]|default(si.status) }}</span></td>
                                     <td>{{ member_options[si.users_id]|default('—') }}</td>
-                                    <td class="small text-muted">{{ si.note }}</td>
+                                    <td class="sprint-small text-muted">{{ si.note }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
-                    <div class="small text-muted">
+                    <div class="sprint-small text-muted">
                         <i class="fas fa-circle-info me-1"></i>{{ __('Use the carry-over and back-to-backlog actions in the walkthrough phase to decide where these items go.', 'sprint') }}
                     </div>
                     {% else %}
@@ -257,7 +257,7 @@
                                    placeholder="{{ __('Improvement or action', 'sprint') }}">
                         </div>
                         <div class="col-md-2 col-lg-2">
-                            <label class="form-check form-check-inline mb-0 small" title="{{ __('Anonymous', 'sprint') }}">
+                            <label class="form-check form-check-inline mb-0 sprint-small" title="{{ __('Anonymous', 'sprint') }}">
                                 <input type="checkbox" class="form-check-input sprint-imp-add-anonymous" value="1">
                                 <span class="form-check-label"><i class="fas fa-user-secret"></i> {{ __('Anonymous', 'sprint') }}</span>
                             </label>
@@ -360,7 +360,7 @@
 
             {% if phase.has_notes %}
             <div class="sprint-phase-notes mt-3">
-                <label class="form-label small fw-bold mb-1">
+                <label class="form-label sprint-small fw-bold mb-1">
                     <i class="fas fa-pen me-1"></i>{{ __('Phase notes', 'sprint') }}
                     <span class="sprint-phase-note-saved text-success ms-2" style="display:none;"><i class="fas fa-check"></i> {{ __('Saved', 'sprint') }}</span>
                 </label>

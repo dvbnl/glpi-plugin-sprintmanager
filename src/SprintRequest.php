@@ -554,7 +554,7 @@ class SprintRequest extends CommonDBTM
                 echo Html::convDateTime($created);
                 $age = self::formatRequestAge($created);
                 if ($age !== '') {
-                    echo "<div class='text-muted small'>" . htmlescape($age) . "</div>";
+                    echo "<div class='text-muted sprint-small'>" . htmlescape($age) . "</div>";
                 }
             } else {
                 echo "<span class='text-muted'>-</span>";
@@ -565,7 +565,7 @@ class SprintRequest extends CommonDBTM
             $reason = trim((string)($row['reason'] ?? ''));
             echo "<td>" . htmlescape($details)
                 . ($reason !== ''
-                    ? "<div class='text-muted small fst-italic'>"
+                    ? "<div class='text-muted sprint-small fst-italic'>"
                         . "<i class='fas fa-comment-dots me-1'></i>" . htmlescape($reason) . "</div>"
                     : "")
                 . "</td>";
@@ -693,7 +693,7 @@ HTML;
       <div class="modal-body">
         <label class="form-label fw-bold">{$lblReason}</label>
         <textarea name="reason" class="form-control" rows="3" placeholder="{$phReason}"></textarea>
-        <div class="text-danger small mt-1 sprint-reqreason-error" style="display:none;">{$errReason}</div>
+        <div class="text-danger sprint-small mt-1 sprint-reqreason-error" style="display:none;">{$errReason}</div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$lblCancel}</button>

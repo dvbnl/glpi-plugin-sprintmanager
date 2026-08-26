@@ -3,6 +3,11 @@
  * Modern, clean design with GLPI compatibility
  */
 
+/* GLPI 10 forces `width: 1%` on `.small`; the plugin uses this instead (#3). */
+.sprint-small {
+    font-size: 0.875em;
+}
+
 /* === CSS Custom Properties === */
 :root {
     --sprint-done: #198754;
@@ -922,7 +927,7 @@ table.tab_cadre_fixe.sprint-themed {
 /* Keep tile icons fixed and give labels the remaining width. */
 .sprint-overview-tile > .avatar { flex: 0 0 auto; }
 .sprint-overview-tile-content { flex: 1 1 0; min-width: 0; }
-.sprint-overview-tile-content > .text-muted.small {
+.sprint-overview-tile-content > .text-muted.sprint-small {
     white-space: normal;
     word-break: normal;
     overflow-wrap: normal;

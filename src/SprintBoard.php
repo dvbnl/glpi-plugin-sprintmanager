@@ -296,7 +296,7 @@ class SprintBoard extends CommonGLPI
             . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>"
             . "</div>"
             . "<div class='modal-body'>"
-            . "<p class='text-muted small mb-2'>{$msgDod}</p>"
+            . "<p class='text-muted sprint-small mb-2'>{$msgDod}</p>"
             . "<div class='sprint-dod-list'></div>"
             . "</div>"
             . "<div class='modal-footer'>"
@@ -332,7 +332,7 @@ class SprintBoard extends CommonGLPI
                     var last='';
                     Array.from(body.querySelectorAll('.sprint-kanban-card')).sort(function(a,b){return String(a.dataset.ownerName).localeCompare(String(b.dataset.ownerName));}).forEach(function(card){
                         var name=card.dataset.ownerName||'{$unassignedJs}';
-                        if(card.style.display!== 'none' && name!==last){var h=document.createElement('div');h.className='sb-owner-lane small fw-bold text-muted mt-2 mb-1';h.textContent=name;body.appendChild(h);last=name;}
+                        if(card.style.display!== 'none' && name!==last){var h=document.createElement('div');h.className='sb-owner-lane sprint-small fw-bold text-muted mt-2 mb-1';h.textContent=name;body.appendChild(h);last=name;}
                         body.appendChild(card);
                     });
                 });

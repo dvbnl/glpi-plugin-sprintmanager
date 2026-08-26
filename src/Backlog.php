@@ -75,7 +75,7 @@ class Backlog
 
         if (self::isLinkedItemInAnySprint($itemtype, $itemId)) {
             echo "<div class='center' style='margin:8px 0;'>";
-            echo "<span class='text-muted small'>"
+            echo "<span class='text-muted sprint-small'>"
                 . "<i class='fas fa-info-circle me-1'></i>"
                 . __('Already linked to a sprint — use "Carry over to sprint" to move it between sprints.', 'sprint')
                 . "</span>";
@@ -139,9 +139,9 @@ class Backlog
         echo $chip('fas fa-user', __('Owner', 'sprint'), $ownerId > 0 ? htmlescape(SprintCache::userName($ownerId)) : $muted);
         $capValue = $capacity > 0 ? SprintMember::formatCapacity($capacity) . '%' : $muted;
         if ($plannedActual) {
-            $capValue .= " <span class='text-muted small'>" . __('planned', 'sprint') . "</span>"
+            $capValue .= " <span class='text-muted sprint-small'>" . __('planned', 'sprint') . "</span>"
                 . " · " . ($actualStr !== '' ? $actualStr . '%' : $muted)
-                . " <span class='text-muted small'>" . __('actual', 'sprint') . "</span>";
+                . " <span class='text-muted sprint-small'>" . __('actual', 'sprint') . "</span>";
         }
         echo $chip('fas fa-gauge-high', __('Est. capacity', 'sprint'), $capValue);
         echo $chip('fas fa-flag-checkered', __('Assign to sprint', 'sprint'), $sprintName !== '' ? htmlescape($sprintName) : $muted);
@@ -210,7 +210,7 @@ class Backlog
             'rand'  => $rand,
             'width' => '100%',
         ]);
-        echo "<div class='form-text small text-muted'>"
+        echo "<div class='form-text sprint-small text-muted'>"
             . __('Pre-selecting a sprint marks the item for the Scrum Master to assign at kick-off.', 'sprint') . "</div>";
         echo "</div>";
 
@@ -524,7 +524,7 @@ class Backlog
         echo "<span class='badge bg-secondary-lt sprint-backlog-cat-subcount' style='display:none;' title='"
             . __s('Items in the subcategories', 'sprint') . "'></span>";
         echo "<span style='flex:1;'></span>";
-        echo "<span class='text-muted small' style='font-weight:400;' title='"
+        echo "<span class='text-muted sprint-small' style='font-weight:400;' title='"
             . __s('Total estimated capacity on the backlog in this category', 'sprint') . "'>"
             . "<i class='fas fa-gauge-high me-1'></i>"
             . "<span class='sprint-backlog-cat-capsum'>{$capLabel}%</span></span>";
@@ -558,7 +558,7 @@ class Backlog
         echo "<span>" . __('Non-active (long term)', 'sprint') . "</span>";
         echo "<span class='badge bg-secondary'>" . $count . "</span>";
         echo "<span style='flex:1;'></span>";
-        echo "<span class='text-muted small' style='font-weight:400;'>"
+        echo "<span class='text-muted sprint-small' style='font-weight:400;'>"
             . __('Low-priority / long-term work, outside the active planning and capacity totals.', 'sprint') . "</span>";
         echo "</div>";
 
@@ -681,7 +681,7 @@ class Backlog
             'rand'  => 424243,
             'width' => '100%',
         ]);
-        echo "<div class='form-text small text-muted'>{$sprintHint}</div>";
+        echo "<div class='form-text sprint-small text-muted'>{$sprintHint}</div>";
         echo "</div>";
         echo "<div class='col-md-6 mb-3'><label class='form-label'>"
             . "<i class='fas fa-folder me-1'></i>" . __s('Category', 'sprint') . "</label>";
@@ -692,7 +692,7 @@ class Backlog
         echo "</div>";
 
         // Live capacity preview for the chosen owner in the chosen sprint.
-        echo "<div class='sprint-be-cap-preview alert py-2 small mb-3' style='display:none;'></div>";
+        echo "<div class='sprint-be-cap-preview alert py-2 sprint-small mb-3' style='display:none;'></div>";
 
         echo "<div class='d-flex gap-4 mb-2'>";
         echo "<div class='form-check form-switch'>";
@@ -1063,9 +1063,9 @@ HTML;
       </div>
       <div class="modal-body">
         <p class="text-muted sprint-deps-item-name fw-bold mb-2"></p>
-        <p class="text-muted small">{$hint}</p>
-        <div class="alert alert-warning py-1 small sprint-deps-status mb-2" style="display:none;"></div>
-        <div class="sprint-deps-list small mb-2"></div>
+        <p class="text-muted sprint-small">{$hint}</p>
+        <div class="alert alert-warning py-1 sprint-small sprint-deps-status mb-2" style="display:none;"></div>
+        <div class="sprint-deps-list sprint-small mb-2"></div>
         <div class="mb-2">
           <label class="form-label fw-bold">{$lblMember}</label>
           <select class="form-select sprint-deps-member"></select>
@@ -1324,7 +1324,7 @@ HTML;
         if ($dor) {
             $dorSection = "<hr class='my-3'><label class='form-label fw-bold'>"
                 . __s('Definition of Ready', 'sprint') . "</label>"
-                . "<p class='text-muted small mb-2'>"
+                . "<p class='text-muted sprint-small mb-2'>"
                 . __s('Confirm the checks that hold for the items you are assigning.', 'sprint') . "</p>";
             foreach ($dor as $check) {
                 $dorSection .= "<label class='form-check d-block'><input class='form-check-input sprint-dor-check' type='checkbox' value='"
@@ -1340,7 +1340,7 @@ HTML;
             . "<i class='fas fa-layer-group me-1'></i> {$lblBulkTitle}</h5>"
             . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button></div>";
         echo "<div class='modal-body'>";
-        echo "<p class='text-muted small'>{$lblBulkHint}</p>";
+        echo "<p class='text-muted sprint-small'>{$lblBulkHint}</p>";
         echo "<select class='form-select sprint-bulk-sprint-choice'>";
         echo "<option value='0'>{$lblBulkAll} (" . (int)$totalReady . ")</option>";
         foreach ($readyBySprint as $sid => $cnt) {
@@ -1366,7 +1366,7 @@ HTML;
             echo "<div class='modal-dialog modal-dialog-centered'><div class='modal-content'>";
             echo "<div class='modal-header'><h5 class='modal-title'><i class='fas fa-clipboard-check me-1'></i> {$lblDorTitle}</h5>"
                 . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button></div>";
-            echo "<div class='modal-body'><p class='text-muted small'>{$lblDorHint}</p>";
+            echo "<div class='modal-body'><p class='text-muted sprint-small'>{$lblDorHint}</p>";
             foreach ($dor as $check) {
                 echo "<label class='form-check d-block'><input class='form-check-input sprint-dor-single-check' type='checkbox' value='"
                     . htmlescape($check) . "'><span class='form-check-label'>" . htmlescape($check) . "</span></label>";
@@ -1738,7 +1738,7 @@ HTML;
             . "background:var(--tblr-bg-surface-secondary,#f8fafc);border-bottom:1px solid var(--tblr-border-color,#e2e8f0);'>";
         echo "<span style='font-weight:700;'><i class='fas fa-chart-simple me-1'></i>"
             . __('Capacity per category', 'sprint') . "</span>";
-        echo "<span class='text-muted small'>"
+        echo "<span class='text-muted sprint-small'>"
             . __('Capacity per category across the upcoming sprints: work already assigned plus backlog proposals, including dependencies and subcategories, against optional min/max limits.', 'sprint') . "</span>";
         echo "<span style='flex:1;'></span>";
         // Two views over the same window: category × sprint (the mix against
@@ -1761,7 +1761,7 @@ HTML;
                 . "<label class='btn btn-outline-secondary' for='sprint-capmode-actual'><i class='fas fa-stopwatch me-1'></i>" . __('Actual', 'sprint') . "</label>";
             echo "</div>";
         }
-        echo "<label class='text-muted small mb-0' for='sprint-backlog-horizon'>" . __('Horizon', 'sprint') . "</label>";
+        echo "<label class='text-muted sprint-small mb-0' for='sprint-backlog-horizon'>" . __('Horizon', 'sprint') . "</label>";
         echo "<select id='sprint-backlog-horizon' class='form-select form-select-sm sprint-backlog-horizon' style='max-width:140px;'>";
         foreach ([4, 8, 13] as $h) {
             echo "<option value='{$h}'>" . sprintf(_n('%d sprint', '%d sprints', $h, 'sprint'), $h) . "</option>";
@@ -1787,7 +1787,7 @@ HTML;
         echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
         echo "</div>";
         echo "<div class='modal-body'>";
-        echo "<div class='text-muted small mb-3'>{$lblHint}</div>";
+        echo "<div class='text-muted sprint-small mb-3'>{$lblHint}</div>";
         echo "<div class='sprint-limits-rows'></div>";
         echo "</div>";
         echo "<div class='modal-footer'>";
@@ -1930,7 +1930,7 @@ HTML;
             "<span class='sprint-limits-vals'>" +
             "<label>{$lblMin} <input type='number' class='form-control form-control-sm sprint-limit-min' min='0' max='" + SLIDER_MAX + "' step='0.5'></label>" +
             "<label>{$lblMax} <input type='number' class='form-control form-control-sm sprint-limit-max' min='0' max='" + SLIDER_MAX + "' step='0.5'></label>" +
-            "<span class='text-muted small'>%</span></span></div>" +
+            "<span class='text-muted sprint-small'>%</span></span></div>" +
             "<div class='sprint-limits-slider'>" +
             "<div class='sprint-limits-track'><div class='sprint-limits-fill'></div></div>" +
             "<input type='range' class='sprint-range-min' min='0' max='" + SLIDER_MAX + "' step='5'>" +
@@ -2281,7 +2281,7 @@ HTML;
         ob_start();
         echo "<div class='table-responsive' style='padding:6px 10px;'>";
         if ($actual) {
-            echo "<div class='small mb-1' style='color:#fd7e14;'><i class='fas fa-stopwatch me-1'></i>"
+            echo "<div class='sprint-small mb-1' style='color:#fd7e14;'><i class='fas fa-stopwatch me-1'></i>"
                 . __('Showing actual capacity; items without an actual figure count with their planned capacity.', 'sprint') . "</div>";
         }
         echo "<table class='table table-sm mb-1 sprint-backlog-matrix' style='min-width:640px;'>";
@@ -2291,7 +2291,7 @@ HTML;
             $sid = (int)$s['id'];
             $sub = !empty($s['date_start']) ? substr((string)$s['date_start'], 0, 10) : '';
             echo "<th class='text-center'>" . htmlescape((string)$s['name'])
-                . ($sub !== '' ? "<div class='text-muted small fw-normal'>{$sub}</div>" : '');
+                . ($sub !== '' ? "<div class='text-muted sprint-small fw-normal'>{$sub}</div>" : '');
             if (!empty($canCap[$sid])) {
                 // data-limits carries every category so the modal needs no fetch.
                 $data = [];
@@ -2338,7 +2338,7 @@ HTML;
                     ? htmlescape((string)$cat['name'])
                     : "<strong>" . htmlescape((string)$cat['name']) . "</strong>")
                 . ($hasKids
-                    ? " <span class='text-muted small' title='" . __s('Totals include the subcategories', 'sprint') . "'>"
+                    ? " <span class='text-muted sprint-small' title='" . __s('Totals include the subcategories', 'sprint') . "'>"
                         . sprintf(__('incl. %d sub', 'sprint'), count($childrenOf[$cid])) . "</span>"
                     : '')
                 . "</td>";
@@ -2396,7 +2396,7 @@ HTML;
                     echo "</div>";
                 }
                 if ($as > 0) {
-                    echo "<div class='text-muted small' title='"
+                    echo "<div class='text-muted sprint-small' title='"
                         . __s('Already assigned to this sprint', 'sprint') . "'>"
                         . "<i class='fas fa-lock me-1' style='font-size:0.8em;'></i>"
                         . SprintMember::formatCapacity($as) . "%</div>";
@@ -2414,19 +2414,19 @@ HTML;
                         $lbl = __('max', 'sprint') . ' ' . SprintMember::formatCapacity($max) . '%';
                         $parts[] = $over ? "<span class='text-danger fw-semibold'>{$lbl}</span>" : $lbl;
                     }
-                    echo "<div class='text-muted small'>" . implode(' · ', $parts) . "</div>";
+                    echo "<div class='text-muted sprint-small'>" . implode(' · ', $parts) . "</div>";
                 }
                 echo "</td>";
             }
             $u  = (float)($vLoad[$cid][0] ?? 0) + (float)($vLoad[$cid][-1] ?? 0);
             $un = (int)($vCount[$cid][0] ?? 0) + (int)($vCount[$cid][-1] ?? 0);
             echo "<td class='text-center'>" . ($u > 0
-                ? SprintMember::formatCapacity($u) . "% <span class='text-muted small'>(" . $un . ")</span>"
+                ? SprintMember::formatCapacity($u) . "% <span class='text-muted sprint-small'>(" . $un . ")</span>"
                 : "<span class='text-muted'>–</span>");
             $age = (int)($vOldest[$cid] ?? 0);
             if ($agingDays > 0 && $age >= $agingDays) {
                 $late = $age >= 2 * $agingDays;
-                echo "<div class='small' style='color:" . ($late ? '#dc3545' : '#d97706') . ";' title='"
+                echo "<div class='sprint-small' style='color:" . ($late ? '#dc3545' : '#d97706') . ";' title='"
                     . htmlescape(sprintf(
                         __('Oldest unplanned item in this category: %d days', 'sprint'),
                         $age
@@ -2460,7 +2460,7 @@ HTML;
             echo "<td class='text-center' style='{$bg}'>"
                 . "<span" . (($over && !$noTeam) ? " class='text-danger'" : '') . ">" . SprintMember::formatCapacity($t) . "%</span>";
             if ($tAssigned > 0) {
-                echo "<div class='text-muted small fw-normal' title='"
+                echo "<div class='text-muted sprint-small fw-normal' title='"
                     . __s('Already assigned to this sprint', 'sprint') . "'>"
                     . "<i class='fas fa-lock me-1' style='font-size:0.8em;'></i>"
                     . SprintMember::formatCapacity($tAssigned) . "%</div>";
@@ -2476,7 +2476,7 @@ HTML;
                     . "<i class='fas fa-user-slash me-1'></i>" . __('No members yet', 'sprint') . "</span></div>";
             }
             $away = $teamRaw[$sid] - $team[$sid];
-            echo "<div class='text-muted small fw-normal' title='"
+            echo "<div class='text-muted sprint-small fw-normal' title='"
                 . __s('Total team capacity of the selected sprint, with the availability exceptions of that sprint applied', 'sprint') . "'>"
                 . __('Team', 'sprint') . " " . SprintMember::formatCapacity($team[$sid]) . "%";
             if ($away > 0.05) {
@@ -2489,12 +2489,12 @@ HTML;
                 $reserveTip = (float)($sprints[$sid]['fastlane_capacity'] ?? 0) > 0
                     ? __s('Reserved for interrupt work: the fastlane capacity limit of this sprint, minus what is already assigned here', 'sprint')
                     : __s('Reserved for interrupt work: no fastlane limit set on this sprint, so the average fastlane load of the completed sprints is used, minus what is already assigned here', 'sprint');
-                echo "<div class='small fw-normal' style='color:#fd7e14;' title='{$reserveTip}'>"
+                echo "<div class='sprint-small fw-normal' style='color:#fd7e14;' title='{$reserveTip}'>"
                     . "<i class='fas fa-bolt me-1'></i>" . SprintMember::formatCapacity($reserve) . "%</div>";
             }
             if (!$noTeam) {
                 $free = $usable - $t;
-                echo "<div class='small fw-normal' style='color:" . ($free < 0 ? '#dc3545' : '#198754') . ";' title='"
+                echo "<div class='sprint-small fw-normal' style='color:" . ($free < 0 ? '#dc3545' : '#198754') . ";' title='"
                     . __s('Team capacity left after the assigned work, the backlog proposals and the fastlane reservation', 'sprint') . "'>"
                     . sprintf(__('free %s%%', 'sprint'), SprintMember::formatCapacity($free)) . "</div>";
             }
@@ -2504,7 +2504,7 @@ HTML;
         echo "</tr>";
         echo "</tbody></table>";
         if ($assign) {
-            echo "<div class='text-muted small' style='padding:0 4px 2px;'>"
+            echo "<div class='text-muted sprint-small' style='padding:0 4px 2px;'>"
                 . __('Solid bar = already assigned to the sprint, faded = still a backlog proposal.', 'sprint') . "</div>";
         }
         // Work supply: how many sprints the whole backlog represents at the
@@ -2512,7 +2512,7 @@ HTML;
         // figures explode for categories that rarely deliver.
         [$supply, $band] = $supplyFor($grandTotal);
         if ($histCount > 0) {
-            echo "<div class='text-muted small' style='padding:0 4px 6px;'>";
+            echo "<div class='text-muted sprint-small' style='padding:0 4px 6px;'>";
             if ($supply !== '') {
                 echo "<span title='"
                     . __s('Backlog capacity divided by the capacity the team delivered per sprint, never less than the configured category minimums.', 'sprint') . "'>"
@@ -2783,7 +2783,7 @@ HTML;
                 $out .= "</div>";
             }
             if ($cap > 0 && $sum > 0) {
-                $out .= "<div class='text-muted small'>" . $fmt($sum) . " / " . $fmt($cap) . "%</div>";
+                $out .= "<div class='text-muted sprint-small'>" . $fmt($sum) . " / " . $fmt($cap) . "%</div>";
             }
             if ($flags) {
                 $out .= "<div class='sprint-member-flags'>" . implode(' ', $flags) . "</div>";
@@ -2794,7 +2794,7 @@ HTML;
         ob_start();
         echo "<div class='table-responsive' style='padding:6px 10px;'>";
         if ($actual) {
-            echo "<div class='small mb-1' style='color:#fd7e14;'><i class='fas fa-stopwatch me-1'></i>"
+            echo "<div class='sprint-small mb-1' style='color:#fd7e14;'><i class='fas fa-stopwatch me-1'></i>"
                 . __('Showing actual capacity; items without an actual figure count with their planned capacity.', 'sprint') . "</div>";
         }
         if (!$sprintIds) {
@@ -2808,7 +2808,7 @@ HTML;
             $sub = !empty($s['date_start']) ? substr((string)$s['date_start'], 0, 10) : '';
             $cls = 'text-center' . ($sid === $firstFuture ? ' sprint-member-now' : '');
             echo "<th class='{$cls}'>" . htmlescape((string)$s['name'])
-                . ($sub !== '' ? "<div class='text-muted small fw-normal'>{$sub}</div>" : '')
+                . ($sub !== '' ? "<div class='text-muted sprint-small fw-normal'>{$sub}</div>" : '')
                 . "</th>";
         }
         echo "<th class='text-center' title='" . __s('Sprints in this window where the member sits above the maximum or below the minimum share of a category', 'sprint') . "'>"
@@ -2839,7 +2839,7 @@ HTML;
                     $parts[] = "<span style='color:#d97706;' title='" . htmlescape(sprintf(__('%1$d of %2$d sprints below the minimum share', 'sprint'), $u, $shown)) . "'>"
                         . "<i class='fas fa-arrow-down'></i> {$u}×</span>";
                 }
-                $sig[] = "<div class='small text-nowrap'>{$dot}" . htmlescape($catName($top)) . " " . implode(' ', $parts) . "</div>";
+                $sig[] = "<div class='sprint-small text-nowrap'>{$dot}" . htmlescape($catName($top)) . " " . implode(' ', $parts) . "</div>";
             }
             echo "<td class='text-start'>" . ($sig ? implode('', $sig) : "<span class='text-muted'>–</span>") . "</td>";
             echo "</tr>";
@@ -2868,7 +2868,7 @@ HTML;
         echo "</tbody></table>";
 
         // Legend + reading aid.
-        echo "<div class='text-muted small' style='padding:0 4px 2px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;'>";
+        echo "<div class='text-muted sprint-small' style='padding:0 4px 2px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;'>";
         foreach ($topCats as $top => $c) {
             echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:" . htmlescape((string)$c['color']) . ";margin-right:5px;vertical-align:middle;'></span>"
                 . htmlescape((string)$c['name']) . "</span>";
@@ -2876,7 +2876,7 @@ HTML;
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:#6c757d;margin-right:5px;vertical-align:middle;'></span>"
             . __('No category', 'sprint') . "</span>";
         echo "</div>";
-        echo "<div class='text-muted small' style='padding:0 4px 6px;'>"
+        echo "<div class='text-muted sprint-small' style='padding:0 4px 6px;'>"
             . __('Bar = share of the member\'s own capacity per category (subcategories rolled up). Percentages are the load against that capacity; the arrows compare the member\'s share with the sprint\'s category limits, read as a share of the team capacity. Backlog proposals that already have an owner are included.', 'sprint')
             . ' ' . sprintf(
                 __('Window: the next %d planned sprints. Realised work per member is on the sprint overview.', 'sprint'),
@@ -2914,7 +2914,7 @@ HTML;
             . "background:var(--tblr-bg-surface-secondary,#f8fafc);border-bottom:1px solid var(--tblr-border-color,#e2e8f0);'>";
         echo "<span style='font-weight:700;'><i class='fas fa-arrow-right-arrow-left me-1'></i>"
             . __('Backlog inflow vs outflow', 'sprint') . "</span>";
-        echo "<span class='text-muted small'>"
+        echo "<span class='text-muted sprint-small'>"
             . __('New backlog work versus work assigned or resolved, per week.', 'sprint') . "</span>";
         echo "<span style='flex:1;'></span>";
         echo "<select class='form-select form-select-sm sprint-backlog-flow-cat' style='max-width:220px;'>";
@@ -3004,7 +3004,7 @@ HTML;
             echo "</div>";
         }
         echo "</div>";
-        echo "<div class='text-muted small' style='display:flex;gap:14px;margin-top:6px;'>"
+        echo "<div class='text-muted sprint-small' style='display:flex;gap:14px;margin-top:6px;'>"
             . "<span><span style='display:inline-block;width:9px;height:9px;background:var(--tblr-primary,#0d6efd);border-radius:2px;'></span> "
             . __('Inflow (new on backlog)', 'sprint') . "</span>"
             . "<span><span style='display:inline-block;width:9px;height:9px;background:#fd7e14;border-radius:2px;'></span> "
@@ -3026,7 +3026,7 @@ HTML;
         echo "<span>" . __('Blocked items', 'sprint') . "</span>";
         echo "<span class='badge bg-danger'>" . $count . "</span>";
         echo "<span style='flex:1;'></span>";
-        echo "<span class='text-muted small sprint-backlog-blocked-hint' style='font-weight:400;'>"
+        echo "<span class='text-muted sprint-small sprint-backlog-blocked-hint' style='font-weight:400;'>"
             . __('Review periodically and unblock when ready.', 'sprint') . "</span>";
         echo "</div>";
 
@@ -3177,7 +3177,7 @@ HTML;
                 . "title='" . __('Drag to reorder — Ctrl/Cmd-click rows to select more and drag them together', 'sprint') . "'><i class='fas fa-grip-vertical'></i></td>";
         }
         if ($reorderable) {
-            echo "<td class='center'><span class='sprint-backlog-rank text-muted small fw-bold'>"
+            echo "<td class='center'><span class='sprint-backlog-rank text-muted sprint-small fw-bold'>"
                 . ($rank > 0 ? $rank : '') . "</span></td>";
         }
 
@@ -3312,7 +3312,7 @@ HTML;
             . "style='display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;"
             . "padding:10px;margin-bottom:12px;background:var(--tblr-bg-surface-secondary,#f8fafc);border:1px solid var(--tblr-border-color,#e2e8f0);border-radius:8px;'>";
 
-        echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
+        echo "<div class='d-flex align-items-center gap-1 text-muted sprint-small'>"
             . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
 
         echo "<input type='search' class='form-control form-control-sm sf-text' "

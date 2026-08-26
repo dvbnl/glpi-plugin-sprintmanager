@@ -1884,7 +1884,7 @@ class SprintDashboard extends CommonGLPI
             . "style='font-size:0.85em;'>";
         echo Html::hidden('id', ['value' => (int)$sprintId]);
         echo Html::hidden('forcetab', ['value' => $tab]);
-        echo "<span class='me-auto text-muted small align-self-center'>"
+        echo "<span class='me-auto text-muted sprint-small align-self-center'>"
             . __('Activity range follows the sprint window.', 'sprint')
             . "</span>";
         echo "<label class='d-flex flex-column' style='gap:2px;'>"

@@ -104,6 +104,28 @@ if (!str_contains($backlog, 'sprint-backlog-blocked-hint')
     fwrite(STDERR, "Blocked backlog hint must retain its readable intrinsic width\n");
     exit(1);
 }
+// GLPI 10 forces `width: 1%` on `.small`; only `.sprint-small` is allowed (#3).
+if (!str_contains($css, '.sprint-small {')) {
+    fwrite(STDERR, "css/sprint.css must define .sprint-small (GLPI 10 forces width:1% on .small)\n");
+    exit(1);
+}
+$markup = [];
+foreach (['src', 'ajax', 'front'] as $dir) {
+    $markup = array_merge($markup, glob($root . '/' . $dir . '/*.php'));
+}
+$markup = array_merge($markup, glob($root . '/templates/*.twig'), glob($root . '/templates/*/*.twig'));
+foreach ($markup as $file) {
+    $body = (string)file_get_contents($file);
+    preg_match_all('/(?:class\s*=\s*|className\s*=\s*)([\'"])(.*?)\1/s', $body, $attrs, PREG_SET_ORDER);
+    foreach ($attrs as $attr) {
+        if (preg_match('/(?<![\w-])small(?![\w-])/', $attr[2])) {
+            $rel = substr($file, strlen($root) + 1);
+            fwrite(STDERR, "{$rel}: use `sprint-small`, not Bootstrap's `small` class — "
+                . "GLPI 10 forces width:1% on it (issue #3): {$attr[2]}\n");
+            exit(1);
+        }
+    }
+}
 foreach (['js/sprint.js' => 'public/sprint.js', 'css/sprint.css' => 'public/sprint.css'] as $source => $copy) {
     if (md5_file($root . '/' . $source) !== md5_file($root . '/' . $copy)) {
         fwrite(STDERR, "{$copy} is out of sync with {$source}\n");

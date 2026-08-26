@@ -900,7 +900,7 @@ class SprintItem extends CommonDBTM
                 'value' => 0,
             ]);
             if (Config::isPlannedActualEnabled()) {
-                echo " <span class='text-muted small ms-2'>" . __('Actual', 'sprint') . "</span> ";
+                echo " <span class='text-muted sprint-small ms-2'>" . __('Actual', 'sprint') . "</span> ";
                 Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
                     'value' => '',
                 ]);
@@ -1006,7 +1006,7 @@ class SprintItem extends CommonDBTM
             echo "<td class='center sprint-cell-story-points'>" . (int)$row['story_points'] . "</td>";
             echo "<td class='center sprint-cell-capacity'>" . SprintMember::formatCapacity($row['capacity'] ?? 0) . "%";
             if ($plannedActual && self::formatActualCapacity($row['capacity_actual'] ?? null) !== '') {
-                echo " <span class='text-muted small' title='" . __s('Actual capacity', 'sprint') . "'>/ "
+                echo " <span class='text-muted sprint-small' title='" . __s('Actual capacity', 'sprint') . "'>/ "
                     . SprintMember::formatCapacity($row['capacity_actual']) . "%</span>";
             }
             echo "</td>";
@@ -1090,7 +1090,7 @@ class SprintItem extends CommonDBTM
       <div class="modal-body">
         <label class="form-label fw-bold">{$lblReason}</label>
         <textarea name="reason" class="form-control" rows="3" placeholder="{$phReason}"></textarea>
-        <div class="text-danger small mt-1 sprint-backlog-reason-error" style="display:none;">{$errReason}</div>
+        <div class="text-danger sprint-small mt-1 sprint-backlog-reason-error" style="display:none;">{$errReason}</div>
         <div class="mt-3">
           <label class="form-label fw-bold d-block">{$lblChoice}</label>
           <label class="form-check">
@@ -1332,7 +1332,7 @@ HTML;
 
         echo "<div id='{$barId}' class='sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2' "
             . "data-target='{$tc}' style='background:var(--tblr-bg-surface-secondary,#f1f3f5);border-radius:6px;'>";
-        echo "<div class='d-flex align-items-center gap-1 text-muted small'>"
+        echo "<div class='d-flex align-items-center gap-1 text-muted sprint-small'>"
             . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
 
         // Events are delegated from sprint.js (no inline handlers) so a CSP
@@ -1510,7 +1510,7 @@ HTML;
             echo SprintCategory::dropdownOptions();
             echo "</select>";
             if ($categoryLocked) {
-                echo "<div class='form-text small text-warning sprint-qe-category-hint'>"
+                echo "<div class='form-text sprint-small text-warning sprint-qe-category-hint'>"
                     . "<i class='fas fa-user-shield me-1'></i>{$categoryRequestHint}</div>";
             }
             echo "</div>";
@@ -1542,7 +1542,7 @@ HTML;
         }
         echo "</select>";
         if ($capacityLocked) {
-            echo "<div class='form-text small text-warning sprint-qe-capacity-hint'>"
+            echo "<div class='form-text sprint-small text-warning sprint-qe-capacity-hint'>"
                 . "<i class='fas fa-user-shield me-1'></i>{$capacityRequestHint}</div>";
         }
         echo "</div>";
@@ -1582,16 +1582,16 @@ HTML;
             echo "<option value='" . (int)$tid . "'>" . htmlescape((string)$tlabel) . "</option>";
         }
         echo "</select>";
-        echo "<div class='form-text small text-muted'>"
+        echo "<div class='form-text sprint-small text-muted'>"
             . htmlescape(__('A fresh copy is created in the target sprint. The original stays in this sprint.', 'sprint'))
             . "</div></div>";
 
         echo "<div class='mb-3 sprint-qe-deps-block'><label class='form-label'>"
             . "<i class='fas fa-link' style='color:#20c997;margin-right:4px;'></i>"
             . __('Dependencies', 'sprint') . "</label>";
-        echo "<div class='alert alert-info py-1 small sprint-qe-dep-status mb-2' style='display:none;'></div>";
+        echo "<div class='alert alert-info py-1 sprint-small sprint-qe-dep-status mb-2' style='display:none;'></div>";
         // Live dependency list (loaded on open); each row edits % or removes.
-        echo "<div class='sprint-qe-dep-list small mb-2'></div>";
+        echo "<div class='sprint-qe-dep-list sprint-small mb-2'></div>";
         echo "<div class='d-flex flex-wrap gap-2 align-items-center'>";
         echo "<select class='form-select form-select-sm sprint-qe-dep-user' style='max-width:240px;'>";
         echo "<option value='0'>" . htmlescape(__('Select sprint member', 'sprint')) . "</option>";
@@ -1611,7 +1611,7 @@ HTML;
         echo "<a href='#' class='btn btn-sm btn-outline-secondary sprint-qe-dep-manage' target='_blank' rel='noopener'>"
             . "<i class='fas fa-external-link-alt me-1'></i>" . __('Manage dependencies', 'sprint') . "</a>";
         echo "</div>";
-        echo "<div class='form-text small text-muted'>"
+        echo "<div class='form-text sprint-small text-muted'>"
             . htmlescape(__("Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove.", 'sprint'))
             . "</div></div>";
 
@@ -3483,7 +3483,7 @@ JS;
                 echo $isAdhoc
                     ? self::renderAdhocBadge(true)
                     : "<span class='text-muted'>" . __('No') . "</span>";
-                echo " <span class='text-muted small'>"
+                echo " <span class='text-muted sprint-small'>"
                     . __('Only the Scrum Master can change this.', 'sprint') . "</span>";
             }
             echo "</td></tr>";
@@ -3550,7 +3550,7 @@ JS;
             ]);
             if (Config::isPlannedActualEnabled()) {
                 $actualRaw = $this->fields['capacity_actual'] ?? null;
-                echo " <span class='text-muted small ms-2' title='"
+                echo " <span class='text-muted sprint-small ms-2' title='"
                     . __s('Actual capacity: what the item really took, filled in as the work is done. Empty = follows the planned figure.', 'sprint')
                     . "'>" . __('Actual', 'sprint') . "</span> ";
                 Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
@@ -3568,7 +3568,7 @@ JS;
         echo "<td>" . __('Sprint') . "</td><td>";
         Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $sprintId]);
         if (!$isFastlane) {
-            echo "<div class='text-muted small'><i class='fas fa-info-circle me-1'></i>"
+            echo "<div class='text-muted sprint-small'><i class='fas fa-info-circle me-1'></i>"
                 . htmlescape(__('Picking a sprint you are not Scrum Master of creates an approval request.', 'sprint'))
                 . "</div>";
         }
@@ -3587,7 +3587,7 @@ JS;
             echo SprintCategory::dropdownOptionsPreserving($currentCategory);
             echo "</select>";
             if ($sprintId > 0 && !self::currentUserIsScrumMasterOf($sprintId)) {
-                echo "<div class='text-muted small'><i class='fas fa-user-shield me-1'></i>"
+                echo "<div class='text-muted sprint-small'><i class='fas fa-user-shield me-1'></i>"
                     . htmlescape(__('Category changes are sent to the Scrum Master for approval.', 'sprint'))
                     . "</div>";
             }
