@@ -654,7 +654,9 @@ class SprintExport extends CommonGLPI
             echo "<tr style='border-bottom:1px solid #fff3cd;page-break-inside:avoid;'>";
             echo "<td style='padding:5px 8px;'>"
                 . "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>"
-                . htmlescape((string)$row['name']) . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
+                . htmlescape((string)$row['name'])
+                . SprintItem::renderParentProjectSuffix((string)($row['itemtype'] ?? ''), (int)($row['items_id'] ?? 0))
+                . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td style='padding:5px 8px;color:#6c757d;'>" . htmlescape((string)$type) . "</td>";
             echo "<td style='padding:5px 8px;'>"
                 . "<span style='display:inline-block;padding:2px 8px;border-radius:12px;color:#fff;background:{$statusBg};font-size:0.78em;'>"
@@ -965,7 +967,9 @@ class SprintExport extends CommonGLPI
                 . ($isFast ? "<i class='fas fa-bolt' style='color:#fd7e14;' title='" . htmlescape(__('Fastlane', 'sprint')) . "'></i>" : '')
                 . "</td>";
             $rowDeps = $depsById[(int)$row['id']] ?? [];
-            echo "<td style='padding:5px 8px;'>" . htmlescape((string)$row['name']) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
+            echo "<td style='padding:5px 8px;'>" . htmlescape((string)$row['name'])
+                . SprintItem::renderParentProjectSuffix((string)($row['itemtype'] ?? ''), (int)($row['items_id'] ?? 0))
+                . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td style='padding:5px 8px;color:#6c757d;'>" . htmlescape((string)$type) . "</td>";
             $catId = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
             echo "<td style='padding:5px 8px;color:#6c757d;'>"
@@ -1174,6 +1178,7 @@ HTML;
             'capacity_actual'  => __('Realised capacity', 'sprint') . ' %',
             'tags'             => __('Tags', 'sprint'),
             'linked'           => __('Linked item', 'sprint'),
+            'parent_project'   => __('Parent project', 'sprint'),
             'note'             => __('Note', 'sprint'),
         ];
     }
@@ -1485,6 +1490,10 @@ HTML;
                 case 'linked':
                     $linked   = SprintCache::getObject($itemtype, (int)($row['items_id'] ?? 0));
                     $fields[] = $linked !== null ? (string)($linked->fields['name'] ?? '') : '';
+                    break;
+                case 'parent_project':
+                    // Only ProjectTask rows have one; blank elsewhere.
+                    $fields[] = SprintItem::getParentProjectName($itemtype, (int)($row['items_id'] ?? 0));
                     break;
                 case 'note':
                     $fields[] = (string)($row['note'] ?? '');

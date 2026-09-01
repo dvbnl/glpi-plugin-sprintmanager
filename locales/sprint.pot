@@ -3957,3 +3957,6 @@ msgstr ""
 
 msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
 msgstr ""
+
+msgid "Parent project"
+msgstr ""

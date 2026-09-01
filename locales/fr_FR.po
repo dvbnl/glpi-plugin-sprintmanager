@@ -3850,3 +3850,6 @@ msgstr "Totaux par catégorie"
 
 msgid "inactive"
 msgstr "inactive"
+
+msgid "Parent project"
+msgstr "Projet parent"

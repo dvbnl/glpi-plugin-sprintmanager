@@ -3854,3 +3854,6 @@ msgstr "Totalen per categorie"
 
 msgid "inactive"
 msgstr "inactief"
+
+msgid "Parent project"
+msgstr "Bovenliggend project"
