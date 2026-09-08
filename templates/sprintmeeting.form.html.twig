@@ -242,17 +242,27 @@
                     $sel.val(match);
                 })();
                 (function() {
-                    var $sel = $modal.find('select[name=capacity_actual]');
-                    if (!$sel.length) { return; }
-                    var raw = $row.attr('data-capacity-actual');
-                    var num = parseFloat(raw);
-                    var match = '';
-                    if (raw !== undefined && raw !== '' && !isNaN(num)) {
-                        $sel.find('option').each(function() {
-                            if (this.value !== '' && parseFloat(this.value) === num) { match = this.value; return false; }
-                        });
+                    var $cust = $modal.find('select[name=plugin_sprint_sprintcustomers_id]');
+                    if ($cust.length) {
+                        // A deactivated customer has no option — inject one so
+                        // saving cannot silently drop it; it goes when the next
+                        // item opens.
+                        var cur = String(parseInt($row.attr('data-customer-id'), 10) || 0);
+                        $cust.find('option.sprint-qe-customer-legacy').remove();
+                        if (cur !== '0' && !$cust.find("option[value='" + cur + "']").length) {
+                            $cust.append($('<option class="sprint-qe-customer-legacy"></option>')
+                                .val(cur)
+                                .text(($row.attr('data-customer-name') || ('#' + cur)) + ' ({{ __('inactive', 'sprint')|e('js') }})'));
+                        }
+                        $cust.val(cur);
                     }
-                    $sel.val(match);
+                    var $cred = $modal.find('input[name=credits]');
+                    if ($cred.length) { $cred.val($row.attr('data-credits') || '0'); }
+                    var $prod = $modal.find('select[name=plugin_sprint_sprintcreditproducts_id]');
+                    if ($prod.length) {
+                        var pid = String(parseInt($row.attr('data-credit-product-id'), 10) || 0);
+                        $prod.val($prod.find("option[value='" + pid + "']").length ? pid : '0');
+                    }
                 })();
                 // Category: a row carrying a deactivated category has no
                 // matching option — inject one so saving cannot silently reset
@@ -273,7 +283,7 @@
                 $modal.find('textarea[name=note]').val(note);
                 $modal.find('select[name=carry_over_to_sprint_id]').val('0');
                 $modal.find('.sprint-qe-error').hide().text('');
-                $modal.find('.sprint-qe-story-points, .sprint-qe-capacity, .sprint-qe-capacity-actual').toggle(!isFastlane);
+                $modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
                 $modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
                 $modal.find('.sprint-qe-dep-user').val('0');
                 $modal.find('.sprint-qe-dep-manage').attr(
@@ -367,8 +377,14 @@
                             users_id:     $modal.find('select[name=users_id]').val(),
                             story_points: $modal.find('input[name=story_points]').val(),
                             capacity:     $modal.find('select[name=capacity]').val(),
-                            capacity_actual: $modal.find('select[name=capacity_actual]').length
-                                ? $modal.find('select[name=capacity_actual]').val()
+                            plugin_sprint_sprintcustomers_id: $modal.find('select[name=plugin_sprint_sprintcustomers_id]').length
+                                ? $modal.find('select[name=plugin_sprint_sprintcustomers_id]').val()
+                                : undefined,
+                            credits: $modal.find('input[name=credits]').length
+                                ? $modal.find('input[name=credits]').val()
+                                : undefined,
+                            plugin_sprint_sprintcreditproducts_id: $modal.find('select[name=plugin_sprint_sprintcreditproducts_id]').length
+                                ? $modal.find('select[name=plugin_sprint_sprintcreditproducts_id]').val()
                                 : undefined,
                             note:         $modal.find('textarea[name=note]').val(),
                             plugin_sprint_sprintcategories_id: $modal.find('select[name=plugin_sprint_sprintcategories_id]').length
@@ -416,8 +432,10 @@
                         $row.attr('data-owner-name', ownerLabel).data('owner-name', ownerLabel);
                         $row.attr('data-story-points', resp.story_points).data('story-points', resp.story_points);
                         $row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
-                        if (typeof resp.capacity_actual !== 'undefined') {
-                            $row.attr('data-capacity-actual', resp.capacity_actual);
+                        if (typeof resp.credits !== 'undefined') {
+                            $row.attr('data-credits', resp.credits).data('credits', resp.credits);
+                            $row.attr('data-customer-id', resp.customer_id).data('customer-id', resp.customer_id);
+                            $row.attr('data-credit-product-id', resp.credit_product_id || 0);
                         }
                         $row.attr('data-note', resp.note).data('note', resp.note);
 
@@ -684,18 +702,41 @@
                                     <i class="fas fa-user-shield me-1"></i>{{ __('Capacity changes are sent to the Scrum Master for approval.', 'sprint') }}
                                 </div>
                             </div>
-                            {% if planned_actual|default(false) %}
-                            <div class="col-md-3 mb-3 sprint-qe-capacity-actual">
-                                <label class="form-label text-nowrap" title="{{ __('Actual capacity (%)', 'sprint') }}">{{ __('Actual', 'sprint') }} %</label>
-                                <select name="capacity_actual" class="form-select">
-                                    <option value="">{{ __('Follows planned', 'sprint') }}</option>
-                                    {% for val, label in capacity_choices %}
-                                    <option value="{{ val }}">{{ label }}</option>
+                        </div>
+
+                        {% if can_view_credits|default(false) %}
+                        <div class="row g-3">
+                            <div class="col-md-8 mb-3">
+                                <label class="form-label">{{ customer_label }}</label>
+                                <select name="plugin_sprint_sprintcustomers_id" class="form-select"{% if not can_edit_credits|default(false) %} disabled{% endif %}>
+                                    <option value="0">-----</option>
+                                    {% for id, name in customers %}
+                                    <option value="{{ id }}">{{ name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
-                            {% endif %}
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">{{ __('Credits', 'sprint') }}</label>
+                                <input type="number" name="credits" class="form-control w-100" min="0" step="0.25" value="0"{% if not can_edit_credits|default(false) %} readonly{% endif %}>
+                            </div>
                         </div>
+                        <div class="row g-3">
+                            <div class="col-md-8 mb-3">
+                                <label class="form-label"><i class="fas fa-tags me-1"></i>{{ credit_product_label|default('') }}</label>
+                                <select name="plugin_sprint_sprintcreditproducts_id" class="form-select sprint-credit-product" data-credits-for="credits"{% if not can_edit_credits|default(false) %} disabled{% endif %}>
+                                    <option value="0" data-credits="">{{ __('Manual credits', 'sprint') }}</option>
+                                    {% for p in credit_products|default([]) %}
+                                    {% if p.is_folder %}
+                                    <option value="" disabled>{{ p.label }} 📁</option>
+                                    {% else %}
+                                    <option value="{{ p.id }}" data-credits="{{ p.credits }}">{{ p.label }}{% if p.credits != '0' %} ({{ p.credits }}){% endif %}</option>
+                                    {% endif %}
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text sprint-small text-muted">{{ __('Picking a product fills in its default credits; the amount stays editable.', 'sprint') }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
 
                         <div class="mb-3">
                             <label class="form-label">{{ __('Note', 'sprint') }}</label>

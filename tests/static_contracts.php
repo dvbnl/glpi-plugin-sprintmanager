@@ -15,15 +15,122 @@ foreach ($required as $file) {
     }
 }
 $hook = file_get_contents($root . '/hook.php');
-foreach (['sprintepics', 'sprintavailabilities', 'sprintimprovements', 'sprintsignals'] as $table) {
+foreach ([
+    'sprintepics', 'sprintavailabilities', 'sprintimprovements', 'sprintsignals',
+    'sprintcustomers', 'sprintcredits', 'sprintcustomercredits', 'sprintretainers', 'sprintcreditproducts',
+] as $table) {
     if (!str_contains($hook, 'glpi_plugin_sprint_' . $table)) {
         fwrite(STDERR, "Missing install migration for {$table}\n");
         exit(1);
     }
 }
+// Customers & credits: the money rules live in one pure class and the
+// callers go through it; the item side refuses an invalid customer rather
+// than silently re-attributing; bookings carry their own CREATE/PURGE rights.
+$creditMath = file_get_contents($root . '/src/SprintCreditMath.php');
+foreach (['resolveAgreement', 'splitSprint', 'wallet', 'forecast', 'retainerFor'] as $method) {
+    if (!str_contains($creditMath, 'function ' . $method)) {
+        fwrite(STDERR, "Missing credit math method: {$method}\n");
+        exit(1);
+    }
+}
+if (preg_match('/\b(global \$DB|Session::|new Sprint\b|new SprintItem\b)/', $creditMath)) {
+    fwrite(STDERR, "SprintCreditMath must stay free of GLPI and database dependencies\n");
+    exit(1);
+}
+$product = file_get_contents($root . '/src/SprintCreditProduct.php');
+foreach (['function dropdownOptions', 'function creditsFor', 'function isVisible'] as $method) {
+    if (!str_contains($product, $method)) {
+        fwrite(STDERR, "Missing credit product method: {$method}\n");
+        exit(1);
+    }
+}
+foreach (['src/SprintItem.php' => 'sprint-credit-product', 'src/Backlog.php' => 'SprintItem::productSelect(',
+    'templates/sprintmeeting.form.html.twig' => 'sprint-credit-product'] as $surface => $needle) {
+    if (!str_contains(file_get_contents($root . '/' . $surface), $needle)) {
+        fwrite(STDERR, "{$surface} must offer the credit product picker\n");
+        exit(1);
+    }
+}
+$retainer = file_get_contents($root . '/src/SprintRetainer.php');
+foreach (['function rulesFor', 'function rawRulesFor', 'function renderEditor', 'function applyPostedRules'] as $method) {
+    if (!str_contains($retainer, $method)) {
+        fwrite(STDERR, "Missing retainer rule method: {$method}\n");
+        exit(1);
+    }
+}
+if (str_contains($hook, "'credits_per_sprint',\n            \"DECIMAL")) {
+    fwrite(STDERR, "The retainer columns must not be re-added to the customer table\n");
+    exit(1);
+}
+$customer = file_get_contents($root . '/src/SprintCustomer.php');
+if (str_contains($customer, "name='credits_per_sprint'") || !str_contains($customer, 'SprintRetainer::renderEditor')) {
+    fwrite(STDERR, "The customer form must edit retainer rules through SprintRetainer\n");
+    exit(1);
+}
+foreach (['SprintCreditMath::resolveAgreement', 'SprintCreditMath::splitSprint', 'SprintCreditMath::wallet',
+    'function customerFitsEntity', 'function isChargeableInSprint', 'function agreementFor',
+    'function standingAgreementFor', 'function invalidateCaches'] as $needle) {
+    if (!str_contains($customer, $needle)) {
+        fwrite(STDERR, "SprintCustomer must route credits through SprintCreditMath: missing {$needle}\n");
+        exit(1);
+    }
+}
+if (!str_contains($customer, "return self::canViewCredits() ? self::loadOverrides() : [];")
+    || !str_contains($customer, "if (!self::canViewCredits()) {\n            return self::\$fundingCache;")) {
+    fwrite(STDERR, "Credit aggregates must refuse without the credits right\n");
+    exit(1);
+}
+$backlog = file_get_contents($root . '/src/Backlog.php');
+if (!str_contains($backlog, 'SprintCustomer::agreementFor($cid, $sid)')
+    || !str_contains($backlog, 'SprintCustomer::standingAgreementFor($cid, $sid)')
+    || !str_contains($backlog, 'sprint-be-customer-legacy')) {
+    fwrite(STDERR, "The credits matrix must use the effective per-sprint agreement and keep inactive customers in quick-edit\n");
+    exit(1);
+}
+$credits = file_get_contents($root . '/src/SprintCredits.php');
+if (!str_contains($credits, 'SprintCreditMath::forecast($cells)')
+    || str_contains($credits, 'function renderForecast(array $window')) {
+    fwrite(STDERR, "The forecast must sum per sprint through SprintCreditMath::forecast()\n");
+    exit(1);
+}
+$credit = file_get_contents($root . '/src/SprintCredit.php');
+if (!str_contains($credit, "Session::haveRight(self::\$rightname, CREATE)")
+    || !str_contains($credit, "Session::haveRight(self::\$rightname, PURGE)")
+    || !str_contains($credit, 'function pre_deleteItem')) {
+    fwrite(STDERR, "Credit bookings must carry their own CREATE and PURGE rights\n");
+    exit(1);
+}
+$creditForm = file_get_contents($root . '/front/sprintcredit.form.php');
+foreach (['SprintCredit::canCreate()', 'SprintCredit::canPurge()', 'SprintCredit::canUpdate()'] as $needle) {
+    if (!str_contains($creditForm, $needle)) {
+        fwrite(STDERR, "The credit booking handler must check {$needle}\n");
+        exit(1);
+    }
+}
+$sprintItems = file_get_contents($root . '/src/SprintItem.php');
+if (!str_contains($sprintItems, 'function validateCustomer')
+    || !str_contains($sprintItems, 'sprint-qe-customer-legacy')
+    || str_contains($sprintItems, '$customerId = 0;' . "\n            }\n            \$input['plugin_sprint_sprintcustomers_id'] = \$customerId;")) {
+    fwrite(STDERR, "Sprint items must refuse an invalid customer and keep inactive ones in quick-edit\n");
+    exit(1);
+}
+$quick = file_get_contents($root . '/ajax/updateitemquick.php');
+if (!str_contains($quick, "unset(\$update['plugin_sprint_sprintcustomers_id']);")) {
+    fwrite(STDERR, "An empty customer field in quick-edit must be ignored, not treated as detach\n");
+    exit(1);
+}
+foreach (['templates/sprintmeeting.form.html.twig', 'templates/meeting/items_tables.html.twig'] as $tpl) {
+    $twig = file_get_contents($root . '/' . $tpl);
+    if (!str_contains($twig, 'data-customer-name') && !str_contains($twig, 'sprint-qe-customer-legacy')) {
+        fwrite(STDERR, "{$tpl} must carry the customer name for quick-edit\n");
+        exit(1);
+    }
+}
+
 $setup = file_get_contents($root . '/setup.php');
-if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.2.2")) {
-    fwrite(STDERR, "Version was not advanced to 1.2.2\n");
+if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.3.0")) {
+    fwrite(STDERR, "Version was not advanced to 1.3.0\n");
     exit(1);
 }
 $endpoint = file_get_contents($root . '/front/sprintagility.form.php');

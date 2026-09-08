@@ -3637,21 +3637,6 @@ msgstr "Oudste niet-ingeplande item in deze categorie: %d dagen"
 msgid "Team capacity left after the assigned work, the backlog proposals and the fastlane reservation"
 msgstr "Teamcapaciteit die overblijft na het toegewezen werk, de backlogvoorstellen en de fastlane-reservering"
 
-msgid "Actual"
-msgstr "Werkelijk"
-
-msgid "Actual capacity"
-msgstr "Werkelijke capaciteit"
-
-msgid "Actual capacity %"
-msgstr "Werkelijke capaciteit %"
-
-msgid "Actual capacity (%)"
-msgstr "Werkelijke capaciteit (%)"
-
-msgid "Actual capacity: what the item really took, filled in as the work is done. Empty = follows the planned figure."
-msgstr "Werkelijke capaciteit: wat het item echt heeft gekost, ingevuld terwijl het werk vordert. Leeg = volgt de geplande waarde."
-
 msgid "Average over the sprints shown"
 msgstr "Gemiddelde over de getoonde sprints"
 
@@ -3670,15 +3655,6 @@ msgstr "Voltooid t.o.v. gepland %"
 msgid "Configured category minimums act as a floor under the delivery pace."
 msgstr "Ingestelde categorieminimums vormen een ondergrens voor het levertempo."
 
-msgid "Follows planned"
-msgstr "Volgt gepland"
-
-msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category."
-msgstr "Per backlogcategorie over de afgeronde sprints in deze periode: toegewezen capaciteit % per sprint (gepland, of werkelijk als die instelling aanstaat) of het aandeel voltooid t.o.v. gepland. Subcategorieën tellen mee bij hun hoofdcategorie, of schakel naar de subcategorieweergave om ze als aparte lijnen te zien. Klik op een legenda-item om een categorie uit te lichten."
-
-msgid "Planned / actual capacity"
-msgstr "Geplande / werkelijke capaciteit"
-
 msgid "Planned capacity %"
 msgstr "Geplande capaciteit %"
 
@@ -3688,29 +3664,14 @@ msgstr "Gereserveerd voor interruptiewerk: geen fastlane-limiet ingesteld op dez
 msgid "Reserved for interrupt work: the fastlane capacity limit of this sprint, minus what is already assigned here"
 msgstr "Gereserveerd voor interruptiewerk: de fastlane-capaciteitslimiet van deze sprint, min wat hier al is toegewezen"
 
-msgid "Show the planned or the actual capacity per item (items without an actual figure keep their planned one)"
-msgstr "Toon de geplande of de werkelijke capaciteit per item (items zonder werkelijke waarde houden hun geplande)"
-
-msgid "Showing actual capacity; items without an actual figure count with their planned capacity."
-msgstr "Werkelijke capaciteit wordt getoond; items zonder werkelijke waarde tellen mee met hun geplande capaciteit."
-
 msgid "Those sprints spent an average of %s%% on fastlane work; that average is reserved up front on sprints without a fastlane limit of their own."
 msgstr "Die sprints besteedden gemiddeld %s%% aan fastlane-werk; dat gemiddelde wordt vooraf gereserveerd op sprints zonder eigen fastlane-limiet."
-
-msgid "When enabled, every sprint item gets a second capacity figure: the planned % is estimated up front, the actual % is filled in as the work is done and may deviate. The capacity-per-category matrix and the category trend chart can be flipped between the two."
-msgstr "Indien ingeschakeld krijgt elk sprintitem een tweede capaciteitswaarde: het geplande % wordt vooraf geschat, het werkelijke % wordt ingevuld terwijl het werk vordert en mag afwijken. De capaciteit-per-categoriematrix en de categorietrendgrafiek kunnen tussen beide worden omgeschakeld."
 
 msgid "You are not allowed to edit this backlog item"
 msgstr "Je mag dit backlogitem niet bewerken"
 
 msgid "You are not allowed to add items to the backlog"
 msgstr "Je mag geen items aan de backlog toevoegen"
-
-msgid "planned"
-msgstr "gepland"
-
-msgid "actual"
-msgstr "werkelijk"
 
 msgid "Main categories"
 msgstr "Hoofdcategorieën"
@@ -3787,9 +3748,6 @@ msgstr "Aandeel van het team"
 msgid "No capacity recorded"
 msgstr "Geen capaciteit vastgelegd"
 
-msgid "Where each member's capacity went per backlog category across the completed sprints in this period, actual capacity where an item has one. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
-msgstr "Waar de capaciteit van elk lid heen ging per backlogcategorie over de afgeronde sprints in deze periode, werkelijke capaciteit waar een item die heeft. Een hoofdcategorie telt de subcategorieën mee; fastlane- en afhankelijkheidswerk telt bij elk daaraan toegewezen lid."
-
 msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
 msgstr "Waar de capaciteit van elk lid heen ging per backlogcategorie over de afgeronde sprints in deze periode. Een hoofdcategorie telt de subcategorieën mee; fastlane- en afhankelijkheidswerk telt bij elk daaraan toegewezen lid."
 
@@ -3822,20 +3780,8 @@ msgstr "Kies minimaal één sectie en één kolom."
 msgid "Planned capacity"
 msgstr "Geplande capaciteit"
 
-msgid "Planned is the estimate the item was taken in with; realised is the actual figure, which falls back to the planned one where nothing was recorded."
-msgstr "Gepland is de schatting waarmee het item is opgenomen; gerealiseerd is het werkelijke cijfer, dat terugvalt op het geplande cijfer als er niets is vastgelegd."
-
-msgid "Realised capacity"
-msgstr "Gerealiseerde capaciteit"
-
 msgid "Sections"
 msgstr "Secties"
-
-msgid "Select all / none"
-msgstr "Alles / niets selecteren"
-
-msgid "Split the item rows into one block per category, each with its own subtotal"
-msgstr "Splits de itemregels in één blok per categorie, elk met een eigen subtotaal"
 
 msgid "Story points done"
 msgstr "Afgeronde story points"
@@ -3846,9 +3792,6 @@ msgstr "Subtotaal"
 msgid "The requested category no longer exists."
 msgstr "De gevraagde categorie bestaat niet meer."
 
-msgid "Tick what the file should contain. Every ticked section is written as its own block, one after another."
-msgstr "Vink aan wat het bestand moet bevatten. Elke aangevinkte sectie wordt als een eigen blok weggeschreven, na elkaar."
-
 msgid "Totals per category"
 msgstr "Totalen per categorie"
 
@@ -3857,3 +3800,705 @@ msgstr "inactief"
 
 msgid "Parent project"
 msgstr "Bovenliggend project"
+
+# === Customers & credits (1.3.0) ===
+#: src/SprintCredits.php:398
+#, php-format
+msgid "%s credits short of covering the backlog waiting for them."
+msgstr "%s credits te weinig om de wachtende backlog te dekken."
+
+#: src/SprintCredits.php:94
+#, php-format
+msgid ""
+"%s credits sit on items with no customer, so they count against "
+"nobody's balance."
+msgstr ""
+"%s credits staan op items zonder klant en tellen dus op niemands "
+"saldo."
+
+#: src/SprintCredits.php:188
+#, php-format
+msgid "%s over budget"
+msgstr "%s over budget"
+
+#: src/SprintCredit.php:101
+msgid ""
+"A positive amount is a purchase, a negative amount a correction or "
+"write-off. Leave the expiry date empty for credits that never lapse."
+msgstr ""
+"Een positief bedrag is een inkoop, een negatief bedrag een correctie "
+"of afboeking. Laat de vervaldatum leeg voor credits die niet verlopen."
+
+#: src/Config.php:524
+msgid "Access"
+msgstr "Toegang"
+
+#: src/SprintCredits.php:380
+msgid "Advice"
+msgstr "Advies"
+
+#: src/SprintCredits.php:66
+msgid "All customers"
+msgstr "Alle klanten"
+
+#: src/SprintCredits.php:105
+msgid "Balance per customer"
+msgstr "Saldo per klant"
+
+#: src/SprintCredit.php:99
+msgid "Book credits"
+msgstr "Credits boeken"
+
+#: src/SprintCredit.php:112 src/SprintCredit.php:132
+#: src/SprintCredit.php:283 src/SprintCredits.php:431
+msgid "Booking date"
+msgstr "Boekdatum"
+
+#: src/SprintCredit.php:190 src/SprintCredits.php:119
+#: src/SprintExport.php:1664
+msgid "Bought"
+msgstr "Ingekocht"
+
+#: src/SprintCustomer.php:302 src/SprintCustomer.php:349
+msgid "Contact"
+msgstr "Contactpersoon"
+
+#: src/SprintCredit.php:23
+msgid "Credit booking"
+msgid_plural "Credit bookings"
+msgstr[0] "Creditboeking"
+msgstr[1] "Creditboekingen"
+
+#: src/Config.php:517
+msgid "Credit managers"
+msgstr "Creditbeheerders"
+
+#: front/config.form.php:27
+msgid "Credit managers saved"
+msgstr "Creditbeheerders opgeslagen"
+
+#: src/Backlog.php:1767 src/Backlog.php:225
+#: src/Backlog.php:703 src/SprintCredit.php:106
+#: src/SprintCredit.php:136 src/SprintCredit.php:276
+#: src/SprintCredit.php:61 src/SprintCredits.php:25
+#: src/SprintCredits.php:435 src/SprintCredits.php:59
+#: src/SprintExport.php:1267 src/SprintExport.php:1740
+#: src/SprintItem.php:1596 src/SprintItem.php:196
+#: src/SprintItem.php:3627 src/SprintItem.php:474
+#: src/SprintItem.php:943 templates/sprintmeeting.form.html.twig:698
+msgid "Credits"
+msgstr "Credits"
+
+#: src/Backlog.php:2094
+msgid "Credits on backlog items that have no sprint yet"
+msgstr "Credits op backlog-items die nog geen sprint hebben"
+
+#: src/SprintExport.php:1297 src/SprintExport.php:1659
+msgid "Credits per customer"
+msgstr "Credits per klant"
+
+#: src/SprintCredits.php:270
+msgid "Credits per sprint"
+msgstr "Credits per sprint"
+
+#: src/SprintCustomer.php:21
+msgid "Customer"
+msgid_plural "Customers"
+msgstr[0] "Klant"
+msgstr[1] "Klanten"
+
+#: src/Backlog.php:146 src/Backlog.php:489
+#: src/SprintItem.php:1000
+msgid "Customer / credits"
+msgstr "Klant / credits"
+
+#: src/Profile.php:49
+msgid "Customers & credits"
+msgstr "Klanten & credits"
+
+#: src/SprintExport.php:1662
+msgid "Delivered this sprint"
+msgstr "Geleverd deze sprint"
+
+#: src/SprintCredit.php:116 src/SprintCredit.php:135
+#: src/SprintCredit.php:290
+msgid "Expires on"
+msgstr "Verloopt op"
+
+#: src/SprintCustomer.php:316
+msgid ""
+"Flag the customer once fewer than this many credits are left. 0 = no "
+"alert."
+msgstr ""
+"Markeer de klant zodra er minder dan dit aantal credits over is. 0 = "
+"geen melding."
+
+#: src/SprintCredit.php:193 src/SprintCredits.php:122
+msgid "In backlog"
+msgstr "In backlog"
+
+#: src/Backlog.php:2097 src/SprintCredit.php:194
+#: src/SprintCredits.php:123 src/SprintCredits.php:184
+#: src/SprintCredits.php:378 src/SprintExport.php:1667
+msgid "Left"
+msgstr "Resterend"
+
+#: src/SprintCustomer.php:314 src/SprintCustomer.php:371
+msgid "Low-balance alert"
+msgstr "Melding bij laag saldo"
+
+#: src/Config.php:508
+msgid "Manage credits"
+msgstr "Credits beheren"
+
+#: src/SprintCredits.php:68
+msgid "New customer"
+msgstr "Nieuwe klant"
+
+#: src/SprintExport.php:1671
+msgid "No credits assigned in this sprint"
+msgstr "Geen credits toegewezen in deze sprint"
+
+#: src/SprintCredits.php:276
+msgid "No credits assigned to a sprint yet."
+msgstr "Nog geen credits aan een sprint toegewezen."
+
+#: src/SprintCredit.php:142
+msgid "No credits booked yet"
+msgstr "Nog geen credits geboekt"
+
+#: src/SprintCredits.php:424
+msgid "No credits booked yet. Open a customer to book their first purchase."
+msgstr ""
+"Nog geen credits geboekt. Open een klant om de eerste inkoop te "
+"boeken."
+
+#: src/Backlog.php:2100 src/SprintCredits.php:316
+#: src/SprintCredits.php:329 src/SprintExport.php:1693
+msgid "No customer"
+msgstr "Geen klant"
+
+#: src/SprintCredits.php:111
+msgid "No customers yet."
+msgstr "Nog geen klanten."
+
+#: src/Config.php:543
+msgid "No named credit managers — access follows the profile right only."
+msgstr ""
+"Geen benoemde creditbeheerders — toegang volgt alleen het "
+"profielrecht."
+
+#: src/SprintExport.php:1065
+msgid "One block per category, each with its own subtotal"
+msgstr "Eén blok per categorie, elk met een eigen subtotaal"
+
+#: src/SprintExport.php:1663
+msgid "Open this sprint"
+msgstr "Open deze sprint"
+
+#: src/SprintOverview.php:1759
+msgid ""
+"Per backlog category across the completed sprints in this period: "
+"allocated capacity % per sprint, or the completed-vs-planned share. "
+"Subcategories count towards their parent, or switch to the "
+"subcategory view to see them as separate lines. Click a legend entry "
+"to isolate a category."
+msgstr ""
+"Per backlog-categorie over de afgeronde sprints in deze periode: "
+"toegewezen capaciteit % per sprint, of het aandeel afgerond versus "
+"gepland. Subcategorieën tellen mee bij hun hoofdcategorie, of schakel "
+"naar de subcategorieweergave om ze als aparte lijnen te zien. Klik op "
+"een legenda-item om één categorie te isoleren."
+
+#: src/SprintCredits.php:420
+msgid "Recent bookings"
+msgstr "Recente boekingen"
+
+#: src/SprintCredit.php:110 src/SprintCredit.php:134
+#: src/SprintCredit.php:297 src/SprintCredits.php:434
+msgid "Reference"
+msgstr "Referentie"
+
+#: src/SprintCustomer.php:297 src/SprintCustomer.php:342
+msgid "Reference code"
+msgstr "Referentiecode"
+
+#: src/SprintCredits.php:126 src/SprintCredits.php:379
+msgid "Runway"
+msgstr "Looptijd"
+
+#: src/Backlog.php:2095
+msgid "Unplanned"
+msgstr "Niet gepland"
+
+#: src/Config.php:507
+msgid "View credits"
+msgstr "Credits inzien"
+
+#: src/SprintCredit.php:230
+msgid "You are not allowed to manage credits"
+msgstr "U mag geen credits beheren"
+
+#: src/SprintExport.php:1031 src/SprintExport.php:1046
+msgid "all / none"
+msgstr "alles / niets"
+
+#: src/SprintCredit.php:156
+msgid "expired"
+msgstr "verlopen"
+
+#: src/SprintCredits.php:147
+msgid "low balance"
+msgstr "laag saldo"
+
+#: src/SprintCredits.php:144
+msgid "overdrawn"
+msgstr "overschreden"
+
+#: src/SprintCredits.php:207
+#, php-format
+msgid "≈ %s sprint"
+msgid_plural "≈ %s sprints"
+msgstr[0] "± %s sprint"
+msgstr[1] "± %s sprints"
+
+# === Retainer & credit agreements (1.3.0) ===
+
+#: src/Backlog.php:2285
+#, php-format
+msgid "%1$s of the %2$s agreed for this sprint"
+msgstr "%1$s van de %2$s die voor deze sprint is afgesproken"
+
+#: src/SprintCredits.php:734
+#, php-format
+msgid "%s of the agreed volume is still unbooked and will lapse."
+msgstr "%s van het afgesproken volume is nog niet ingepland en vervalt."
+
+#: src/SprintCredits.php:743
+#, php-format
+msgid "%s past the agreed volume, drawn from the wallet."
+msgstr "%s boven het afgesproken volume, onttrokken aan de portemonnee."
+
+#: src/SprintCustomer.php:570
+msgid ""
+"A retainer grants the customer a fixed number of credits every "
+"sprint. Unused credits lapse when that sprint completes; work beyond "
+"the grant is drawn from the credits bought through the ledger."
+msgstr ""
+"Een vaste afspraak geeft de klant elke sprint een vast aantal "
+"credits. Wat niet wordt gebruikt vervalt zodra die sprint is "
+"afgerond; werk boven de toekenning wordt onttrokken aan de credits "
+"die via het grootboek zijn ingekocht."
+
+#: src/SprintCredits.php:692
+msgid "Agreed ahead"
+msgstr "Afgesproken vooruit"
+
+#: src/SprintExport.php:1662
+msgid "Agreed this sprint"
+msgstr "Afgesproken deze sprint"
+
+#: src/Backlog.php:2216
+msgid "Agreement"
+msgstr "Afspraak"
+
+#: src/SprintCredits.php:693
+msgid "Booked ahead"
+msgstr "Ingepland vooruit"
+
+#: src/SprintCustomer.php:580 src/SprintCustomer.php:661
+msgid "Cap per sprint"
+msgstr "Maximum per sprint"
+
+#: src/Backlog.php:1809
+msgid "Credit agreement"
+msgstr "Creditafspraak"
+
+#: src/SprintCredit.php:197 src/SprintCredits.php:129
+#: src/SprintCredits.php:209
+msgid "From wallet"
+msgstr "Uit portemonnee"
+
+#: src/SprintCredit.php:192 src/SprintCredits.php:123
+#: src/SprintExport.php:1666
+msgid "Granted"
+msgstr "Toegekend"
+
+#: src/SprintCredits.php:599
+#, php-format
+msgid "Granted %1$s, used %2$s"
+msgstr "Toegekend %1$s, gebruikt %2$s"
+
+#: src/SprintCredits.php:557
+msgid ""
+"Granted volume a completed sprint never claimed. It does not carry "
+"over, so this is agreed work that was left on the table."
+msgstr ""
+"Toegekend volume dat een afgeronde sprint nooit heeft geclaimd. Het "
+"rolt niet door, dus dit is afgesproken werk dat is blijven liggen."
+
+#: src/SprintCredit.php:194 src/SprintCredits.php:125
+#: src/SprintCredits.php:202 src/SprintCredits.php:455
+#: src/SprintCredits.php:477 src/SprintExport.php:1665
+msgid "Lapsed"
+msgstr "Vervallen"
+
+#: src/SprintCredits.php:555
+msgid "Lapsed credits per sprint"
+msgstr "Vervallen credits per sprint"
+
+#: src/Backlog.php:1829
+msgid "Max"
+msgstr "Max"
+
+#: src/SprintCredits.php:272
+msgid "Mix"
+msgstr "Verdeling"
+
+#: src/SprintCredits.php:240
+msgid "No completed sprint has drawn on this wallet yet"
+msgstr "Nog geen afgeronde sprint heeft uit deze portemonnee geput"
+
+#: src/SprintCredits.php:561
+msgid "Nothing has lapsed yet."
+msgstr "Er is nog niets vervallen."
+
+#: src/SprintCredits.php:755
+msgid "On plan."
+msgstr "Op schema."
+
+#: src/SprintCredits.php:722
+#, php-format
+msgid "Over the agreed cap in %s."
+msgstr "Boven het afgesproken maximum in %s."
+
+#: src/SprintCredits.php:122
+msgid "Per sprint"
+msgstr "Per sprint"
+
+#: src/SprintCustomer.php:568
+msgid "Retainer"
+msgstr "Vaste afspraak"
+
+#: src/Backlog.php:2187
+msgid "Set the credits agreed with each customer for this sprint"
+msgstr "Stel per klant in hoeveel credits voor deze sprint zijn afgesproken"
+
+#: src/SprintCredits.php:131
+msgid ""
+"Sprints the wallet lasts at the average draw of the last completed "
+"sprints"
+msgstr ""
+"Aantal sprints dat de portemonnee meegaat bij de gemiddelde "
+"onttrekking van de laatste afgeronde sprints"
+
+#: src/SprintCredits.php:121
+msgid "The retainer: credits granted every sprint in the agreed window"
+msgstr ""
+"De vaste afspraak: credits die elke sprint binnen het afgesproken "
+"venster worden toegekend"
+
+#: src/SprintCredits.php:275
+msgid ""
+"Trend: one line per customer showing the credits that sprint claimed, "
+"with their agreed volume as a dashed line when you isolate them. Mix: "
+"how each sprint was filled, plus the grant that lapsed unused."
+msgstr ""
+"Verloop: één lijn per klant met de credits die die sprint heeft "
+"geclaimd, met het afgesproken volume als stippellijn zodra je de "
+"klant isoleert. Verdeling: hoe elke sprint is gevuld, plus de "
+"toekenning die ongebruikt is vervallen."
+
+#: src/SprintCredits.php:728
+msgid "Wallet overdrawn — nothing new should be planned before a top-up."
+msgstr ""
+"Portemonnee overschreden — plan niets nieuws voordat er is bijgekocht."
+
+#: src/Backlog.php:1810
+msgid ""
+"What each customer is granted for this sprint. Leave a field empty to "
+"follow their standing agreement."
+msgstr ""
+"Wat elke klant voor deze sprint krijgt toegekend. Laat een veld leeg "
+"om de vaste afspraak te volgen."
+
+#: src/SprintCredits.php:62
+msgid ""
+"What every customer is granted per sprint, what the sprints claimed "
+"of it and what the bought wallet still holds."
+msgstr ""
+"Wat elke klant per sprint krijgt toegekend, wat de sprints daarvan "
+"hebben geclaimd en wat de ingekochte portemonnee nog bevat."
+
+#: ajax/customercredits.php:34
+msgid "You are not allowed to set credit agreements"
+msgstr "U mag geen creditafspraken instellen"
+
+#: src/Backlog.php:2290 src/SprintCredits.php:161
+#, php-format
+msgid "cap %s"
+msgstr "max %s"
+
+#: src/Backlog.php:1830
+#, php-format
+msgid "standing agreement: %s"
+msgstr "vaste afspraak: %s"
+
+#: src/SprintCustomer.php:594
+msgid "until"
+msgstr "tot"
+
+#: src/SprintCredit.php:136
+msgid "Booked by"
+msgstr "Geboekt door"
+
+#: src/SprintCredits.php:180
+msgid "Bought credits that expired before a sprint drew on them"
+msgstr ""
+"Ingekochte credits die zijn verlopen voordat een sprint eruit heeft "
+"geput"
+
+#: src/SprintCustomer.php:664
+msgid ""
+"Flags a sprint in the credits matrix and the forecast once it claims "
+"more than this, grant and wallet together. It does not block the "
+"save. 0 = no flag."
+msgstr ""
+"Markeert een sprint in de creditsmatrix en de prognose zodra die hier "
+"meer dan claimt, toekenning en portemonnee samen. Het blokkeert het "
+"opslaan niet. 0 = geen markering."
+
+#: src/Config.php:519
+msgid ""
+"Grant credit access to individual users on top of the profile right. "
+"View opens the Credits page, the customers and their balances; manage "
+"additionally allows creating customers, booking credits and setting "
+"the per-sprint agreements. Picking a customer and a credit amount on "
+"a sprint item needs neither — that follows the item rights."
+msgstr ""
+"Geef losse gebruikers creditrechten bovenop het profielrecht. Inzien "
+"opent de Credits-pagina, de klanten en hun saldi; beheren staat "
+"daarnaast toe klanten aan te maken, credits te boeken en de afspraken "
+"per sprint te zetten. Een klant en creditbedrag op een sprintitem "
+"kiezen vraagt geen van beide — dat volgt de itemrechten."
+
+#: src/Backlog.php:2285
+#, php-format
+msgid "flagged above %s"
+msgstr "gemarkeerd boven %s"
+
+#: src/Backlog.php:2293
+msgid "over agreed cap"
+msgstr "boven afgesproken max"
+
+msgid "\"Delivered\" and \"open\" follow the exported items (filters apply); the sprint agreement and the customer totals do not."
+msgstr "\"Geleverd\" en \"open\" volgen de geëxporteerde items (filters gelden); de sprintafspraak en de klanttotalen niet."
+
+#, php-format
+msgid "%1$s assigned, %2$s proposed from the backlog"
+msgstr "%1$s toegewezen, %2$s voorgesteld vanuit de backlog"
+
+#, php-format
+msgid "%1$s of the agreed volume will lapse while %2$s is drawn from the wallet in other sprints — rebalance the work."
+msgstr "%1$s van de afgesproken omvang vervalt terwijl in andere sprints %2$s uit de portemonnee wordt gehaald — herverdeel het werk."
+
+msgid "A cell is the credits claimed for that sprint: work already assigned to it plus the backlog items proposed for it. The bar holds that against the credits agreed for that sprint — the recorded agreement, else the retainer inside its window."
+msgstr "Een cel is het aantal credits dat voor die sprint wordt geclaimd: werk dat er al aan is toegewezen plus de backlog-items die ervoor zijn voorgesteld. De balk zet dat af tegen de credits die voor die sprint zijn afgesproken — de vastgelegde afspraak, anders de vaste afspraak binnen haar periode."
+
+msgid "Agreed volume the upcoming sprints leave unbooked, summed per sprint"
+msgstr "Afgesproken omvang die de komende sprints ongeboekt laten, per sprint opgeteld"
+
+msgid "Credits drawn from the wallet because delivered work went past its sprint's grant"
+msgstr "Credits uit de portemonnee omdat geleverd werk boven de toekenning van zijn sprint uitkwam"
+
+#, php-format
+msgid "Customer “%s” is not available in the entity of that sprint."
+msgstr "Klant “%s” is niet beschikbaar in de entiteit van die sprint."
+
+#, php-format
+msgid "Customer “%s” is not available in the entity of the target sprint; the carried-over item has no customer."
+msgstr "Klant “%s” is niet beschikbaar in de entiteit van de doelsprint; het meegenomen item heeft geen klant."
+
+msgid "Delivered against the grants; below it what open work still reserves of them"
+msgstr "Geleverd tegen de toekenningen; daaronder wat open werk er nog van reserveert"
+
+msgid "Delivered work spends the sprint's grant first; work beyond it is drawn from the bought wallet. Open work only reserves. A grant that a completed sprint did not use lapses."
+msgstr "Geleverd werk gebruikt eerst de toekenning van de sprint; werk daarboven komt uit de gekochte portemonnee. Open werk reserveert alleen. Een toekenning die een afgeronde sprint niet heeft gebruikt vervalt."
+
+msgid "Free to plan: the wallet after what open work already reserves"
+msgstr "Vrij te plannen: de portemonnee na wat open werk al reserveert"
+
+msgid "From wallet this sprint"
+msgstr "Uit portemonnee deze sprint"
+
+msgid "Granted (all sprints)"
+msgstr "Toegekend (alle sprints)"
+
+msgid "Lapsed this sprint"
+msgstr "Vervallen deze sprint"
+
+msgid "Negative bookings: corrections and write-offs"
+msgstr "Negatieve boekingen: correcties en afschrijvingen"
+
+msgid "Open work in running and planned sprints that the grants do not cover"
+msgstr "Open werk in lopende en geplande sprints dat de toekenningen niet dekken"
+
+#, php-format
+msgid "Open work needs %s more than the wallet holds — top up or plan less."
+msgstr "Open werk heeft %s meer nodig dan de portemonnee bevat — vul aan of plan minder."
+
+msgid "Purchases up to today; a lot that lapsed unused and corrections are shown below it"
+msgstr "Aankopen tot vandaag; een ongebruikt vervallen partij en correcties staan eronder"
+
+msgid "Purchases with a booking date after today; not counted yet"
+msgstr "Aankopen met een boekingsdatum na vandaag; tellen nog niet mee"
+
+msgid "Reserved"
+msgstr "Gereserveerd"
+
+msgid "Reserved from wallet"
+msgstr "Gereserveerd uit portemonnee"
+
+msgid "Reserved on grants"
+msgstr "Gereserveerd op toekenningen"
+
+msgid "Reserved on the grants by open work"
+msgstr "Door open werk gereserveerd op de toekenningen"
+
+#, php-format
+msgid "The credit agreement could not be recorded for %d customer(s) on this sprint. Until it is, their figures follow the current retainer."
+msgstr "De creditafspraak kon voor %d klant(en) op deze sprint niet worden vastgelegd. Tot dat gebeurt volgen hun cijfers de huidige vaste afspraak."
+
+msgid "The planned and running sprints against the agreed volume, sprint by sprint. What a sprint fills below its agreement will lapse; what it fills above it is drawn from the bought wallet — one never offsets the other."
+msgstr "De geplande en lopende sprints tegenover de afgesproken omvang, sprint voor sprint. Wat een sprint onder zijn afspraak vult vervalt; wat hij erboven vult komt uit de gekochte portemonnee — het een compenseert het ander nooit."
+
+msgid "The wallet today: bought credits after what completed and running sprints drew past their agreement, corrections and lapsed lots. Below it, what open work still needs beyond the agreements."
+msgstr "De portemonnee vandaag: gekochte credits na wat afgeronde en lopende sprints boven hun afspraak hebben opgenomen, correcties en vervallen partijen. Daaronder wat open werk nog nodig heeft boven de afspraken."
+
+msgid "The wallet today; below it what open work still needs beyond the grants"
+msgstr "De portemonnee vandaag; daaronder wat open werk nog nodig heeft boven de toekenningen"
+
+msgid "This customer is not available in your entities."
+msgstr "Deze klant is niet beschikbaar in uw entiteiten."
+
+msgid "Used (all sprints)"
+msgstr "Gebruikt (alle sprints)"
+
+msgid "Wallet"
+msgstr "Portemonnee"
+
+msgid "What the upcoming sprints claim past their agreement, summed per sprint"
+msgstr "Wat de komende sprints boven hun afspraak claimen, per sprint opgeteld"
+
+msgid "Will lapse"
+msgstr "Vervalt"
+
+msgid "You are not allowed to delete credit bookings"
+msgstr "U mag geen creditboekingen verwijderen"
+
+msgid "corrected"
+msgstr "gecorrigeerd"
+
+msgid "dated ahead"
+msgstr "vooruit gedateerd"
+
+msgid "lapsed"
+msgstr "vervallen"
+
+msgid "reserved"
+msgstr "gereserveerd"
+
+msgid "A rule applies from its start date until the next rule starts, so a newer rule always ends the one before it. A rule with 0 credits ends the retainer; a rule without a date applies from the beginning."
+msgstr "Een regel geldt vanaf haar ingangsdatum tot de volgende regel ingaat; een nieuwere regel beëindigt dus altijd de vorige. Een regel met 0 credits beëindigt de vaste afspraak; een regel zonder datum geldt vanaf het begin."
+
+msgid "Cap"
+msgstr "Maximum"
+
+msgid "Catalogue"
+msgstr "Catalogus"
+
+msgid "Charged to the customer once this item is delivered. Pick a product from the catalogue to fill in its default, or enter the credits by hand."
+msgstr "Wordt bij de klant in rekening gebracht zodra dit item is geleverd. Kies een product uit de catalogus om de standaard in te vullen, of voer de credits handmatig in."
+
+msgid "Default credits"
+msgstr "Standaardcredits"
+
+msgid "In force"
+msgstr "Van kracht"
+
+msgid "Manual credits"
+msgstr "Handmatige credits"
+
+msgid "New rule"
+msgstr "Nieuwe regel"
+
+msgid "New rule: fill in the credits and save"
+msgstr "Nieuwe regel: vul de credits in en bewaar"
+
+msgid "No retainer: this customer only draws on bought credits."
+msgstr "Geen vaste afspraak: deze klant gebruikt alleen gekochte credits."
+
+msgid "Picking a product fills in its default credits; the amount stays editable."
+msgstr "Een product kiezen vult de standaardcredits in; het aantal blijft aanpasbaar."
+
+msgid "Remove this rule"
+msgstr "Regel verwijderen"
+
+msgid "Remove this rule?"
+msgstr "Deze regel verwijderen?"
+
+msgid "Save the customer first, then add the retainer rules."
+msgstr "Bewaar eerst de klant en voeg daarna de afspraakregels toe."
+
+msgid "Starts on"
+msgstr "Ingangsdatum"
+
+msgid "The next retainer rule and the day it takes over"
+msgstr "De volgende afspraakregel en de dag waarop die ingaat"
+
+msgid "Upcoming"
+msgstr "Aanstaand"
+
+#, php-format
+msgid "from %s"
+msgstr "vanaf %s"
+
+msgid "from the beginning"
+msgstr "vanaf het begin"
+
+msgid "Retainer rule"
+msgid_plural "Retainer rules"
+msgstr[0] "Afspraakregel"
+msgstr[1] "Afspraakregels"
+
+msgid "Credit product"
+msgid_plural "Credit products"
+msgstr[0] "Creditproduct"
+msgstr[1] "Creditproducten"
+
+msgid "Credit catalogue"
+msgstr "Creditcatalogus"
+
+msgid "Filled in on an item when this product is picked; the amount stays editable. Not used for a folder."
+msgstr "Wordt op een item ingevuld zodra dit product wordt gekozen; het aantal blijft aanpasbaar. Niet gebruikt voor een map."
+
+msgid "Folder"
+msgstr "Map"
+
+msgid "New folder"
+msgstr "Nieuwe map"
+
+msgid "New product"
+msgstr "Nieuw product"
+
+msgid "New product in this folder"
+msgstr "Nieuw product in deze map"
+
+msgid "Products and tasks with a default number of credits. Pick one on a sprint item to fill in its credits; the amount stays editable. Folders only group."
+msgstr "Producten en taken met een standaardaantal credits. Kies er een op een sprintitem om de credits in te vullen; het aantal blijft aanpasbaar. Mappen groeperen alleen."
+
+msgid "The catalogue is empty. Add a folder or a product to start."
+msgstr "De catalogus is leeg. Voeg een map of product toe om te beginnen."
+
+msgid "Top level"
+msgstr "Hoofdniveau"

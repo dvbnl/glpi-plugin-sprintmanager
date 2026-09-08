@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.2.2');
+define('PLUGIN_SPRINT_VERSION', '1.3.0');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -119,6 +119,24 @@ function plugin_init_sprint(): void
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintOverview',
         ['addtabon' => []]
+    );
+
+    // Credits: customers, the credits they buy and what the sprints claim of
+    // them. Gated on the plugin_sprint_credits right.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintCredits',
+        ['addtabon' => []]
+    );
+
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintCustomer',
+        ['addtabon' => []]
+    );
+
+    // Credit ledger: tab on the customer.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintCredit',
+        ['addtabon' => ['GlpiPlugin\Sprint\SprintCustomer']]
     );
 
     Plugin::registerClass(

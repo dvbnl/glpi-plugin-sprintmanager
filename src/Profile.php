@@ -45,6 +45,17 @@ class Profile extends CommonDBTM
                 ],
             ],
             [
+                'itemtype'  => 'GlpiPlugin\Sprint\SprintCustomer',
+                'label'     => __('Customers & credits', 'sprint'),
+                'field'     => 'plugin_sprint_credits',
+                'rights'    => [
+                    READ   => __('Read'),
+                    CREATE => __('Create'),
+                    UPDATE => __('Update'),
+                    PURGE  => __('Delete permanently'),
+                ],
+            ],
+            [
                 'itemtype'  => 'GlpiPlugin\Sprint\SprintItem',
                 'label'     => __('Sprint items', 'sprint'),
                 'field'     => 'plugin_sprint_item',
@@ -81,7 +92,13 @@ class Profile extends CommonDBTM
                     ],
                 ]);
                 if (count($existing) === 0) {
-                    $value = ($profile['id'] == 4) ? ALLSTANDARDRIGHT : READ;
+                    // Credit figures are commercially sensitive: super-admin
+                    // only, every other profile is granted them deliberately.
+                    if ($field === 'plugin_sprint_credits') {
+                        $value = ($profile['id'] == 4) ? (READ | CREATE | UPDATE | PURGE) : 0;
+                    } else {
+                        $value = ($profile['id'] == 4) ? ALLSTANDARDRIGHT : READ;
+                    }
                     $DB->insert('glpi_profilerights', [
                         'profiles_id' => $profile['id'],
                         'name'        => $field,

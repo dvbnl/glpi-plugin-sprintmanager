@@ -598,6 +598,7 @@ class SprintMeeting extends CommonDBTM
 
         // Build sprint items data for the review table
         $sprintItemsData = [];
+        $showCredits     = SprintCustomer::canUseCredits();
         if ($isExisting && $sprintId > 0) {
             $si        = new SprintItem();
             $statuses  = SprintItem::getAllStatuses();
@@ -702,6 +703,10 @@ class SprintMeeting extends CommonDBTM
                     'users_id'             => (int)$row['users_id'],
                     'story_points'         => (int)$row['story_points'],
                     'capacity'             => (float)($row['capacity'] ?? 0),
+                    'customer_id'          => $showCredits ? (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0) : 0,
+                    'customer_name'        => $showCredits ? SprintCustomer::getNameFor((int)($row['plugin_sprint_sprintcustomers_id'] ?? 0)) : '',
+                    'credit_product_id'    => $showCredits ? (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0) : 0,
+                    'credits'              => $showCredits ? SprintCustomer::formatCredits($row['credits'] ?? 0) : '0',
                     'priority'             => (int)($row['priority'] ?? 3),
                     'note'                 => $row['note'] ?? '',
                     'itemtype'             => $itemtype,
@@ -760,7 +765,15 @@ class SprintMeeting extends CommonDBTM
                     5 => __('Very high'),
                 ],
                 'capacity_choices'  => SprintMember::getCapacityChoices(),
-                'planned_actual'    => \GlpiPlugin\Sprint\Config::isPlannedActualEnabled(),
+                'can_view_credits'  => SprintCustomer::canUseCredits(),
+                'can_edit_credits'  => SprintCustomer::canUseCredits(),
+                'customer_label'    => SprintCustomer::getTypeName(1),
+                'customers'         => array_map(
+                    static fn($c) => (string)$c['name'],
+                    SprintCustomer::getAll()
+                ),
+                'credit_product_label' => \GlpiPlugin\Sprint\SprintCreditProduct::getTypeName(1),
+                'credit_products'   => \GlpiPlugin\Sprint\SprintCreditProduct::pickerRows(),
                 'backlog_url'       => \GlpiPlugin\Sprint\Backlog::getFormURL(),
                 'meeting_url'       => static::getFormURLWithID($ID),
                 'meeting_id'        => $ID,

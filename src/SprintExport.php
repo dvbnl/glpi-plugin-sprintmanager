@@ -506,6 +506,7 @@ class SprintExport extends CommonGLPI
         echo "<th style='padding:8px;border-bottom:1px solid #dee2e6;width:160px;'>" . __('Distribution', 'sprint') . "</th>";
         echo "</tr></thead><tbody>";
 
+        $usedBySprint = SprintMember::usedCapacityBySprint($sprintId);
         foreach ($members as $row) {
             $userId   = (int)$row['users_id'];
             // Effective capacity (availability exceptions applied), matching the dashboard.
@@ -516,15 +517,8 @@ class SprintExport extends CommonGLPI
             );
             $roleName = $roles[$row['role']] ?? $row['role'];
 
-            $regularUsed = 0.0;
-            foreach ($si->find([
-                'plugin_sprint_sprints_id' => $sprintId,
-                'users_id'                 => $userId,
-                'is_fastlane'              => 0,
-            ]) as $r) {
-                $regularUsed += (float)($r['capacity'] ?? 0);
-            }
-            $fastlaneUsed = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
+            $regularUsed  = (float)($usedBySprint[$userId]['regular'] ?? 0.0);
+            $fastlaneUsed = (float)($usedBySprint[$userId]['fastlane'] ?? 0.0);
             $used         = $regularUsed + $fastlaneUsed;
             $free         = max($totalCap - $used, 0);
             $regWidth     = $totalCap > 0 ? min(round(($regularUsed / $totalCap) * 100), 100) : 0;
@@ -1008,62 +1002,63 @@ class SprintExport extends CommonGLPI
         echo "<h5 class='modal-title'><i class='fas fa-file-csv me-1'></i>" . __('Download CSV', 'sprint') . "</h5>";
         echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
         echo "</div>";
-        echo "<div class='modal-body'>";
-        echo "<p class='text-muted sprint-small'>"
-            . htmlescape(__('Tick what the file should contain. Every ticked section is written as its own block, one after another.', 'sprint'))
-            . "</p>";
+        echo self::csvDialogStyles();
+        echo "<div class='modal-body sprint-csv-body'>";
 
-        // --- Sections ---------------------------------------------------
-        echo "<div class='mb-3'><label class='form-label fw-bold'>"
-            . "<i class='fas fa-layer-group me-1'></i>" . __('Sections', 'sprint') . "</label>";
-        echo "<div class='d-flex flex-wrap gap-3'>";
+        // Wide dialogs: sections left, item columns right.
+        echo "<div class='sprint-csv-cols'>";
+
+        echo "<section class='sprint-csv-group'>";
+        echo "<h6 class='sprint-csv-head'>" . htmlescape(__('Sections', 'sprint')) . "</h6>";
+        echo "<div class='sprint-csv-list'>";
         foreach (self::getCsvSections() as $key => $label) {
             $checked = in_array($key, self::CSV_DEFAULT_SECTIONS, true) ? ' checked' : '';
-            echo "<label class='form-check' style='display:inline-flex;align-items:center;gap:6px;'>"
+            echo "<label class='sprint-csv-opt'>"
                 . "<input type='checkbox' class='form-check-input sprint-csv-section' value='" . htmlescape($key) . "'{$checked}>"
-                . "<span class='form-check-label'>" . htmlescape($label) . "</span></label>";
+                . "<span>" . htmlescape($label) . "</span></label>";
         }
-        echo "</div></div>";
+        echo "</div></section>";
 
-        // --- Item columns -----------------------------------------------
-        echo "<div class='mb-3 sprint-csv-columns-block'><label class='form-label fw-bold'>"
-            . "<i class='fas fa-table-columns me-1'></i>" . __('Columns for the item rows', 'sprint')
-            . " <button type='button' class='btn btn-sm btn-link p-0 ms-2 sprint-csv-toggle-all'>"
-            . htmlescape(__('Select all / none', 'sprint')) . "</button></label>";
-        echo "<div class='d-flex flex-wrap gap-3'>";
+        echo "<section class='sprint-csv-group'>";
+        echo "<h6 class='sprint-csv-head'>" . htmlescape(__('Columns for the item rows', 'sprint'))
+            . "<button type='button' class='sprint-csv-link sprint-csv-toggle-all'>"
+            . htmlescape(__('all / none', 'sprint')) . "</button></h6>";
+        echo "<div class='sprint-csv-list sprint-csv-list-2'>";
         foreach (self::getCsvColumns() as $key => $label) {
             $checked = in_array($key, self::CSV_DEFAULT_COLUMNS, true) ? ' checked' : '';
-            echo "<label class='form-check' style='display:inline-flex;align-items:center;gap:6px;'>"
+            echo "<label class='sprint-csv-opt'>"
                 . "<input type='checkbox' class='form-check-input sprint-csv-col' value='" . htmlescape($key) . "'{$checked}>"
-                . "<span class='form-check-label'>" . htmlescape($label) . "</span></label>";
+                . "<span>" . htmlescape($label) . "</span></label>";
         }
-        echo "</div>";
-        echo "<div class='form-text sprint-small text-muted'>"
-            . htmlescape(__('Planned is the estimate the item was taken in with; realised is the actual figure, which falls back to the planned one where nothing was recorded.', 'sprint'))
-            . "</div></div>";
+        echo "</div></section>";
 
-        // --- Category filter --------------------------------------------
-        echo "<div class='mb-3'><label class='form-label fw-bold'>"
-            . "<i class='fas fa-folder me-1'></i>" . __('Categories', 'sprint')
-            . " <button type='button' class='btn btn-sm btn-link p-0 ms-2 sprint-csv-toggle-cats'>"
-            . htmlescape(__('Select all / none', 'sprint')) . "</button></label>";
-        echo "<div class='d-flex flex-wrap gap-3'>";
+        echo "</div>"; // sprint-csv-cols
+
+        echo "<section class='sprint-csv-group'>";
+        echo "<h6 class='sprint-csv-head'>" . htmlescape(__('Categories', 'sprint'))
+            . "<button type='button' class='sprint-csv-link sprint-csv-toggle-cats'>"
+            . htmlescape(__('all / none', 'sprint')) . "</button></h6>";
+        echo "<div class='sprint-csv-list sprint-csv-list-cats sprint-csv-scroll'>";
         foreach ($categories as $cid => $cat) {
-            $indent = (int)($cat['level'] ?? 0) > 0 ? 'margin-left:18px;' : '';
-            echo "<label class='form-check' style='display:inline-flex;align-items:center;gap:6px;{$indent}'>"
+            $color = htmlescape((string)($cat['color'] ?? '#6c757d'));
+            $name  = (int)($cat['level'] ?? 0) > 0
+                ? '↳ ' . (string)$cat['name']
+                : (string)$cat['name'];
+            echo "<label class='sprint-csv-opt'>"
                 . "<input type='checkbox' class='form-check-input sprint-csv-cat' value='" . (int)$cid . "' checked>"
-                . "<span class='form-check-label'>" . htmlescape((string)$cat['name']) . "</span></label>";
+                . "<span class='sprint-csv-dot' style='background:{$color};'></span>"
+                . "<span>" . htmlescape($name) . "</span></label>";
         }
-        echo "<label class='form-check' style='display:inline-flex;align-items:center;gap:6px;'>"
+        echo "<label class='sprint-csv-opt'>"
             . "<input type='checkbox' class='form-check-input sprint-csv-cat' value='0' checked>"
-            . "<span class='form-check-label fst-italic'>" . htmlescape(__('No category', 'sprint')) . "</span></label>";
+            . "<span class='sprint-csv-dot' style='background:#6c757d;'></span>"
+            . "<span class='fst-italic'>" . htmlescape(__('No category', 'sprint')) . "</span></label>";
         echo "</div>";
-        echo "<div class='form-check form-switch mt-2'>";
+        echo "<label class='sprint-csv-opt sprint-csv-split'>";
         echo "<input class='form-check-input' type='checkbox' id='sprint-csv-split'>";
-        echo "<label class='form-check-label' for='sprint-csv-split'>"
-            . htmlescape(__('Split the item rows into one block per category, each with its own subtotal', 'sprint'))
-            . "</label>";
-        echo "</div></div>";
+        echo "<span>" . htmlescape(__('One block per category, each with its own subtotal', 'sprint')) . "</span>";
+        echo "</label>";
+        echo "</section>";
 
         echo "<div class='alert alert-warning py-2 sprint-small sprint-csv-error' style='display:none;'></div>";
         echo "</div>"; // modal-body
@@ -1156,6 +1151,90 @@ class SprintExport extends CommonGLPI
 HTML;
     }
 
+    /** An even grid of small options instead of a wall of wrapping checkboxes. */
+    private static function csvDialogStyles(): string
+    {
+        return <<<'HTML'
+<style>
+.sprint-csv-body { padding-top: 14px; }
+.sprint-csv-cols {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px 26px;
+}
+@media (min-width: 720px) {
+    .sprint-csv-cols { grid-template-columns: minmax(180px, 1fr) 2fr; }
+}
+.sprint-csv-body > .sprint-csv-group { margin-top: 18px; }
+.sprint-csv-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 0 0 8px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--tblr-border-color, #e2e8f0);
+    font-size: 0.74rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-csv-link {
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 0.72rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--tblr-primary, #0d6efd);
+    cursor: pointer;
+}
+.sprint-csv-link:hover { text-decoration: underline; }
+.sprint-csv-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 2px 18px;
+}
+.sprint-csv-list-2 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.sprint-csv-list-cats { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.sprint-csv-scroll {
+    max-height: 168px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+.sprint-csv-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 3px 0;
+    font-size: 0.86rem;
+    line-height: 1.3;
+    cursor: pointer;
+}
+.sprint-csv-opt input { flex: none; margin: 0; }
+.sprint-csv-opt > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sprint-csv-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.sprint-csv-split {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--tblr-border-color, #e2e8f0);
+    color: var(--tblr-secondary, #6c757d);
+}
+</style>
+HTML;
+    }
+
     /**
      * Every column the item section can carry, in the order they are written.
      * Keys are the values submitted by the export dialog.
@@ -1164,7 +1243,7 @@ HTML;
      */
     public static function getCsvColumns(): array
     {
-        return [
+        $columns = [
             'name'             => __('Name'),
             'type'             => __('Type'),
             'category'         => __('Category', 'sprint'),
@@ -1175,11 +1254,18 @@ HTML;
             'priority'         => __('Priority'),
             'story_points'     => __('Story Points', 'sprint'),
             'capacity_planned' => __('Planned capacity', 'sprint') . ' %',
-            'capacity_actual'  => __('Realised capacity', 'sprint') . ' %',
-            'tags'             => __('Tags', 'sprint'),
-            'linked'           => __('Linked item', 'sprint'),
-            'parent_project'   => __('Parent project', 'sprint'),
-            'note'             => __('Note', 'sprint'),
+        ];
+        // Credit figures need the credits right.
+        if (SprintCustomer::canUseCredits()) {
+            $columns['customer']       = SprintCustomer::getTypeName(1);
+            $columns['credits']        = __('Credits', 'sprint');
+            $columns['credit_product'] = SprintCreditProduct::getTypeName(1);
+        }
+        return $columns + [
+            'tags'           => __('Tags', 'sprint'),
+            'linked'         => __('Linked item', 'sprint'),
+            'parent_project' => __('Parent project', 'sprint'),
+            'note'           => __('Note', 'sprint'),
         ];
     }
 
@@ -1196,12 +1282,16 @@ HTML;
      */
     public static function getCsvSections(): array
     {
-        return [
+        $sections = [
             'items'        => __('Sprint items', 'sprint'),
             'categories'   => __('Totals per category', 'sprint'),
             'members'      => __('Workload per member', 'sprint'),
             'dependencies' => __('Dependencies', 'sprint'),
         ];
+        if (SprintCustomer::canViewCredits()) {
+            $sections['credits'] = __('Credits per customer', 'sprint');
+        }
+        return $sections;
     }
 
     /** Sections pre-ticked in the export dialog. */
@@ -1306,6 +1396,9 @@ HTML;
                 case 'members':
                     self::writeCsvMembers($out, $sprintId);
                     break;
+                case 'credits':
+                    self::writeCsvCredits($out, $items, $sprintId);
+                    break;
                 case 'dependencies':
                     self::writeCsvDependencies($out, $items, $itemIds);
                     break;
@@ -1373,12 +1466,12 @@ HTML;
             self::csvRow($out, [__('Category', 'sprint') . ': ' . $label]);
             self::csvRow($out, $header);
             $plannedTotal = 0.0;
-            $actualTotal  = 0.0;
+            $creditTotal  = 0.0;
             $pointsTotal  = 0;
             foreach ($grouped[$cid] as $row) {
                 self::csvRow($out, self::csvItemFields($row, $tagsById, $opt['columns']));
-                $plannedTotal += self::csvItemCapacity($row, false);
-                $actualTotal  += self::csvItemCapacity($row, true);
+                $plannedTotal += self::csvItemCapacity($row);
+                $creditTotal  += (float)($row['credits'] ?? 0);
                 $pointsTotal  += (int)$row['story_points'];
             }
             // Subtotal line mirroring the selected columns, so it lines up
@@ -1389,7 +1482,7 @@ HTML;
                     case 'name':             $subtotal[] = __('Subtotal', 'sprint'); break;
                     case 'story_points':     $subtotal[] = $pointsTotal; break;
                     case 'capacity_planned': $subtotal[] = SprintMember::formatCapacity($plannedTotal); break;
-                    case 'capacity_actual':  $subtotal[] = SprintMember::formatCapacity($actualTotal); break;
+                    case 'credits':          $subtotal[] = SprintCustomer::formatCredits($creditTotal); break;
                     default:                 $subtotal[] = ''; break;
                 }
             }
@@ -1399,10 +1492,9 @@ HTML;
 
     /**
      * Allocated capacity for one item. Fastlane items have no single figure of
-     * their own — their capacity is the sum of the member allocations, which
-     * carry no separate realised value, so planned and realised match there.
+     * their own — their capacity is the sum of the member allocations.
      */
-    private static function csvItemCapacity(array $row, bool $actual): float
+    private static function csvItemCapacity(array $row): float
     {
         if ((int)($row['is_fastlane'] ?? 0) === 1) {
             $total = 0.0;
@@ -1413,7 +1505,7 @@ HTML;
             }
             return $total;
         }
-        return SprintItem::capacityFor($row, $actual);
+        return (float)($row['capacity'] ?? 0);
     }
 
     /**
@@ -1479,10 +1571,16 @@ HTML;
                     $fields[] = (int)$row['story_points'];
                     break;
                 case 'capacity_planned':
-                    $fields[] = SprintMember::formatCapacity(self::csvItemCapacity($row, false));
+                    $fields[] = SprintMember::formatCapacity(self::csvItemCapacity($row));
                     break;
-                case 'capacity_actual':
-                    $fields[] = SprintMember::formatCapacity(self::csvItemCapacity($row, true));
+                case 'customer':
+                    $fields[] = SprintCustomer::getNameFor((int)($row['plugin_sprint_sprintcustomers_id'] ?? 0));
+                    break;
+                case 'credits':
+                    $fields[] = SprintCustomer::formatCredits($row['credits'] ?? 0);
+                    break;
+                case 'credit_product':
+                    $fields[] = SprintCreditProduct::getFullNameFor((int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0));
                     break;
                 case 'tags':
                     $fields[] = implode('; ', $tagsById[$itemId] ?? []);
@@ -1533,6 +1631,93 @@ HTML;
     }
 
     /**
+     * Credits per customer in this sprint, next to their overall balance.
+     *
+     * @param resource $out
+     */
+    private static function writeCsvCredits($out, array $items, int $sprintId): void
+    {
+        if (!SprintCustomer::canViewCredits()) {
+            return;
+        }
+
+        // Delivered versus still open, over the exported items (so a category
+        // filter narrows these two columns, never the customer totals). Same
+        // rule as the balances: parked open work claims nothing.
+        $inSprint = [];
+        foreach ($items as $row) {
+            $credits = (float)($row['credits'] ?? 0);
+            if ($credits == 0.0 || SprintCustomer::bucketFor($row) === null) {
+                continue;
+            }
+            $cid = (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0);
+            $inSprint[$cid] ??= ['done' => 0.0, 'open' => 0.0];
+            $key = (string)$row['status'] === SprintItem::STATUS_DONE ? 'done' : 'open';
+            $inSprint[$cid][$key] += $credits;
+        }
+
+        self::csvRow($out, [__('Credits per customer', 'sprint')]);
+        self::csvRow($out, [__('"Delivered" and "open" follow the exported items (filters apply); the sprint agreement and the customer totals do not.', 'sprint')]);
+        self::csvRow($out, [
+            SprintCustomer::getTypeName(1),
+            __('Agreed this sprint', 'sprint'),
+            __('Delivered this sprint', 'sprint'),
+            __('Open this sprint', 'sprint'),
+            __('Lapsed this sprint', 'sprint'),
+            __('From wallet this sprint', 'sprint'),
+            __('Granted (all sprints)', 'sprint'),
+            __('Used (all sprints)', 'sprint'),
+            __('Reserved on grants', 'sprint'),
+            __('Bought', 'sprint'),
+            __('Wallet', 'sprint'),
+            __('Reserved from wallet', 'sprint'),
+            __('Free', 'sprint'),
+        ]);
+
+        if (count($inSprint) === 0) {
+            self::csvRow($out, [__('No credits assigned in this sprint', 'sprint')]);
+            return;
+        }
+
+        $balances = SprintCustomer::balances(false);
+        // Customers in name order, "no customer" last.
+        $order = array_keys($balances);
+        foreach (array_keys($inSprint) as $cid) {
+            if (!in_array($cid, $order, true)) {
+                $order[] = $cid;
+            }
+        }
+        $order = array_filter($order, static fn($cid) => $cid !== 0);
+        $order[] = 0;
+
+        foreach ($order as $cid) {
+            if (!isset($inSprint[$cid])) {
+                continue;
+            }
+            $bal   = $balances[$cid] ?? null;
+            $cell  = SprintCustomer::fundingFor($cid, $sprintId);
+            $label = $cid > 0
+                ? (SprintCustomer::getNameFor($cid) ?: ('#' . $cid))
+                : __('No customer', 'sprint');
+            self::csvRow($out, [
+                $label,
+                $cell !== null ? SprintCustomer::formatCredits($cell['grant']) : '',
+                SprintCustomer::formatCredits($inSprint[$cid]['done']),
+                SprintCustomer::formatCredits($inSprint[$cid]['open']),
+                $cell !== null ? SprintCustomer::formatCredits($cell['lapsed']) : '',
+                $cell !== null ? SprintCustomer::formatCredits($cell['wallet_consumed']) : '',
+                $bal !== null ? SprintCustomer::formatCredits($bal['granted']) : '',
+                $bal !== null ? SprintCustomer::formatCredits($bal['grant_used']) : '',
+                $bal !== null ? SprintCustomer::formatCredits($bal['grant_reserved']) : '',
+                $bal !== null ? SprintCustomer::formatCredits($bal['purchased']) : '',
+                $bal !== null ? SprintCustomer::formatCredits($bal['wallet_balance']) : '',
+                $bal !== null ? SprintCustomer::formatCredits($bal['wallet_reserved']) : '',
+                $bal !== null ? SprintCustomer::formatCredits($bal['available']) : '',
+            ]);
+        }
+    }
+
+    /**
      * Per-category totals over the exported items, so the category split can be
      * read without pivoting the item rows.
      *
@@ -1545,13 +1730,13 @@ HTML;
             $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
             $totals[$cid] ??= [
                 'items' => 0, 'done' => 0, 'points' => 0, 'points_done' => 0,
-                'planned' => 0.0, 'actual' => 0.0,
+                'planned' => 0.0, 'credits' => 0.0,
             ];
             $done = (string)$row['status'] === SprintItem::STATUS_DONE;
             $totals[$cid]['items']++;
             $totals[$cid]['points']  += (int)$row['story_points'];
-            $totals[$cid]['planned'] += self::csvItemCapacity($row, false);
-            $totals[$cid]['actual']  += self::csvItemCapacity($row, true);
+            $totals[$cid]['planned'] += self::csvItemCapacity($row);
+            $totals[$cid]['credits'] += (float)($row['credits'] ?? 0);
             if ($done) {
                 $totals[$cid]['done']++;
                 $totals[$cid]['points_done'] += (int)$row['story_points'];
@@ -1566,7 +1751,7 @@ HTML;
             __('Story Points', 'sprint'),
             __('Story points done', 'sprint'),
             __('Planned capacity', 'sprint') . ' %',
-            __('Realised capacity', 'sprint') . ' %',
+            __('Credits', 'sprint'),
         ]);
 
         if (count($totals) === 0) {
@@ -1594,7 +1779,7 @@ HTML;
                 $t['points'],
                 $t['points_done'],
                 SprintMember::formatCapacity($t['planned']),
-                SprintMember::formatCapacity($t['actual']),
+                SprintCustomer::formatCredits($t['credits']),
             ]);
         }
     }
@@ -1613,14 +1798,13 @@ HTML;
             __('Role', 'sprint'),
             __('Capacity', 'sprint') . ' %',
             __('Planned capacity', 'sprint') . ' %',
-            __('Realised capacity', 'sprint') . ' %',
             __('Fastlane', 'sprint') . ' %',
             __('Used', 'sprint') . ' %',
             __('Free', 'sprint') . ' %',
         ]);
 
-        $roles = SprintMember::getAllRoles();
-        $si    = new SprintItem();
+        $roles        = SprintMember::getAllRoles();
+        $usedBySprint = SprintMember::usedCapacityBySprint($sprintId);
 
         foreach ((new SprintMember())->find(['plugin_sprint_sprints_id' => $sprintId], ['role ASC']) as $row) {
             $userId = (int)$row['users_id'];
@@ -1632,17 +1816,8 @@ HTML;
                 SprintMember::normalizeCapacity($row['capacity_percent'])
             );
 
-            $planned = 0.0;
-            $actual  = 0.0;
-            foreach ($si->find([
-                'plugin_sprint_sprints_id' => $sprintId,
-                'users_id'                 => $userId,
-                'is_fastlane'              => 0,
-            ]) as $r) {
-                $planned += SprintItem::capacityFor($r, false);
-                $actual  += SprintItem::capacityFor($r, true);
-            }
-            $fastlane = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
+            $planned  = (float)($usedBySprint[$userId]['regular'] ?? 0.0);
+            $fastlane = (float)($usedBySprint[$userId]['fastlane'] ?? 0.0);
             $used     = $planned + $fastlane;
 
             self::csvRow($out, [
@@ -1650,7 +1825,6 @@ HTML;
                 (string)($roles[$row['role']] ?? $row['role']),
                 SprintMember::formatCapacity($totalCap),
                 SprintMember::formatCapacity($planned),
-                SprintMember::formatCapacity($actual),
                 SprintMember::formatCapacity($fastlane),
                 SprintMember::formatCapacity($used),
                 SprintMember::formatCapacity(max($totalCap - $used, 0)),

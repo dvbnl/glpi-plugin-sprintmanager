@@ -356,7 +356,12 @@ class SprintDashboard extends CommonGLPI
                 . ' data-owner-name="' . htmlescape($ownerNameRaw) . '"'
                 . ' data-story-points="' . (int)$row['story_points'] . '"'
                 . ' data-capacity="' . SprintMember::formatCapacity($row['capacity'] ?? 0) . '"'
-                . ' data-capacity-actual="' . SprintItem::formatActualCapacity($row['capacity_actual'] ?? null) . '"'
+                . (SprintCustomer::canUseCredits()
+                    ? ' data-customer-id="' . (int)($row['customer_id'] ?? 0) . '"'
+                        . ' data-customer-name="' . htmlescape(SprintCustomer::getNameFor((int)($row['customer_id'] ?? 0))) . '"'
+                        . ' data-credits="' . htmlescape(SprintCustomer::formatCredits($row['credits'] ?? 0)) . '"'
+                        . ' data-credit-product-id="' . (int)($row['credit_product_id'] ?? 0) . '"'
+                    : '')
                 . ' data-is-fastlane="0"'
                 . ' data-is-adhoc="' . ($isAdhoc ? 1 : 0) . '"'
                 . ' data-item-tags="' . htmlescape(SprintItem::tagsToBlob($rowTags)) . '"'
@@ -415,25 +420,16 @@ class SprintDashboard extends CommonGLPI
             return;
         }
 
-        // Regular (non-fastlane) per-user usage
-        $si = new SprintItem();
-        $regularUsed = [];
-        foreach ($si->find([
-            'plugin_sprint_sprints_id' => $sprintId,
-            'is_fastlane'              => 0,
-        ]) as $row) {
-            $uid = (int)$row['users_id'];
-            if ($uid > 0) {
-                $regularUsed[$uid] = ($regularUsed[$uid] ?? 0) + (float)($row['capacity'] ?? 0);
-            }
-        }
-
+        // One capacity dataset for the whole team (three grouped queries).
+        $usedBySprint   = SprintMember::usedCapacityBySprint($sprintId);
+        $regularUsed    = [];
         $fastlaneUsed   = [];
         $dependencyUsed = [];
         foreach ($members as $row) {
             $uid = (int)$row['users_id'];
-            $fastlaneUsed[$uid]   = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $uid);
-            $dependencyUsed[$uid] = SprintItemDependency::getUsedDependencyCapacityForUser($sprintId, $uid);
+            $regularUsed[$uid]    = (float)($usedBySprint[$uid]['regular'] ?? 0.0);
+            $fastlaneUsed[$uid]   = (float)($usedBySprint[$uid]['fastlane'] ?? 0.0);
+            $dependencyUsed[$uid] = (float)($usedBySprint[$uid]['dependency'] ?? 0.0);
         }
 
         $roles = SprintMember::getAllRoles();
@@ -946,7 +942,9 @@ class SprintDashboard extends CommonGLPI
                 'raw_priority'  => (int)($row['priority'] ?? 3),
                 'story_points'  => (int)$row['story_points'],
                 'capacity'      => (float)($row['capacity'] ?? 0),
-                'capacity_actual' => $row['capacity_actual'] ?? null,
+                'customer_id'   => (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0),
+                'credits'       => (float)($row['credits'] ?? 0),
+                'credit_product_id' => (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0),
                 'users_id'      => (int)$row['users_id'],
                 'is_adhoc'      => (int)($row['is_adhoc'] ?? 0),
                 'note'          => (string)($row['note'] ?? ''),
@@ -979,17 +977,10 @@ class SprintDashboard extends CommonGLPI
             return;
         }
 
-        $si = new SprintItem();
-        $regularUsed = 0.0;
-        foreach ($si->find([
-            'plugin_sprint_sprints_id' => $sprintId,
-            'users_id'                 => $userId,
-            'is_fastlane'              => 0,
-        ]) as $row) {
-            $regularUsed += (float)($row['capacity'] ?? 0);
-        }
-        $fastlaneUsed   = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
-        $dependencyUsed = SprintItemDependency::getUsedDependencyCapacityForUser($sprintId, $userId);
+        $usedBySprint   = SprintMember::usedCapacityBySprint($sprintId);
+        $regularUsed    = (float)($usedBySprint[$userId]['regular'] ?? 0.0);
+        $fastlaneUsed   = (float)($usedBySprint[$userId]['fastlane'] ?? 0.0);
+        $dependencyUsed = (float)($usedBySprint[$userId]['dependency'] ?? 0.0);
         $usedCapacity   = $regularUsed + $fastlaneUsed + $dependencyUsed;
 
         $roles = SprintMember::getAllRoles();

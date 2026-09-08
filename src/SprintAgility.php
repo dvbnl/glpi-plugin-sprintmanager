@@ -231,10 +231,11 @@ class SprintAgility extends CommonGLPI
         }
         foreach ($DB->request(['FROM' => Sprint::getTable(), 'WHERE' => ['status' => Sprint::STATUS_ACTIVE]]) as $activeSprint) {
             $sprintId = (int)$activeSprint['id'];
+            $usedBySprint = SprintMember::usedCapacityBySprint($sprintId);
             foreach ((new SprintMember())->find(['plugin_sprint_sprints_id' => $sprintId]) as $member) {
                 $uid = (int)$member['users_id'];
                 $available = self::effectiveCapacity($sprintId, $uid, (float)$member['capacity_percent']);
-                $used = SprintMember::getUsedCapacityForUser($sprintId, $uid);
+                $used = (float)($usedBySprint[$uid]['total'] ?? 0.0);
                 if ($used > $available) {
                     $created += self::signalOnce($sprintId, $uid, 'capacity', sprintf(__('Capacity overloaded: %s%% used of %s%% available.', 'sprint'), SprintMember::formatCapacity($used), SprintMember::formatCapacity($available)), Sprint::getFormURLWithID($sprintId)) ? 1 : 0;
                 }
@@ -608,23 +609,35 @@ HTML;
 
     private static function renderPlanningSuggestions(Sprint $sprint, array $items, string $form, bool $edit): void
     {
+        global $DB;
         $unassigned = array_filter($items, fn($row) => (int)($row['users_id'] ?? 0) <= 0 && ($row['status'] ?? '') !== SprintItem::STATUS_DONE);
         if (!$unassigned) return;
         $members = (new SprintMember())->find(['plugin_sprint_sprints_id' => (int)$sprint->getID()]);
         if (!$members) return;
         $loads = [];
+        $usedBySprint = SprintMember::usedCapacityBySprint((int)$sprint->getID());
         foreach ($members as $member) {
             $uid = (int)$member['users_id'];
             $capacity = self::effectiveCapacity((int)$sprint->getID(), $uid, (float)$member['capacity_percent']);
-            $used = SprintMember::getUsedCapacityForUser((int)$sprint->getID(), $uid);
+            $used = (float)($usedBySprint[$uid]['total'] ?? 0.0);
             $loads[$uid] = ['name' => SprintCache::userName($uid), 'free' => max(0, $capacity - $used), 'role' => $member['role']];
         }
+        // Tag familiarity per member, counted in SQL over their whole history
+        // rather than loading every item they ever owned and its tags.
         $familiarity = [];
-        $history = (new SprintItem())->find(['users_id' => array_keys($loads)]);
-        $historyTags = SprintItem::getTagsForItems(array_map(fn($r) => (int)$r['id'], $history));
-        foreach ($history as $row) foreach ($historyTags[(int)$row['id']] ?? [] as $tag) {
-            $key = mb_strtolower($tag); $uid = (int)$row['users_id'];
-            $familiarity[$uid][$key] = ($familiarity[$uid][$key] ?? 0) + 1;
+        if ($DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+            $tags  = 'glpi_plugin_sprint_sprintitemtags';
+            $table = SprintItem::getTable();
+            foreach ($DB->request([
+                'SELECT'     => ["{$table}.users_id", "{$tags}.tag", 'COUNT' => "{$tags}.id AS n"],
+                'FROM'       => $tags,
+                'INNER JOIN' => [$table => ['ON' => [$tags => 'plugin_sprint_sprintitems_id', $table => 'id']]],
+                'WHERE'      => ["{$table}.users_id" => array_keys($loads)],
+                'GROUPBY'    => ["{$table}.users_id", "{$tags}.tag"],
+            ]) as $row) {
+                $uid = (int)$row['users_id']; $key = mb_strtolower((string)$row['tag']);
+                $familiarity[$uid][$key] = ($familiarity[$uid][$key] ?? 0) + (int)$row['n'];
+            }
         }
         $itemTags = SprintItem::getTagsForItems(array_map(fn($r) => (int)$r['id'], $unassigned));
         self::beginCard(

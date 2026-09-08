@@ -375,7 +375,8 @@ class SprintMember extends CommonDBRelation
             __('Team dashboard', 'sprint') . "</h4>";
         echo "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;'>";
 
-        $si = new SprintItem();
+        // One capacity dataset for the whole team, not three queries per member.
+        $usedBySprint = self::usedCapacityBySprint($sprintId);
         foreach ($members as $row) {
             $userId   = (int)$row['users_id'];
             $baseCap  = self::normalizeCapacity($row['capacity_percent']);
@@ -383,16 +384,9 @@ class SprintMember extends CommonDBRelation
             $roleName = $roles[$row['role']] ?? $row['role'];
             $roleIcon = $roleIcons[$row['role']] ?? 'fas fa-user';
 
-            $regularUsed = 0.0;
-            foreach ($si->find([
-                'plugin_sprint_sprints_id' => $sprintId,
-                'users_id'                 => $userId,
-                'is_fastlane'              => 0,
-            ]) as $r) {
-                $regularUsed += (float)($r['capacity'] ?? 0);
-            }
-            $fastlaneUsed   = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
-            $dependencyUsed = SprintItemDependency::getUsedDependencyCapacityForUser($sprintId, $userId);
+            $regularUsed    = (float)($usedBySprint[$userId]['regular'] ?? 0.0);
+            $fastlaneUsed   = (float)($usedBySprint[$userId]['fastlane'] ?? 0.0);
+            $dependencyUsed = (float)($usedBySprint[$userId]['dependency'] ?? 0.0);
             $usedCap        = $regularUsed + $fastlaneUsed + $dependencyUsed;
             $remaining      = max($totalCap - $usedCap, 0);
             $capUsedPct     = $totalCap > 0 ? round(($usedCap / $totalCap) * 100) : 0;
@@ -706,6 +700,84 @@ class SprintMember extends CommonDBRelation
         return true;
     }
 
+    /** @var array<int,array<int,array{regular:float,fastlane:float,dependency:float,total:float}>> per sprint, per request */
+    private static array $usedBySprint = [];
+
+    /**
+     * Used capacity for every user of a sprint in three grouped queries —
+     * regular items, fastlane allocations, dependency allocations — cached
+     * per request. The read paths (dashboards, tables, suggestions, exports,
+     * the cron) take it from here, so the query count no longer grows with
+     * the team. Validation keeps using getUsedCapacityForUser(): it runs
+     * between writes and must see them.
+     *
+     * @return array<int,array{regular:float,fastlane:float,dependency:float,total:float}> by user id
+     */
+    public static function usedCapacityBySprint(int $sprintId): array
+    {
+        global $DB;
+
+        if ($sprintId <= 0) {
+            return [];
+        }
+        if (isset(self::$usedBySprint[$sprintId])) {
+            return self::$usedBySprint[$sprintId];
+        }
+        $out  = [];
+        $bump = static function (int $uid, string $key, float $value) use (&$out): void {
+            if ($uid <= 0 || $value == 0.0) {
+                return;
+            }
+            $out[$uid] ??= ['regular' => 0.0, 'fastlane' => 0.0, 'dependency' => 0.0, 'total' => 0.0];
+            $out[$uid][$key]    += $value;
+            $out[$uid]['total'] += $value;
+        };
+
+        $items = SprintItem::getTable();
+        foreach ($DB->request([
+            'SELECT'  => ['users_id', 'SUM' => 'capacity AS used'],
+            'FROM'    => $items,
+            'WHERE'   => ['plugin_sprint_sprints_id' => $sprintId, 'is_fastlane' => 0],
+            'GROUPBY' => 'users_id',
+        ]) as $row) {
+            $bump((int)$row['users_id'], 'regular', (float)$row['used']);
+        }
+
+        // Fastlane items spread their load over the junction table.
+        $fastlane = SprintFastlaneMember::getTable();
+        foreach ($DB->request([
+            'SELECT'     => ["{$fastlane}.users_id", 'SUM' => "{$fastlane}.capacity AS used"],
+            'FROM'       => $fastlane,
+            'INNER JOIN' => [$items => ['ON' => [$fastlane => 'plugin_sprint_sprintitems_id', $items => 'id']]],
+            'WHERE'      => ["{$items}.plugin_sprint_sprints_id" => $sprintId, "{$items}.is_fastlane" => 1],
+            'GROUPBY'    => "{$fastlane}.users_id",
+        ]) as $row) {
+            $bump((int)$row['users_id'], 'fastlane', (float)$row['used']);
+        }
+
+        // Resolved dependency rows still count: that capacity was spent.
+        if (SprintItemDependency::isTableReady()) {
+            $deps = SprintItemDependency::getTable();
+            foreach ($DB->request([
+                'SELECT'     => ["{$deps}.users_id", 'SUM' => "{$deps}.capacity AS used"],
+                'FROM'       => $deps,
+                'INNER JOIN' => [$items => ['ON' => [$deps => 'plugin_sprint_sprintitems_id', $items => 'id']]],
+                'WHERE'      => ["{$items}.plugin_sprint_sprints_id" => $sprintId],
+                'GROUPBY'    => "{$deps}.users_id",
+            ]) as $row) {
+                $bump((int)$row['users_id'], 'dependency', (float)$row['used']);
+            }
+        }
+
+        return self::$usedBySprint[$sprintId] = $out;
+    }
+
+    /** Forget the per-sprint totals after a write that changes them. */
+    public static function invalidateUsedCapacity(): void
+    {
+        self::$usedBySprint = [];
+    }
+
     /**
      * Capacity already used by a user in a sprint: regular + Fastlane + open
      * Dependency allocations. Exclude ids let an update re-check the row it edits.
@@ -770,67 +842,62 @@ class SprintMember extends CommonDBRelation
             return null;
         }
 
-        static $cache = [];
-        $key = $sprintId . ':' . $userId;
-        if (!isset($cache[$key])) {
-            $member   = new self();
-            $rows     = $member->find([
-                'plugin_sprint_sprints_id' => $sprintId,
-                'users_id'                 => $userId,
-            ]);
-            $isMember = count($rows) > 0;
-            $total    = 0.0;
-            if ($isMember) {
-                $first = reset($rows);
-                // Effective capacity (availability exceptions applied), matching the sprint views.
-                $total = SprintAgility::effectiveCapacity(
-                    $sprintId,
-                    $userId,
-                    self::normalizeCapacity($first['capacity_percent'] ?? 0)
-                );
+        // Everything is loaded once per sprint — members, the backlog rows
+        // proposed for it, their open dependency allocations, the used
+        // capacity per user — and every user's preview is cut from that.
+        static $sprintCache = [];
+        if (!isset($sprintCache[$sprintId])) {
+            $members = [];
+            foreach ((new self())->find(['plugin_sprint_sprints_id' => $sprintId]) as $m) {
+                $members[(int)$m['users_id']] = self::normalizeCapacity($m['capacity_percent'] ?? 0);
             }
-
-            $used = self::getUsedCapacityForUser($sprintId, $userId);
 
             // Pending = backlog rows pencilled in for this sprint: items the
             // user owns (fastlane rows spread capacity via their own junction
             // table) plus open dependency allocations where the user is the
             // coupled helper — those claim their capacity too.
-            $pendingIds = [];
-            $depIds     = [];
-            $si = new SprintItem();
-            $allProposed = $si->find([
+            $pendingByUser = [];
+            $depByUser     = [];
+            $allProposed   = (new SprintItem())->find([
                 'plugin_sprint_sprints_id' => 0,
                 'proposed_sprints_id'      => $sprintId,
             ]);
             foreach ($allProposed as $r) {
-                if ((int)$r['users_id'] === $userId && (int)($r['is_fastlane'] ?? 0) === 0) {
-                    $pendingIds[(int)$r['id']] = (float)($r['capacity'] ?? 0);
+                $owner = (int)$r['users_id'];
+                if ($owner > 0 && (int)($r['is_fastlane'] ?? 0) === 0) {
+                    $pendingByUser[$owner][(int)$r['id']] = (float)($r['capacity'] ?? 0);
                 }
             }
             $proposedItemIds = array_map(fn($r) => (int)$r['id'], $allProposed);
-            if (count($proposedItemIds) > 0) {
-                $dep = new SprintItemDependency();
-                foreach ($dep->find([
+            if (count($proposedItemIds) > 0 && SprintItemDependency::isTableReady()) {
+                foreach ((new SprintItemDependency())->find([
                     'plugin_sprint_sprintitems_id' => $proposedItemIds,
-                    'users_id'                     => $userId,
                     'is_resolved'                  => 0,
                 ]) as $d) {
-                    $iid = (int)$d['plugin_sprint_sprintitems_id'];
-                    $depIds[$iid] = ($depIds[$iid] ?? 0.0) + (float)$d['capacity'];
+                    $helper = (int)$d['users_id'];
+                    $iid    = (int)$d['plugin_sprint_sprintitems_id'];
+                    $depByUser[$helper][$iid] = ($depByUser[$helper][$iid] ?? 0.0) + (float)$d['capacity'];
                 }
             }
 
-            $cache[$key] = [
-                'total'       => $total,
-                'used'        => $used,
-                'pending_ids' => $pendingIds,
-                'dep_ids'     => $depIds,
-                'is_member'   => $isMember,
+            $sprintCache[$sprintId] = [
+                'members' => $members,
+                'pending' => $pendingByUser,
+                'deps'    => $depByUser,
+                'used'    => self::usedCapacityBySprint($sprintId),
             ];
         }
 
-        $c            = $cache[$key];
+        $s        = $sprintCache[$sprintId];
+        $isMember = isset($s['members'][$userId]);
+        $c        = [
+            // Effective capacity (availability exceptions applied), matching the sprint views.
+            'total'       => $isMember ? SprintAgility::effectiveCapacity($sprintId, $userId, $s['members'][$userId]) : 0.0,
+            'used'        => (float)($s['used'][$userId]['total'] ?? 0.0),
+            'pending_ids' => $s['pending'][$userId] ?? [],
+            'dep_ids'     => $s['deps'][$userId] ?? [],
+            'is_member'   => $isMember,
+        ];
         $pendingOther = array_sum($c['pending_ids']) + array_sum($c['dep_ids']);
         if ($excludeItemId > 0 && isset($c['pending_ids'][$excludeItemId])) {
             $pendingOther -= $c['pending_ids'][$excludeItemId];

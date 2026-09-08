@@ -3933,21 +3933,6 @@ msgstr "Item não planejado mais antigo desta categoria: %d dias"
 msgid "Team capacity left after the assigned work, the backlog proposals and the fastlane reservation"
 msgstr "Capacidade da equipe restante após o trabalho atribuído, as propostas do backlog e a reserva de fastlane"
 
-msgid "Actual"
-msgstr "Real"
-
-msgid "Actual capacity"
-msgstr "Capacidade real"
-
-msgid "Actual capacity %"
-msgstr "Capacidade real %"
-
-msgid "Actual capacity (%)"
-msgstr "Capacidade real (%)"
-
-msgid "Actual capacity: what the item really took, filled in as the work is done. Empty = follows the planned figure."
-msgstr "Capacidade real: o que o item realmente custou, preenchido conforme o trabalho avança. Vazio = segue o valor planejado."
-
 msgid "Average over the sprints shown"
 msgstr "Média dos sprints exibidos"
 
@@ -3966,15 +3951,6 @@ msgstr "Concluído vs planejado %"
 msgid "Configured category minimums act as a floor under the delivery pace."
 msgstr "Os mínimos configurados por categoria funcionam como piso do ritmo de entrega."
 
-msgid "Follows planned"
-msgstr "Segue o planejado"
-
-msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category."
-msgstr "Por categoria de backlog nos sprints concluídos deste período: capacidade alocada % por sprint (planejada, ou real quando essa opção está ativa) ou a proporção concluído/planejado. Subcategorias contam para a categoria principal, ou mude para a visão por subcategoria para vê-las como linhas separadas. Clique em uma entrada da legenda para isolar uma categoria."
-
-msgid "Planned / actual capacity"
-msgstr "Capacidade planejada / real"
-
 msgid "Planned capacity %"
 msgstr "Capacidade planejada %"
 
@@ -3984,29 +3960,14 @@ msgstr "Reservado para trabalho de interrupção: sem limite de fastlane neste s
 msgid "Reserved for interrupt work: the fastlane capacity limit of this sprint, minus what is already assigned here"
 msgstr "Reservado para trabalho de interrupção: o limite de capacidade fastlane deste sprint, menos o que já está atribuído aqui"
 
-msgid "Show the planned or the actual capacity per item (items without an actual figure keep their planned one)"
-msgstr "Mostrar a capacidade planejada ou real por item (itens sem valor real mantêm a planejada)"
-
-msgid "Showing actual capacity; items without an actual figure count with their planned capacity."
-msgstr "Exibindo capacidade real; itens sem valor real contam com a capacidade planejada."
-
 msgid "Those sprints spent an average of %s%% on fastlane work; that average is reserved up front on sprints without a fastlane limit of their own."
 msgstr "Esses sprints gastaram em média %s%% em trabalho fastlane; essa média é reservada antecipadamente nos sprints sem limite fastlane próprio."
-
-msgid "When enabled, every sprint item gets a second capacity figure: the planned % is estimated up front, the actual % is filled in as the work is done and may deviate. The capacity-per-category matrix and the category trend chart can be flipped between the two."
-msgstr "Quando ativado, cada item do sprint recebe um segundo valor de capacidade: o % planejado é estimado antecipadamente, o % real é preenchido conforme o trabalho avança e pode divergir. A matriz de capacidade por categoria e o gráfico de tendência por categoria podem alternar entre os dois."
 
 msgid "You are not allowed to edit this backlog item"
 msgstr "Você não tem permissão para editar este item do backlog"
 
 msgid "You are not allowed to add items to the backlog"
 msgstr "Você não tem permissão para adicionar itens ao backlog"
-
-msgid "planned"
-msgstr "planejado"
-
-msgid "actual"
-msgstr "real"
 
 msgid "Main categories"
 msgstr "Categorias principais"
@@ -4083,9 +4044,6 @@ msgstr "Parcela da equipe"
 msgid "No capacity recorded"
 msgstr "Nenhuma capacidade registrada"
 
-msgid "Where each member's capacity went per backlog category across the completed sprints in this period, actual capacity where an item has one. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
-msgstr "Para onde foi a capacidade de cada membro por categoria do backlog nos sprints concluídos deste período, capacidade real quando um item a tem. Uma categoria principal inclui as suas subcategorias; o trabalho de fastlane e de dependências conta para cada membro alocado."
-
 msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
 msgstr "Para onde foi a capacidade de cada membro por categoria do backlog nos sprints concluídos deste período. Uma categoria principal inclui as suas subcategorias; o trabalho de fastlane e de dependências conta para cada membro alocado."
 
@@ -4118,20 +4076,8 @@ msgstr "Escolha pelo menos uma seção e uma coluna."
 msgid "Planned capacity"
 msgstr "Capacidade planejada"
 
-msgid "Planned is the estimate the item was taken in with; realised is the actual figure, which falls back to the planned one where nothing was recorded."
-msgstr "Planejado é a estimativa com que o item foi incluído; realizado é o valor real, que recorre ao planejado quando nada foi registrado."
-
-msgid "Realised capacity"
-msgstr "Capacidade realizada"
-
 msgid "Sections"
 msgstr "Seções"
-
-msgid "Select all / none"
-msgstr "Selecionar tudo / nada"
-
-msgid "Split the item rows into one block per category, each with its own subtotal"
-msgstr "Dividir as linhas de itens em um bloco por categoria, cada um com seu subtotal"
 
 msgid "Story points done"
 msgstr "Story points concluídos"
@@ -4142,9 +4088,6 @@ msgstr "Subtotal"
 msgid "The requested category no longer exists."
 msgstr "A categoria solicitada não existe mais."
 
-msgid "Tick what the file should contain. Every ticked section is written as its own block, one after another."
-msgstr "Marque o que o arquivo deve conter. Cada seção marcada é escrita como um bloco próprio, um após o outro."
-
 msgid "Totals per category"
 msgstr "Totais por categoria"
 
@@ -4153,3 +4096,705 @@ msgstr "inativa"
 
 msgid "Parent project"
 msgstr "Projeto pai"
+
+# === Customers & credits (1.3.0) ===
+#: src/SprintCredits.php:398
+#, php-format
+msgid "%s credits short of covering the backlog waiting for them."
+msgstr "Faltam %s créditos para cobrir o backlog pendente."
+
+#: src/SprintCredits.php:94
+#, php-format
+msgid ""
+"%s credits sit on items with no customer, so they count against "
+"nobody's balance."
+msgstr ""
+"%s créditos estão em itens sem cliente, portanto não são debitados de "
+"nenhum saldo."
+
+#: src/SprintCredits.php:188
+#, php-format
+msgid "%s over budget"
+msgstr "%s acima do orçamento"
+
+#: src/SprintCredit.php:101
+msgid ""
+"A positive amount is a purchase, a negative amount a correction or "
+"write-off. Leave the expiry date empty for credits that never lapse."
+msgstr ""
+"Um valor positivo é uma compra; um negativo, uma correção ou baixa. "
+"Deixe a data de validade vazia para créditos que não expiram."
+
+#: src/Config.php:524
+msgid "Access"
+msgstr "Acesso"
+
+#: src/SprintCredits.php:380
+msgid "Advice"
+msgstr "Recomendação"
+
+#: src/SprintCredits.php:66
+msgid "All customers"
+msgstr "Todos os clientes"
+
+#: src/SprintCredits.php:105
+msgid "Balance per customer"
+msgstr "Saldo por cliente"
+
+#: src/SprintCredit.php:99
+msgid "Book credits"
+msgstr "Lançar créditos"
+
+#: src/SprintCredit.php:112 src/SprintCredit.php:132
+#: src/SprintCredit.php:283 src/SprintCredits.php:431
+msgid "Booking date"
+msgstr "Data do lançamento"
+
+#: src/SprintCredit.php:190 src/SprintCredits.php:119
+#: src/SprintExport.php:1664
+msgid "Bought"
+msgstr "Comprados"
+
+#: src/SprintCustomer.php:302 src/SprintCustomer.php:349
+msgid "Contact"
+msgstr "Contato"
+
+#: src/SprintCredit.php:23
+msgid "Credit booking"
+msgid_plural "Credit bookings"
+msgstr[0] "Lançamento de crédito"
+msgstr[1] "Lançamentos de crédito"
+
+#: src/Config.php:517
+msgid "Credit managers"
+msgstr "Gestores de créditos"
+
+#: front/config.form.php:27
+msgid "Credit managers saved"
+msgstr "Gestores de créditos salvos"
+
+#: src/Backlog.php:1767 src/Backlog.php:225
+#: src/Backlog.php:703 src/SprintCredit.php:106
+#: src/SprintCredit.php:136 src/SprintCredit.php:276
+#: src/SprintCredit.php:61 src/SprintCredits.php:25
+#: src/SprintCredits.php:435 src/SprintCredits.php:59
+#: src/SprintExport.php:1267 src/SprintExport.php:1740
+#: src/SprintItem.php:1596 src/SprintItem.php:196
+#: src/SprintItem.php:3627 src/SprintItem.php:474
+#: src/SprintItem.php:943 templates/sprintmeeting.form.html.twig:698
+msgid "Credits"
+msgstr "Créditos"
+
+#: src/Backlog.php:2094
+msgid "Credits on backlog items that have no sprint yet"
+msgstr "Créditos em itens do backlog que ainda não têm sprint"
+
+#: src/SprintExport.php:1297 src/SprintExport.php:1659
+msgid "Credits per customer"
+msgstr "Créditos por cliente"
+
+#: src/SprintCredits.php:270
+msgid "Credits per sprint"
+msgstr "Créditos por sprint"
+
+#: src/SprintCustomer.php:21
+msgid "Customer"
+msgid_plural "Customers"
+msgstr[0] "Cliente"
+msgstr[1] "Clientes"
+
+#: src/Backlog.php:146 src/Backlog.php:489
+#: src/SprintItem.php:1000
+msgid "Customer / credits"
+msgstr "Cliente / créditos"
+
+#: src/Profile.php:49
+msgid "Customers & credits"
+msgstr "Clientes e créditos"
+
+#: src/SprintExport.php:1662
+msgid "Delivered this sprint"
+msgstr "Entregues neste sprint"
+
+#: src/SprintCredit.php:116 src/SprintCredit.php:135
+#: src/SprintCredit.php:290
+msgid "Expires on"
+msgstr "Expira em"
+
+#: src/SprintCustomer.php:316
+msgid ""
+"Flag the customer once fewer than this many credits are left. 0 = no "
+"alert."
+msgstr ""
+"Sinalizar o cliente quando restarem menos créditos do que este valor. "
+"0 = sem alerta."
+
+#: src/SprintCredit.php:193 src/SprintCredits.php:122
+msgid "In backlog"
+msgstr "No backlog"
+
+#: src/Backlog.php:2097 src/SprintCredit.php:194
+#: src/SprintCredits.php:123 src/SprintCredits.php:184
+#: src/SprintCredits.php:378 src/SprintExport.php:1667
+msgid "Left"
+msgstr "Restantes"
+
+#: src/SprintCustomer.php:314 src/SprintCustomer.php:371
+msgid "Low-balance alert"
+msgstr "Alerta de saldo baixo"
+
+#: src/Config.php:508
+msgid "Manage credits"
+msgstr "Gerenciar créditos"
+
+#: src/SprintCredits.php:68
+msgid "New customer"
+msgstr "Novo cliente"
+
+#: src/SprintExport.php:1671
+msgid "No credits assigned in this sprint"
+msgstr "Nenhum crédito atribuído neste sprint"
+
+#: src/SprintCredits.php:276
+msgid "No credits assigned to a sprint yet."
+msgstr "Ainda não há créditos atribuídos a um sprint."
+
+#: src/SprintCredit.php:142
+msgid "No credits booked yet"
+msgstr "Nenhum crédito lançado ainda"
+
+#: src/SprintCredits.php:424
+msgid "No credits booked yet. Open a customer to book their first purchase."
+msgstr ""
+"Nenhum crédito lançado ainda. Abra um cliente para lançar a primeira "
+"compra."
+
+#: src/Backlog.php:2100 src/SprintCredits.php:316
+#: src/SprintCredits.php:329 src/SprintExport.php:1693
+msgid "No customer"
+msgstr "Sem cliente"
+
+#: src/SprintCredits.php:111
+msgid "No customers yet."
+msgstr "Ainda não há clientes."
+
+#: src/Config.php:543
+msgid "No named credit managers — access follows the profile right only."
+msgstr ""
+"Nenhum gestor de créditos nomeado — o acesso segue apenas o direito "
+"do perfil."
+
+#: src/SprintExport.php:1065
+msgid "One block per category, each with its own subtotal"
+msgstr "Um bloco por categoria, cada um com seu próprio subtotal"
+
+#: src/SprintExport.php:1663
+msgid "Open this sprint"
+msgstr "Abertos neste sprint"
+
+#: src/SprintOverview.php:1759
+msgid ""
+"Per backlog category across the completed sprints in this period: "
+"allocated capacity % per sprint, or the completed-vs-planned share. "
+"Subcategories count towards their parent, or switch to the "
+"subcategory view to see them as separate lines. Click a legend entry "
+"to isolate a category."
+msgstr ""
+"Por categoria do backlog nos sprints concluídos do período: "
+"capacidade alocada em % por sprint, ou a proporção concluído versus "
+"planejado. Subcategorias contam para a categoria pai; alterne para a "
+"visão de subcategorias para vê-las como linhas separadas. Clique em "
+"um item da legenda para isolar uma categoria."
+
+#: src/SprintCredits.php:420
+msgid "Recent bookings"
+msgstr "Lançamentos recentes"
+
+#: src/SprintCredit.php:110 src/SprintCredit.php:134
+#: src/SprintCredit.php:297 src/SprintCredits.php:434
+msgid "Reference"
+msgstr "Referência"
+
+#: src/SprintCustomer.php:297 src/SprintCustomer.php:342
+msgid "Reference code"
+msgstr "Código de referência"
+
+#: src/SprintCredits.php:126 src/SprintCredits.php:379
+msgid "Runway"
+msgstr "Autonomia"
+
+#: src/Backlog.php:2095
+msgid "Unplanned"
+msgstr "Não planejados"
+
+#: src/Config.php:507
+msgid "View credits"
+msgstr "Ver créditos"
+
+#: src/SprintCredit.php:230
+msgid "You are not allowed to manage credits"
+msgstr "Você não tem permissão para gerenciar créditos"
+
+#: src/SprintExport.php:1031 src/SprintExport.php:1046
+msgid "all / none"
+msgstr "tudo / nada"
+
+#: src/SprintCredit.php:156
+msgid "expired"
+msgstr "expirado"
+
+#: src/SprintCredits.php:147
+msgid "low balance"
+msgstr "saldo baixo"
+
+#: src/SprintCredits.php:144
+msgid "overdrawn"
+msgstr "excedido"
+
+#: src/SprintCredits.php:207
+#, php-format
+msgid "≈ %s sprint"
+msgid_plural "≈ %s sprints"
+msgstr[0] "≈ %s sprint"
+msgstr[1] "≈ %s sprints"
+
+# === Retainer & credit agreements (1.3.0) ===
+
+#: src/Backlog.php:2285
+#, php-format
+msgid "%1$s of the %2$s agreed for this sprint"
+msgstr "%1$s dos %2$s acordados para este sprint"
+
+#: src/SprintCredits.php:734
+#, php-format
+msgid "%s of the agreed volume is still unbooked and will lapse."
+msgstr "%s do volume acordado ainda não foi planejado e vai expirar."
+
+#: src/SprintCredits.php:743
+#, php-format
+msgid "%s past the agreed volume, drawn from the wallet."
+msgstr "%s acima do volume acordado, retirados da carteira."
+
+#: src/SprintCustomer.php:570
+msgid ""
+"A retainer grants the customer a fixed number of credits every "
+"sprint. Unused credits lapse when that sprint completes; work beyond "
+"the grant is drawn from the credits bought through the ledger."
+msgstr ""
+"Um acordo fixo concede ao cliente um número fixo de créditos a cada "
+"sprint. Créditos não usados expiram quando o sprint é concluído; "
+"trabalho acima da concessão é retirado dos créditos comprados no "
+"livro-razão."
+
+#: src/SprintCredits.php:692
+msgid "Agreed ahead"
+msgstr "Acordado à frente"
+
+#: src/SprintExport.php:1662
+msgid "Agreed this sprint"
+msgstr "Acordado neste sprint"
+
+#: src/Backlog.php:2216
+msgid "Agreement"
+msgstr "Acordo"
+
+#: src/SprintCredits.php:693
+msgid "Booked ahead"
+msgstr "Planejado à frente"
+
+#: src/SprintCustomer.php:580 src/SprintCustomer.php:661
+msgid "Cap per sprint"
+msgstr "Limite por sprint"
+
+#: src/Backlog.php:1809
+msgid "Credit agreement"
+msgstr "Acordo de créditos"
+
+#: src/SprintCredit.php:197 src/SprintCredits.php:129
+#: src/SprintCredits.php:209
+msgid "From wallet"
+msgstr "Da carteira"
+
+#: src/SprintCredit.php:192 src/SprintCredits.php:123
+#: src/SprintExport.php:1666
+msgid "Granted"
+msgstr "Concedidos"
+
+#: src/SprintCredits.php:599
+#, php-format
+msgid "Granted %1$s, used %2$s"
+msgstr "Concedidos %1$s, usados %2$s"
+
+#: src/SprintCredits.php:557
+msgid ""
+"Granted volume a completed sprint never claimed. It does not carry "
+"over, so this is agreed work that was left on the table."
+msgstr ""
+"Volume concedido que um sprint concluído nunca reivindicou. Não é "
+"transferido, então é trabalho acordado que ficou por fazer."
+
+#: src/SprintCredit.php:194 src/SprintCredits.php:125
+#: src/SprintCredits.php:202 src/SprintCredits.php:455
+#: src/SprintCredits.php:477 src/SprintExport.php:1665
+msgid "Lapsed"
+msgstr "Expirados"
+
+#: src/SprintCredits.php:555
+msgid "Lapsed credits per sprint"
+msgstr "Créditos expirados por sprint"
+
+#: src/Backlog.php:1829
+msgid "Max"
+msgstr "Máx"
+
+#: src/SprintCredits.php:272
+msgid "Mix"
+msgstr "Distribuição"
+
+#: src/SprintCredits.php:240
+msgid "No completed sprint has drawn on this wallet yet"
+msgstr "Nenhum sprint concluído recorreu a esta carteira ainda"
+
+#: src/SprintCredits.php:561
+msgid "Nothing has lapsed yet."
+msgstr "Nada expirou ainda."
+
+#: src/SprintCredits.php:755
+msgid "On plan."
+msgstr "Dentro do plano."
+
+#: src/SprintCredits.php:722
+#, php-format
+msgid "Over the agreed cap in %s."
+msgstr "Acima do limite acordado em %s."
+
+#: src/SprintCredits.php:122
+msgid "Per sprint"
+msgstr "Por sprint"
+
+#: src/SprintCustomer.php:568
+msgid "Retainer"
+msgstr "Acordo fixo"
+
+#: src/Backlog.php:2187
+msgid "Set the credits agreed with each customer for this sprint"
+msgstr "Defina os créditos acordados com cada cliente para este sprint"
+
+#: src/SprintCredits.php:131
+msgid ""
+"Sprints the wallet lasts at the average draw of the last completed "
+"sprints"
+msgstr ""
+"Sprints que a carteira cobre no consumo médio dos últimos sprints "
+"concluídos"
+
+#: src/SprintCredits.php:121
+msgid "The retainer: credits granted every sprint in the agreed window"
+msgstr ""
+"O acordo fixo: créditos concedidos a cada sprint dentro do período "
+"acordado"
+
+#: src/SprintCredits.php:275
+msgid ""
+"Trend: one line per customer showing the credits that sprint claimed, "
+"with their agreed volume as a dashed line when you isolate them. Mix: "
+"how each sprint was filled, plus the grant that lapsed unused."
+msgstr ""
+"Tendência: uma linha por cliente com os créditos que aquele sprint "
+"reivindicou, e o volume acordado como linha tracejada ao isolá-lo. "
+"Distribuição: como cada sprint foi preenchido, mais a concessão que "
+"expirou sem uso."
+
+#: src/SprintCredits.php:728
+msgid "Wallet overdrawn — nothing new should be planned before a top-up."
+msgstr ""
+"Carteira negativa — nada novo deve ser planejado antes de uma recarga."
+
+#: src/Backlog.php:1810
+msgid ""
+"What each customer is granted for this sprint. Leave a field empty to "
+"follow their standing agreement."
+msgstr ""
+"O que cada cliente recebe para este sprint. Deixe um campo vazio para "
+"seguir o acordo permanente."
+
+#: src/SprintCredits.php:62
+msgid ""
+"What every customer is granted per sprint, what the sprints claimed "
+"of it and what the bought wallet still holds."
+msgstr ""
+"O que cada cliente recebe por sprint, o que os sprints reivindicaram "
+"disso e o que a carteira comprada ainda contém."
+
+#: ajax/customercredits.php:34
+msgid "You are not allowed to set credit agreements"
+msgstr "Você não tem permissão para definir acordos de créditos"
+
+#: src/Backlog.php:2290 src/SprintCredits.php:161
+#, php-format
+msgid "cap %s"
+msgstr "limite %s"
+
+#: src/Backlog.php:1830
+#, php-format
+msgid "standing agreement: %s"
+msgstr "acordo permanente: %s"
+
+#: src/SprintCustomer.php:594
+msgid "until"
+msgstr "até"
+
+#: src/SprintCredit.php:136
+msgid "Booked by"
+msgstr "Lançado por"
+
+#: src/SprintCredits.php:180
+msgid "Bought credits that expired before a sprint drew on them"
+msgstr ""
+"Créditos comprados que expiraram antes de algum sprint recorrer a eles"
+
+#: src/SprintCustomer.php:664
+msgid ""
+"Flags a sprint in the credits matrix and the forecast once it claims "
+"more than this, grant and wallet together. It does not block the "
+"save. 0 = no flag."
+msgstr ""
+"Sinaliza um sprint na matriz de créditos e na previsão assim que ele "
+"reivindica mais do que isto, concessão e carteira juntas. Não "
+"bloqueia o salvamento. 0 = sem sinalização."
+
+#: src/Config.php:519
+msgid ""
+"Grant credit access to individual users on top of the profile right. "
+"View opens the Credits page, the customers and their balances; manage "
+"additionally allows creating customers, booking credits and setting "
+"the per-sprint agreements. Picking a customer and a credit amount on "
+"a sprint item needs neither — that follows the item rights."
+msgstr ""
+"Conceda acesso a créditos a usuários específicos, além do direito do "
+"perfil. Visualizar abre a página de Créditos, os clientes e seus "
+"saldos; gerenciar permite ainda criar clientes, lançar créditos e "
+"definir os acordos por sprint. Escolher um cliente e um valor de "
+"créditos em um item de sprint não exige nenhum dos dois — isso segue "
+"os direitos do item."
+
+#: src/Backlog.php:2285
+#, php-format
+msgid "flagged above %s"
+msgstr "sinalizado acima de %s"
+
+#: src/Backlog.php:2293
+msgid "over agreed cap"
+msgstr "acima do limite acordado"
+
+msgid "\"Delivered\" and \"open\" follow the exported items (filters apply); the sprint agreement and the customer totals do not."
+msgstr "\"Entregue\" e \"aberto\" seguem os itens exportados (os filtros se aplicam); o acordo do sprint e os totais do cliente não."
+
+#, php-format
+msgid "%1$s assigned, %2$s proposed from the backlog"
+msgstr "%1$s atribuídos, %2$s propostos do backlog"
+
+#, php-format
+msgid "%1$s of the agreed volume will lapse while %2$s is drawn from the wallet in other sprints — rebalance the work."
+msgstr "%1$s do volume acordado vai expirar enquanto %2$s são retirados da carteira em outros sprints — reequilibre o trabalho."
+
+msgid "A cell is the credits claimed for that sprint: work already assigned to it plus the backlog items proposed for it. The bar holds that against the credits agreed for that sprint — the recorded agreement, else the retainer inside its window."
+msgstr "Uma célula são os créditos reivindicados para esse sprint: o trabalho já atribuído mais os itens do backlog propostos para ele. A barra compara isso com os créditos acordados para esse sprint — o acordo registrado ou, senão, o acordo fixo dentro do seu período."
+
+msgid "Agreed volume the upcoming sprints leave unbooked, summed per sprint"
+msgstr "Volume acordado que os próximos sprints deixam sem reservar, somado por sprint"
+
+msgid "Credits drawn from the wallet because delivered work went past its sprint's grant"
+msgstr "Créditos retirados da carteira porque o trabalho entregue ultrapassou a concessão do seu sprint"
+
+#, php-format
+msgid "Customer “%s” is not available in the entity of that sprint."
+msgstr "O cliente “%s” não está disponível na entidade desse sprint."
+
+#, php-format
+msgid "Customer “%s” is not available in the entity of the target sprint; the carried-over item has no customer."
+msgstr "O cliente “%s” não está disponível na entidade do sprint de destino; o item transferido não tem cliente."
+
+msgid "Delivered against the grants; below it what open work still reserves of them"
+msgstr "Entregue contra as concessões; abaixo, o que o trabalho aberto ainda reserva delas"
+
+msgid "Delivered work spends the sprint's grant first; work beyond it is drawn from the bought wallet. Open work only reserves. A grant that a completed sprint did not use lapses."
+msgstr "O trabalho entregue gasta primeiro a concessão do sprint; o trabalho além dela é retirado da carteira comprada. O trabalho aberto apenas reserva. Uma concessão que um sprint concluído não usou expira."
+
+msgid "Free to plan: the wallet after what open work already reserves"
+msgstr "Livre para planejar: a carteira após o que o trabalho aberto já reserva"
+
+msgid "From wallet this sprint"
+msgstr "Da carteira neste sprint"
+
+msgid "Granted (all sprints)"
+msgstr "Concedido (todos os sprints)"
+
+msgid "Lapsed this sprint"
+msgstr "Expirado neste sprint"
+
+msgid "Negative bookings: corrections and write-offs"
+msgstr "Lançamentos negativos: correções e baixas"
+
+msgid "Open work in running and planned sprints that the grants do not cover"
+msgstr "Trabalho aberto em sprints ativos e planejados que as concessões não cobrem"
+
+#, php-format
+msgid "Open work needs %s more than the wallet holds — top up or plan less."
+msgstr "O trabalho aberto precisa de %s a mais do que a carteira contém — recarregue ou planeje menos."
+
+msgid "Purchases up to today; a lot that lapsed unused and corrections are shown below it"
+msgstr "Compras até hoje; um lote expirado sem uso e as correções aparecem abaixo"
+
+msgid "Purchases with a booking date after today; not counted yet"
+msgstr "Compras com data de lançamento posterior a hoje; ainda não contam"
+
+msgid "Reserved"
+msgstr "Reservado"
+
+msgid "Reserved from wallet"
+msgstr "Reservado da carteira"
+
+msgid "Reserved on grants"
+msgstr "Reservado nas concessões"
+
+msgid "Reserved on the grants by open work"
+msgstr "Reservado nas concessões por trabalho aberto"
+
+#, php-format
+msgid "The credit agreement could not be recorded for %d customer(s) on this sprint. Until it is, their figures follow the current retainer."
+msgstr "O acordo de créditos não pôde ser registrado para %d cliente(s) neste sprint. Até lá, os seus números seguem o acordo fixo atual."
+
+msgid "The planned and running sprints against the agreed volume, sprint by sprint. What a sprint fills below its agreement will lapse; what it fills above it is drawn from the bought wallet — one never offsets the other."
+msgstr "Os sprints planejados e ativos frente ao volume acordado, sprint por sprint. O que um sprint preenche abaixo do seu acordo vai expirar; o que preenche acima é retirado da carteira comprada — um nunca compensa o outro."
+
+msgid "The wallet today: bought credits after what completed and running sprints drew past their agreement, corrections and lapsed lots. Below it, what open work still needs beyond the agreements."
+msgstr "A carteira hoje: créditos comprados após o que os sprints concluídos e ativos retiraram além do seu acordo, as correções e os lotes expirados. Abaixo, o que o trabalho aberto ainda precisa além dos acordos."
+
+msgid "The wallet today; below it what open work still needs beyond the grants"
+msgstr "A carteira hoje; abaixo, o que o trabalho aberto ainda precisa além das concessões"
+
+msgid "This customer is not available in your entities."
+msgstr "Este cliente não está disponível nas suas entidades."
+
+msgid "Used (all sprints)"
+msgstr "Usado (todos os sprints)"
+
+msgid "Wallet"
+msgstr "Carteira"
+
+msgid "What the upcoming sprints claim past their agreement, summed per sprint"
+msgstr "O que os próximos sprints reivindicam além do seu acordo, somado por sprint"
+
+msgid "Will lapse"
+msgstr "Vai expirar"
+
+msgid "You are not allowed to delete credit bookings"
+msgstr "Você não tem permissão para excluir lançamentos de créditos"
+
+msgid "corrected"
+msgstr "corrigido"
+
+msgid "dated ahead"
+msgstr "datado à frente"
+
+msgid "lapsed"
+msgstr "expirado"
+
+msgid "reserved"
+msgstr "reservado"
+
+msgid "A rule applies from its start date until the next rule starts, so a newer rule always ends the one before it. A rule with 0 credits ends the retainer; a rule without a date applies from the beginning."
+msgstr "Uma regra vale da sua data de início até a próxima regra começar; uma regra mais recente sempre encerra a anterior. Uma regra com 0 créditos encerra o acordo fixo; uma regra sem data vale desde o início."
+
+msgid "Cap"
+msgstr "Teto"
+
+msgid "Catalogue"
+msgstr "Catálogo"
+
+msgid "Charged to the customer once this item is delivered. Pick a product from the catalogue to fill in its default, or enter the credits by hand."
+msgstr "Cobrado do cliente quando este item é entregue. Escolha um produto do catálogo para preencher o padrão, ou informe os créditos manualmente."
+
+msgid "Default credits"
+msgstr "Créditos padrão"
+
+msgid "In force"
+msgstr "Em vigor"
+
+msgid "Manual credits"
+msgstr "Créditos manuais"
+
+msgid "New rule"
+msgstr "Nova regra"
+
+msgid "New rule: fill in the credits and save"
+msgstr "Nova regra: preencha os créditos e salve"
+
+msgid "No retainer: this customer only draws on bought credits."
+msgstr "Sem acordo fixo: este cliente usa apenas créditos comprados."
+
+msgid "Picking a product fills in its default credits; the amount stays editable."
+msgstr "Escolher um produto preenche os créditos padrão; a quantidade continua editável."
+
+msgid "Remove this rule"
+msgstr "Remover esta regra"
+
+msgid "Remove this rule?"
+msgstr "Remover esta regra?"
+
+msgid "Save the customer first, then add the retainer rules."
+msgstr "Salve o cliente primeiro e depois adicione as regras do acordo."
+
+msgid "Starts on"
+msgstr "Começa em"
+
+msgid "The next retainer rule and the day it takes over"
+msgstr "A próxima regra do acordo e o dia em que ela entra em vigor"
+
+msgid "Upcoming"
+msgstr "Futura"
+
+#, php-format
+msgid "from %s"
+msgstr "a partir de %s"
+
+msgid "from the beginning"
+msgstr "desde o início"
+
+msgid "Retainer rule"
+msgid_plural "Retainer rules"
+msgstr[0] "Regra do acordo"
+msgstr[1] "Regras do acordo"
+
+msgid "Credit product"
+msgid_plural "Credit products"
+msgstr[0] "Produto de créditos"
+msgstr[1] "Produtos de créditos"
+
+msgid "Credit catalogue"
+msgstr "Catálogo de créditos"
+
+msgid "Filled in on an item when this product is picked; the amount stays editable. Not used for a folder."
+msgstr "Preenchido em um item quando este produto é escolhido; a quantidade continua editável. Não usado para uma pasta."
+
+msgid "Folder"
+msgstr "Pasta"
+
+msgid "New folder"
+msgstr "Nova pasta"
+
+msgid "New product"
+msgstr "Novo produto"
+
+msgid "New product in this folder"
+msgstr "Novo produto nesta pasta"
+
+msgid "Products and tasks with a default number of credits. Pick one on a sprint item to fill in its credits; the amount stays editable. Folders only group."
+msgstr "Produtos e tarefas com um número padrão de créditos. Escolha um em um item do sprint para preencher os créditos; a quantidade continua editável. As pastas apenas agrupam."
+
+msgid "The catalogue is empty. Add a folder or a product to start."
+msgstr "O catálogo está vazio. Adicione uma pasta ou um produto para começar."
+
+msgid "Top level"
+msgstr "Nível superior"

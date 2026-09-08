@@ -113,11 +113,8 @@ class Backlog
         $canEdit = Session::haveRight(SprintItem::$rightname, UPDATE)
             || ($isOwner && Session::haveRight(SprintItem::$rightname, Profile::RIGHT_OWN_ITEMS));
 
-        $plannedActual = Config::isPlannedActualEnabled();
         $ownerId       = (int)($existing['users_id'] ?? 0);
         $capacity      = (float)($existing['capacity'] ?? 0);
-        $actualRaw     = $existing['capacity_actual'] ?? null;
-        $actualStr     = SprintItem::formatActualCapacity($actualRaw);
         $proposedId    = (int)($existing['proposed_sprints_id'] ?? 0);
         $categoryId    = (int)($existing['plugin_sprint_sprintcategories_id'] ?? 0);
         $isFastlane    = (int)($existing['is_fastlane'] ?? 0) === 1;
@@ -138,14 +135,19 @@ class Backlog
         echo "<span class='fw-bold'><i class='fas fa-layer-group me-1'></i>" . __('Backlog planning', 'sprint') . "</span>";
         echo $chip('fas fa-user', __('Owner', 'sprint'), $ownerId > 0 ? htmlescape(SprintCache::userName($ownerId)) : $muted);
         $capValue = $capacity > 0 ? SprintMember::formatCapacity($capacity) . '%' : $muted;
-        if ($plannedActual) {
-            $capValue .= " <span class='text-muted sprint-small'>" . __('planned', 'sprint') . "</span>"
-                . " · " . ($actualStr !== '' ? $actualStr . '%' : $muted)
-                . " <span class='text-muted sprint-small'>" . __('actual', 'sprint') . "</span>";
-        }
         echo $chip('fas fa-gauge-high', __('Est. capacity', 'sprint'), $capValue);
         echo $chip('fas fa-flag-checkered', __('Assign to sprint', 'sprint'), $sprintName !== '' ? htmlescape($sprintName) : $muted);
         echo $chip('fas fa-folder', __('Category', 'sprint'), $categoryId > 0 ? SprintCategory::renderPill($categoryId) : $muted);
+        if (SprintCustomer::canUseCredits()) {
+            $customerId = (int)($existing['plugin_sprint_sprintcustomers_id'] ?? 0);
+            $credits    = (float)($existing['credits'] ?? 0);
+            echo $chip(
+                'fas fa-coins',
+                __('Customer / credits', 'sprint'),
+                ($customerId > 0 ? SprintCustomer::renderPill($customerId) : $muted)
+                    . ($credits > 0 ? ' <span class="fw-bold">' . htmlescape(SprintCustomer::formatCredits($credits)) . '</span>' : '')
+            );
+        }
         if ($isFastlane) {
             echo "<span class='sprint-plan-chip'><i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Fastlane', 'sprint') . "</span>";
         }
@@ -186,22 +188,13 @@ class Backlog
         ]);
         echo "</div>";
 
-        echo "<div class='" . ($plannedActual ? 'col-md-3' : 'col-md-6') . " mb-2'><label class='form-label'>" . __('Est. capacity', 'sprint') . " %</label>";
+        echo "<div class='col-md-6 mb-2'><label class='form-label'>" . __('Est. capacity', 'sprint') . " %</label>";
         Dropdown::showFromArray('capacity', ['0' => '-----'] + SprintMember::getCapacityChoices(), [
             'value' => $capacity > 0 ? SprintMember::capacityKey($capacity) : '0',
             'rand'  => $rand,
             'width' => '100%',
         ]);
         echo "</div>";
-        if ($plannedActual) {
-            echo "<div class='col-md-3 mb-2'><label class='form-label text-nowrap' title='" . __s('Actual capacity (%)', 'sprint') . "'>" . __('Actual', 'sprint') . " %</label>";
-            Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
-                'value' => $actualStr === '' ? '' : SprintMember::capacityKey($actualRaw),
-                'rand'  => $rand,
-                'width' => '100%',
-            ]);
-            echo "</div>";
-        }
 
         echo "<div class='col-md-6 mb-2'><label class='form-label'>" . __('Assign to sprint', 'sprint') . "</label>";
         Sprint::dropdown([
@@ -219,6 +212,28 @@ class Backlog
         echo "<option value='0'>-----</option>";
         echo SprintCategory::dropdownOptions($categoryId);
         echo "</select></div>";
+
+        if (SprintCustomer::canUseCredits()) {
+            echo "<div class='col-md-6 mb-2'><label class='form-label'><i class='fas fa-building me-1'></i>"
+                . SprintCustomer::getTypeName(1) . "</label>";
+            echo SprintItem::customerSelect(
+                'plugin_sprint_sprintcustomers_id',
+                (int)($existing['plugin_sprint_sprintcustomers_id'] ?? 0)
+            );
+            echo "</div>";
+            echo "<div class='col-md-6 mb-2'><label class='form-label'><i class='fas fa-coins me-1'></i>"
+                . __('Credits', 'sprint') . "</label>";
+            echo "<div class='d-flex gap-2'>";
+            echo SprintItem::productSelect(
+                'plugin_sprint_sprintcreditproducts_id',
+                (int)($existing['plugin_sprint_sprintcreditproducts_id'] ?? 0),
+                'credits'
+            );
+            echo SprintItem::creditsInput('credits', $existing['credits'] ?? 0);
+            echo "</div>";
+            echo "</div>";
+            SprintItem::creditProductScript();
+        }
 
         echo "<div class='col-12'>";
         echo "<input type='hidden' name='is_fastlane' value='0'>";
@@ -477,6 +492,10 @@ class Backlog
         echo "<th><i class='fas fa-flag-checkered' style='margin-right:4px;'></i>" . __('Sprint') . "</th>";
         echo "<th title='" . __('Estimated capacity (informational on backlog, enforced once the item joins a sprint)', 'sprint') . "'>"
             . __('Est. capacity', 'sprint') . " %</th>";
+        if (SprintCustomer::canUseCredits()) {
+            echo "<th><i class='fas fa-coins' style='margin-right:4px;'></i>"
+                . __('Customer / credits', 'sprint') . "</th>";
+        }
         if ($canedit) {
             echo "<th style='width:120px;'>" . __('Actions') . "</th>";
         }
@@ -489,6 +508,7 @@ class Backlog
         return 5
             + (($reorderable && $canedit) ? 1 : 0)
             + ($reorderable ? 1 : 0)
+            + (SprintCustomer::canUseCredits() ? 1 : 0)
             + ($canedit ? 1 : 0);
     }
 
@@ -654,23 +674,13 @@ class Backlog
             'width'  => '100%',
         ]);
         echo "</div>";
-        $plannedActual = Config::isPlannedActualEnabled();
-        echo "<div class='" . ($plannedActual ? 'col-md-3' : 'col-md-6') . " mb-3'><label class='form-label'>{$lblCapacity} %</label>";
+        echo "<div class='col-md-6 mb-3'><label class='form-label'>{$lblCapacity} %</label>";
         Dropdown::showFromArray('_backlog_modal_capacity', SprintMember::getCapacityChoices(), [
             'value' => 0,
             'rand'  => 424244,
             'width' => '100%',
         ]);
         echo "</div>";
-        if ($plannedActual) {
-            echo "<div class='col-md-3 mb-3'><label class='form-label text-nowrap' title='" . __s('Actual capacity (%)', 'sprint') . "'>" . __s('Actual', 'sprint') . " %</label>";
-            echo "<select class='form-select' name='_backlog_modal_capacity_actual'>";
-            echo "<option value=''>" . __s('Follows planned', 'sprint') . "</option>";
-            foreach (SprintMember::getCapacityChoices() as $val => $label) {
-                echo "<option value='" . htmlescape((string)$val) . "'>" . htmlescape((string)$label) . "</option>";
-            }
-            echo "</select></div>";
-        }
         echo "</div>";
 
         echo "<div class='row g-3'>";
@@ -690,6 +700,28 @@ class Backlog
         echo SprintCategory::dropdownOptions();
         echo "</select></div>";
         echo "</div>";
+
+        if (SprintCustomer::canUseCredits()) {
+            echo "<div class='row g-3'>";
+            echo "<div class='col-md-8 mb-3'><label class='form-label'>"
+                . "<i class='fas fa-building me-1'></i>" . SprintCustomer::getTypeName(1) . "</label>";
+            echo SprintItem::customerSelect('_backlog_modal_customer', 0);
+            echo "</div>";
+            echo "<div class='col-md-4 mb-3'><label class='form-label'>"
+                . "<i class='fas fa-coins me-1'></i>" . __s('Credits', 'sprint') . "</label>";
+            echo SprintItem::creditsInput('_backlog_modal_credits', 0, 'w-100');
+            echo "</div>";
+            echo "</div>";
+            echo "<div class='row g-3'>";
+            echo "<div class='col-md-8 mb-3'><label class='form-label'>"
+                . "<i class='fas fa-tags me-1'></i>" . SprintCreditProduct::getTypeName(1) . "</label>";
+            echo SprintItem::productSelect('_backlog_modal_product', 0, '_backlog_modal_credits', 'w-100');
+            echo "<div class='form-text sprint-small text-muted'>"
+                . htmlescape(__('Picking a product fills in its default credits; the amount stays editable.', 'sprint')) . "</div>";
+            echo "</div>";
+            echo "</div>";
+            SprintItem::creditProductScript();
+        }
 
         // Live capacity preview for the chosen owner in the chosen sprint.
         echo "<div class='sprint-be-cap-preview alert py-2 sprint-small mb-3' style='display:none;'></div>";
@@ -749,6 +781,7 @@ class Backlog
         $msgNotMember  = addslashes(__('Owner is not a member of the selected sprint', 'sprint'));
         $msgPreview    = addslashes(__('Total %total%% — used in sprint %used%%, pending from backlog %pending%%, this item %own%% → %free%% free after assigning', 'sprint'));
         $msgSaveFailed = addslashes(__('Save failed', 'sprint'));
+        $lblInactive   = addslashes(__('inactive', 'sprint'));
 
         echo <<<HTML
 <script>
@@ -878,18 +911,28 @@ class Backlog
             });
             \$sel.val(match).trigger('change');
         })();
+
         (function() {
-            var \$sel = \$modal.find("select[name='_backlog_modal_capacity_actual']");
-            if (!\$sel.length) { return; }
-            var raw = \$row.attr('data-capacity-actual');
-            var num = parseFloat(raw);
-            var match = '';
-            if (raw !== undefined && raw !== '' && !isNaN(num)) {
-                \$sel.find('option').each(function() {
-                    if (this.value !== '' && parseFloat(this.value) === num) { match = this.value; return false; }
-                });
+            var \$cust = \$modal.find("select[name='_backlog_modal_customer']");
+            if (\$cust.length) {
+                // A deactivated customer has no option — inject one so saving
+                // cannot silently drop it; it goes when the next item opens.
+                var cur = String(parseInt(\$row.attr('data-customer-id'), 10) || 0);
+                \$cust.find('option.sprint-be-customer-legacy').remove();
+                if (cur !== '0' && !\$cust.find("option[value='" + cur + "']").length) {
+                    \$cust.append(jQuery('<option class="sprint-be-customer-legacy"></option>')
+                        .val(cur)
+                        .text((\$row.attr('data-customer-name') || ('#' + cur)) + ' ({$lblInactive})'));
+                }
+                \$cust.val(cur);
             }
-            \$sel.val(match);
+            var \$cred = \$modal.find("input[name='_backlog_modal_credits']");
+            if (\$cred.length) { \$cred.val(\$row.attr('data-credits') || '0'); }
+            var \$prod = \$modal.find("select[name='_backlog_modal_product']");
+            if (\$prod.length) {
+                var pid = String(parseInt(\$row.attr('data-credit-product-id'), 10) || 0);
+                \$prod.val(\$prod.find("option[value='" + pid + "']").length ? pid : '0');
+            }
         })();
 
         refreshPreview();
@@ -914,15 +957,23 @@ class Backlog
                     name: \$modal.find('input[name=name]').val(),
                     users_id: parseInt(\$modal.find("select[name='_backlog_modal_users_id']").val(), 10) || 0,
                     capacity: parseFloat(\$modal.find("select[name='_backlog_modal_capacity']").val()) || 0,
-                    capacity_actual: \$modal.find("select[name='_backlog_modal_capacity_actual']").length
-                        ? \$modal.find("select[name='_backlog_modal_capacity_actual']").val()
-                        : undefined,
                     proposed_sprints_id: parseInt(\$modal.find("select[name='_backlog_modal_sprint_id']").val(), 10) || 0,
                     is_fastlane: \$modal.find('input[name=is_fastlane]').is(':checked') ? 1 : 0,
                     is_blocked: \$modal.find('input[name=is_blocked]').is(':checked') ? 1 : 0,
                     is_adhoc: \$modal.find('input[name=is_adhoc]').is(':checked') ? 1 : 0,
                     is_parked: \$modal.find('input[name=is_parked]').is(':checked') ? 1 : 0,
                     plugin_sprint_sprintcategories_id: parseInt(\$modal.find("select[name='_backlog_modal_category']").val(), 10) || 0,
+                    // '' (no option selected) is "not sent"; only an explicit 0 detaches.
+                    plugin_sprint_sprintcustomers_id: \$modal.find("select[name='_backlog_modal_customer']").length
+                        ? (\$modal.find("select[name='_backlog_modal_customer']").val() === null
+                            ? '' : String(\$modal.find("select[name='_backlog_modal_customer']").val()))
+                        : undefined,
+                    credits: \$modal.find("input[name='_backlog_modal_credits']").length
+                        ? \$modal.find("input[name='_backlog_modal_credits']").val()
+                        : undefined,
+                    plugin_sprint_sprintcreditproducts_id: \$modal.find("select[name='_backlog_modal_product']").length
+                        ? \$modal.find("select[name='_backlog_modal_product']").val()
+                        : undefined,
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 }
             });
@@ -1729,7 +1780,8 @@ HTML;
     private static function renderCategoryDashboard(): void
     {
         $statsUrl = Plugin::getWebDir('sprint') . '/ajax/backlogcategorystats.php';
-        $capUrl   = Plugin::getWebDir('sprint') . '/ajax/categorycap.php';
+        $capUrl    = Plugin::getWebDir('sprint') . '/ajax/categorycap.php';
+        $creditUrl = Plugin::getWebDir('sprint') . '/ajax/customercredits.php';
         $tokenUrl = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
 
         echo "<div class='sprint-backlog-dash' "
@@ -1743,24 +1795,29 @@ HTML;
         echo "<span style='flex:1;'></span>";
         // Two views over the same window: category × sprint (the mix against
         // the limits) and member × sprint (each person's share of that mix).
+        // The preferred view lives in localStorage; the JS mirrors it into a
+        // cookie so the server can render that view straight away instead of
+        // the categories first and a second request right after.
+        $view = (string)($_COOKIE['sprint_backlog_matrix_view'] ?? 'categories');
+        if (
+            !in_array($view, ['categories', 'members', 'credits'], true)
+            || ($view === 'credits' && !SprintCustomer::canViewCredits())
+        ) {
+            $view = 'categories';
+        }
+        $checked = static fn(string $v) => $v === $view ? ' checked' : '';
         echo "<div class='sprint-backlog-view btn-group btn-group-sm' role='group' title='"
             . __s('Switch between the capacity per category and the capacity per member', 'sprint') . "'>";
-        echo "<input type='radio' class='btn-check' name='sprint-backlog-view' id='sprint-view-categories' value='categories' checked>"
+        echo "<input type='radio' class='btn-check' name='sprint-backlog-view' id='sprint-view-categories' value='categories'" . $checked('categories') . ">"
             . "<label class='btn btn-outline-secondary' for='sprint-view-categories'><i class='fas fa-layer-group me-1'></i>" . __('Categories', 'sprint') . "</label>";
-        echo "<input type='radio' class='btn-check' name='sprint-backlog-view' id='sprint-view-members' value='members'>"
+        echo "<input type='radio' class='btn-check' name='sprint-backlog-view' id='sprint-view-members' value='members'" . $checked('members') . ">"
             . "<label class='btn btn-outline-secondary' for='sprint-view-members'><i class='fas fa-users me-1'></i>" . __('Members', 'sprint') . "</label>";
-        echo "</div>";
-        if (Config::isPlannedActualEnabled()) {
-            // Planned = the estimated capacity, actual = the recorded actual
-            // capacity where an item has one (planned fills the gaps).
-            echo "<div class='sprint-backlog-capmode btn-group btn-group-sm' role='group' title='"
-                . __s('Show the planned or the actual capacity per item (items without an actual figure keep their planned one)', 'sprint') . "'>";
-            echo "<input type='radio' class='btn-check' name='sprint-backlog-capmode' id='sprint-capmode-planned' value='planned' checked>"
-                . "<label class='btn btn-outline-secondary' for='sprint-capmode-planned'><i class='fas fa-pen-ruler me-1'></i>" . __('Planned', 'sprint') . "</label>";
-            echo "<input type='radio' class='btn-check' name='sprint-backlog-capmode' id='sprint-capmode-actual' value='actual'>"
-                . "<label class='btn btn-outline-secondary' for='sprint-capmode-actual'><i class='fas fa-stopwatch me-1'></i>" . __('Actual', 'sprint') . "</label>";
-            echo "</div>";
+        // Reserved credits per customer per sprint, credits right only.
+        if (SprintCustomer::canViewCredits()) {
+            echo "<input type='radio' class='btn-check' name='sprint-backlog-view' id='sprint-view-credits' value='credits'" . $checked('credits') . ">"
+                . "<label class='btn btn-outline-secondary' for='sprint-view-credits'><i class='fas fa-coins me-1'></i>" . __('Credits', 'sprint') . "</label>";
         }
+        echo "</div>";
         echo "<label class='text-muted sprint-small mb-0' for='sprint-backlog-horizon'>" . __('Horizon', 'sprint') . "</label>";
         echo "<select id='sprint-backlog-horizon' class='form-select form-select-sm sprint-backlog-horizon' style='max-width:140px;'>";
         foreach ([4, 8, 13] as $h) {
@@ -1768,7 +1825,10 @@ HTML;
         }
         echo "</select>";
         echo "</div>";
-        echo "<div class='sprint-backlog-dash-body'>" . self::renderCategoryMatrixFragment() . "</div>";
+        $fragment = $view === 'credits'
+            ? self::renderCreditMatrixFragment()
+            : ($view === 'members' ? self::renderMemberMatrixFragment() : self::renderCategoryMatrixFragment());
+        echo "<div class='sprint-backlog-dash-body' data-view='" . htmlescape($view) . "'>" . $fragment . "</div>";
         echo "</div>";
 
         // Limits modal: one dual-range slider (min/max %) per category, saved
@@ -1796,6 +1856,31 @@ HTML;
         echo "</div>";
         echo "</div></div></div>";
 
+        // Like the category limits, but per customer: what they get this sprint.
+        if (SprintCustomer::canEditCredits()) {
+            $lblCredTitle = __s('Credit agreement', 'sprint');
+            $lblCredHint  = __s('What each customer is granted for this sprint. Leave a field empty to follow their standing agreement.', 'sprint');
+            echo "<div class='modal fade' id='sprint-credits-modal' tabindex='-1' aria-hidden='true'>";
+            echo "<div class='modal-dialog modal-dialog-centered'><div class='modal-content'>";
+            echo "<div class='modal-header'>";
+            echo "<h5 class='modal-title'><i class='fas fa-coins me-1'></i> {$lblCredTitle}: <span class='sprint-credits-sprintname'></span></h5>";
+            echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
+            echo "</div>";
+            echo "<div class='modal-body'>";
+            echo "<div class='text-muted sprint-small mb-3'>{$lblCredHint}</div>";
+            echo "<div class='sprint-credits-rows'></div>";
+            echo "</div>";
+            echo "<div class='modal-footer'>";
+            echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$lblCancel}</button>";
+            echo "<button type='button' class='btn btn-primary sprint-credits-save'><i class='fas fa-save me-1'></i> {$lblSave}</button>";
+            echo "</div>";
+            echo "</div></div></div>";
+        }
+
+        $lblCredits    = __s('Credits', 'sprint');
+        $lblCreditsMax = __s('Max', 'sprint');
+        $lblAgreedFmt  = addslashes(__('standing agreement: %s', 'sprint'));
+
         echo <<<HTML
 <script>
 (function(){
@@ -1806,47 +1891,41 @@ HTML;
     function currentHorizon() {
         return parseInt(jQuery('.sprint-backlog-horizon').val(), 10) || 4;
     }
-    function currentCapMode() {
-        return jQuery('input[name="sprint-backlog-capmode"]:checked').val() === 'actual' ? 'actual' : 'planned';
-    }
     function currentView() {
-        return jQuery('input[name="sprint-backlog-view"]:checked').val() === 'members' ? 'members' : 'categories';
+        var v = jQuery('input[name="sprint-backlog-view"]:checked').val();
+        return (v === 'members' || v === 'credits') ? v : 'categories';
     }
-    // Remember the categories/members view per user.
+    // Remember the categories/members/credits view per user.
     (function(){
         var \$view = jQuery('input[name="sprint-backlog-view"]');
         if (!\$view.length) { return; }
         try {
-            if (localStorage.getItem('sprint.backlog.matrix.view') === 'members') {
-                \$view.filter('[value="members"]').prop('checked', true);
+            var stored = localStorage.getItem('sprint.backlog.matrix.view');
+            // A stored view whose radio is gone falls back to the default.
+            if (stored && \$view.filter('[value="' + stored + '"]').length) {
+                \$view.filter('[value="' + stored + '"]').prop('checked', true);
             }
         } catch (e) {}
         \$view.on('change', function(){
-            try { localStorage.setItem('sprint.backlog.matrix.view', currentView()); } catch (e) {}
+            rememberView();
             reloadMatrix();
         });
     })();
-    // Remember the planned/actual choice per user.
-    (function(){
-        var \$mode = jQuery('input[name="sprint-backlog-capmode"]');
-        if (!\$mode.length) { return; }
-        try {
-            if (localStorage.getItem('sprint.backlog.matrix.capmode') === 'actual') {
-                \$mode.filter('[value="actual"]').prop('checked', true);
-            }
-        } catch (e) {}
-        \$mode.on('change', function(){
-            try { localStorage.setItem('sprint.backlog.matrix.capmode', currentCapMode()); } catch (e) {}
-            reloadMatrix();
-        });
-    })();
-    // The server renders the default view; any stored preference needs a fetch.
-    if (currentCapMode() === 'actual' || currentView() === 'members') { jQuery(reloadMatrix); }
+    // The preference is kept in localStorage; the cookie only tells the server
+    // which view to render first, so the page does not load one and fetch another.
+    function rememberView() {
+        try { localStorage.setItem('sprint.backlog.matrix.view', currentView()); } catch (e) {}
+        try { document.cookie = 'sprint_backlog_matrix_view=' + currentView() + ';path=/;max-age=31536000;SameSite=Lax'; } catch (e) {}
+    }
+    if (currentView() !== String(jQuery('.sprint-backlog-dash-body').attr('data-view') || 'categories')) {
+        rememberView();
+        jQuery(reloadMatrix);
+    }
 
     function reloadMatrix() {
         jQuery('.sprint-backlog-dash-body').css('opacity', 0.5);
         jQuery.ajax({ url: "{$statsUrl}", type: 'GET', dataType: 'json', cache: false,
-            data: { horizon: currentHorizon(), mode: currentCapMode(), view: currentView() } })
+            data: { horizon: currentHorizon(), view: currentView() } })
         .done(function(resp){
             if (resp && resp.success) {
                 jQuery('.sprint-backlog-dash-body').html(resp.html);
@@ -1992,6 +2071,73 @@ HTML;
         updateFill(\$row);
     });
 
+    // One row per customer; empty = follow their standing retainer.
+    function buildCreditRow(row) {
+        var \$row = jQuery(
+            "<div class='sprint-credits-row' data-customer-id='" + (parseInt(row.id, 10) || 0) + "'>" +
+            "<div class='sprint-credits-row-head'>" +
+            "<span class='sprint-limits-dot'></span><strong class='sprint-credits-name'></strong>" +
+            "<span class='sprint-credits-default text-muted sprint-small'></span>" +
+            "</div>" +
+            "<div class='sprint-credits-inputs'>" +
+            "<label>{$lblCredits}<input type='number' min='0' step='0.25' class='form-control form-control-sm sprint-credit-value'></label>" +
+            "<label>{$lblCreditsMax}<input type='number' min='0' step='0.25' class='form-control form-control-sm sprint-credit-max'></label>" +
+            "</div></div>"
+        );
+        \$row.find('.sprint-limits-dot').css('background', String(row.color || '#6c757d'));
+        \$row.find('.sprint-credits-name').text(String(row.name || ''));
+        \$row.find('.sprint-credits-default').text('{$lblAgreedFmt}'.replace('%s', String(row.default || '0')));
+        \$row.find('.sprint-credit-value').val(row.credits === '' ? '' : row.credits).attr('placeholder', String(row.default || '0'));
+        \$row.find('.sprint-credit-max').val(row.max === '' ? '' : row.max).attr('placeholder', String(row.defaultMax || '0'));
+        return \$row;
+    }
+
+    jQuery(document).on('click', '.sprint-credits-open', function(){
+        var \$btn = jQuery(this);
+        var rows = [];
+        try { rows = JSON.parse(\$btn.attr('data-rows') || '[]'); } catch (e) { rows = []; }
+        var \$modal = jQuery('#sprint-credits-modal');
+        if (!\$modal.length) { return; }
+        \$modal.attr('data-sprint-id', \$btn.attr('data-sprint-id') || '0');
+        \$modal.find('.sprint-credits-sprintname').text(\$btn.attr('data-sprint-name') || '');
+        var \$rows = \$modal.find('.sprint-credits-rows').empty();
+        rows.forEach(function(row){ \$rows.append(buildCreditRow(row)); });
+        bootstrap.Modal.getOrCreateInstance(\$modal[0]).show();
+    });
+
+    jQuery(document).on('click', '.sprint-credits-save', function(){
+        var \$modal   = jQuery('#sprint-credits-modal');
+        var sprintId = parseInt(\$modal.attr('data-sprint-id'), 10) || 0;
+        if (sprintId <= 0) { return; }
+        var limits = {};
+        \$modal.find('.sprint-credits-row').each(function(){
+            var \$row = jQuery(this);
+            var id   = parseInt(\$row.attr('data-customer-id'), 10) || 0;
+            if (id <= 0) { return; }
+            limits[id] = {
+                credits: jQuery.trim(String(\$row.find('.sprint-credit-value').val() || '')),
+                max: jQuery.trim(String(\$row.find('.sprint-credit-max').val() || ''))
+            };
+        });
+        jQuery.ajax({ url: "{$tokenUrl}", type: 'GET', dataType: 'json', cache: false })
+        .then(function(tok){
+            return jQuery.ajax({
+                url: "{$creditUrl}", type: 'POST', dataType: 'json',
+                data: {
+                    sprint_id: sprintId, limits: JSON.stringify(limits),
+                    _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                }
+            });
+        }).done(function(resp){
+            if (resp && resp.success) {
+                bootstrap.Modal.getOrCreateInstance(\$modal[0]).hide();
+                reloadMatrix();
+            } else if (window.glpi_toast_error) {
+                window.glpi_toast_error((resp && resp.message) || 'Failed');
+            }
+        });
+    });
+
     jQuery(document).on('click', '.sprint-limits-save', function(){
         var \$modal   = jQuery('#sprint-limits-modal');
         var sprintId = parseInt(\$modal.attr('data-sprint-id'), 10) || 0;
@@ -2029,13 +2175,245 @@ HTML;
 HTML;
     }
 
+    /**
+     * Matrix fragment: credits per customer × upcoming sprints. A cell is the
+     * credits on items assigned to that sprint plus the backlog items proposed
+     * for it, held against the agreement in force for that sprint — the
+     * recorded override, else the retainer inside its window. The trailing
+     * columns hold the pipeline and the wallet.
+     */
+    public static function renderCreditMatrixFragment(int $horizon = 4): string
+    {
+        $horizon = max(1, min(26, $horizon));
+
+        $sprints = (new Sprint())->find(
+            ['status' => Sprint::STATUS_PLANNED]
+                + getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true),
+            ['date_start ASC'],
+            $horizon
+        );
+        $sprintIds = array_map(fn($s) => (int)$s['id'], $sprints);
+
+        // Assigned work and proposed backlog work are kept apart: the cell
+        // shows their sum, its title says how much is only a proposal.
+        // sid > 0 = that sprint, 0 = backlog with no target, -1 = proposed for
+        // a sprint beyond the horizon.
+        $assigned = [];
+        $proposed = [];
+        $add      = static function (array &$cells, int $customerId, int $sid, float $credits): void {
+            if ($credits == 0.0) {
+                return;
+            }
+            $cells[$customerId][$sid] = ($cells[$customerId][$sid] ?? 0) + $credits;
+        };
+
+        foreach ((new SprintItem())->find(['plugin_sprint_sprints_id' => 0, 'is_parked' => 0]) as $row) {
+            $sid = (int)($row['proposed_sprints_id'] ?? 0);
+            if ($sid > 0 && !in_array($sid, $sprintIds, true)) {
+                $sid = -1;
+            }
+            $add($proposed, (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0), $sid, (float)($row['credits'] ?? 0));
+        }
+        if ($sprintIds) {
+            foreach ((new SprintItem())->find(['plugin_sprint_sprints_id' => $sprintIds]) as $row) {
+                // Same rule as the balances: parked open work claims nothing.
+                if (SprintCustomer::bucketFor($row) === null) {
+                    continue;
+                }
+                $add(
+                    $assigned,
+                    (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0),
+                    (int)$row['plugin_sprint_sprints_id'],
+                    (float)($row['credits'] ?? 0)
+                );
+            }
+        }
+
+        $balances = SprintCustomer::balances(false);
+        // Every customer with a balance or a claim, plus the unattributed row.
+        // A claim on a customer outside this session's entities is dropped, so
+        // the matrix never hints at another entity's customers.
+        $rowIds = array_keys($balances);
+        foreach (array_unique(array_merge(array_keys($assigned), array_keys($proposed))) as $cid) {
+            $cid = (int)$cid;
+            if (!in_array($cid, $rowIds, true) && SprintCustomer::isVisible($cid)) {
+                $rowIds[] = $cid;
+            }
+        }
+        sort($rowIds);
+
+        ob_start();
+        echo "<div class='table-responsive' style='padding:6px 10px;'>";
+        if (!$sprintIds) {
+            echo "<div class='text-muted'>" . __('No sprints to show yet.', 'sprint') . "</div></div>";
+            return (string)ob_get_clean();
+        }
+
+        echo "<table class='table table-sm mb-1 sprint-backlog-matrix sprint-credit-matrix' style='min-width:640px;'>";
+        echo "<thead><tr><th style='min-width:150px;'>" . SprintCustomer::getTypeName(1) . "</th>";
+        $canSetLimits  = SprintCustomer::canEditCredits();
+        $creditsTitle  = __s('Set the credits agreed with each customer for this sprint', 'sprint');
+        $overrides     = SprintCustomer::getSprintOverrides();
+        foreach ($sprints as $sp) {
+            $sid = (int)$sp['id'];
+            $sub = !empty($sp['date_start']) ? substr((string)$sp['date_start'], 0, 10) : '';
+            echo "<th class='text-center'>" . htmlescape((string)$sp['name'])
+                . ($sub !== '' ? "<div class='text-muted sprint-small fw-normal'>" . htmlescape($sub) . "</div>" : '');
+            if ($canSetLimits) {
+                $data = [];
+                foreach ($rowIds as $cid) {
+                    $cid = (int)$cid;
+                    if ($cid <= 0 || !isset($balances[$cid])) {
+                        continue;
+                    }
+                    // Only customers valid for this sprint's entity can have an
+                    // agreement on it; the rest are not offered.
+                    if (!SprintCustomer::isAvailableInEntity($cid, (int)($sp['entities_id'] ?? 0))) {
+                        continue;
+                    }
+                    $over     = $overrides[$sid][$cid] ?? [];
+                    // What an empty field falls back to: the retainer for
+                    // *this* sprint, 0 outside its window.
+                    $standing = SprintCustomer::standingAgreementFor($cid, $sid);
+                    $data[]   = [
+                        'id'         => $cid,
+                        'name'       => (string)$balances[$cid]['name'],
+                        'color'      => (string)$balances[$cid]['color'],
+                        'credits'    => $over['credits'] ?? '',
+                        'max'        => $over['max'] ?? '',
+                        'default'    => SprintCustomer::formatCredits($standing['grant']),
+                        'defaultMax' => SprintCustomer::formatCredits($standing['cap']),
+                    ];
+                }
+                echo "<div style='margin-top:2px;'><button type='button' class='sprint-cap-edit sprint-credits-open' "
+                    . "title='{$creditsTitle}' data-sprint-id='{$sid}' "
+                    . "data-sprint-name='" . htmlescape((string)$sp['name']) . "' "
+                    . "data-rows='" . htmlescape((string)json_encode($data)) . "'>"
+                    . "<i class='fas fa-sliders'></i> " . __('Agreement', 'sprint') . "</button></div>";
+            }
+            echo "</th>";
+        }
+        echo "<th class='text-center' title='" . __s('Credits on backlog items that have no sprint yet', 'sprint') . "'>"
+            . __('Unplanned', 'sprint') . "</th>";
+        echo "<th class='text-center' title='" . __s('The wallet today: bought credits after what completed and running sprints drew past their agreement, corrections and lapsed lots. Below it, what open work still needs beyond the agreements.', 'sprint') . "'>"
+            . __('Left', 'sprint') . "</th>";
+        echo "</tr></thead><tbody>";
+
+        $noCustomer  = __('No customer', 'sprint');
+        $lblReserved = __('reserved', 'sprint');
+        foreach ($rowIds as $cid) {
+            $cid  = (int)$cid;
+            $bal  = $balances[$cid] ?? null;
+            $rowAssigned = $assigned[$cid] ?? [];
+            $rowProposed = $proposed[$cid] ?? [];
+            // A deactivated customer with nothing outstanding is noise.
+            if (
+                $bal !== null && (int)$bal['is_active'] === 0
+                && !$rowAssigned && !$rowProposed && (float)$bal['purchased'] == 0.0
+            ) {
+                continue;
+            }
+            $name  = $cid > 0 ? SprintCustomer::getNameFor($cid) : $noCustomer;
+            $color = $cid > 0 ? SprintCustomer::getColorFor($cid) : '#6c757d';
+            echo "<tr>";
+            echo "<td><span class='sprint-matrix-dot' style='background:" . htmlescape($color) . ";'></span>"
+                . ($name !== '' ? htmlescape($name) : '#' . $cid) . "</td>";
+            foreach ($sprintIds as $sid) {
+                $agreement = $cid > 0 ? SprintCustomer::agreementFor($cid, $sid) : null;
+                echo "<td class='text-center'>" . self::creditCell(
+                    (float)($rowAssigned[$sid] ?? 0),
+                    (float)($rowProposed[$sid] ?? 0),
+                    (float)($agreement['grant'] ?? 0),
+                    (float)($agreement['cap'] ?? 0)
+                ) . "</td>";
+            }
+            $unplanned = (float)($rowProposed[0] ?? 0) + (float)($rowProposed[-1] ?? 0);
+            echo "<td class='text-center'>"
+                . ($unplanned > 0 ? htmlescape(SprintCustomer::formatCredits($unplanned)) : "<span class='text-muted'>—</span>")
+                . "</td>";
+            if ($bal === null) {
+                echo "<td class='text-center text-muted'>—</td>";
+            } else {
+                $left     = (float)$bal['wallet_balance'];
+                $free     = (float)$bal['available'];
+                $alert    = (float)$bal['alert'];
+                $reserved = (float)$bal['wallet_reserved'];
+                $color    = $left < 0 ? '#dc3545' : (($free < 0 || ($alert > 0 && $free < $alert)) ? '#fd7e14' : '#198754');
+                echo "<td class='text-center fw-bold' style='color:{$color};'>"
+                    . htmlescape(SprintCustomer::formatCredits($left));
+                if ($reserved > 0) {
+                    echo "<div class='sprint-small fw-normal text-muted'>" . htmlescape(SprintCustomer::formatCredits($reserved))
+                        . ' ' . htmlescape($lblReserved) . "</div>";
+                }
+                echo "</td>";
+            }
+            echo "</tr>";
+        }
+        echo "</tbody></table>";
+        echo "<div class='text-muted sprint-small'>"
+            . __('A cell is the credits claimed for that sprint: work already assigned to it plus the backlog items proposed for it. The bar holds that against the credits agreed for that sprint — the recorded agreement, else the retainer inside its window.', 'sprint')
+            . "</div>";
+        echo "</div>";
+        return (string)ob_get_clean();
+    }
+
+    /**
+     * Claimed against the agreement: green inside, amber past it, red past the
+     * cap. A cap without a grant still flags; a proposal is named in the title.
+     */
+    private static function creditCell(float $assigned, float $proposed, float $grant, float $cap): string
+    {
+        $claimed = $assigned + $proposed;
+        if ($claimed <= 0 && $grant <= 0) {
+            return "<span class='text-muted'>—</span>";
+        }
+        $overCap = $cap > 0 && $claimed > $cap;
+        $parts   = [];
+        if ($proposed > 0) {
+            $parts[] = sprintf(
+                __('%1$s assigned, %2$s proposed from the backlog', 'sprint'),
+                SprintCustomer::formatCredits($assigned),
+                SprintCustomer::formatCredits($proposed)
+            );
+        }
+        if ($cap > 0) {
+            $parts[] = sprintf(__('flagged above %s', 'sprint'), SprintCustomer::formatCredits($cap));
+        }
+
+        if ($grant <= 0) {
+            $color = $overCap ? '#dc3545' : 'inherit';
+            $out   = "<span class='fw-bold' style='color:{$color};' title='" . htmlescape(implode(' — ', $parts)) . "'>"
+                . htmlescape(SprintCustomer::formatCredits($claimed)) . "</span>";
+            if ($overCap) {
+                $out .= "<div class='sprint-small' style='color:#dc3545;'>" . htmlescape(__('over agreed cap', 'sprint')) . "</div>";
+            }
+            return $out;
+        }
+
+        $color = $overCap ? '#dc3545' : ($claimed > $grant ? '#fd7e14' : '#198754');
+        $pct   = min(100, round(100 * $claimed / $grant, 2));
+        array_unshift($parts, sprintf(
+            __('%1$s of the %2$s agreed for this sprint', 'sprint'),
+            SprintCustomer::formatCredits($claimed),
+            SprintCustomer::formatCredits($grant)
+        ));
+
+        $out = "<span class='fw-bold' style='color:{$color};' title='" . htmlescape(implode(' — ', $parts)) . "'>"
+            . htmlescape(SprintCustomer::formatCredits($claimed)) . "</span>"
+            . "<span class='text-muted sprint-small'> / " . htmlescape(SprintCustomer::formatCredits($grant)) . "</span>";
+        $out .= "<div class='sprint-wallet-bar mt-1'><span style='width:{$pct}%;background:{$color};'></span></div>";
+        if ($overCap) {
+            $out .= "<div class='sprint-small' style='color:#dc3545;'>" . htmlescape(__('over agreed cap', 'sprint')) . "</div>";
+        }
+        return $out;
+    }
+
     /** Matrix fragment: categories × upcoming sprints (+ unplanned + work-supply). */
-    public static function renderCategoryMatrixFragment(int $horizon = 4, bool $actual = false): string
+    public static function renderCategoryMatrixFragment(int $horizon = 4): string
     {
         global $DB;
 
         $horizon    = max(1, min(26, $horizon));
-        $actual     = $actual && Config::isPlannedActualEnabled();
         $categories = SprintCategory::getAll();
 
         // A parent row totals its own work plus its subcategories'.
@@ -2047,11 +2425,12 @@ HTML;
             }
         }
 
-        $sprints    = array_slice((new Sprint())->find(
+        $sprints    = (new Sprint())->find(
             ['status' => Sprint::STATUS_PLANNED]
                 + getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true),
-            ['date_start ASC']
-        ), 0, $horizon, true);
+            ['date_start ASC'],
+            $horizon
+        );
         $sprintIds  = array_map(fn($s) => (int)$s['id'], $sprints);
 
         // One pass over the active backlog: capacity + counts per category,
@@ -2071,7 +2450,7 @@ HTML;
             if ($sid > 0 && !in_array($sid, $sprintIds, true)) {
                 $sid = -1; // proposed for a sprint outside the horizon
             }
-            $cap = SprintItem::capacityFor($row, $actual);
+            $cap = (float)($row['capacity'] ?? 0);
             $alloc[$cid][$sid] = ($alloc[$cid][$sid] ?? 0) + $cap;
             $count[$cid][$sid] = ($count[$cid][$sid] ?? 0) + 1;
             $totalByCat[$cid]  = ($totalByCat[$cid] ?? 0) + $cap;
@@ -2109,7 +2488,7 @@ HTML;
                 if ((int)($row['is_fastlane'] ?? 0) === 1) {
                     $fastIds[] = (int)$row['id'];
                 } else {
-                    $assign[$cid][$sid] = ($assign[$cid][$sid] ?? 0) + SprintItem::capacityFor($row, $actual);
+                    $assign[$cid][$sid] = ($assign[$cid][$sid] ?? 0) + (float)($row['capacity'] ?? 0);
                 }
             }
             foreach (SprintFastlaneMember::getCapacityByItem($fastIds) as $iid => $cap) {
@@ -2185,7 +2564,7 @@ HTML;
                 ],
             ]) as $row) {
                 $sid = (int)$row['plugin_sprint_sprints_id'];
-                $delivered[$sid]          += SprintItem::capacityFor($row, $actual);
+                $delivered[$sid]          += (float)($row['capacity'] ?? 0);
                 $doneSprint[(int)$row['id']] = $sid;
             }
             // Helper capacity spent on those items was real delivery too.
@@ -2280,10 +2659,6 @@ HTML;
 
         ob_start();
         echo "<div class='table-responsive' style='padding:6px 10px;'>";
-        if ($actual) {
-            echo "<div class='sprint-small mb-1' style='color:#fd7e14;'><i class='fas fa-stopwatch me-1'></i>"
-                . __('Showing actual capacity; items without an actual figure count with their planned capacity.', 'sprint') . "</div>";
-        }
         echo "<table class='table table-sm mb-1 sprint-backlog-matrix' style='min-width:640px;'>";
         echo "<thead><tr><th style='min-width:150px;'>" . __('Category', 'sprint') . "</th>";
         $limitsTitle = __s('Set min/max capacity % per category for this sprint', 'sprint');
@@ -2547,12 +2922,11 @@ HTML;
      * too much internal work" shows as a count. Realised work per member sits
      * on the sprint overview, not here.
      */
-    public static function renderMemberMatrixFragment(int $horizon = 4, bool $actual = false): string
+    public static function renderMemberMatrixFragment(int $horizon = 4): string
     {
         global $DB;
 
         $horizon    = max(1, min(26, $horizon));
-        $actual     = $actual && Config::isPlannedActualEnabled();
         $categories = SprintCategory::getAll();
 
         // Every category rolls up to its top-level ancestor; that is the
@@ -2619,7 +2993,7 @@ HTML;
                 if ((int)($row['is_fastlane'] ?? 0) === 1) {
                     $fastIds[] = $iid;
                 } else {
-                    $add($sid, (int)($row['users_id'] ?? 0), $cid, SprintItem::capacityFor($row, $actual));
+                    $add($sid, (int)($row['users_id'] ?? 0), $cid, (float)($row['capacity'] ?? 0));
                 }
             }
             if ($fastIds) {
@@ -2645,7 +3019,7 @@ HTML;
                 $sid = (int)$row['proposed_sprints_id'];
                 $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
                 $pslot[(int)$row['id']] = [$sid, $cid];
-                $add($sid, (int)($row['users_id'] ?? 0), $cid, SprintItem::capacityFor($row, $actual), true);
+                $add($sid, (int)($row['users_id'] ?? 0), $cid, (float)($row['capacity'] ?? 0), true);
             }
             if ($pslot && SprintItemDependency::isTableReady()) {
                 foreach ((new SprintItemDependency())->find([
@@ -2793,10 +3167,6 @@ HTML;
 
         ob_start();
         echo "<div class='table-responsive' style='padding:6px 10px;'>";
-        if ($actual) {
-            echo "<div class='sprint-small mb-1' style='color:#fd7e14;'><i class='fas fa-stopwatch me-1'></i>"
-                . __('Showing actual capacity; items without an actual figure count with their planned capacity.', 'sprint') . "</div>";
-        }
         if (!$sprintIds) {
             echo "<div class='text-muted'>" . __('No sprints to show yet.', 'sprint') . "</div></div>";
             return (string)ob_get_clean();
@@ -3147,7 +3517,9 @@ HTML;
         $isAdhoc    = (int)($row['is_adhoc'] ?? 0) === 1;
         $isParked   = (int)($row['is_parked'] ?? 0) === 1;
         $categoryId = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
-        $rowTags    = $tagsById[(int)$row['id']] ?? [];
+        $customerId  = (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0);
+        $showCredits = SprintCustomer::canUseCredits();
+        $rowTags     = $tagsById[(int)$row['id']] ?? [];
         $flags      = self::computeRowFlags($row);
 
         $ownerId      = (int)($row['users_id'] ?? 0);
@@ -3163,7 +3535,12 @@ HTML;
             . "data-users-id='" . $ownerId . "' "
             . "data-owner-name='" . htmlescape($ownerName) . "' "
             . "data-capacity='" . SprintMember::formatCapacity($estCapacity) . "' "
-            . "data-capacity-actual='" . SprintItem::formatActualCapacity($row['capacity_actual'] ?? null) . "' "
+            . ($showCredits
+                ? "data-customer-id='" . $customerId . "' "
+                    . "data-customer-name='" . htmlescape(SprintCustomer::getNameFor($customerId)) . "' "
+                    . "data-credits='" . SprintCustomer::formatCredits($row['credits'] ?? 0) . "' "
+                    . "data-credit-product-id='" . (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0) . "' "
+                : '')
             . "data-proposed-sprint-id='" . $proposedId . "' "
             . "data-proposed-sprint-name='" . htmlescape($proposedName) . "' "
             . "data-is-fastlane='" . ($isFastlane ? 1 : 0) . "' "
@@ -3260,6 +3637,11 @@ HTML;
             ? SprintMember::formatCapacity($estCapacity) . '%'
             : "<span class='text-muted'>-</span>";
         echo "</td>";
+
+        if ($showCredits) {
+            echo "<td class='center sprint-cell-credits'>"
+                . SprintItem::renderCreditCell($customerId, $row['credits'] ?? 0, (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0)) . "</td>";
+        }
 
         if ($canedit) {
             echo "<td class='center' style='white-space:nowrap;'>";

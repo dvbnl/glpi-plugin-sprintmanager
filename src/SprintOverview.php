@@ -77,6 +77,18 @@ class SprintOverview extends CommonGLPI
                 'icon'  => Backlog::getIcon(),
             ];
         }
+        if (SprintCustomer::canViewCredits()) {
+            $items['credits'] = [
+                'label' => SprintCredits::getTypeName(2),
+                'url'   => SprintCredits::getSearchURL(),
+                'icon'  => SprintCredits::getIcon(),
+            ];
+            $items['catalogue'] = [
+                'label' => __('Catalogue', 'sprint'),
+                'url'   => SprintCreditProduct::getSearchURL(),
+                'icon'  => SprintCreditProduct::getIcon(),
+            ];
+        }
         $items['sprinttemplate'] = [
             'label' => SprintTemplate::getTypeName(2),
             'url'   => SprintTemplate::getSearchURL(),
@@ -393,15 +405,11 @@ class SprintOverview extends CommonGLPI
         if (!$per) {
             return;
         }
-        $actual = Config::isPlannedActualEnabled();
-
         self::renderCard(
             __('Delivered per member', 'sprint'),
             'fas fa-user-clock',
-            $actual
-                ? __('Where each member\'s capacity went per backlog category across the completed sprints in this period, actual capacity where an item has one. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it.', 'sprint')
-                : __('Where each member\'s capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it.', 'sprint'),
-            function () use ($per, $actual) {
+            __('Where each member\'s capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it.', 'sprint'),
+            function () use ($per) {
                 $cats  = SprintCategory::getAll(false);
                 $topOf = [];
                 foreach ($cats as $cid => $cat) {
@@ -411,7 +419,7 @@ class SprintOverview extends CommonGLPI
                         ? ($topOf[$pid] ?? $pid)
                         : $cid;
                 }
-                $capKey  = $actual ? 'cap_actual' : 'cap_planned';
+                $capKey  = 'cap_planned';
                 $noCat   = __('No category', 'sprint');
                 $nameOf  = static fn(int $cid) => $cid > 0 ? (string)($cats[$cid]['name'] ?? $noCat) : $noCat;
                 $colorOf = static fn(int $cid) => $cid > 0 ? (string)($cats[$cid]['color'] ?? '#6c757d') : '#6c757d';
@@ -943,11 +951,17 @@ class SprintOverview extends CommonGLPI
         }
         $sprints = array_values((new Sprint())->find($criteria, ['date_end ASC']));
         if (!$sprints) return;
+        // Items and the next meeting for every live sprint in one query each.
+        $sprintIds    = array_map(static fn($s) => (int)$s['id'], $sprints);
+        $itemsBySprint = [];
+        foreach (self::filterItems(self::fetchItems($sprintIds), $filters) as $item) $itemsBySprint[(int)$item['plugin_sprint_sprints_id']][] = $item;
+        $nextMeetings = [];
+        foreach ($DB->request(['SELECT' => ['plugin_sprint_sprints_id', 'MIN' => 'date_meeting AS next_meeting'], 'FROM' => SprintMeeting::getTable(), 'WHERE' => ['plugin_sprint_sprints_id' => $sprintIds, ['date_meeting' => ['>=', date('Y-m-d H:i:s')]]], 'GROUPBY' => 'plugin_sprint_sprints_id']) as $meeting) $nextMeetings[(int)$meeting['plugin_sprint_sprints_id']] = (string)$meeting['next_meeting'];
         echo "<div class='d-flex align-items-center justify-content-between mt-3 mb-2'><h3 class='m-0'><i class='fas fa-heart-pulse me-2 text-red'></i>" . __('Live sprint status', 'sprint') . "</h3><span class='text-muted sprint-small'>" . __('Kept separate from completed sprint statistics', 'sprint') . '</span></div>';
         echo "<div class='row g-2 mb-4'>";
         foreach ($sprints as $sprint) {
             $sid = (int)$sprint['id'];
-            $items = self::filterItems(self::fetchItems([$sid]), $filters);
+            $items = $itemsBySprint[$sid] ?? [];
             $total = $done = $blocked = $dependency = $remainingPoints = $totalPoints = 0;
             $byStatus = [];
             foreach ($items as $item) {
@@ -967,8 +981,7 @@ class SprintOverview extends CommonGLPI
             $elapsed = max(0, min(100, (int)round(100 * (time() - $start) / max(1, $end - $start))));
             $progress = $totalPoints > 0 ? (int)round(100 * ($totalPoints - $remainingPoints) / $totalPoints) : ($total > 0 ? (int)round(100 * $done / $total) : 0);
             $expected = $elapsed > 0 ? min($totalPoints, (int)round(($totalPoints - $remainingPoints) * 100 / $elapsed)) : 0;
-            $nextMeeting = '';
-            foreach ($DB->request(['SELECT' => ['date_meeting'], 'FROM' => SprintMeeting::getTable(), 'WHERE' => ['plugin_sprint_sprints_id' => $sid, ['date_meeting' => ['>=', date('Y-m-d H:i:s')]]], 'ORDER' => ['date_meeting ASC'], 'LIMIT' => 1]) as $meeting) $nextMeeting = (string)$meeting['date_meeting'];
+            $nextMeeting = $nextMeetings[$sid] ?? '';
             $url = Sprint::getFormURLWithID($sid);
             echo "<div class='col-12 col-xl-6'><a class='card card-sm h-100 text-reset text-decoration-none' href='" . htmlescape($url) . "'><div class='card-body'><div class='d-flex justify-content-between'><strong>" . htmlescape((string)$sprint['name']) . "</strong><span>" . $progress . "%</span></div>";
             echo "<div class='progress progress-sm my-2'><div class='progress-bar bg-blue' style='width:" . min(100, $progress) . "%'></div><span class='position-absolute border-start border-dark' style='left:" . $elapsed . "%'></span></div>";
@@ -1301,15 +1314,12 @@ class SprintOverview extends CommonGLPI
                 $perCategory[$cid]['items_done']++;
             }
 
-            $catBySprint[$sid][$cid] ??= ['cap_planned' => 0.0, 'cap_actual' => 0.0, 'pts_planned' => 0, 'pts_done' => 0];
+            $catBySprint[$sid][$cid] ??= ['cap_planned' => 0.0, 'pts_planned' => 0, 'pts_done' => 0];
             $depCap = array_sum($depByUser[(int)$item['id']] ?? []);
             if ((int)($item['is_fastlane'] ?? 0) === 1) {
-                $flItemCap = (float)($flCap[(int)$item['id']] ?? 0);
-                $catBySprint[$sid][$cid]['cap_planned'] += $flItemCap;
-                $catBySprint[$sid][$cid]['cap_actual']  += $flItemCap;
+                $catBySprint[$sid][$cid]['cap_planned'] += (float)($flCap[(int)$item['id']] ?? 0);
             } else {
-                $catBySprint[$sid][$cid]['cap_planned'] += SprintItem::capacityFor($item, false) + $depCap;
-                $catBySprint[$sid][$cid]['cap_actual']  += SprintItem::capacityFor($item, true) + $depCap;
+                $catBySprint[$sid][$cid]['cap_planned'] += (float)($item['capacity'] ?? 0) + $depCap;
             }
             $catBySprint[$sid][$cid]['pts_planned'] += $pts;
             if ($done) {
@@ -1385,6 +1395,13 @@ class SprintOverview extends CommonGLPI
 
         $velocities = [];
         $flowStart = max(0, count($sprints) - self::CHART_SPRINTS);
+        // One walk through the status history for every item; the per-sprint
+        // figures and the period total aggregate the same per-item results.
+        $flowItems       = $shift ? [] : self::flowPerItem($items);
+        $itemIdsBySprint = [];
+        foreach ($items as $item) {
+            $itemIdsBySprint[(int)$item['plugin_sprint_sprints_id']][] = (int)$item['id'];
+        }
         foreach ($sprints as $sprintIndex => $sprint) {
             $sid    = (int)$sprint['id'];
             $bucket = $bySprint[$sid] ?? [
@@ -1419,7 +1436,7 @@ class SprintOverview extends CommonGLPI
             $out['series']['dependency'][]     = $bucket['dependencies'];
 
             if (!$shift && $sprintIndex >= $flowStart) {
-                $sprintFlow = self::flowMetrics(array_values(array_filter($items, static fn($item) => (int)$item['plugin_sprint_sprints_id'] === $sid)));
+                $sprintFlow = self::flowAggregate($flowItems, $itemIdsBySprint[$sid] ?? []);
                 $out['series']['cycle_days'][] = round($sprintFlow['cycle_days'], 1);
                 $out['series']['blocked_days'][] = round($sprintFlow['blocked_days'], 1);
                 $out['series']['rework_pct'][] = $sprintFlow['rework_pct'];
@@ -1458,7 +1475,7 @@ class SprintOverview extends CommonGLPI
 
         // The delta badges don't use flow data, so skip the log work there.
         if (!$shift) {
-            $out['flow']     = self::flowMetrics($items);
+            $out['flow']     = self::flowAggregate($flowItems);
             $out['requests'] = self::requestStats($sprintIds);
             $out['dependencies'] = self::dependencyMetrics($items);
         }
@@ -1477,7 +1494,7 @@ class SprintOverview extends CommonGLPI
         $rows = [];
         foreach ($DB->request([
             'SELECT' => [
-                'id', 'plugin_sprint_sprints_id', 'status', 'story_points', 'capacity', 'capacity_actual',
+                'id', 'plugin_sprint_sprints_id', 'status', 'story_points', 'capacity',
                 'users_id', 'itemtype', 'items_id', 'is_fastlane', 'is_adhoc', 'is_blocked',
                 'plugin_sprint_sprintepics_id', 'plugin_sprint_sprintcategories_id',
                 'date_creation', 'date_mod', 'name',
@@ -1511,7 +1528,8 @@ class SprintOverview extends CommonGLPI
                 $sid = (int)$member['plugin_sprint_sprints_id'];
                 $uid = (int)$member['users_id'];
                 $capacity = SprintAgility::effectiveCapacity($sid, $uid, (float)$member['capacity_percent']);
-                if ($capacity > 0 && SprintMember::getUsedCapacityForUser($sid, $uid) > $capacity) $over[$sid] = true;
+                $used = (float)(SprintMember::usedCapacityBySprint($sid)[$uid]['total'] ?? 0.0);
+                if ($capacity > 0 && $used > $capacity) $over[$sid] = true;
             }
             $cohortSprints = $cohortSprints === null ? $over : array_intersect_key($cohortSprints, $over);
         }
@@ -1614,18 +1632,17 @@ class SprintOverview extends CommonGLPI
     private static function memberCategoryUsage(array $items, array $flByUser, array $depByUser): array
     {
         $blank = [
-            'cap_planned' => 0.0, 'cap_actual' => 0.0,
+            'cap_planned' => 0.0,
             'pts_planned' => 0, 'pts_done' => 0, 'items_total' => 0, 'items_done' => 0,
         ];
         $out   = [];
         $catOf = [];
-        $addCap = static function (int $uid, int $cid, float $planned, float $actual) use (&$out, $blank): void {
-            if ($uid <= 0 || ($planned <= 0 && $actual <= 0)) {
+        $addCap = static function (int $uid, int $cid, float $planned) use (&$out, $blank): void {
+            if ($uid <= 0 || $planned <= 0) {
                 return;
             }
             $out[$uid][$cid] ??= $blank;
             $out[$uid][$cid]['cap_planned'] += $planned;
-            $out[$uid][$cid]['cap_actual']  += $actual;
         };
 
         foreach ($items as $item) {
@@ -1634,7 +1651,7 @@ class SprintOverview extends CommonGLPI
             $catOf[(int)$item['id']] = $cid;
             // A fastlane item carries no capacity of its own; its member rows do.
             if ((int)($item['is_fastlane'] ?? 0) !== 1) {
-                $addCap($uid, $cid, SprintItem::capacityFor($item, false), SprintItem::capacityFor($item, true));
+                $addCap($uid, $cid, (float)($item['capacity'] ?? 0));
             }
             if ($uid > 0) {
                 $out[$uid][$cid] ??= $blank;
@@ -1684,7 +1701,6 @@ class SprintOverview extends CommonGLPI
             'color'       => $color,
             'sub'         => $sub,
             'cap_planned' => array_fill(0, count($window), 0.0),
-            'cap_actual'  => array_fill(0, count($window), 0.0),
             'pts_planned' => array_fill(0, count($window), 0),
             'pts_done'    => array_fill(0, count($window), 0),
         ];
@@ -1719,7 +1735,6 @@ class SprintOverview extends CommonGLPI
                 }
                 foreach ([&$rows[$top], &$detail[$own]] as &$target) {
                     $target['cap_planned'][$i] += (float)$bucket['cap_planned'];
-                    $target['cap_actual'][$i]  += (float)$bucket['cap_actual'];
                     $target['pts_planned'][$i] += (int)$bucket['pts_planned'];
                     $target['pts_done'][$i]    += (int)$bucket['pts_done'];
                 }
@@ -1756,13 +1771,11 @@ class SprintOverview extends CommonGLPI
         if (!$rows || count($trend['labels'] ?? []) === 0) {
             return;
         }
-        $plannedActual = Config::isPlannedActualEnabled();
-
         self::renderCard(
             __('Category trend', 'sprint'),
             'fas fa-chart-line',
-            __('Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category.', 'sprint'),
-            function () use ($trend, $rows, $plannedActual) {
+            __('Per backlog category across the completed sprints in this period: allocated capacity % per sprint, or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category.', 'sprint'),
+            function () use ($trend, $rows) {
                 $labels  = $trend['labels'];
                 $n       = count($labels);
                 $detail  = $trend['detail'] ?? [];
@@ -1771,11 +1784,10 @@ class SprintOverview extends CommonGLPI
                 if ($hasSubs) {
                     $levels['sub'] = $detail;
                 }
-                $metrics = ['cap_planned' => __('Planned capacity %', 'sprint')];
-                if ($plannedActual) {
-                    $metrics['cap_actual'] = __('Actual capacity %', 'sprint');
-                }
-                $metrics['done_pct'] = __('Completed vs planned %', 'sprint');
+                $metrics = [
+                    'cap_planned' => __('Planned capacity %', 'sprint'),
+                    'done_pct'    => __('Completed vs planned %', 'sprint'),
+                ];
 
                 // One dataset per level × metric; the pickers swap the visible one.
                 $datasets = [];
@@ -2086,28 +2098,30 @@ class SprintOverview extends CommonGLPI
     }
 
     /**
-     * Reconstructed from GLPI's history: time to done, time blocked, reopens.
+     * Cycle time, blocked time and rework per item, from one read of the
+     * status history. Aggregate with flowAggregate(); never re-read the log
+     * per sprint.
      *
-     * @return array{cycle_days:float,blocked_days:float,rework_pct:int,measured:int,blocked_items:int}
+     * @return array<int,array{cycle:?float,blocked_seconds:int,done:bool,reopened:bool,ever_blocked:bool}>
      */
-    private static function flowMetrics(array $items): array
+    private static function flowPerItem(array $items): array
     {
         global $DB;
 
-        $out = ['cycle_days' => 0.0, 'blocked_days' => 0.0, 'rework_pct' => 0, 'measured' => 0, 'blocked_items' => 0];
-
-        // Still blocked at close; the log walk below adds the ones that only
-        // passed through blocked, or a completed sprint reports no blockers.
-        $everBlocked = [];
+        $out = [];
         foreach ($items as $item) {
-            if ((string)($item['status'] ?? '') === SprintItem::STATUS_BLOCKED
-                || (int)($item['is_blocked'] ?? 0) === 1) {
-                $everBlocked[(int)$item['id']] = true;
-            }
+            $out[(int)$item['id']] = [
+                'cycle'           => null,
+                'blocked_seconds' => 0,
+                'done'            => false,
+                'reopened'        => false,
+                // Still blocked at close; the log walk adds the ones that
+                // only passed through blocked.
+                'ever_blocked'    => (string)($item['status'] ?? '') === SprintItem::STATUS_BLOCKED
+                    || (int)($item['is_blocked'] ?? 0) === 1,
+            ];
         }
-        $out['blocked_items'] = count($everBlocked);
-
-        $ids = array_map(static fn($i) => (int)$i['id'], $items);
+        $ids = array_keys($out);
         if (empty($ids) || !$DB->tableExists('glpi_logs')) {
             return $out;
         }
@@ -2133,17 +2147,13 @@ class SprintOverview extends CommonGLPI
             $logs[(int)$row['items_id']][] = $row;
         }
 
-        $cycleSum = 0.0;
-        $cycleN   = 0;
-        $blockedSeconds = 0;
-        $doneItems = 0;
-        $reopened  = 0;
         foreach ($logs as $itemId => $itemLogs) {
             $started    = null;
             $finished   = null;
             $blockedAt  = null;
             $wasDone    = false;
             $isReopened = false;
+            $blockedSeconds = 0;
 
             foreach ($itemLogs as $log) {
                 $ts    = strtotime((string)$log['date_mod']);
@@ -2161,7 +2171,7 @@ class SprintOverview extends CommonGLPI
 
                 if (in_array($value, $blocked, true)) {
                     $blockedAt = $ts;
-                    $everBlocked[$itemId] = true;
+                    $out[$itemId]['ever_blocked'] = true;
                 } elseif ($blockedAt !== null) {
                     $blockedSeconds += max(0, $ts - $blockedAt);
                     $blockedAt = null;
@@ -2169,23 +2179,59 @@ class SprintOverview extends CommonGLPI
             }
 
             if ($started !== null && $finished !== null && $finished >= $started) {
-                $cycleSum += ($finished - $started) / 86400;
+                $out[$itemId]['cycle'] = ($finished - $started) / 86400;
+            }
+            $out[$itemId]['blocked_seconds'] = $blockedSeconds;
+            $out[$itemId]['done']            = $wasDone;
+            $out[$itemId]['reopened']        = $wasDone && $isReopened;
+        }
+        return $out;
+    }
+
+    /**
+     * Average cycle time, blocked days and rework share over a set of items
+     * (all of them when $itemIds is null).
+     *
+     * @param array<int,array<string,mixed>> $perItem from flowPerItem()
+     * @param int[]|null $itemIds
+     * @return array{cycle_days:float,blocked_days:float,rework_pct:int,measured:int,blocked_items:int}
+     */
+    private static function flowAggregate(array $perItem, ?array $itemIds = null): array
+    {
+        $cycleSum = 0.0;
+        $cycleN   = 0;
+        $blockedSeconds = 0;
+        $doneItems = 0;
+        $reopened  = 0;
+        $blockedItems = 0;
+        $ids = $itemIds === null ? array_keys($perItem) : $itemIds;
+        foreach ($ids as $id) {
+            $f = $perItem[$id] ?? null;
+            if ($f === null) {
+                continue;
+            }
+            if ($f['cycle'] !== null) {
+                $cycleSum += $f['cycle'];
                 $cycleN++;
             }
-            if ($wasDone) {
+            $blockedSeconds += $f['blocked_seconds'];
+            if ($f['done']) {
                 $doneItems++;
-                if ($isReopened) {
+                if ($f['reopened']) {
                     $reopened++;
                 }
             }
+            if ($f['ever_blocked']) {
+                $blockedItems++;
+            }
         }
-
-        $out['cycle_days']   = $cycleN > 0 ? $cycleSum / $cycleN : 0.0;
-        $out['blocked_days'] = $blockedSeconds / 86400;
-        $out['rework_pct']   = $doneItems > 0 ? (int)round(($reopened / $doneItems) * 100) : 0;
-        $out['measured']     = $cycleN;
-        $out['blocked_items'] = count($everBlocked);
-        return $out;
+        return [
+            'cycle_days'    => $cycleN > 0 ? $cycleSum / $cycleN : 0.0,
+            'blocked_days'  => $blockedSeconds / 86400,
+            'rework_pct'    => $doneItems > 0 ? (int)round(($reopened / $doneItems) * 100) : 0,
+            'measured'      => $cycleN,
+            'blocked_items' => $blockedItems,
+        ];
     }
 
     /**

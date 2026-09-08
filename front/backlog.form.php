@@ -28,20 +28,20 @@ function plugin_sprint_safe_redirect(string $target): void
 
 /**
  * Planning fields from the Sprint-tab panel (owner, capacity, sprint,
- * category, fastlane). Only the whitelisted keys reach the item; the values
+ * category, customer, credits, fastlane). Only the whitelisted keys reach the item; the values
  * are normalized inside SprintItem::prepareInputForAdd/Update.
  */
 function plugin_sprint_backlog_plan_fields(array $post): array
 {
     $out = [];
-    foreach (['users_id', 'capacity', 'proposed_sprints_id', 'plugin_sprint_sprintcategories_id', 'is_fastlane'] as $key) {
+    foreach ([
+        'users_id', 'capacity', 'credits', 'proposed_sprints_id',
+        'plugin_sprint_sprintcategories_id', 'plugin_sprint_sprintcustomers_id', 'is_fastlane',
+        'plugin_sprint_sprintcreditproducts_id',
+    ] as $key) {
         if (array_key_exists($key, $post)) {
-            $out[$key] = $key === 'capacity' ? (float)$post[$key] : (int)$post[$key];
+            $out[$key] = in_array($key, ['capacity', 'credits'], true) ? (float)$post[$key] : (int)$post[$key];
         }
-    }
-    // '' = no actual figure (follows planned); normalized in SprintItem.
-    if (array_key_exists('capacity_actual', $post)) {
-        $out['capacity_actual'] = (string)$post['capacity_actual'] === '' ? '' : (float)$post['capacity_actual'];
     }
     return $out;
 }

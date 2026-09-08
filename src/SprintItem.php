@@ -21,6 +21,8 @@ class SprintItem extends CommonDBTM
 
     /** @see withoutAssignGuard() */
     private static bool $skipAssignGuard = false;
+    /** @var bool guard bypass for server-side writes touching customer/credits */
+    private static bool $skipCreditGuard = false;
     private static bool $linkedStatusAutomation = false;
 
     /**
@@ -178,13 +180,30 @@ class SprintItem extends CommonDBTM
             // DECIMAL(5,1) column; 'integer' would strip the decimal point in filterValues() ("0.5" → 5)
             'datatype' => 'decimal',
         ];
-        if (Config::isPlannedActualEnabled()) {
+        if (SprintCustomer::canUseCredits()) {
             $tab[] = [
-                'id'       => 12,
+                'id'        => 12,
+                'table'     => SprintCustomer::getTable(),
+                'field'     => 'name',
+                'linkfield' => 'plugin_sprint_sprintcustomers_id',
+                'name'      => SprintCustomer::getTypeName(1),
+                'datatype'  => 'dropdown',
+            ];
+            $tab[] = [
+                'id'       => 14,
                 'table'    => $this->getTable(),
-                'field'    => 'capacity_actual',
-                'name'     => __('Actual capacity (%)', 'sprint'),
+                'field'    => 'credits',
+                'name'     => __('Credits', 'sprint'),
+                // DECIMAL(10,2) column; 'integer' would strip the decimal point.
                 'datatype' => 'decimal',
+            ];
+            $tab[] = [
+                'id'        => 15,
+                'table'     => SprintCreditProduct::getTable(),
+                'field'     => 'name',
+                'linkfield' => 'plugin_sprint_sprintcreditproducts_id',
+                'name'      => SprintCreditProduct::getTypeName(1),
+                'datatype'  => 'dropdown',
             ];
         }
         $tab[] = [
@@ -433,22 +452,82 @@ class SprintItem extends CommonDBTM
             . htmlescape($projectName) . "</span>";
     }
 
-    /**
-     * Capacity of a row for the requested view: the actual figure when the
-     * planned/actual setting is on and one was recorded, else the planned one.
-     */
-    public static function capacityFor(array $row, bool $actual): float
+    /** Customer picker; disabled for a session without the item READ right (see SprintCustomer::canUseCredits()). */
+    public static function customerSelect(string $name, int $selected, string $extraClass = ''): string
     {
-        if ($actual && isset($row['capacity_actual']) && $row['capacity_actual'] !== '' && $row['capacity_actual'] !== 'NULL') {
-            return (float)$row['capacity_actual'];
-        }
-        return (float)($row['capacity'] ?? 0);
+        $disabled = SprintCustomer::canUseCredits() ? '' : ' disabled';
+        $class    = trim('form-select ' . $extraClass);
+        return "<select name='" . htmlescape($name) . "' class='" . htmlescape($class) . "'{$disabled}>"
+            . "<option value='0'>-----</option>"
+            . SprintCustomer::dropdownOptionsPreserving($selected)
+            . "</select>";
     }
 
-    /** '' when no actual capacity was recorded, else the formatted figure. */
-    public static function formatActualCapacity($value): string
+    /** Credit amount input; read-only for a session without the item READ right (see SprintCustomer::canUseCredits()). */
+    public static function creditsInput(string $name, $value, string $extraClass = ''): string
     {
-        return ($value === null || $value === '' || $value === 'NULL') ? '' : SprintMember::formatCapacity($value);
+        $readonly = SprintCustomer::canUseCredits() ? '' : ' readonly';
+        $class    = trim('form-control ' . $extraClass);
+        return "<input type='number' min='0' step='0.25' name='" . htmlescape($name) . "' "
+            . "class='" . htmlescape($class) . "' style='max-width:140px;' value='"
+            . htmlescape(SprintCustomer::formatCredits($value)) . "'{$readonly}>";
+    }
+
+    /**
+     * Catalogue picker: choosing a product fills the credits input named
+     * $creditsInputName in the same form or modal (see creditProductScript()).
+     * Manual credits stay possible — the picker is a shortcut, not a lock.
+     */
+    public static function productSelect(string $name, int $selected, string $creditsInputName, string $extraClass = ''): string
+    {
+        $disabled = SprintCustomer::canUseCredits() ? '' : ' disabled';
+        $class    = trim('form-select sprint-credit-product ' . $extraClass);
+        return "<select name='" . htmlescape($name) . "' class='" . htmlescape($class) . "' "
+            . "data-credits-for='" . htmlescape($creditsInputName) . "'{$disabled}>"
+            . "<option value='0' data-credits=''>" . htmlescape(__('Manual credits', 'sprint')) . "</option>"
+            . SprintCreditProduct::dropdownOptions($selected)
+            . "</select>";
+    }
+
+    /** The one-time script behind every productSelect() on the page. */
+    public static function creditProductScript(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        echo <<<'HTML'
+<script>
+(function(){
+    if (typeof jQuery === 'undefined' || window.__sprintCreditProductBound) { return; }
+    window.__sprintCreditProductBound = true;
+    // Picking a product copies its default credits into the credits field
+    // next to it; "manual" leaves the amount alone.
+    jQuery(document).on('change', 'select.sprint-credit-product', function(){
+        var credits = jQuery(this).find('option:selected').attr('data-credits');
+        var target  = jQuery(this).attr('data-credits-for');
+        if (credits === undefined || credits === '' || !target) { return; }
+        var scope = jQuery(this).closest('.modal, form');
+        var input = (scope.length ? scope : jQuery(document)).find("input[name='" + target + "']");
+        if (input.length) { input.val(credits).trigger('change'); }
+    });
+})();
+</script>
+HTML;
+    }
+
+    /** Customer pill + credit amount for a list cell; '' when neither is set. */
+    public static function renderCreditCell(int $customerId, $credits, int $productId = 0): string
+    {
+        $credits = (float)$credits;
+        $out     = $customerId > 0 ? SprintCustomer::renderPill($customerId) : '';
+        if ($credits > 0) {
+            $product = $productId > 0 ? SprintCreditProduct::getFullNameFor($productId) : '';
+            $out .= " <span class='sprint-credit-chip' title='" . htmlescape($product !== '' ? $product : __('Credits', 'sprint')) . "'>"
+                . "<i class='fas fa-coins'></i> " . htmlescape(SprintCustomer::formatCredits($credits)) . "</span>";
+        }
+        return $out !== '' ? $out : "<span class='text-muted'>-</span>";
     }
 
     /**
@@ -899,12 +978,6 @@ class SprintItem extends CommonDBTM
             Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
                 'value' => 0,
             ]);
-            if (Config::isPlannedActualEnabled()) {
-                echo " <span class='text-muted sprint-small ms-2'>" . __('Actual', 'sprint') . "</span> ";
-                Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
-                    'value' => '',
-                ]);
-            }
             echo "</td>";
             echo "<td>" . __('Priority') . "</td>";
             echo "<td>";
@@ -913,7 +986,22 @@ class SprintItem extends CommonDBTM
                 4 => __('High'), 5 => __('Very high'),
             ], ['value' => 3]);
             echo "</td>";
-            echo "<td colspan='2'>";
+            if (SprintCustomer::canUseCredits()) {
+                echo "<td>" . SprintCustomer::getTypeName(1) . "</td>";
+                echo "<td>";
+                echo self::customerSelect('plugin_sprint_sprintcustomers_id', 0);
+                echo "</td></tr>";
+
+                echo "<tr class='tab_bg_1'>";
+                echo "<td>" . __('Credits', 'sprint') . "</td>";
+                echo "<td><div class='d-flex flex-wrap gap-2 align-items-center'>"
+                    . self::productSelect('plugin_sprint_sprintcreditproducts_id', 0, 'credits', 'w-auto')
+                    . self::creditsInput('credits', 0) . "</div></td>";
+                self::creditProductScript();
+                echo "<td colspan='4'>";
+            } else {
+                echo "<td colspan='2'>";
+            }
             echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
             echo "</td></tr>";
 
@@ -933,7 +1021,6 @@ class SprintItem extends CommonDBTM
         );
 
         $statuses   = self::getAllStatuses();
-        $plannedActual = Config::isPlannedActualEnabled();
         $priorities = [
             1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
             4 => __('High'), 5 => __('Very high'),
@@ -964,13 +1051,17 @@ class SprintItem extends CommonDBTM
         echo "<th class='sprint-sortable' data-sort-type='story_points' style='cursor:pointer;' {$sc}>" . __('Story Points', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th class='sprint-sortable' data-sort-type='capacity' style='cursor:pointer;' {$sc}>" . __('Capacity (%)', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th class='sprint-sortable' data-sort-type='owner' style='cursor:pointer;' {$sc}>" . __('Owner', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
+        $showCredits = SprintCustomer::canUseCredits();
+        if ($showCredits) {
+            echo "<th>" . __('Customer / credits', 'sprint') . "</th>";
+        }
         if ($canedit) {
             echo "<th>" . __('Actions') . "</th>";
         }
         echo "</tr>";
 
         if (count($items) === 0) {
-            $cols = $canedit ? 9 : 8;
+            $cols = 8 + ($canedit ? 1 : 0) + ($showCredits ? 1 : 0);
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
                 __('No items found', 'sprint') . "</td></tr>";
         }
@@ -1005,13 +1096,16 @@ class SprintItem extends CommonDBTM
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td class='center sprint-cell-story-points'>" . (int)$row['story_points'] . "</td>";
             echo "<td class='center sprint-cell-capacity'>" . SprintMember::formatCapacity($row['capacity'] ?? 0) . "%";
-            if ($plannedActual && self::formatActualCapacity($row['capacity_actual'] ?? null) !== '') {
-                echo " <span class='text-muted sprint-small' title='" . __s('Actual capacity', 'sprint') . "'>/ "
-                    . SprintMember::formatCapacity($row['capacity_actual']) . "%</span>";
-            }
             echo "</td>";
             echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? htmlescape(SprintCache::userName($row['users_id'])) :
                 '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
+            if ($showCredits) {
+                echo "<td class='sprint-cell-credits'>" . self::renderCreditCell(
+                    (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0),
+                    $row['credits'] ?? 0,
+                    (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0)
+                ) . "</td>";
+            }
             if ($canedit) {
                 $isOwn = (int)$row['users_id'] === (int)Session::getLoginUserID();
                 $canEditRow = self::canUpdate() || (self::hasOnlyOwnRight(UPDATE) && $isOwn);
@@ -1210,7 +1304,6 @@ HTML;
             'data-owner-name'        => $ownerName,
             'data-story-points'      => (int)($row['story_points'] ?? 0),
             'data-capacity'          => SprintMember::formatCapacity($row['capacity'] ?? 0),
-            'data-capacity-actual'   => self::formatActualCapacity($row['capacity_actual'] ?? null),
             'data-is-fastlane'       => (int)($row['is_fastlane'] ?? 0),
             'data-is-adhoc'          => (int)($row['is_adhoc'] ?? 0),
             'data-note'              => (string)($row['note'] ?? ''),
@@ -1221,6 +1314,14 @@ HTML;
             'data-category-id'       => (int)($row['plugin_sprint_sprintcategories_id'] ?? 0),
             'data-category-name'     => SprintCategory::getFullNameFor((int)($row['plugin_sprint_sprintcategories_id'] ?? 0)),
         ];
+
+        if (SprintCustomer::canUseCredits()) {
+            $customerId = (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0);
+            $attrs['data-customer-id']   = $customerId;
+            $attrs['data-customer-name'] = SprintCustomer::getNameFor($customerId);
+            $attrs['data-credits']       = SprintCustomer::formatCredits($row['credits'] ?? 0);
+            $attrs['data-credit-product-id'] = (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0);
+        }
 
         $parts = [];
         foreach ($attrs as $k => $v) {
@@ -1406,7 +1507,6 @@ HTML;
             4 => __('High'), 5 => __('Very high'),
         ];
         $capacityChoices = SprintMember::getCapacityChoices();
-        $plannedActual   = Config::isPlannedActualEnabled();
         $memberOptions  = $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [];
         $moveTargets    = $sprintId > 0 ? Sprint::getMoveTargetOptions($sprintId) : [];
         $definedTags    = Config::getDefinedTags();
@@ -1546,16 +1646,29 @@ HTML;
                 . "<i class='fas fa-user-shield me-1'></i>{$capacityRequestHint}</div>";
         }
         echo "</div>";
-        if ($plannedActual) {
-            echo "<div class='col-md-3 mb-3 sprint-qe-capacity-actual'><label class='form-label text-nowrap' title='" . __s('Actual capacity (%)', 'sprint') . "'>" . __('Actual', 'sprint') . " %</label>";
-            echo "<select name='capacity_actual' class='form-select'>";
-            echo "<option value=''>" . __('Follows planned', 'sprint') . "</option>";
-            foreach ($capacityChoices as $val => $label) {
-                echo "<option value='" . htmlescape((string)$val) . "'>" . htmlescape((string)$label) . "</option>";
-            }
-            echo "</select></div>";
-        }
         echo "</div>";
+
+        if (SprintCustomer::canUseCredits()) {
+            echo "<div class='row g-3'>";
+            echo "<div class='col-md-8 mb-3'><label class='form-label'>"
+                . SprintCustomer::getTypeName(1) . "</label>";
+            echo self::customerSelect('plugin_sprint_sprintcustomers_id', 0);
+            echo "</div>";
+            echo "<div class='col-md-4 mb-3'><label class='form-label'>"
+                . __('Credits', 'sprint') . "</label>";
+            echo self::creditsInput('credits', 0, 'w-100');
+            echo "</div>";
+            echo "</div>";
+            echo "<div class='row g-3'>";
+            echo "<div class='col-md-8 mb-3'><label class='form-label'>"
+                . "<i class='fas fa-tags me-1'></i>" . SprintCreditProduct::getTypeName(1) . "</label>";
+            echo self::productSelect('plugin_sprint_sprintcreditproducts_id', 0, 'credits', 'w-100');
+            echo "<div class='form-text sprint-small text-muted'>"
+                . htmlescape(__('Picking a product fills in its default credits; the amount stays editable.', 'sprint')) . "</div>";
+            echo "</div>";
+            echo "</div>";
+            self::creditProductScript();
+        }
 
         echo "<div class='mb-3'><label class='form-label'>" . __('Note', 'sprint') . "</label>";
         echo "<textarea name='note' class='form-control' rows='8' style='min-height:180px;'></textarea></div>";
@@ -1635,6 +1748,7 @@ HTML;
         $depResolvedTxt  = addslashes(__('resolved', 'sprint'));
         $depRemoveTxt    = addslashes(__('Remove dependency', 'sprint'));
         $depRemoveConfirm = addslashes(__('Remove this dependency?', 'sprint'));
+        $lblInactive      = addslashes(__('inactive', 'sprint'));
 
         echo <<<JS
 <script>
@@ -1712,22 +1826,32 @@ $(function() {
             \$modal.data('qe-orig-capacity', num);
         })();
         (function() {
-            var \$sel = \$modal.find('select[name=capacity_actual]');
-            if (!\$sel.length) { return; }
-            var raw = \$row.attr('data-capacity-actual');
-            var num = parseFloat(raw);
-            var match = '';
-            if (raw !== undefined && raw !== '' && !isNaN(num)) {
-                \$sel.find('option').each(function() {
-                    if (this.value !== '' && parseFloat(this.value) === num) { match = this.value; return false; }
-                });
+            var \$cust = \$modal.find('select[name=plugin_sprint_sprintcustomers_id]');
+            if (\$cust.length) {
+                // A row charged to a deactivated customer has no matching
+                // option — inject one so saving cannot silently drop it. The
+                // injected option goes when the next item is opened.
+                var cur = String(parseInt(\$row.attr('data-customer-id'), 10) || 0);
+                \$cust.find('option.sprint-qe-customer-legacy').remove();
+                if (cur !== '0' && !\$cust.find("option[value='" + cur + "']").length) {
+                    \$cust.append(jQuery('<option class="sprint-qe-customer-legacy"></option>')
+                        .val(cur)
+                        .text((\$row.attr('data-customer-name') || ('#' + cur)) + ' ({$lblInactive})'));
+                }
+                \$cust.val(cur);
             }
-            \$sel.val(match);
+            var \$cred = \$modal.find('input[name=credits]');
+            if (\$cred.length) { \$cred.val(\$row.attr('data-credits') || '0'); }
+            var \$prod = \$modal.find('select[name=plugin_sprint_sprintcreditproducts_id]');
+            if (\$prod.length) {
+                var pid = String(parseInt(\$row.attr('data-credit-product-id'), 10) || 0);
+                \$prod.val(\$prod.find("option[value='" + pid + "']").length ? pid : '0');
+            }
         })();
         \$modal.find('textarea[name=note]').val(note);
         \$modal.find('select[name=carry_over_to_sprint_id]').val('0');
         \$modal.find('.sprint-qe-error').hide().text('');
-        \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity, .sprint-qe-capacity-actual').toggle(!isFastlane);
+        \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
         \$modal.data('qe-is-fastlane', isFastlane ? 1 : 0);
         \$modal.removeData('qe-request-reason');
         \$modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
@@ -1863,8 +1987,14 @@ $(function() {
                     users_id: \$modal.find('select[name=users_id]').val(),
                     story_points: \$modal.find('input[name=story_points]').val(),
                     capacity: \$modal.find('select[name=capacity]').val(),
-                    capacity_actual: \$modal.find('select[name=capacity_actual]').length
-                        ? \$modal.find('select[name=capacity_actual]').val()
+                    plugin_sprint_sprintcustomers_id: \$modal.find('select[name=plugin_sprint_sprintcustomers_id]').length
+                        ? \$modal.find('select[name=plugin_sprint_sprintcustomers_id]').val()
+                        : undefined,
+                    credits: \$modal.find('input[name=credits]').length
+                        ? \$modal.find('input[name=credits]').val()
+                        : undefined,
+                    plugin_sprint_sprintcreditproducts_id: \$modal.find('select[name=plugin_sprint_sprintcreditproducts_id]').length
+                        ? \$modal.find('select[name=plugin_sprint_sprintcreditproducts_id]').val()
                         : undefined,
                     note: \$modal.find('textarea[name=note]').val(),
                     carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
@@ -1927,8 +2057,12 @@ $(function() {
                 \$row.attr('data-owner-name', ownerLabel).data('owner-name', ownerLabel);
                 \$row.attr('data-story-points', resp.story_points).data('story-points', resp.story_points);
                 \$row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
-                if (typeof resp.capacity_actual !== 'undefined') {
-                    \$row.attr('data-capacity-actual', resp.capacity_actual);
+                if (typeof resp.credits !== 'undefined') {
+                    \$row.attr('data-credits', resp.credits).data('credits', resp.credits);
+                    \$row.attr('data-customer-id', resp.customer_id).data('customer-id', resp.customer_id);
+                    \$row.attr('data-customer-name', resp.customer_name).data('customer-name', resp.customer_name);
+                    \$row.attr('data-credit-product-id', resp.credit_product_id || 0);
+                    \$row.find('.sprint-cell-credits').html(resp.credit_cell_html);
                 }
                 \$row.attr('data-note', resp.note).data('note', resp.note);
 
@@ -2594,6 +2728,9 @@ JS;
                 WARNING
             );
         }
+        if (!$this->validateCustomer($input, (int)($input['plugin_sprint_sprints_id'] ?? 0))) {
+            return false;
+        }
         if (!$this->validateCapacity($input)) {
             return false;
         }
@@ -2833,6 +2970,9 @@ JS;
             $validationInput['plugin_sprint_sprints_id'] = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         }
 
+        if (!$this->validateCustomer($input, (int)$validationInput['plugin_sprint_sprints_id'])) {
+            return false;
+        }
         if (!$this->validateCapacity($input, (int)($input['id'] ?? 0))) {
             return false;
         }
@@ -2840,6 +2980,40 @@ JS;
             return false;
         }
         return parent::prepareInputForUpdate($input);
+    }
+
+    /**
+     * The customer charged on an item must be one the session may see and,
+     * once the item sits in a sprint, valid for that sprint's entity. An
+     * invalid pick — or a move into a sprint the customer is not valid for —
+     * is refused with a message, never silently re-attributed. Only a changed
+     * customer or a changed sprint is judged; unrelated edits leave the pair
+     * alone. Server-side bookkeeping (carry-over) is judged on the rows.
+     */
+    private function validateCustomer(array $input, int $sprintId): bool
+    {
+        $current    = (int)($this->fields['plugin_sprint_sprintcustomers_id'] ?? 0);
+        $customerId = (int)($input['plugin_sprint_sprintcustomers_id'] ?? $current);
+        if ($customerId <= 0) {
+            return true;
+        }
+        $changed = array_key_exists('plugin_sprint_sprintcustomers_id', $input) && $customerId !== $current;
+        $moved   = $sprintId > 0 && $sprintId !== (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        if (!$changed && !$moved) {
+            return true;
+        }
+        if (SprintCustomer::isChargeableInSprint($customerId, $sprintId, !self::$skipCreditGuard)) {
+            return true;
+        }
+        $name = SprintCustomer::getNameFor($customerId) ?: ('#' . $customerId);
+        Session::addMessageAfterRedirect(
+            $sprintId > 0
+                ? sprintf(__('Customer “%s” is not available in the entity of that sprint.', 'sprint'), $name)
+                : __('This customer is not available in your entities.', 'sprint'),
+            false,
+            ERROR
+        );
+        return false;
     }
 
     public static function applyAutomatedStatus(int $itemId, string $status): bool
@@ -2888,6 +3062,8 @@ JS;
 
     public function post_addItem()
     {
+        SprintCustomer::invalidateCaches();
+        SprintMember::invalidateUsedCapacity();
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         $itemtype = (string)($this->fields['itemtype'] ?? '');
         $itemsId  = (int)($this->fields['items_id'] ?? 0);
@@ -2905,6 +3081,8 @@ JS;
 
     public function post_updateItem($history = true)
     {
+        SprintCustomer::invalidateCaches();
+        SprintMember::invalidateUsedCapacity();
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         $itemtype = (string)($this->fields['itemtype'] ?? '');
         $itemsId  = (int)($this->fields['items_id'] ?? 0);
@@ -3171,8 +3349,24 @@ JS;
             }
         }
 
+        // The customer travels with the work, but only into a sprint it is
+        // valid for; elsewhere the copy lands unattributed, and says so.
+        $customerId = (int)($source->fields['plugin_sprint_sprintcustomers_id'] ?? 0);
+        if ($customerId > 0 && !SprintCustomer::isChargeableInSprint($customerId, $targetSprintId, false)) {
+            Session::addMessageAfterRedirect(
+                sprintf(
+                    __('Customer “%s” is not available in the entity of the target sprint; the carried-over item has no customer.', 'sprint'),
+                    SprintCustomer::getNameFor($customerId) ?: ('#' . $customerId)
+                ),
+                false,
+                WARNING
+            );
+            $customerId = 0;
+        }
+
         $copy = new self();
-        return self::withoutAssignGuard(static function () use ($copy, $targetSprintId, $source, $itemtype, $itemsId) {
+        return self::withoutAssignGuard(static fn() => self::withoutCreditGuard(
+            static function () use ($copy, $targetSprintId, $source, $itemtype, $itemsId, $customerId) {
             return (int)$copy->add([
                 'plugin_sprint_sprints_id' => $targetSprintId,
                 'name'                     => (string)($source->fields['name'] ?? ''),
@@ -3185,13 +3379,32 @@ JS;
                 // Classification travels with the work — execution state resets.
                 'plugin_sprint_sprintcategories_id' => (int)($source->fields['plugin_sprint_sprintcategories_id'] ?? 0),
                 'plugin_sprint_sprintepics_id'      => (int)($source->fields['plugin_sprint_sprintepics_id'] ?? 0),
+                'plugin_sprint_sprintcustomers_id'  => $customerId,
                 'users_id'                 => 0,
+                // Capacity and credits are re-estimated for the remaining work.
                 'capacity'                 => 0,
+                'credits'                  => 0,
+                'plugin_sprint_sprintcreditproducts_id' => (int)($source->fields['plugin_sprint_sprintcreditproducts_id'] ?? 0),
                 'is_fastlane'              => (int)($source->fields['is_fastlane'] ?? 0),
                 'is_blocked'               => 0,
                 'note'                     => '',
             ]);
-        });
+            }
+        ));
+    }
+
+    /**
+     * Server-side write that may set customer/credits regardless of the acting
+     * user's right — a carry-over must not drop the customer it is charged to.
+     */
+    public static function withoutCreditGuard(callable $callback)
+    {
+        self::$skipCreditGuard = true;
+        try {
+            return $callback();
+        } finally {
+            self::$skipCreditGuard = false;
+        }
     }
 
     /** Server-side write that may place items in a sprint without the assign guard. */
@@ -3240,12 +3453,27 @@ JS;
         if (isset($input['users_id']))    $input['users_id']    = (int)$input['users_id'];
         if (isset($input['story_points'])) $input['story_points'] = max(0, (int)$input['story_points']);
         if (isset($input['capacity']))    $input['capacity']    = SprintMember::normalizeCapacity($input['capacity']);
-        // '' / -1 = no actual figure recorded: the item follows its planned capacity.
-        if (array_key_exists('capacity_actual', $input)) {
-            $raw = $input['capacity_actual'];
-            $input['capacity_actual'] = ($raw === '' || $raw === null || (float)$raw < 0)
-                ? 'NULL'
-                : SprintMember::normalizeCapacity($raw);
+        // An empty customer field means "not sent" (a disabled picker or a
+        // selection that never loaded), never "no customer": only an explicit
+        // 0 detaches. Validity is judged in validateCustomer().
+        if (array_key_exists('plugin_sprint_sprintcustomers_id', $input)) {
+            $raw = $input['plugin_sprint_sprintcustomers_id'];
+            if ($raw === '' || $raw === null) {
+                unset($input['plugin_sprint_sprintcustomers_id']);
+            } else {
+                $input['plugin_sprint_sprintcustomers_id'] = max(0, (int)$raw);
+            }
+        }
+        if (isset($input['credits']))     $input['credits']     = SprintCustomer::normalizeCredits($input['credits']);
+        if (isset($input['plugin_sprint_sprintcreditproducts_id'])) {
+            $productId = (int)$input['plugin_sprint_sprintcreditproducts_id'];
+            // A catalogue entry outside the session's entities is not usable
+            // here; the credits themselves are kept as entered.
+            $input['plugin_sprint_sprintcreditproducts_id'] = (self::$skipCreditGuard ? SprintCreditProduct::isVisible($productId) : SprintCreditProduct::isPickable($productId)) || $productId === 0 ? $productId : 0;
+            // A product without an amount takes the product's default.
+            if ($productId > 0 && !isset($input['credits'])) {
+                $input['credits'] = SprintCreditProduct::creditsFor($productId);
+            }
         }
         if (isset($input['priority']))    $input['priority']    = max(1, min(5, (int)$input['priority']));
         if (isset($input['plugin_sprint_sprints_id'])) $input['plugin_sprint_sprints_id'] = (int)$input['plugin_sprint_sprints_id'];
@@ -3548,19 +3776,34 @@ JS;
             Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
                 'value' => SprintMember::capacityKey($this->fields['capacity'] ?? 0),
             ]);
-            if (Config::isPlannedActualEnabled()) {
-                $actualRaw = $this->fields['capacity_actual'] ?? null;
-                echo " <span class='text-muted sprint-small ms-2' title='"
-                    . __s('Actual capacity: what the item really took, filled in as the work is done. Empty = follows the planned figure.', 'sprint')
-                    . "'>" . __('Actual', 'sprint') . "</span> ";
-                Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
-                    'value' => self::formatActualCapacity($actualRaw) === '' ? '' : SprintMember::capacityKey($actualRaw),
-                ]);
-            }
             echo "</td><td>" . __('Owner', 'sprint') . "</td><td>";
             Dropdown::showFromArray('users_id', $memberOptions, [
                 'value' => $this->fields['users_id'] ?? 0,
             ]);
+            echo "</td></tr>";
+        }
+
+        if (SprintCustomer::canUseCredits()) {
+            echo "<tr class='tab_bg_1'>";
+            echo "<td>" . SprintCustomer::getTypeName(1) . "</td><td>";
+            echo self::customerSelect(
+                'plugin_sprint_sprintcustomers_id',
+                (int)($this->fields['plugin_sprint_sprintcustomers_id'] ?? 0)
+            );
+            echo "</td><td>" . __('Credits', 'sprint') . "<br>";
+            echo "<span class='text-muted sprint-small'>"
+                . htmlescape(__('Charged to the customer once this item is delivered. Pick a product from the catalogue to fill in its default, or enter the credits by hand.', 'sprint')) . "</span>";
+            echo "</td><td>";
+            echo "<div class='d-flex flex-wrap gap-2 align-items-center'>";
+            echo self::productSelect(
+                'plugin_sprint_sprintcreditproducts_id',
+                (int)($this->fields['plugin_sprint_sprintcreditproducts_id'] ?? 0),
+                'credits',
+                'w-auto'
+            );
+            echo self::creditsInput('credits', $this->fields['credits'] ?? 0);
+            echo "</div>";
+            self::creditProductScript();
             echo "</td></tr>";
         }
 

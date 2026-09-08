@@ -3802,21 +3802,6 @@ msgstr ""
 msgid "Team capacity left after the assigned work, the backlog proposals and the fastlane reservation"
 msgstr ""
 
-msgid "Actual"
-msgstr ""
-
-msgid "Actual capacity"
-msgstr ""
-
-msgid "Actual capacity %"
-msgstr ""
-
-msgid "Actual capacity (%)"
-msgstr ""
-
-msgid "Actual capacity: what the item really took, filled in as the work is done. Empty = follows the planned figure."
-msgstr ""
-
 msgid "Average over the sprints shown"
 msgstr ""
 
@@ -3835,15 +3820,6 @@ msgstr ""
 msgid "Configured category minimums act as a floor under the delivery pace."
 msgstr ""
 
-msgid "Follows planned"
-msgstr ""
-
-msgid "Per backlog category across the completed sprints in this period: allocated capacity % per sprint (planned, or actual when that setting is on) or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category."
-msgstr ""
-
-msgid "Planned / actual capacity"
-msgstr ""
-
 msgid "Planned capacity %"
 msgstr ""
 
@@ -3853,28 +3829,13 @@ msgstr ""
 msgid "Reserved for interrupt work: the fastlane capacity limit of this sprint, minus what is already assigned here"
 msgstr ""
 
-msgid "Show the planned or the actual capacity per item (items without an actual figure keep their planned one)"
-msgstr ""
-
-msgid "Showing actual capacity; items without an actual figure count with their planned capacity."
-msgstr ""
-
 msgid "Those sprints spent an average of %s%% on fastlane work; that average is reserved up front on sprints without a fastlane limit of their own."
-msgstr ""
-
-msgid "When enabled, every sprint item gets a second capacity figure: the planned % is estimated up front, the actual % is filled in as the work is done and may deviate. The capacity-per-category matrix and the category trend chart can be flipped between the two."
 msgstr ""
 
 msgid "You are not allowed to edit this backlog item"
 msgstr ""
 
 msgid "You are not allowed to add items to the backlog"
-msgstr ""
-
-msgid "planned"
-msgstr ""
-
-msgid "actual"
 msgstr ""
 
 msgid "Main categories"
@@ -3952,11 +3913,731 @@ msgstr ""
 msgid "No capacity recorded"
 msgstr ""
 
-msgid "Where each member's capacity went per backlog category across the completed sprints in this period, actual capacity where an item has one. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
-msgstr ""
-
 msgid "Where each member's capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it."
 msgstr ""
 
 msgid "Parent project"
+msgstr ""
+
+# === Customers & credits (1.3.0) ===
+#: src/SprintCredits.php:398
+#, php-format
+msgid "%s credits short of covering the backlog waiting for them."
+msgstr ""
+
+#: src/SprintCredits.php:94
+#, php-format
+msgid ""
+"%s credits sit on items with no customer, so they count against "
+"nobody's balance."
+msgstr ""
+
+#: src/SprintCredits.php:188
+#, php-format
+msgid "%s over budget"
+msgstr ""
+
+#: src/SprintCredit.php:101
+msgid ""
+"A positive amount is a purchase, a negative amount a correction or "
+"write-off. Leave the expiry date empty for credits that never lapse."
+msgstr ""
+
+#: src/Config.php:524
+msgid "Access"
+msgstr ""
+
+#: src/SprintCredits.php:380
+msgid "Advice"
+msgstr ""
+
+#: src/SprintCredits.php:66
+msgid "All customers"
+msgstr ""
+
+#: src/SprintCredits.php:105
+msgid "Balance per customer"
+msgstr ""
+
+#: src/SprintCredit.php:99
+msgid "Book credits"
+msgstr ""
+
+#: src/SprintCredit.php:112 src/SprintCredit.php:132
+#: src/SprintCredit.php:283 src/SprintCredits.php:431
+msgid "Booking date"
+msgstr ""
+
+#: src/SprintCredit.php:190 src/SprintCredits.php:119
+#: src/SprintExport.php:1664
+msgid "Bought"
+msgstr ""
+
+#: src/SprintRequest.php:493
+msgid "Category change"
+msgstr ""
+
+#: src/SprintItem.php:2816
+#, php-format
+msgid "Category change to %s sent to the Scrum Master for approval."
+msgstr ""
+
+#: src/SprintItem.php:1484 src/SprintItem.php:3659
+#: templates/sprintmeeting.form.html.twig:626
+msgid "Category changes are sent to the Scrum Master for approval."
+msgstr ""
+
+#: src/SprintRequest.php:368
+#, php-format
+msgid "Category updated to %s"
+msgstr ""
+
+#: src/SprintExport.php:1029
+msgid "Columns for the item rows"
+msgstr ""
+
+#: src/SprintCustomer.php:302 src/SprintCustomer.php:349
+msgid "Contact"
+msgstr ""
+
+#: src/SprintRequest.php:364
+msgid "Could not update the category"
+msgstr ""
+
+#: src/SprintCredit.php:23
+msgid "Credit booking"
+msgid_plural "Credit bookings"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Config.php:517
+msgid "Credit managers"
+msgstr ""
+
+#: front/config.form.php:27
+msgid "Credit managers saved"
+msgstr ""
+
+#: src/Backlog.php:1767 src/Backlog.php:225
+#: src/Backlog.php:703 src/SprintCredit.php:106
+#: src/SprintCredit.php:136 src/SprintCredit.php:276
+#: src/SprintCredit.php:61 src/SprintCredits.php:25
+#: src/SprintCredits.php:435 src/SprintCredits.php:59
+#: src/SprintExport.php:1267 src/SprintExport.php:1740
+#: src/SprintItem.php:1596 src/SprintItem.php:196
+#: src/SprintItem.php:3627 src/SprintItem.php:474
+#: src/SprintItem.php:943 templates/sprintmeeting.form.html.twig:698
+msgid "Credits"
+msgstr ""
+
+#: src/Backlog.php:2094
+msgid "Credits on backlog items that have no sprint yet"
+msgstr ""
+
+#: src/SprintExport.php:1297 src/SprintExport.php:1659
+msgid "Credits per customer"
+msgstr ""
+
+#: src/SprintCredits.php:270
+msgid "Credits per sprint"
+msgstr ""
+
+#: src/SprintCustomer.php:21
+msgid "Customer"
+msgid_plural "Customers"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Backlog.php:146 src/Backlog.php:489
+#: src/SprintItem.php:1000
+msgid "Customer / credits"
+msgstr ""
+
+#: src/Profile.php:49
+msgid "Customers & credits"
+msgstr ""
+
+#: src/SprintExport.php:1662
+msgid "Delivered this sprint"
+msgstr ""
+
+#: src/SprintCredit.php:116 src/SprintCredit.php:135
+#: src/SprintCredit.php:290
+msgid "Expires on"
+msgstr ""
+
+#: src/SprintCustomer.php:316
+msgid ""
+"Flag the customer once fewer than this many credits are left. 0 = no "
+"alert."
+msgstr ""
+
+#: src/SprintCredit.php:193 src/SprintCredits.php:122
+msgid "In backlog"
+msgstr ""
+
+#: src/Backlog.php:2097 src/SprintCredit.php:194
+#: src/SprintCredits.php:123 src/SprintCredits.php:184
+#: src/SprintCredits.php:378 src/SprintExport.php:1667
+msgid "Left"
+msgstr ""
+
+#: src/SprintCustomer.php:314 src/SprintCustomer.php:371
+msgid "Low-balance alert"
+msgstr ""
+
+#: src/Config.php:508
+msgid "Manage credits"
+msgstr ""
+
+#: src/SprintCredits.php:68
+msgid "New customer"
+msgstr ""
+
+#: src/SprintExport.php:1671
+msgid "No credits assigned in this sprint"
+msgstr ""
+
+#: src/SprintCredits.php:276
+msgid "No credits assigned to a sprint yet."
+msgstr ""
+
+#: src/SprintCredit.php:142
+msgid "No credits booked yet"
+msgstr ""
+
+#: src/SprintCredits.php:424
+msgid "No credits booked yet. Open a customer to book their first purchase."
+msgstr ""
+
+#: src/Backlog.php:2100 src/SprintCredits.php:316
+#: src/SprintCredits.php:329 src/SprintExport.php:1693
+msgid "No customer"
+msgstr ""
+
+#: src/SprintCredits.php:111
+msgid "No customers yet."
+msgstr ""
+
+#: src/Config.php:543
+msgid "No named credit managers — access follows the profile right only."
+msgstr ""
+
+#: src/SprintExport.php:1065
+msgid "One block per category, each with its own subtotal"
+msgstr ""
+
+#: src/SprintExport.php:1663
+msgid "Open this sprint"
+msgstr ""
+
+#: src/SprintOverview.php:1759
+msgid ""
+"Per backlog category across the completed sprints in this period: "
+"allocated capacity % per sprint, or the completed-vs-planned share. "
+"Subcategories count towards their parent, or switch to the "
+"subcategory view to see them as separate lines. Click a legend entry "
+"to isolate a category."
+msgstr ""
+
+#: src/SprintExport.php:1080
+msgid "Pick at least one category."
+msgstr ""
+
+#: src/SprintExport.php:1079
+msgid "Pick at least one section and one column."
+msgstr ""
+
+#: src/SprintExport.php:1262 src/SprintExport.php:1739
+#: src/SprintExport.php:1786
+msgid "Planned capacity"
+msgstr ""
+
+#: src/SprintCredits.php:420
+msgid "Recent bookings"
+msgstr ""
+
+#: src/SprintCredit.php:110 src/SprintCredit.php:134
+#: src/SprintCredit.php:297 src/SprintCredits.php:434
+msgid "Reference"
+msgstr ""
+
+#: src/SprintCustomer.php:297 src/SprintCustomer.php:342
+msgid "Reference code"
+msgstr ""
+
+#: src/SprintCredits.php:126 src/SprintCredits.php:379
+msgid "Runway"
+msgstr ""
+
+#: src/SprintExport.php:1018
+msgid "Sections"
+msgstr ""
+
+#: src/SprintExport.php:1738
+msgid "Story points done"
+msgstr ""
+
+#: src/SprintExport.php:1487
+msgid "Subtotal"
+msgstr ""
+
+#: src/SprintRequest.php:358
+msgid "The requested category no longer exists."
+msgstr ""
+
+#: src/SprintExport.php:1292 src/SprintExport.php:1732
+msgid "Totals per category"
+msgstr ""
+
+#: src/Backlog.php:2095
+msgid "Unplanned"
+msgstr ""
+
+#: src/Config.php:507
+msgid "View credits"
+msgstr ""
+
+#: src/SprintCredit.php:230
+msgid "You are not allowed to manage credits"
+msgstr ""
+
+#: src/SprintExport.php:1031 src/SprintExport.php:1046
+msgid "all / none"
+msgstr ""
+
+#: src/SprintCredit.php:156
+msgid "expired"
+msgstr ""
+
+#: src/SprintCategory.php:173 src/SprintCredits.php:141
+#: src/SprintCustomer.php:131
+msgid "inactive"
+msgstr ""
+
+#: src/SprintCredits.php:147
+msgid "low balance"
+msgstr ""
+
+#: src/SprintCredits.php:144
+msgid "overdrawn"
+msgstr ""
+
+#: src/SprintCredits.php:207
+#, php-format
+msgid "≈ %s sprint"
+msgid_plural "≈ %s sprints"
+msgstr[0] ""
+msgstr[1] ""
+
+# === Retainer & credit agreements (1.3.0) ===
+
+#: src/Backlog.php:2285
+#, php-format
+msgid "%1$s of the %2$s agreed for this sprint"
+msgstr ""
+
+#: src/SprintCredits.php:734
+#, php-format
+msgid "%s of the agreed volume is still unbooked and will lapse."
+msgstr ""
+
+#: src/SprintCredits.php:743
+#, php-format
+msgid "%s past the agreed volume, drawn from the wallet."
+msgstr ""
+
+#: src/SprintCustomer.php:570
+msgid ""
+"A retainer grants the customer a fixed number of credits every "
+"sprint. Unused credits lapse when that sprint completes; work beyond "
+"the grant is drawn from the credits bought through the ledger."
+msgstr ""
+
+#: src/SprintCredits.php:692
+msgid "Agreed ahead"
+msgstr ""
+
+#: src/SprintExport.php:1662
+msgid "Agreed this sprint"
+msgstr ""
+
+#: src/Backlog.php:2216
+msgid "Agreement"
+msgstr ""
+
+#: src/SprintCredits.php:693
+msgid "Booked ahead"
+msgstr ""
+
+#: src/SprintCustomer.php:580 src/SprintCustomer.php:661
+msgid "Cap per sprint"
+msgstr ""
+
+#: src/Backlog.php:1809
+msgid "Credit agreement"
+msgstr ""
+
+#: src/SprintCredit.php:197 src/SprintCredits.php:129
+#: src/SprintCredits.php:209
+msgid "From wallet"
+msgstr ""
+
+#: src/SprintCredit.php:192 src/SprintCredits.php:123
+#: src/SprintExport.php:1666
+msgid "Granted"
+msgstr ""
+
+#: src/SprintCredits.php:599
+#, php-format
+msgid "Granted %1$s, used %2$s"
+msgstr ""
+
+#: src/SprintCredits.php:557
+msgid ""
+"Granted volume a completed sprint never claimed. It does not carry "
+"over, so this is agreed work that was left on the table."
+msgstr ""
+
+#: src/SprintCredit.php:194 src/SprintCredits.php:125
+#: src/SprintCredits.php:202 src/SprintCredits.php:455
+#: src/SprintCredits.php:477 src/SprintExport.php:1665
+msgid "Lapsed"
+msgstr ""
+
+#: src/SprintCredits.php:555
+msgid "Lapsed credits per sprint"
+msgstr ""
+
+#: src/Backlog.php:1829
+msgid "Max"
+msgstr ""
+
+#: src/SprintCredits.php:272
+msgid "Mix"
+msgstr ""
+
+#: src/SprintCredits.php:240
+msgid "No completed sprint has drawn on this wallet yet"
+msgstr ""
+
+#: src/SprintCredits.php:561
+msgid "Nothing has lapsed yet."
+msgstr ""
+
+#: src/SprintCredits.php:755
+msgid "On plan."
+msgstr ""
+
+#: src/SprintCredits.php:722
+#, php-format
+msgid "Over the agreed cap in %s."
+msgstr ""
+
+#: src/SprintCredits.php:122
+msgid "Per sprint"
+msgstr ""
+
+#: src/SprintCustomer.php:568
+msgid "Retainer"
+msgstr ""
+
+#: src/Backlog.php:2187
+msgid "Set the credits agreed with each customer for this sprint"
+msgstr ""
+
+#: src/SprintCredits.php:131
+msgid ""
+"Sprints the wallet lasts at the average draw of the last completed "
+"sprints"
+msgstr ""
+
+#: src/SprintCredits.php:121
+msgid "The retainer: credits granted every sprint in the agreed window"
+msgstr ""
+
+#: src/SprintCredits.php:275
+msgid ""
+"Trend: one line per customer showing the credits that sprint claimed, "
+"with their agreed volume as a dashed line when you isolate them. Mix: "
+"how each sprint was filled, plus the grant that lapsed unused."
+msgstr ""
+
+#: src/SprintCredits.php:728
+msgid "Wallet overdrawn — nothing new should be planned before a top-up."
+msgstr ""
+
+#: src/Backlog.php:1810
+msgid ""
+"What each customer is granted for this sprint. Leave a field empty to "
+"follow their standing agreement."
+msgstr ""
+
+#: src/SprintCredits.php:62
+msgid ""
+"What every customer is granted per sprint, what the sprints claimed "
+"of it and what the bought wallet still holds."
+msgstr ""
+
+#: ajax/customercredits.php:34
+msgid "You are not allowed to set credit agreements"
+msgstr ""
+
+#: src/Backlog.php:2290 src/SprintCredits.php:161
+#, php-format
+msgid "cap %s"
+msgstr ""
+
+#: src/Backlog.php:1830
+#, php-format
+msgid "standing agreement: %s"
+msgstr ""
+
+#: src/SprintCustomer.php:594
+msgid "until"
+msgstr ""
+
+#: src/SprintCredit.php:136
+msgid "Booked by"
+msgstr ""
+
+#: src/SprintCredits.php:180
+msgid "Bought credits that expired before a sprint drew on them"
+msgstr ""
+
+#: src/SprintCustomer.php:664
+msgid ""
+"Flags a sprint in the credits matrix and the forecast once it claims "
+"more than this, grant and wallet together. It does not block the "
+"save. 0 = no flag."
+msgstr ""
+
+#: src/Config.php:519
+msgid ""
+"Grant credit access to individual users on top of the profile right. "
+"View opens the Credits page, the customers and their balances; manage "
+"additionally allows creating customers, booking credits and setting "
+"the per-sprint agreements. Picking a customer and a credit amount on "
+"a sprint item needs neither — that follows the item rights."
+msgstr ""
+
+#: src/Backlog.php:2285
+#, php-format
+msgid "flagged above %s"
+msgstr ""
+
+#: src/Backlog.php:2293
+msgid "over agreed cap"
+msgstr ""
+
+msgid "\"Delivered\" and \"open\" follow the exported items (filters apply); the sprint agreement and the customer totals do not."
+msgstr ""
+
+#, php-format
+msgid "%1$s assigned, %2$s proposed from the backlog"
+msgstr ""
+
+#, php-format
+msgid "%1$s of the agreed volume will lapse while %2$s is drawn from the wallet in other sprints — rebalance the work."
+msgstr ""
+
+msgid "A cell is the credits claimed for that sprint: work already assigned to it plus the backlog items proposed for it. The bar holds that against the credits agreed for that sprint — the recorded agreement, else the retainer inside its window."
+msgstr ""
+
+msgid "Agreed volume the upcoming sprints leave unbooked, summed per sprint"
+msgstr ""
+
+msgid "Credits drawn from the wallet because delivered work went past its sprint's grant"
+msgstr ""
+
+#, php-format
+msgid "Customer “%s” is not available in the entity of that sprint."
+msgstr ""
+
+#, php-format
+msgid "Customer “%s” is not available in the entity of the target sprint; the carried-over item has no customer."
+msgstr ""
+
+msgid "Delivered against the grants; below it what open work still reserves of them"
+msgstr ""
+
+msgid "Delivered work spends the sprint's grant first; work beyond it is drawn from the bought wallet. Open work only reserves. A grant that a completed sprint did not use lapses."
+msgstr ""
+
+msgid "Free to plan: the wallet after what open work already reserves"
+msgstr ""
+
+msgid "From wallet this sprint"
+msgstr ""
+
+msgid "Granted (all sprints)"
+msgstr ""
+
+msgid "Lapsed this sprint"
+msgstr ""
+
+msgid "Negative bookings: corrections and write-offs"
+msgstr ""
+
+msgid "Open work in running and planned sprints that the grants do not cover"
+msgstr ""
+
+#, php-format
+msgid "Open work needs %s more than the wallet holds — top up or plan less."
+msgstr ""
+
+msgid "Purchases up to today; a lot that lapsed unused and corrections are shown below it"
+msgstr ""
+
+msgid "Purchases with a booking date after today; not counted yet"
+msgstr ""
+
+msgid "Reserved"
+msgstr ""
+
+msgid "Reserved from wallet"
+msgstr ""
+
+msgid "Reserved on grants"
+msgstr ""
+
+msgid "Reserved on the grants by open work"
+msgstr ""
+
+#, php-format
+msgid "The credit agreement could not be recorded for %d customer(s) on this sprint. Until it is, their figures follow the current retainer."
+msgstr ""
+
+msgid "The planned and running sprints against the agreed volume, sprint by sprint. What a sprint fills below its agreement will lapse; what it fills above it is drawn from the bought wallet — one never offsets the other."
+msgstr ""
+
+msgid "The wallet today: bought credits after what completed and running sprints drew past their agreement, corrections and lapsed lots. Below it, what open work still needs beyond the agreements."
+msgstr ""
+
+msgid "The wallet today; below it what open work still needs beyond the grants"
+msgstr ""
+
+msgid "This customer is not available in your entities."
+msgstr ""
+
+msgid "Used (all sprints)"
+msgstr ""
+
+msgid "Wallet"
+msgstr ""
+
+msgid "What the upcoming sprints claim past their agreement, summed per sprint"
+msgstr ""
+
+msgid "Will lapse"
+msgstr ""
+
+msgid "You are not allowed to delete credit bookings"
+msgstr ""
+
+msgid "corrected"
+msgstr ""
+
+msgid "dated ahead"
+msgstr ""
+
+msgid "lapsed"
+msgstr ""
+
+msgid "reserved"
+msgstr ""
+
+msgid "A rule applies from its start date until the next rule starts, so a newer rule always ends the one before it. A rule with 0 credits ends the retainer; a rule without a date applies from the beginning."
+msgstr ""
+
+msgid "Cap"
+msgstr ""
+
+msgid "Catalogue"
+msgstr ""
+
+msgid "Charged to the customer once this item is delivered. Pick a product from the catalogue to fill in its default, or enter the credits by hand."
+msgstr ""
+
+msgid "Default credits"
+msgstr ""
+
+msgid "In force"
+msgstr ""
+
+msgid "Manual credits"
+msgstr ""
+
+msgid "New rule"
+msgstr ""
+
+msgid "New rule: fill in the credits and save"
+msgstr ""
+
+msgid "No retainer: this customer only draws on bought credits."
+msgstr ""
+
+msgid "Picking a product fills in its default credits; the amount stays editable."
+msgstr ""
+
+msgid "Remove this rule"
+msgstr ""
+
+msgid "Remove this rule?"
+msgstr ""
+
+msgid "Save the customer first, then add the retainer rules."
+msgstr ""
+
+msgid "Starts on"
+msgstr ""
+
+msgid "The next retainer rule and the day it takes over"
+msgstr ""
+
+msgid "Upcoming"
+msgstr ""
+
+#, php-format
+msgid "from %s"
+msgstr ""
+
+msgid "from the beginning"
+msgstr ""
+
+msgid "Retainer rule"
+msgid_plural "Retainer rules"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Credit product"
+msgid_plural "Credit products"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Credit catalogue"
+msgstr ""
+
+msgid "Filled in on an item when this product is picked; the amount stays editable. Not used for a folder."
+msgstr ""
+
+msgid "Folder"
+msgstr ""
+
+msgid "New folder"
+msgstr ""
+
+msgid "New product"
+msgstr ""
+
+msgid "New product in this folder"
+msgstr ""
+
+msgid "Products and tasks with a default number of credits. Pick one on a sprint item to fill in its credits; the amount stays editable. Folders only group."
+msgstr ""
+
+msgid "The catalogue is empty. Add a folder or a product to start."
+msgstr ""
+
+msgid "Top level"
 msgstr ""

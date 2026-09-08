@@ -1112,3 +1112,207 @@ table.tab_cadre_fixe.sprint-themed {
     white-space: nowrap;
 }
 .sprint-member-flag i { font-size: 0.85em; margin-right: 2px; }
+
+/* ==========================================================================
+   Customers & credits
+   ========================================================================== */
+.sprint-customer-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    margin-left: 4px;
+    border-radius: 10px;
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.sprint-credit-chip {
+    display: inline-block;
+    padding: 1px 8px;
+    margin-left: 4px;
+    border-radius: 10px;
+    background: color-mix(in srgb, #ffc107 18%, var(--tblr-bg-surface, #fff));
+    border: 1px solid #ffc107;
+    /* An explicit colour: .text-dark flips to white in the dark theme. */
+    color: #8a6100;
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.sprint-matrix-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: baseline;
+}
+.sprint-credit-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+}
+.sprint-credit-tile {
+    position: relative;
+    padding: 12px 14px 10px;
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-radius: 10px;
+    background: var(--tblr-bg-surface, #fff);
+    overflow: hidden;
+}
+.sprint-credit-tile::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--sprint-tile-color, #0d6efd);
+}
+.sprint-credit-tile-icon {
+    color: var(--sprint-tile-color, #0d6efd);
+    font-size: 0.9em;
+    opacity: 0.85;
+}
+.sprint-credit-tile-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--sprint-tile-color, #0d6efd);
+}
+.sprint-credit-tile-label {
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-wallet-bar,
+.sprint-credit-chart-track {
+    display: flex;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.sprint-wallet-bar > span,
+.sprint-credit-chart-track > span {
+    display: block;
+}
+.sprint-credit-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+.sprint-credit-chart-row {
+    display: grid;
+    grid-template-columns: minmax(90px, 150px) 1fr 60px;
+    align-items: center;
+    gap: 10px;
+}
+.sprint-credit-chart-label {
+    font-size: 0.84em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sprint-credit-chart-track {
+    height: 14px;
+}
+.sprint-credit-chart-value {
+    font-size: 0.84em;
+    font-weight: 600;
+    text-align: right;
+}
+.sprint-credit-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-top: 12px;
+    font-size: 0.82em;
+}
+.sprint-credit-legend-item {
+    white-space: nowrap;
+}
+.sprint-credit-table th {
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--tblr-secondary, #6c757d);
+    font-weight: 600;
+}
+
+/* Credit agreement modal: one row per customer, empty = the standing retainer. */
+.sprint-credits-row {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--tblr-border-color, #e2e8f0);
+}
+.sprint-credits-row:last-child { border-bottom: none; }
+.sprint-credits-row-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.sprint-credits-default { margin-left: auto; }
+.sprint-credits-inputs {
+    display: flex;
+    gap: 12px;
+}
+.sprint-credits-inputs label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82em;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-credits-inputs input { max-width: 110px; }
+
+/* Credits page charts */
+.sprint-credit-chartbox {
+    width: 100%;
+    overflow-x: auto;
+}
+.sprint-credit-svg {
+    display: block;
+    width: 100%;
+    min-width: 520px;
+    height: auto;
+}
+.sprint-credit-grid {
+    stroke: var(--tblr-border-color, #e2e8f0);
+    stroke-width: 1;
+}
+.sprint-credit-axis {
+    fill: var(--tblr-secondary, #6c757d);
+    font-size: 10px;
+}
+.sprint-credit-series {
+    transition: opacity 0.15s ease;
+}
+.sprint-credit-series.is-muted { opacity: 0.12; }
+/* The agreed volume only shows while its customer is isolated. */
+.sprint-credit-reference { opacity: 0; }
+.sprint-credit-series.is-isolated .sprint-credit-reference { opacity: 0.7; }
+.sprint-credit-lapsed {
+    display: block;
+    background: repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, #dc3545 45%, transparent),
+        color-mix(in srgb, #dc3545 45%, transparent) 4px,
+        transparent 4px,
+        transparent 8px
+    );
+}
+.sprint-credit-lapsed-dot {
+    background: color-mix(in srgb, #dc3545 60%, transparent);
+}
+button.sprint-credit-legend-item {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: inherit;
+    cursor: pointer;
+}
+button.sprint-credit-legend-item.is-active { font-weight: 700; }
+.sprint-credit-legend-static { color: var(--tblr-secondary, #6c757d); }
