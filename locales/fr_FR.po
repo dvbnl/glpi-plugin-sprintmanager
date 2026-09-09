@@ -4498,3 +4498,31 @@ msgstr "Le catalogue est vide. Ajoutez un dossier ou un produit pour commencer."
 
 msgid "Top level"
 msgstr "Niveau racine"
+
+
+
+
+
+msgid "Assign to %s"
+msgstr "Affecter à %s"
+
+msgid "Requested"
+msgstr "Demandé"
+
+msgid "Ask the Scrum Master"
+msgstr "Demander au Scrum Master"
+
+msgid "Team ranking"
+msgstr "Classement de l'équipe"
+
+msgid "Project, then name"
+msgstr "Projet, puis nom"
+
+
+
+
+msgid "Personal view, saved as your default: the order only changes for you — the team ranking stays as it is"
+msgstr "Vue personnelle, enregistrée comme votre défaut : l'ordre ne change que pour vous — le classement de l'équipe reste tel quel"
+
+msgid "View saved as your default"
+msgstr "Vue enregistrée comme votre défaut"

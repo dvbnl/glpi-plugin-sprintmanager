@@ -4490,3 +4490,31 @@ msgstr "The catalogue is empty. Add a folder or a product to start."
 
 msgid "Top level"
 msgstr "Top level"
+
+
+
+
+
+msgid "Assign to %s"
+msgstr "Assign to %s"
+
+msgid "Requested"
+msgstr "Requested"
+
+msgid "Ask the Scrum Master"
+msgstr "Ask the Scrum Master"
+
+msgid "Team ranking"
+msgstr "Team ranking"
+
+msgid "Project, then name"
+msgstr "Project, then name"
+
+
+
+
+msgid "Personal view, saved as your default: the order only changes for you — the team ranking stays as it is"
+msgstr "Personal view, saved as your default: the order only changes for you — the team ranking stays as it is"
+
+msgid "View saved as your default"
+msgstr "View saved as your default"

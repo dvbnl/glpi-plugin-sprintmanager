@@ -220,17 +220,34 @@ if (isset($_POST['assign_to_sprint'])) {
         || GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId)
         || GlpiPlugin\Sprint\SprintMember::isScrumMaster($sprintId, $currentUserId);
 
+    // DoR is mandatory on assign (as in ajax/assigntosprint.php); fastlane
+    // items are exempt. The Sprint-tab dialog posts the confirmed checks.
+    $dor    = GlpiPlugin\Sprint\Config::getDefinitionReady();
+    $update = [
+        'id'                       => $id,
+        'plugin_sprint_sprints_id' => $sprintId,
+        'proposed_sprints_id'      => 0,
+    ];
+    $dorOk = true;
+    if ($dor) {
+        $confirmed = array_values(array_intersect($dor, (array)($_POST['ready'] ?? [])));
+        $dorOk     = $isFastlane || count($confirmed) >= count($dor);
+        $update['ready_checks'] = json_encode($confirmed);
+    }
+
     if (!$canAssign) {
         Session::addMessageAfterRedirect(
             __('Only the Scrum Master of the selected sprint can assign items to it.', 'sprint'),
             false,
             ERROR
         );
-    } elseif ($item->update([
-        'id'                       => $id,
-        'plugin_sprint_sprints_id' => $sprintId,
-        'proposed_sprints_id'      => 0,
-    ])) {
+    } elseif (!$dorOk) {
+        Session::addMessageAfterRedirect(
+            __('Definition of Ready incomplete. Confirm every check to assign this item.', 'sprint'),
+            false,
+            ERROR
+        );
+    } elseif ($item->update($update)) {
         GlpiPlugin\Sprint\SprintItem::purgeBacklogCoupling(
             (string)($item->fields['itemtype'] ?? ''),
             (int)($item->fields['items_id'] ?? 0),

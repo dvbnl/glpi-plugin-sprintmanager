@@ -4641,3 +4641,31 @@ msgstr ""
 
 msgid "Top level"
 msgstr ""
+
+
+
+
+
+msgid "Assign to %s"
+msgstr ""
+
+msgid "Requested"
+msgstr ""
+
+msgid "Ask the Scrum Master"
+msgstr ""
+
+msgid "Team ranking"
+msgstr ""
+
+msgid "Project, then name"
+msgstr ""
+
+
+
+
+msgid "Personal view, saved as your default: the order only changes for you — the team ranking stays as it is"
+msgstr ""
+
+msgid "View saved as your default"
+msgstr ""

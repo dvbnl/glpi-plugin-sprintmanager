@@ -930,6 +930,24 @@ function plugin_sprint_install(): bool
     }
 
     // =========================================================================
+    // Table: glpi_plugin_sprint_userprefs
+    // Per-user preferences (personal backlog view). Key/value per user; also
+    // created lazily by UserPref::ensureTable() on running installations.
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_userprefs')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_userprefs` (
+            `id`       INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `users_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `name`     VARCHAR(64) NOT NULL DEFAULT '',
+            `value`    VARCHAR(255) NOT NULL DEFAULT '',
+            `date_mod` TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `user_name` (`users_id`, `name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
+    }
+
+    // =========================================================================
     // Table: glpi_plugin_sprint_sprintrequests
     // Approval requests from non-Scrum-Masters: assigning a backlog item to a
     // sprint, or changing an item's capacity % or category inside a sprint.
@@ -1131,6 +1149,7 @@ function plugin_sprint_uninstall(): bool
         'glpi_plugin_sprint_sprintavailabilities',
         'glpi_plugin_sprint_sprintepics',
         'glpi_plugin_sprint_sprintrequests',
+        'glpi_plugin_sprint_userprefs',
         'glpi_plugin_sprint_meetingblockedsnapshots',
         'glpi_plugin_sprint_audit_sources',
         'glpi_plugin_sprint_sprinttemplatemeetings',

@@ -4502,3 +4502,31 @@ msgstr "De catalogus is leeg. Voeg een map of product toe om te beginnen."
 
 msgid "Top level"
 msgstr "Hoofdniveau"
+
+
+
+
+
+msgid "Assign to %s"
+msgstr "Toewijzen aan %s"
+
+msgid "Requested"
+msgstr "Aangevraagd"
+
+msgid "Ask the Scrum Master"
+msgstr "Vraag de Scrum Master"
+
+msgid "Team ranking"
+msgstr "Teamvolgorde"
+
+msgid "Project, then name"
+msgstr "Project, dan naam"
+
+
+
+
+msgid "Personal view, saved as your default: the order only changes for you — the team ranking stays as it is"
+msgstr "Persoonlijke weergave, opgeslagen als uw standaard: de volgorde verandert alleen voor u — de teamvolgorde blijft zoals die is"
+
+msgid "View saved as your default"
+msgstr "Weergave opgeslagen als uw standaard"

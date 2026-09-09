@@ -151,10 +151,19 @@ class Backlog
         if ($isFastlane) {
             echo "<span class='sprint-plan-chip'><i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Fastlane', 'sprint') . "</span>";
         }
+        // Same readiness rule as the backlog row badge.
+        $isReady = $proposedId > 0 && $ownerId > 0 && $capacity > 0;
+        if ($isReady) {
+            echo "<span class='sprint-ready-badge' title='" . __s('Owner, capacity and sprint set — ready for the Scrum Master to assign', 'sprint') . "'>"
+                . "<i class='fas fa-check'></i> " . __('Ready', 'sprint') . "</span>";
+        }
         echo "<span style='flex:1;'></span>";
         if ($canEdit) {
             echo "<button type='button' class='btn btn-sm btn-outline-primary' data-bs-toggle='modal' data-bs-target='#sprint-plan-modal'>"
                 . "<i class='fas fa-pen me-1'></i>" . __('Quick edit', 'sprint') . "</button>";
+            if ($proposedId > 0) {
+                self::renderPlanAssignControls($existing, $proposedId, $sprintName, $isFastlane);
+            }
         }
         echo "</div>";
 
@@ -253,6 +262,143 @@ class Backlog
         // Modals nested in the tab content get clipped by the tab's
         // stacking context; move it to <body> like the other dialogs.
         echo "<script>(function(){var m=document.getElementById('sprint-plan-modal');if(m&&m.parentNode!==document.body){document.body.appendChild(m);}})();</script>";
+    }
+
+    /**
+     * Assign / "ask the Scrum Master" controls of the planning line on the
+     * Sprint tab, mirroring the backlog row: the Scrum Master of the proposed
+     * sprint (or anyone, for fastlane items) assigns straight away — behind
+     * the Definition of Ready when one is configured — everyone else files an
+     * assignment request that lands in the Scrum Master's approval panel.
+     */
+    private static function renderPlanAssignControls(array $row, int $proposedId, string $sprintName, bool $isFastlane): void
+    {
+        $flags = self::computeRowFlags($row);
+        $rowId = (int)$row['id'];
+
+        if ($flags['can_assign']) {
+            $dor      = $isFastlane ? [] : Config::getDefinitionReady();
+            $modalId  = 'sprint-plan-assign-modal';
+            $btnTitle = $isFastlane
+                ? __s('Fastlane item — anyone can assign it to a sprint', 'sprint')
+                : __s('Assign to the selected sprint', 'sprint');
+            $btnLabel = "<i class='fas fa-arrow-right me-1'></i>" . htmlescape(sprintf(__('Assign to %s', 'sprint'), $sprintName));
+
+            if (!$dor) {
+                echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
+                echo Html::hidden('id', ['value' => $rowId]);
+                echo Html::hidden('plugin_sprint_sprints_id', ['value' => $proposedId]);
+                echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-sm btn-primary' title='{$btnTitle}'>{$btnLabel}</button>";
+                Html::closeForm();
+                return;
+            }
+
+            // DoR configured: the checks are confirmed in a dialog and travel
+            // with the POST (front/backlog.form.php enforces them again).
+            echo "<button type='button' class='btn btn-sm btn-primary' data-bs-toggle='modal' data-bs-target='#{$modalId}' title='{$btnTitle}'>{$btnLabel}</button>";
+            echo "<div class='modal fade' id='{$modalId}' tabindex='-1' aria-hidden='true'>";
+            echo "<div class='modal-dialog modal-dialog-centered'><div class='modal-content'>";
+            echo "<form method='post' action='" . self::getFormURL() . "'>";
+            echo "<div class='modal-header'><h5 class='modal-title'><i class='fas fa-clipboard-check me-1'></i> "
+                . __s('Definition of Ready', 'sprint') . "</h5>"
+                . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button></div>";
+            echo "<div class='modal-body'>";
+            echo Html::hidden('id', ['value' => $rowId]);
+            echo Html::hidden('plugin_sprint_sprints_id', ['value' => $proposedId]);
+            echo "<p class='text-muted sprint-small'>" . __s('Confirm the checks that hold for this item.', 'sprint') . "</p>";
+            foreach ($dor as $check) {
+                echo "<label class='form-check d-block'><input class='form-check-input sprint-plan-dor-check' type='checkbox' name='ready[]' value='"
+                    . htmlescape($check) . "'><span class='form-check-label'>" . htmlescape($check) . "</span></label>";
+            }
+            echo "</div>";
+            echo "<div class='modal-footer'>";
+            echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __s('Cancel') . "</button>";
+            echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-success sprint-plan-dor-go' disabled>"
+                . "<i class='fas fa-check me-1'></i>" . __s('Assign', 'sprint') . "</button>";
+            echo "</div>";
+            Html::closeForm();
+            echo "</div></div></div>";
+            echo <<<HTML
+<script>
+(function(){
+    // Move the dialog to <body> (the tab clips modals); a GLPI ajax-tab reload
+    // re-echoes it, so drop the stale copy from an earlier load first.
+    var all = document.querySelectorAll('#{$modalId}');
+    for (var i = 0; i < all.length - 1; i++) { all[i].parentNode.removeChild(all[i]); }
+    var m = all[all.length - 1];
+    if (m && m.parentNode !== document.body) { document.body.appendChild(m); }
+    if (typeof jQuery === 'undefined' || window.__sprintPlanDorBound) { return; }
+    window.__sprintPlanDorBound = true;
+    jQuery(document).on('change', '.sprint-plan-dor-check', function(){
+        var \$m = jQuery(this).closest('.modal');
+        \$m.find('.sprint-plan-dor-go').prop('disabled', \$m.find('.sprint-plan-dor-check:not(:checked)').length > 0);
+    });
+})();
+</script>
+HTML;
+            return;
+        }
+
+        // Not the Scrum Master: ask them. Handled by ajax/requestcreate.php,
+        // same as the backlog row button.
+        $hasPending = $flags['pending_assign'];
+        echo "<button type='button' class='btn btn-sm " . ($hasPending ? 'btn-outline-secondary' : 'btn-outline-primary') . " sprint-plan-request-btn' "
+            . "data-item-id='{$rowId}' " . ($hasPending ? 'disabled ' : '')
+            . "title='" . ($hasPending
+                ? __s('Assignment already requested — waiting for the Scrum Master', 'sprint')
+                : __s('Ask the Scrum Master to assign this item to the selected sprint', 'sprint')) . "'>"
+            . "<i class='fas fa-" . ($hasPending ? 'hourglass-half' : 'paper-plane') . " me-1'></i>"
+            . ($hasPending ? __s('Requested', 'sprint') : __s('Ask the Scrum Master', 'sprint'))
+            . "</button>";
+        if ($hasPending) {
+            return;
+        }
+
+        SprintRequest::renderReasonModalUI();
+        $tokenUrl   = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
+        $requestUrl = Plugin::getWebDir('sprint') . '/ajax/requestcreate.php';
+        $lblRequested = addslashes(__('Requested', 'sprint'));
+        echo <<<HTML
+<script>
+(function(){
+    if (typeof jQuery === 'undefined' || window.__sprintPlanRequestBound) { return; }
+    window.__sprintPlanRequestBound = true;
+    var tokenUrl = "{$tokenUrl}";
+    function send(\$btn, itemId, reason) {
+        \$btn.prop('disabled', true);
+        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
+        .then(function(tok) {
+            return jQuery.ajax({
+                url: "{$requestUrl}", type: 'POST', dataType: 'json',
+                data: { id: itemId, reason: reason, _glpi_csrf_token: tok && tok.token ? tok.token : '' }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || 'Requested'); }
+                \$btn.removeClass('btn-outline-primary').addClass('btn-outline-secondary').prop('disabled', true)
+                    .html('<i class="fas fa-hourglass-half me-1"></i>{$lblRequested}');
+            } else {
+                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
+                \$btn.prop('disabled', false);
+            }
+        }).fail(function() {
+            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+            \$btn.prop('disabled', false);
+        });
+    }
+    jQuery(document).on('click', '.sprint-plan-request-btn', function() {
+        var \$btn   = jQuery(this);
+        var itemId = parseInt(\$btn.data('item-id'), 10) || 0;
+        if (itemId <= 0) { return; }
+        if (typeof window.sprintRequestReason === 'function') {
+            window.sprintRequestReason(function(reason){ send(\$btn, itemId, reason); });
+        } else {
+            send(\$btn, itemId, '');
+        }
+    });
+})();
+</script>
+HTML;
     }
 
     /** True when the linked GLPI item is in a real sprint (sprints_id > 0). */
@@ -418,7 +564,7 @@ class Backlog
         }
         asort($owners);
 
-        self::renderFilterBar($typeLabels, $owners, $sprintNames);
+        self::renderFilterBar($typeLabels, $owners, $sprintNames, $canedit);
 
         // One collapsible section per admin-defined category ("mini kanban"),
         // plus a catch-all for uncategorized items. Empty categories still
@@ -1361,6 +1507,10 @@ HTML;
         $requestUrl  = Plugin::getWebDir('sprint') . '/ajax/requestcreate.php';
         $reorderUrl  = Plugin::getWebDir('sprint') . '/ajax/reorder.php';
         $savedOrderMsg = addslashes(__('Order saved', 'sprint'));
+        $prefUrl      = Plugin::getWebDir('sprint') . '/ajax/userpref.php';
+        $prefName     = UserPref::BACKLOG_SORT;
+        $sortMode     = UserPref::backlogSort();
+        $viewSavedMsg = addslashes(__('View saved as your default', 'sprint'));
 
         // Sprint-scope modal: assign everything, or kick off one sprint while
         // future sprints (already marked ready) stay queued.
@@ -1592,8 +1742,15 @@ HTML;
             var sum = 0;
             \$vis.each(function() { sum += parseFloat(this.getAttribute('data-capacity')) || 0; });
             \$sec.find('.sprint-backlog-cat-capsum').text((Math.round(sum * 10) / 10) + '%');
+            // Ranks are the team order: renumbered from the DOM in team view
+            // (drag changes them), frozen while the personal sort is active.
+            var sortedView = backlogSortMode() === 'project';
             var i = 1;
-            \$rows.each(function() { jQuery(this).find('.sprint-backlog-rank').text(i++); });
+            \$rows.each(function() {
+                if (!sortedView) { this.setAttribute('data-team-rank', i); }
+                jQuery(this).find('.sprint-backlog-rank').text(sortedView ? (this.getAttribute('data-team-rank') || '') : i);
+                i++;
+            });
             // While filtering, matches are always in view and empty buckets step aside.
             if (filtering) {
                 \$sec.toggle(\$vis.length > 0);
@@ -1746,19 +1903,26 @@ HTML;
         jQuery('.sprint-row-selected').removeClass('sprint-row-selected');
         sprintLastSelected = null;
 
+        if (window.sprintBacklogRefreshSections) { window.sprintBacklogRefreshSections(); }
+        persistBacklogOrder(catMap);
+    });
+
+    // Persist the current DOM order of the category tables as the ranks
+    // (plus any category moves), shared by drag-and-drop and the sort button.
+    function persistBacklogOrder(catMap) {
         var ids = [];
         jQuery('.sprint-backlog-table .sprint-backlog-row').each(function() {
             var id = parseInt(this.getAttribute('data-item-id'), 10) || 0;
             if (id) { ids.push(id); }
         });
-        if (window.sprintBacklogRefreshSections) { window.sprintBacklogRefreshSections(); }
+        if (!ids.length) { return; }
         jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
         .then(function(tok) {
             return jQuery.ajax({
                 url: "{$reorderUrl}", type: 'POST', dataType: 'json',
                 data: {
                     order: JSON.stringify(ids),
-                    categories: JSON.stringify(catMap),
+                    categories: JSON.stringify(catMap || {}),
                     _glpi_csrf_token: tok && tok.token ? tok.token : ''
                 }
             });
@@ -1770,7 +1934,70 @@ HTML;
                 window.glpi_toast_error('Save failed');
             }
         });
+    }
+
+    // Sort every category by project, then by task name/number. Rows without
+    // a project go last. Natural comparison keeps "Task 2" ahead of "Task 10".
+    var sprintNatural = (typeof Intl !== 'undefined' && Intl.Collator)
+        ? new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+        : { compare: function(a, b) { return a.localeCompare(b); } };
+    function sprintProjectNameCompare(a, b) {
+        var pa = a.getAttribute('data-project-name') || '';
+        var pb = b.getAttribute('data-project-name') || '';
+        if (pa !== pb) {
+            if (pa === '') { return 1; }
+            if (pb === '') { return -1; }
+            var c = sprintNatural.compare(pa, pb);
+            if (c !== 0) { return c; }
+        }
+        return sprintNatural.compare(
+            a.getAttribute('data-item-name') || '',
+            b.getAttribute('data-item-name') || ''
+        );
+    }
+    function sprintTeamRankCompare(a, b) {
+        return (parseInt(a.getAttribute('data-team-rank'), 10) || 0) - (parseInt(b.getAttribute('data-team-rank'), 10) || 0);
+    }
+    var backlogSortCurrent = '{$sortMode}';
+    function backlogSortMode() { return backlogSortCurrent; }
+    function applyBacklogSort(mode) {
+        backlogSortCurrent = mode === 'project' ? 'project' : 'team';
+        var cmp = backlogSortCurrent === 'project' ? sprintProjectNameCompare : sprintTeamRankCompare;
+        jQuery('.sprint-backlog-cat-section .sprint-backlog-table').each(function() {
+            var \$tbody = jQuery(this).find('tbody').first();
+            var rows    = \$tbody.find('tr.sprint-backlog-row').toArray();
+            if (rows.length < 2) { return; }
+            rows.sort(cmp);
+            rows.forEach(function(r) { \$tbody.append(r); });
+        });
+        // No drag-to-rank inside a personal sort: the grip would rewrite the team order.
+        jQuery('.sprint-backlog-grip').css('visibility', backlogSortCurrent === 'project' ? 'hidden' : '');
+        jQuery('.sprint-backlog-sort').val(backlogSortCurrent);
+        jQuery('.sprint-row-selected').removeClass('sprint-row-selected');
+        sprintLastSelected = null;
+        if (window.sprintBacklogRefreshSections) { window.sprintBacklogRefreshSections(); }
+    }
+    // The choice is this user's default from now on (ajax/userpref.php).
+    jQuery(document).on('change', '.sprint-backlog-sort', function() {
+        var mode = this.value === 'project' ? 'project' : 'team';
+        applyBacklogSort(mode);
+        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
+        .then(function(tok) {
+            return jQuery.ajax({
+                url: "{$prefUrl}", type: 'POST', dataType: 'json',
+                data: { name: '{$prefName}', value: mode, _glpi_csrf_token: tok && tok.token ? tok.token : '' }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                if (window.glpi_toast_info) { window.glpi_toast_info('{$viewSavedMsg}'); }
+            } else if (window.glpi_toast_error) {
+                window.glpi_toast_error('Save failed');
+            }
+        }).fail(function() {
+            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+        });
     });
+    jQuery(function() { applyBacklogSort(backlogSortCurrent); });
 })();
 </script>
 HTML;
@@ -2591,7 +2818,7 @@ HTML;
         // however little it delivered historically. Taken from the first
         // upcoming sprint (falls back to the category defaults).
         $minLimits = $sprintIds
-            ? ($limits[$sprintIds[0]] ?? [])
+            ? ($limits[reset($sprintIds)] ?? [])
             : Config::getCategoryDefaultLimits();
         $minTotal = 0.0;
         foreach (array_keys($categories) as $cid) {
@@ -3548,6 +3775,8 @@ HTML;
             . "data-is-adhoc='" . ($isAdhoc ? 1 : 0) . "' "
             . "data-is-parked='" . ($isParked ? 1 : 0) . "' "
             . "data-category-id='{$categoryId}' "
+            . "data-project-name='" . htmlescape(SprintItem::getParentProjectName($itemtype, (int)($row['items_id'] ?? 0))) . "' "
+            . "data-team-rank='" . (int)$rank . "' "
             . "data-item-tags='" . htmlescape(SprintItem::tagsToBlob($rowTags)) . "'>";
         if ($reorderable && $canedit) {
             echo "<td class='sprint-backlog-grip' style='cursor:grab;text-align:center;color:#adb5bd;' "
@@ -3688,7 +3917,7 @@ HTML;
         echo "</tr>";
     }
 
-    private static function renderFilterBar(array $typeLabels, array $owners = [], array $sprintNames = []): void
+    private static function renderFilterBar(array $typeLabels, array $owners = [], array $sprintNames = [], bool $canedit = false): void
     {
         echo "<div class='sprint-filter-bar sprint-backlog-filter' "
             . "style='display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;"
@@ -3746,6 +3975,21 @@ HTML;
 
         echo "<button type='button' class='btn btn-sm btn-outline-secondary sf-reset' data-sprint-action='filter-reset'>"
             . "<i class='fas fa-times me-1'></i>" . __('Reset', 'sprint') . "</button>";
+
+        // Personal view: how THIS user sees the backlog. "Project, then name"
+        // re-orders every category client-side (natural order, so "Task 2"
+        // sorts before "Task 10"; rows without a project last). The choice is
+        // saved per user (UserPref) and is that user's default everywhere;
+        // the shared team ranking is never touched by it.
+        $sortMode = UserPref::backlogSort();
+        echo "<span class='vr d-none d-md-inline-block' style='height:22px;opacity:0.25;'></span>";
+        echo "<div class='d-flex align-items-center gap-1 text-muted sprint-small'>"
+            . "<i class='fas fa-eye'></i><span>" . __('View', 'sprint') . "</span></div>";
+        echo "<select class='form-select form-select-sm sprint-backlog-sort' style='max-width:200px;' title='"
+            . __s('Personal view, saved as your default: the order only changes for you — the team ranking stays as it is', 'sprint') . "'>";
+        echo "<option value='team'" . ($sortMode === 'team' ? ' selected' : '') . ">" . __('Team ranking', 'sprint') . "</option>";
+        echo "<option value='project'" . ($sortMode === 'project' ? ' selected' : '') . ">" . __('Project, then name', 'sprint') . "</option>";
+        echo "</select>";
 
         echo "</div>";
     }

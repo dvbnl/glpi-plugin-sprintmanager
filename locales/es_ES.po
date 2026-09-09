@@ -4500,3 +4500,31 @@ msgstr "El catálogo está vacío. Añada una carpeta o un producto para empezar
 
 msgid "Top level"
 msgstr "Nivel superior"
+
+
+
+
+
+msgid "Assign to %s"
+msgstr "Asignar a %s"
+
+msgid "Requested"
+msgstr "Solicitado"
+
+msgid "Ask the Scrum Master"
+msgstr "Pedir al Scrum Master"
+
+msgid "Team ranking"
+msgstr "Clasificación del equipo"
+
+msgid "Project, then name"
+msgstr "Proyecto, luego nombre"
+
+
+
+
+msgid "Personal view, saved as your default: the order only changes for you — the team ranking stays as it is"
+msgstr "Vista personal, guardada como su predeterminada: el orden solo cambia para usted — la clasificación del equipo se mantiene"
+
+msgid "View saved as your default"
+msgstr "Vista guardada como predeterminada"
