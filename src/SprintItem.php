@@ -2697,6 +2697,9 @@ JS;
                 Session::addMessageAfterRedirect($policy['message'], false, ERROR);
                 return false;
             }
+            if (!empty($policy['overridden'])) {
+                Session::addMessageAfterRedirect($policy['message'], false, WARNING);
+            }
         }
         if (!isset($input['story_points']) || $input['story_points'] === '' || $input['story_points'] === null) {
             $input['story_points'] = 1;
@@ -2780,6 +2783,12 @@ JS;
             if (!$policy['ok']) {
                 Session::addMessageAfterRedirect($policy['message'], false, ERROR);
                 return false;
+            }
+            if (!empty($policy['overridden'])) {
+                Session::addMessageAfterRedirect($policy['message'], false, WARNING);
+                // Picked up in post_updateItem(): the skipped checks land in the
+                // item history so an overruled DoD stays auditable.
+                $input['_dod_override_note'] = (string)$policy['message'];
             }
         }
 
@@ -3083,6 +3092,9 @@ JS;
     {
         SprintCustomer::invalidateCaches();
         SprintMember::invalidateUsedCapacity();
+        if (!empty($this->input['_dod_override_note'])) {
+            \Log::history((int)$this->getID(), self::class, [0, '', (string)$this->input['_dod_override_note']]);
+        }
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         $itemtype = (string)($this->fields['itemtype'] ?? '');
         $itemsId  = (int)($this->fields['items_id'] ?? 0);

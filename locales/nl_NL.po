@@ -4530,3 +4530,13 @@ msgstr "Persoonlijke weergave, opgeslagen als uw standaard: de volgorde verander
 
 msgid "View saved as your default"
 msgstr "Weergave opgeslagen als uw standaard"
+
+#, php-format
+msgid "Definition of Done overruled by the Scrum Master; skipped: %s"
+msgstr "Definition of Done overruled door de Scrum Master; overgeslagen: %s"
+
+msgid "Overrule as Scrum Master"
+msgstr "Overrulen als Scrum Master"
+
+msgid "As Scrum Master you can move this item on without completing every check. The skipped checks are recorded in the history."
+msgstr "Als Scrum Master kun je dit item doorzetten zonder alle checks af te vinken. De overgeslagen checks worden in de historie vastgelegd."

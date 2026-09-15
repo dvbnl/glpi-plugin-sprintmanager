@@ -4669,3 +4669,13 @@ msgstr ""
 
 msgid "View saved as your default"
 msgstr ""
+
+#, php-format
+msgid "Definition of Done overruled by the Scrum Master; skipped: %s"
+msgstr ""
+
+msgid "Overrule as Scrum Master"
+msgstr ""
+
+msgid "As Scrum Master you can move this item on without completing every check. The skipped checks are recorded in the history."
+msgstr ""

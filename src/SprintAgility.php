@@ -66,16 +66,23 @@ class SprintAgility extends CommonGLPI
         return $out;
     }
 
-    /** @return array{ok:bool,message:string} */
-    public static function validateTransition(SprintItem $item, string $newStatus): array
+    /**
+     * @return array{ok:bool,message:string,overridden:bool} `overridden` is
+     *   true when the Definition of Done was incomplete but the current user
+     *   is the sprint's Scrum Master and may move the item regardless; the
+     *   message then lists the skipped checks for a warning instead of an error.
+     *   Pass $allowScrumMasterOverride = false for automated moves (linked-status
+     *   sync) so the DoD stays strict regardless of who triggered them.
+     */
+    public static function validateTransition(SprintItem $item, string $newStatus, bool $allowScrumMasterOverride = true): array
     {
         $sprintId = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
         if ($sprintId <= 0 || $newStatus === (string)($item->fields['status'] ?? '')) {
-            return ['ok' => true, 'message' => ''];
+            return ['ok' => true, 'message' => '', 'overridden' => false];
         }
         $sprint = new Sprint();
         if (!$sprint->getFromDB($sprintId)) {
-            return ['ok' => true, 'message' => ''];
+            return ['ok' => true, 'message' => '', 'overridden' => false];
         }
 
         // Limits apply per owner; fastlane items neither count nor get blocked.
@@ -94,7 +101,7 @@ class SprintAgility extends CommonGLPI
                 return ['ok' => false, 'message' => sprintf(
                     __('WIP limit reached for this column (%d per person). Finish work before starting more.', 'sprint'),
                     $limit
-                )];
+                ), 'overridden' => false];
             }
         }
 
@@ -103,13 +110,21 @@ class SprintAgility extends CommonGLPI
             $checked  = self::checklist((string)($item->fields['done_checks'] ?? ''));
             $missing  = array_values(array_diff($required, $checked));
             if ($missing) {
+                // The Scrum Master may overrule the DoD: an item should never
+                // stay locked because a check cannot (or need not) be ticked.
+                if ($allowScrumMasterOverride && SprintItem::currentUserIsScrumMasterOf($sprintId)) {
+                    return ['ok' => true, 'overridden' => true, 'message' => sprintf(
+                        __('Definition of Done overruled by the Scrum Master; skipped: %s', 'sprint'),
+                        implode(', ', $missing)
+                    )];
+                }
                 return ['ok' => false, 'message' => sprintf(
                     __('Definition of Done incomplete: %s', 'sprint'),
                     implode(', ', $missing)
-                )];
+                ), 'overridden' => false];
             }
         }
-        return ['ok' => true, 'message' => ''];
+        return ['ok' => true, 'message' => '', 'overridden' => false];
     }
 
     public static function readiness(array $item): array
@@ -136,7 +151,7 @@ class SprintAgility extends CommonGLPI
             $target = (string)($rules[$type][$closed ? 'closed' : 'open'] ?? ($closed ? SprintItem::STATUS_DONE : ''));
             if ($target === '' || !isset(SprintItem::getAllStatuses()[$target]) || $target === $row['status']) continue;
             $item = new SprintItem(); $item->fields = $row;
-            $policy = self::validateTransition($item, $target);
+            $policy = self::validateTransition($item, $target, false);
             if ($policy['ok']) {
                 SprintItem::applyAutomatedStatus((int)$row['id'], $target);
             }
