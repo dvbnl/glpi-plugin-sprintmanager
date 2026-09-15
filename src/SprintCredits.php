@@ -54,6 +54,7 @@ class SprintCredits extends CommonGLPI
         self::renderPortfolio($balances, SprintCustomer::unassignedUsage());
         self::renderCustomerTable($balances, $funding);
         self::renderSprintCharts($window, $funding, $balances);
+        SprintCreditFlow::render($window, $balances);
         self::renderExpiry($window, $funding, $balances);
         self::renderForecast($funding, $balances);
         self::renderLedger();

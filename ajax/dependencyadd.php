@@ -19,6 +19,9 @@ $response = ['success' => false, 'message' => 'Request failed'];
 $itemId   = (int)($_POST['plugin_sprint_sprintitems_id'] ?? 0);
 $userId   = (int)($_POST['users_id'] ?? 0);
 $capacity = GlpiPlugin\Sprint\SprintMember::normalizeCapacity($_POST['capacity'] ?? 0);
+// Optional billable share of the helper; normalised in the model.
+$credits   = array_key_exists('credits', $_POST) ? $_POST['credits'] : null;
+$productId = (int)($_POST['plugin_sprint_sprintcreditproducts_id'] ?? 0);
 
 if ($itemId <= 0 || $userId <= 0 || $capacity <= 0) {
     echo json_encode([
@@ -91,12 +94,17 @@ if (!$confirmOverflow) {
 }
 
 $rel    = new GlpiPlugin\Sprint\SprintItemDependency();
-$newId  = $rel->add([
+$depInput = [
     'plugin_sprint_sprintitems_id' => $itemId,
     'users_id'                     => $userId,
     'capacity'                     => $capacity,
     'is_resolved'                  => 0,
-]);
+    'plugin_sprint_sprintcreditproducts_id' => $productId,
+];
+if ($credits !== null && $credits !== '') {
+    $depInput['credits'] = $credits;
+}
+$newId  = $rel->add($depInput);
 
 $messages = [];
 $warnings = [];
@@ -127,11 +135,16 @@ $summaries = GlpiPlugin\Sprint\SprintItemDependency::getOpenSummariesForItems([$
 $openDeps  = $summaries[$itemId] ?? [];
 $openCount = count($openDeps);
 
+$rel->getFromDB((int)$newId);
+$depCredits  = (float)($rel->fields['credits'] ?? 0);
 $baseMessage = sprintf(
     __('Dependency added: %s (%s%%)', 'sprint'),
     GlpiPlugin\Sprint\SprintCache::userName($userId),
     GlpiPlugin\Sprint\SprintMember::formatCapacity($capacity)
 );
+if ($depCredits > 0) {
+    $baseMessage .= ' · ' . sprintf(__('%s credits', 'sprint'), GlpiPlugin\Sprint\SprintCustomer::formatCredits($depCredits));
+}
 
 echo json_encode([
     'success'    => true,
@@ -143,5 +156,6 @@ echo json_encode([
         'users_id' => $userId,
         'name'     => GlpiPlugin\Sprint\SprintCache::userName($userId),
         'capacity' => $capacity,
+        'credits'  => GlpiPlugin\Sprint\SprintCustomer::formatCredits($depCredits),
     ],
 ]);

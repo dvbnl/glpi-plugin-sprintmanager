@@ -92,6 +92,15 @@ class SprintCreditProduct extends CommonDBTM
                 foreach ((new self())->find(getEntitiesRestrictCriteria(self::getTable(), '', '', true), ['name ASC']) as $row) {
                     $rows[(int)$row['id']] = $row;
                 }
+                // Drag order first; entries never dragged (0) keep name order after them.
+                uasort($rows, static function (array $a, array $b): int {
+                    $sa = (int)($a['sort_order'] ?? 0);
+                    $sb = (int)($b['sort_order'] ?? 0);
+                    if (($sa === 0) !== ($sb === 0)) {
+                        return $sa === 0 ? 1 : -1;
+                    }
+                    return $sa <=> $sb ?: strnatcasecmp((string)$a['name'], (string)$b['name']);
+                });
             }
             self::$cache = self::treeOrder($rows);
         }
@@ -277,8 +286,13 @@ class SprintCreditProduct extends CommonDBTM
             return;
         }
 
-        echo "<div class='table-responsive'><table class='table table-sm align-middle mb-0 sprint-credit-catalogue'>";
+        $candrag = $canedit && self::canUpdate();
+        echo "<div class='table-responsive'><table class='table table-sm align-middle mb-0 sprint-credit-catalogue'"
+            . ($candrag ? " data-reorder-url='" . htmlescape(Plugin::getWebDir('sprint') . '/ajax/catalogreorder.php') . "'"
+                . " data-token-url='" . htmlescape(Plugin::getWebDir('sprint') . '/ajax/csrftoken.php') . "'" : '')
+            . ">";
         echo "<thead><tr>"
+            . ($candrag ? "<th style='width:26px;' title='" . __s('Drag to reorder', 'sprint') . "'></th>" : '')
             . "<th>" . __('Name') . "</th>"
             . "<th style='width:120px;'>" . __('Reference code', 'sprint') . "</th>"
             . "<th class='text-center' style='width:130px;'>" . __('Default credits', 'sprint') . "</th>"
@@ -291,7 +305,17 @@ class SprintCreditProduct extends CommonDBTM
             $isFolder = (int)($row['is_folder'] ?? 0) === 1;
             $inactive = (int)($row['is_active'] ?? 1) === 0;
             $pad      = 12 + 22 * (int)($row['level'] ?? 0);
-            echo "<tr" . ($inactive ? " style='opacity:0.55;'" : '') . ($isFolder ? " class='fw-bold'" : '') . ">";
+            $parentId = (int)($row['sprintcreditproducts_id'] ?? 0);
+            if ($parentId > 0 && !isset($all[$parentId])) {
+                $parentId = 0;
+            }
+            echo "<tr class='sprint-catalogue-row" . ($isFolder ? ' fw-bold' : '') . "'"
+                . ($inactive ? " style='opacity:0.55;'" : '')
+                . " data-id='{$id}' data-parent='{$parentId}' data-level='" . (int)($row['level'] ?? 0) . "'>";
+            if ($candrag) {
+                echo "<td class='sprint-catalogue-grip text-muted' title='" . __s('Drag to reorder', 'sprint') . "'>"
+                    . "<i class='fas fa-grip-vertical'></i></td>";
+            }
             echo "<td style='padding-left:{$pad}px;'>"
                 . "<i class='" . ($isFolder ? 'fas fa-folder' : 'fas fa-tag') . " me-2' style='color:" . ($isFolder ? '#f59f00' : '#6c757d') . ";'></i>"
                 . "<a href='" . self::getFormURLWithID($id) . "'>" . htmlescape((string)$row['name']) . "</a>";
@@ -321,6 +345,114 @@ class SprintCreditProduct extends CommonDBTM
         }
         echo "</tbody></table></div>";
         echo "</div></div>";
+        if ($candrag) {
+            self::renderReorderScript();
+        }
+    }
+
+    /**
+     * Drag a row (a folder takes its subtree along) to another spot among
+     * its siblings; the new order is saved straight away. Dropping onto a
+     * row with another parent is refused: moving between folders stays an
+     * explicit edit on the form.
+     */
+    private static function renderReorderScript(): void
+    {
+        $msgSaved  = addslashes(__('Order saved', 'sprint'));
+        $msgFailed = addslashes(__('Could not save the order', 'sprint'));
+        echo <<<HTML
+<script>
+(function(){
+    if (typeof jQuery === 'undefined' || window.__sprintCatalogueReorderBound) { return; }
+    window.__sprintCatalogueReorderBound = true;
+    var dragging = null;   // the block of rows being moved (row + subtree)
+
+    // A folder row and everything indented under it move as one block.
+    function blockOf(row) {
+        var level = parseInt(row.getAttribute('data-level'), 10) || 0;
+        var rows = [row];
+        var next = row.nextElementSibling;
+        while (next && (parseInt(next.getAttribute('data-level'), 10) || 0) > level) {
+            rows.push(next);
+            next = next.nextElementSibling;
+        }
+        return rows;
+    }
+
+    jQuery(document).on('mousedown', '.sprint-catalogue-grip', function(){
+        var row = this.closest('tr');
+        if (row) { row.setAttribute('draggable', 'true'); }
+    });
+    jQuery(document).on('dragstart', '.sprint-catalogue-row', function(e){
+        if (this.getAttribute('draggable') !== 'true') { e.preventDefault(); return; }
+        dragging = blockOf(this);
+        dragging.forEach(function(r){ r.classList.add('sprint-catalogue-dragging'); });
+        if (e.originalEvent.dataTransfer) {
+            e.originalEvent.dataTransfer.effectAllowed = 'move';
+            e.originalEvent.dataTransfer.setData('text/plain', this.getAttribute('data-id'));
+        }
+    });
+    jQuery(document).on('dragover', '.sprint-catalogue-row', function(e){
+        if (!dragging) { return; }
+        var sameParent = this.getAttribute('data-parent') === dragging[0].getAttribute('data-parent');
+        if (!sameParent || dragging.indexOf(this) !== -1) { return; }
+        e.preventDefault();
+        var rect = this.getBoundingClientRect();
+        var below = (e.originalEvent.clientY - rect.top) > rect.height / 2;
+        jQuery('.sprint-catalogue-row').removeClass('sprint-catalogue-over-top sprint-catalogue-over-bottom');
+        this.classList.add(below ? 'sprint-catalogue-over-bottom' : 'sprint-catalogue-over-top');
+    });
+    jQuery(document).on('dragleave', '.sprint-catalogue-row', function(){
+        this.classList.remove('sprint-catalogue-over-top', 'sprint-catalogue-over-bottom');
+    });
+    jQuery(document).on('drop', '.sprint-catalogue-row', function(e){
+        if (!dragging) { return; }
+        e.preventDefault();
+        var target = this;
+        var below  = target.classList.contains('sprint-catalogue-over-bottom');
+        jQuery('.sprint-catalogue-row').removeClass('sprint-catalogue-over-top sprint-catalogue-over-bottom');
+        if (target.getAttribute('data-parent') !== dragging[0].getAttribute('data-parent') || dragging.indexOf(target) !== -1) {
+            return;
+        }
+        // Dropping below a folder means below its whole subtree.
+        var anchor = below ? blockOf(target).slice(-1)[0] : target;
+        var tbody  = target.parentNode;
+        dragging.forEach(function(r){
+            if (below) { tbody.insertBefore(r, anchor.nextSibling); anchor = r; }
+            else { tbody.insertBefore(r, anchor); }
+        });
+        var parent = dragging[0].getAttribute('data-parent');
+        var order  = [];
+        jQuery(tbody).find('.sprint-catalogue-row[data-parent="' + parent + '"]').each(function(){
+            order.push(parseInt(this.getAttribute('data-id'), 10));
+        });
+        var table = jQuery(target).closest('table');
+        jQuery.ajax({
+            url: table.attr('data-token-url'), type: 'GET', dataType: 'json', cache: false
+        }).then(function(tok){
+            return jQuery.ajax({
+                url: table.attr('data-reorder-url'), type: 'POST', dataType: 'json',
+                data: { order: JSON.stringify(order), _glpi_csrf_token: tok && tok.token ? tok.token : '' }
+            });
+        }).done(function(resp){
+            if (resp && resp.success) {
+                if (window.glpi_toast_info) { window.glpi_toast_info("{$msgSaved}"); }
+            } else {
+                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || "{$msgFailed}"); }
+                else { alert((resp && resp.message) || "{$msgFailed}"); }
+            }
+        }).fail(function(){
+            if (window.glpi_toast_error) { window.glpi_toast_error("{$msgFailed}"); }
+        });
+    });
+    jQuery(document).on('dragend', '.sprint-catalogue-row', function(){
+        jQuery('.sprint-catalogue-row').removeClass('sprint-catalogue-dragging sprint-catalogue-over-top sprint-catalogue-over-bottom')
+            .each(function(){ this.removeAttribute('draggable'); });
+        dragging = null;
+    });
+})();
+</script>
+HTML;
     }
 
     // =========================================================================

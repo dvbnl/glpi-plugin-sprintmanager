@@ -302,6 +302,7 @@ function plugin_sprint_install(): bool
             `description`   TEXT,
             `sprintcreditproducts_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Parent folder, 0 = top level',
             `is_folder`     TINYINT NOT NULL DEFAULT 0 COMMENT 'A folder groups products and cannot be picked',
+            `sort_order`    INT NOT NULL DEFAULT 0 COMMENT 'Drag order among siblings, 0 = by name',
             `entities_id`   INT UNSIGNED NOT NULL DEFAULT 0,
             `is_recursive`  TINYINT NOT NULL DEFAULT 1,
             `is_active`     TINYINT NOT NULL DEFAULT 1,
@@ -364,6 +365,8 @@ function plugin_sprint_install(): bool
         $migration->addField('glpi_plugin_sprint_sprintcreditproducts', 'sprintcreditproducts_id', 'integer', ['value' => 0, 'after' => 'description']);
         $migration->addKey('glpi_plugin_sprint_sprintcreditproducts', 'sprintcreditproducts_id');
         $migration->addField('glpi_plugin_sprint_sprintcreditproducts', 'is_folder', 'bool', ['value' => 0, 'after' => 'sprintcreditproducts_id']);
+        // Drag order on the catalogue page (among siblings, 0 = by name).
+        $migration->addField('glpi_plugin_sprint_sprintcreditproducts', 'sort_order', 'integer', ['value' => 0, 'after' => 'is_folder']);
     }
 
     // The retainer moved from four columns on the customer (one figure with
@@ -552,6 +555,8 @@ function plugin_sprint_install(): bool
             `plugin_sprint_sprintitems_id`  INT UNSIGNED NOT NULL DEFAULT 0,
             `users_id`                      INT UNSIGNED NOT NULL DEFAULT 0,
             `capacity`                      DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Capacity allocated to this dependency, in %',
+            `credits`                       DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Credits the helper charges to the parent item customer',
+            `plugin_sprint_sprintcreditproducts_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Catalogue entry the credits were taken from, 0 = by hand',
             `is_resolved`                   TINYINT NOT NULL DEFAULT 0,
             `comment`                       TEXT,
             `date_creation`                 TIMESTAMP NULL DEFAULT NULL,
@@ -560,9 +565,27 @@ function plugin_sprint_install(): bool
             UNIQUE KEY `unicity` (`plugin_sprint_sprintitems_id`, `users_id`),
             KEY `plugin_sprint_sprintitems_id` (`plugin_sprint_sprintitems_id`),
             KEY `users_id` (`users_id`),
-            KEY `is_resolved` (`is_resolved`)
+            KEY `is_resolved` (`is_resolved`),
+            KEY `plugin_sprint_sprintcreditproducts_id` (`plugin_sprint_sprintcreditproducts_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
         $DB->doQueryOrDie($query, $DB->error());
+    }
+    // Migration: a dependency charges credits of its own next to its capacity
+    // (a helper's check or review is billable work on the parent's customer).
+    if ($DB->tableExists('glpi_plugin_sprint_sprintitemdependencies')) {
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitemdependencies',
+            'credits',
+            "DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Credits the helper charges to the parent item customer'",
+            ['after' => 'capacity']
+        );
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitemdependencies',
+            'plugin_sprint_sprintcreditproducts_id',
+            'integer',
+            ['value' => 0, 'after' => 'credits']
+        );
+        $migration->addKey('glpi_plugin_sprint_sprintitemdependencies', 'plugin_sprint_sprintcreditproducts_id');
     }
 
     // =========================================================================

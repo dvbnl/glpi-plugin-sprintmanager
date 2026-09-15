@@ -48,6 +48,11 @@ if ($action === 'list') {
             'users_id'    => $uid,
             'name'        => $uid > 0 ? GlpiPlugin\Sprint\SprintCache::userName($uid) : '',
             'capacity'    => GlpiPlugin\Sprint\SprintMember::formatCapacity($r['capacity']),
+            'credits'     => GlpiPlugin\Sprint\SprintCustomer::formatCredits($r['credits'] ?? 0),
+            'product_id'  => (int)($r['plugin_sprint_sprintcreditproducts_id'] ?? 0),
+            'product'     => (int)($r['plugin_sprint_sprintcreditproducts_id'] ?? 0) > 0
+                ? GlpiPlugin\Sprint\SprintCreditProduct::getFullNameFor((int)$r['plugin_sprint_sprintcreditproducts_id'])
+                : '',
             'is_resolved' => (int)$r['is_resolved'],
         ];
     }
@@ -70,13 +75,27 @@ if (
 }
 
 if ($action === 'update') {
-    $capacity = GlpiPlugin\Sprint\SprintMember::normalizeCapacity($_POST['capacity'] ?? 0);
-    if ($capacity <= 0) {
-        echo json_encode(['success' => false, 'message' => __('Capacity must be greater than 0', 'sprint')]);
-        return;
+    // Capacity and/or credits; whichever the modal sends.
+    $update = ['id' => $depId];
+    if (array_key_exists('capacity', $_POST)) {
+        $capacity = GlpiPlugin\Sprint\SprintMember::normalizeCapacity($_POST['capacity'] ?? 0);
+        if ($capacity <= 0) {
+            echo json_encode(['success' => false, 'message' => __('Capacity must be greater than 0', 'sprint')]);
+            return;
+        }
+        $update['capacity'] = $capacity;
+    } else {
+        $capacity = (float)($rel->fields['capacity'] ?? 0);
+    }
+    if (array_key_exists('credits', $_POST)) {
+        $update['credits'] = $_POST['credits'];
+    }
+    if (array_key_exists('plugin_sprint_sprintcreditproducts_id', $_POST)) {
+        $update['plugin_sprint_sprintcreditproducts_id'] = (int)$_POST['plugin_sprint_sprintcreditproducts_id'];
     }
 
-    $rel->update(['id' => $depId, 'capacity' => $capacity]);
+    $rel->update($update);
+    $rel->getFromDB($depId);
 
     // Surface any capacity warning queued by the model.
     $warnings = [];
@@ -91,9 +110,12 @@ if ($action === 'update') {
         $_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
     }
 
+    $depCredits = (float)($rel->fields['credits'] ?? 0);
     echo json_encode([
         'success' => true,
-        'message' => sprintf(__('Dependency updated to %s%%', 'sprint'), GlpiPlugin\Sprint\SprintMember::formatCapacity($capacity)),
+        'message' => sprintf(__('Dependency updated to %s%%', 'sprint'), GlpiPlugin\Sprint\SprintMember::formatCapacity($capacity))
+            . ($depCredits > 0 ? ' · ' . sprintf(__('%s credits', 'sprint'), GlpiPlugin\Sprint\SprintCustomer::formatCredits($depCredits)) : ''),
+        'credits' => GlpiPlugin\Sprint\SprintCustomer::formatCredits($depCredits),
         'warning' => $warnings ? implode("\n", $warnings) : '',
     ]);
     return;

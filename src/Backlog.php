@@ -896,8 +896,11 @@ HTML;
         // filtering and planning don't have to wait for sprint assignment.
         $definedTags = Config::getDefinedTags();
         if (!empty($definedTags)) {
-            echo "<div class='mb-2 sprint-be-tags-block'><label class='form-label'>"
-                . "<i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint') . "</label>";
+            $tagRequired = Config::isTagRequired();
+            echo "<div class='mb-2 sprint-be-tags-block' data-tag-required='" . ($tagRequired ? 1 : 0) . "'><label class='form-label'>"
+                . "<i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint')
+                . ($tagRequired ? " <span class='text-danger' title='" . __s('Required', 'sprint') . "'>*</span>" : '')
+                . "</label>";
             echo "<div class='d-flex flex-wrap gap-3'>";
             foreach ($definedTags as $tag) {
                 echo "<label style='display:inline-flex;align-items:center;gap:6px;'>"
@@ -928,6 +931,7 @@ HTML;
         $msgPreview    = addslashes(__('Total %total%% — used in sprint %used%%, pending from backlog %pending%%, this item %own%% → %free%% free after assigning', 'sprint'));
         $msgSaveFailed = addslashes(__('Save failed', 'sprint'));
         $lblInactive   = addslashes(__('inactive', 'sprint'));
+        $msgTagRequired = addslashes(__('Pick at least one tag — tags are required on every item.', 'sprint'));
 
         echo <<<HTML
 <script>
@@ -1086,6 +1090,17 @@ HTML;
         bootstrap.Modal.getOrCreateInstance(\$modal[0]).show();
     });
 
+    // Tag required (plugin setting): checked before every save from this
+    // modal; the server enforces the same rule.
+    function tagsMissing() {
+        var \$block = \$modal.find('.sprint-be-tags-block');
+        if (!\$block.length || parseInt(\$block.attr('data-tag-required'), 10) !== 1) { return false; }
+        if (\$modal.find('.sprint-be-tag:checked').length > 0) { return false; }
+        \$modal.find('.sprint-be-error').text("{$msgTagRequired}").show();
+        \$block[0].scrollIntoView({block: 'nearest'});
+        return true;
+    }
+
     function saveItem() {
         var itemId = parseInt(\$modal.find('input[name=id]').val(), 10) || 0;
         var tags = [];
@@ -1169,6 +1184,8 @@ HTML;
         var \$btn   = jQuery(this);
         var itemId = parseInt(\$modal.find('input[name=id]').val(), 10) || 0;
         if (itemId <= 0) { return; }
+        \$modal.find('.sprint-be-error').hide().text('');
+        if (tagsMissing()) { return; }
         \$btn.prop('disabled', true);
         saveItem().done(function(resp){
             if (resp && resp.success) {
@@ -1198,6 +1215,8 @@ HTML;
         var itemId   = parseInt(\$modal.find('input[name=id]').val(), 10) || 0;
         var sprintId = parseInt(\$modal.find("select[name='_backlog_modal_sprint_id']").val(), 10) || 0;
         if (itemId <= 0 || sprintId <= 0) { return; }
+        \$modal.find('.sprint-be-error').hide().text('');
+        if (tagsMissing()) { return; }
         \$btn.prop('disabled', true);
         saveItem().done(function(resp){
             \$btn.prop('disabled', false);
@@ -1250,6 +1269,22 @@ HTML;
         $msgSelectBoth = addslashes(__('Please select a sprint member and a capacity > 0', 'sprint'));
         $hint          = __('Only members of the pre-selected sprint can be added.', 'sprint');
 
+        // The helper's own billable share (a check, a review), charged to the
+        // item's customer on top of the item's credits.
+        $creditFields = '';
+        if (SprintCustomer::canUseCredits()) {
+            $creditFields = "<div class='row g-2'>"
+                . "<div class='col-md-8 mb-2'><label class='form-label fw-bold'><i class='fas fa-tags me-1'></i>"
+                . htmlescape(SprintCreditProduct::getTypeName(1)) . "</label>"
+                . SprintItem::productSelect('_deps_product', 0, '_deps_credits', 'sprint-deps-product')
+                . "</div>"
+                . "<div class='col-md-4 mb-2'><label class='form-label fw-bold'><i class='fas fa-coins me-1'></i>"
+                . htmlescape(__('Credits', 'sprint')) . "</label>"
+                . SprintItem::creditsInput('_deps_credits', 0, 'w-100 sprint-deps-credits')
+                . "</div></div>";
+            SprintItem::creditProductScript();
+        }
+
         echo <<<HTML
 <div class="modal fade" id="sprint-backlog-deps-modal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -1271,6 +1306,7 @@ HTML;
           <label class="form-label fw-bold">{$lblCapacity} %</label>
           <select class="form-select sprint-deps-capacity">{$capacityOptions}</select>
         </div>
+        {$creditFields}
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$lblCancel}</button>
@@ -1359,7 +1395,8 @@ HTML;
                 var \$line = jQuery('<div class="d-flex align-items-center gap-2 py-1"></div>');
                 var \$name = jQuery('<span></span>').append(
                     jQuery('<i class="fas fa-link me-1" style="color:#20c997;font-size:0.8em;"></i>')
-                ).append(document.createTextNode(d.name + ' (' + d.capacity + '%)'));
+                ).append(document.createTextNode(d.name + ' (' + d.capacity + '%'
+                    + (parseFloat(d.credits) > 0 ? ' · ' + d.credits + ' cr.' : '') + ')'));
                 if (parseInt(d.is_resolved, 10) === 1) {
                     \$name.css('text-decoration', 'line-through').addClass('text-muted');
                 }
@@ -1407,6 +1444,8 @@ HTML;
         \$modal.data('item-id', itemId);
         \$modal.find('.sprint-deps-item-name').text(name);
         \$modal.find('.sprint-deps-status').hide().text('');
+        \$modal.find('.sprint-deps-credits').val('0');
+        \$modal.find('.sprint-deps-product').val('0');
         loadDepsList(itemId);
         var \$member = \$modal.find('.sprint-deps-member');
         \$member.html('<option value="0">…</option>');
@@ -1442,6 +1481,8 @@ HTML;
     });
 
     function doAdd(itemId, userId, capacity, confirmOverflow) {
+        var \$credits = \$modal.find('.sprint-deps-credits');
+        var \$product = \$modal.find('.sprint-deps-product');
         jQuery.ajax({
             url: tokenUrl, type: 'GET', dataType: 'json', cache: false
         }).then(function(tokResp){
@@ -1451,6 +1492,8 @@ HTML;
                     plugin_sprint_sprintitems_id: itemId,
                     users_id: userId,
                     capacity: capacity,
+                    credits: \$credits.length ? \$credits.val() : undefined,
+                    plugin_sprint_sprintcreditproducts_id: \$product.length ? \$product.val() : undefined,
                     confirm_overflow: confirmOverflow ? 1 : 0,
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 }
@@ -1460,6 +1503,8 @@ HTML;
                 // Stay open so more helpers can be added in a row.
                 showDepsStatus(resp.message || 'Saved', true);
                 \$modal.find('.sprint-deps-member').val('0');
+                if (\$credits.length) { \$credits.val('0'); }
+                if (\$product.length) { \$product.val('0'); }
                 loadDepsList(itemId);
             } else if (resp && resp.needs_confirm) {
                 if (confirm(resp.message)) {

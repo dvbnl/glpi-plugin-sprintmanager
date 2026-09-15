@@ -4526,3 +4526,45 @@ msgstr "Vue personnelle, enregistrée comme votre défaut : l'ordre ne change qu
 
 msgid "View saved as your default"
 msgstr "Vue enregistrée comme votre défaut"
+
+msgid "Require a tag on every item"
+msgstr ""
+
+msgid "When enabled, the item form, the quick-edit dialog and the backlog edit dialog refuse to save an item without at least one tag. Only applies while the tag list above has entries."
+msgstr ""
+
+msgid "Pick at least one tag — tags are required on every item."
+msgstr ""
+
+msgid "Required"
+msgstr ""
+
+msgid "Couples a colleague to this item with their own capacity % and, when their share is billable, their own credits on this item's customer. Open 'Manage' to resolve, reopen or remove."
+msgstr ""
+
+msgid "%s credits"
+msgstr ""
+
+msgid "Credits on dependencies (helpers)"
+msgstr ""
+
+msgid "Credit flow per customer per sprint"
+msgstr ""
+
+msgid "Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint."
+msgstr ""
+
+msgid "Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint. Open and delivered work in the sprint counts; a dependency's credits follow the parent item."
+msgstr ""
+
+msgid "Credits per catalogue folder"
+msgstr ""
+
+msgid "Tags × categories"
+msgstr ""
+
+msgid "Every tag bar is scaled to 100 %: the split shows which categories that tag worked on in the sprint; the figure is the tag's credits."
+msgstr ""
+
+msgid "No tag"
+msgstr ""

@@ -29,6 +29,10 @@ class Config extends CommonDBTM
      *  members pick from it, only admins add new entries. */
     const CFG_SPRINT_ITEM_TAGS = 'sprint_item_tags';
 
+    /** Every save that carries the tag field (item form, quick edit, backlog
+     *  edit) must keep at least one tag on the item. Default off. */
+    const CFG_TAG_REQUIRED = 'sprint_item_tag_required';
+
     /** When a backlog item with an estimated capacity %% joins a sprint,
      *  seed its story points from that capacity (1%% = 1 SP). Default off. */
     const CFG_CAPACITY_TO_POINTS = 'backlog_capacity_to_story_points';
@@ -74,6 +78,7 @@ class Config extends CommonDBTM
             self::CFG_SCRUM_MASTER_CAPACITY => 0,
             self::CFG_REPORT_LOGO_URL       => '',
             self::CFG_SPRINT_ITEM_TAGS      => '[]',
+            self::CFG_TAG_REQUIRED          => 0,
             self::CFG_CAPACITY_TO_POINTS    => 0,
             self::CFG_BACKLOG_AUTO_CLEANUP  => 1,
             self::CFG_BACKLOG_AGING_DAYS    => 21,
@@ -114,6 +119,16 @@ class Config extends CommonDBTM
             $out[]      = $tag;
         }
         return $out;
+    }
+
+    /**
+     * Whether an item must carry at least one tag. Only meaningful while the
+     * admin pool has tags to pick from, so an empty pool never locks saves.
+     */
+    public static function isTagRequired(): bool
+    {
+        $cfg = self::getConfig();
+        return (int)($cfg[self::CFG_TAG_REQUIRED] ?? 0) === 1 && count(self::getDefinedTags()) > 0;
     }
 
     /** @return string[] Global Definition of Ready checks. */
@@ -278,6 +293,7 @@ class Config extends CommonDBTM
             self::CFG_SCRUM_MASTER_CAPACITY => (int)(bool)($input[self::CFG_SCRUM_MASTER_CAPACITY] ?? 0),
             self::CFG_REPORT_LOGO_URL       => trim((string)($input[self::CFG_REPORT_LOGO_URL] ?? '')),
             self::CFG_SPRINT_ITEM_TAGS      => self::normalizeTagInput((string)($input[self::CFG_SPRINT_ITEM_TAGS] ?? '')),
+            self::CFG_TAG_REQUIRED          => (int)(bool)($input[self::CFG_TAG_REQUIRED] ?? 0),
             self::CFG_CAPACITY_TO_POINTS    => (int)(bool)($input[self::CFG_CAPACITY_TO_POINTS] ?? 0),
             self::CFG_BACKLOG_AUTO_CLEANUP  => (int)(bool)($input[self::CFG_BACKLOG_AUTO_CLEANUP] ?? 0),
             self::CFG_BACKLOG_AGING_DAYS    => max(0, min(365, (int)($input[self::CFG_BACKLOG_AGING_DAYS] ?? 21))),
@@ -476,6 +492,23 @@ class Config extends CommonDBTM
             . ($canedit ? '' : ' readonly') . ">"
             . htmlescape($tagsRaw)
             . "</textarea>";
+        echo "</td></tr>";
+
+        // Tag required on save
+        $checkedTag = (int)$cfg[self::CFG_TAG_REQUIRED] === 1 ? 'checked' : '';
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Require a tag on every item', 'sprint') . "<br>";
+        echo "<span class='text-muted' style='font-size:0.85em;'>" .
+            __('When enabled, the item form, the quick-edit dialog and the backlog edit dialog refuse to save an item without at least one tag. Only applies while the tag list above has entries.', 'sprint') .
+            "</span></td>";
+        echo "<td>";
+        echo "<input type='hidden' name='" . self::CFG_TAG_REQUIRED . "' value='0'>";
+        echo "<label class='form-check form-switch'>";
+        echo "<input class='form-check-input' type='checkbox' role='switch' "
+            . "name='" . self::CFG_TAG_REQUIRED . "' value='1' {$checkedTag}"
+            . ($canedit ? '' : ' disabled') . ">";
+        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
+        echo "</label>";
         echo "</td></tr>";
 
         if ($canedit) {

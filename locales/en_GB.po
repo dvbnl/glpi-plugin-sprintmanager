@@ -4518,3 +4518,45 @@ msgstr "Personal view, saved as your default: the order only changes for you —
 
 msgid "View saved as your default"
 msgstr "View saved as your default"
+
+msgid "Require a tag on every item"
+msgstr "Require a tag on every item"
+
+msgid "When enabled, the item form, the quick-edit dialog and the backlog edit dialog refuse to save an item without at least one tag. Only applies while the tag list above has entries."
+msgstr "When enabled, the item form, the quick-edit dialog and the backlog edit dialog refuse to save an item without at least one tag. Only applies while the tag list above has entries."
+
+msgid "Pick at least one tag — tags are required on every item."
+msgstr "Pick at least one tag — tags are required on every item."
+
+msgid "Required"
+msgstr "Required"
+
+msgid "Couples a colleague to this item with their own capacity % and, when their share is billable, their own credits on this item's customer. Open 'Manage' to resolve, reopen or remove."
+msgstr "Couples a colleague to this item with their own capacity % and, when their share is billable, their own credits on this item's customer. Open 'Manage' to resolve, reopen or remove."
+
+msgid "%s credits"
+msgstr "%s credits"
+
+msgid "Credits on dependencies (helpers)"
+msgstr "Credits on dependencies (helpers)"
+
+msgid "Credit flow per customer per sprint"
+msgstr "Credit flow per customer per sprint"
+
+msgid "Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint."
+msgstr "Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint."
+
+msgid "Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint. Open and delivered work in the sprint counts; a dependency's credits follow the parent item."
+msgstr "Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint. Open and delivered work in the sprint counts; a dependency's credits follow the parent item."
+
+msgid "Credits per catalogue folder"
+msgstr "Credits per catalogue folder"
+
+msgid "Tags × categories"
+msgstr "Tags × categories"
+
+msgid "Every tag bar is scaled to 100 %: the split shows which categories that tag worked on in the sprint; the figure is the tag's credits."
+msgstr "Every tag bar is scaled to 100 %: the split shows which categories that tag worked on in the sprint; the figure is the tag's credits."
+
+msgid "No tag"
+msgstr "No tag"

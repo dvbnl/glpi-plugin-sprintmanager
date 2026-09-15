@@ -76,6 +76,7 @@ class SprintItemDependency extends CommonDBRelation
         if (isset($input['plugin_sprint_sprintitems_id'])) $input['plugin_sprint_sprintitems_id'] = (int)$input['plugin_sprint_sprintitems_id'];
         if (isset($input['capacity']))                     $input['capacity']                     = SprintMember::normalizeCapacity($input['capacity']);
         if (isset($input['is_resolved']))                  $input['is_resolved']                  = (int)(bool)$input['is_resolved'];
+        $input = self::sanitizeCredits($input);
 
         // One dependency row per (item, member) — table has a UNIQUE index.
         // Catch dupes here for a clear message instead of a DB 500.
@@ -107,6 +108,7 @@ class SprintItemDependency extends CommonDBRelation
         if (isset($input['capacity']))     $input['capacity']    = SprintMember::normalizeCapacity($input['capacity']);
         if (isset($input['users_id']))     $input['users_id']    = (int)$input['users_id'];
         if (isset($input['is_resolved']))  $input['is_resolved'] = (int)(bool)$input['is_resolved'];
+        $input = self::sanitizeCredits($input);
 
         if (!$this->validateCapacity($input, (int)($input['id'] ?? 0))) {
             return false;
@@ -114,8 +116,41 @@ class SprintItemDependency extends CommonDBRelation
         return parent::prepareInputForUpdate($input);
     }
 
+    /**
+     * Credits + catalogue product, same rules as on the item: an unknown or
+     * unpickable product falls back to "by hand", a product without an
+     * amount takes the product's default.
+     */
+    private static function sanitizeCredits(array $input): array
+    {
+        if (isset($input['credits'])) {
+            $input['credits'] = SprintCustomer::normalizeCredits($input['credits']);
+        }
+        if (isset($input['plugin_sprint_sprintcreditproducts_id'])) {
+            $productId = (int)$input['plugin_sprint_sprintcreditproducts_id'];
+            $input['plugin_sprint_sprintcreditproducts_id'] = SprintCreditProduct::isPickable($productId) ? $productId : 0;
+            if ($productId > 0 && !isset($input['credits'])) {
+                $input['credits'] = SprintCreditProduct::creditsFor($productId);
+            }
+        }
+        return $input;
+    }
+
+    public function post_updateItem($history = true)
+    {
+        SprintCustomer::invalidateCaches();
+        parent::post_updateItem($history);
+    }
+
+    public function post_purgeItem()
+    {
+        SprintCustomer::invalidateCaches();
+        parent::post_purgeItem();
+    }
+
     public function post_addItem(): void
     {
+        SprintCustomer::invalidateCaches();
         $item = new SprintItem();
         $itemId = (int)($this->fields['plugin_sprint_sprintitems_id'] ?? 0);
         if ($itemId > 0 && $item->getFromDB($itemId)) {
@@ -196,6 +231,18 @@ class SprintItemDependency extends CommonDBRelation
                 'value' => 5,
             ]);
             echo "</td></tr>";
+            if (SprintCustomer::canUseCredits()) {
+                // The helper's own billable share (a check, a review), charged
+                // to the parent item's customer on top of the item's credits.
+                echo "<tr class='tab_bg_1'>";
+                echo "<td><i class='fas fa-tags me-1'></i>" . SprintCreditProduct::getTypeName(1) . "</td><td>";
+                echo SprintItem::productSelect('plugin_sprint_sprintcreditproducts_id', 0, 'credits');
+                echo "</td>";
+                echo "<td><i class='fas fa-coins me-1'></i>" . __('Credits', 'sprint') . "</td><td>";
+                echo SprintItem::creditsInput('credits', 0);
+                echo "</td></tr>";
+                SprintItem::creditProductScript();
+            }
             echo "<tr class='tab_bg_1'><td colspan='4' class='center'>";
             echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
             echo "</td></tr>";
@@ -207,10 +254,14 @@ class SprintItemDependency extends CommonDBRelation
         $rel  = new self();
         $rows = $rel->find(['plugin_sprint_sprintitems_id' => $itemId]);
 
+        $showCredits = SprintCustomer::canUseCredits();
         echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Helper', 'sprint') . "</th>";
         echo "<th>" . __('Capacity (%)', 'sprint') . "</th>";
+        if ($showCredits) {
+            echo "<th>" . __('Credits', 'sprint') . "</th>";
+        }
         echo "<th>" . __('Status') . "</th>";
         if ($canedit) {
             echo "<th>" . __('Actions') . "</th>";
@@ -218,18 +269,22 @@ class SprintItemDependency extends CommonDBRelation
         echo "</tr>";
 
         if (count($rows) === 0) {
-            $cols = $canedit ? 4 : 3;
+            $cols = 3 + ($canedit ? 1 : 0) + ($showCredits ? 1 : 0);
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
                 __('No dependencies yet', 'sprint') . "</td></tr>";
         }
 
-        $openCap     = 0.0;
-        $resolvedCap = 0.0;
+        $openCap      = 0.0;
+        $resolvedCap  = 0.0;
+        $totalCredits = 0.0;
         foreach ($rows as $row) {
             $uid        = (int)$row['users_id'];
             $cap        = (float)$row['capacity'];
             $capLabel   = SprintMember::formatCapacity($cap);
             $isResolved = (int)($row['is_resolved'] ?? 0) === 1;
+            $credits    = (float)($row['credits'] ?? 0);
+            $productId  = (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0);
+            $totalCredits += $credits;
             if ($isResolved) {
                 $resolvedCap += $cap;
             } else {
@@ -240,6 +295,17 @@ class SprintItemDependency extends CommonDBRelation
             echo "<tr class='tab_bg_1' style='{$rowStyle}'>";
             echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(SprintCache::userName($uid)) . "</td>";
             echo "<td class='center'>{$capLabel}%</td>";
+            if ($showCredits) {
+                echo "<td class='center'>";
+                if ($credits > 0) {
+                    $product = $productId > 0 ? SprintCreditProduct::getFullNameFor($productId) : '';
+                    echo "<span class='sprint-credit-chip' title='" . htmlescape($product !== '' ? $product : __('Credits', 'sprint')) . "'>"
+                        . "<i class='fas fa-coins'></i> " . htmlescape(SprintCustomer::formatCredits($credits)) . "</span>";
+                } else {
+                    echo "<span class='text-muted'>-</span>";
+                }
+                echo "</td>";
+            }
             echo "<td class='center'>";
             if ($isResolved) {
                 echo "<span class='sprint-badge' style='background:#198754;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.78em;'>"
@@ -257,6 +323,11 @@ class SprintItemDependency extends CommonDBRelation
                     Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
                         'value' => SprintMember::capacityKey($cap),
                     ]);
+                    if ($showCredits) {
+                        echo "<input type='number' min='0' step='0.25' name='credits' class='form-control form-control-sm' "
+                            . "style='max-width:90px;' title='" . __s('Credits', 'sprint') . "' value='"
+                            . htmlescape(SprintCustomer::formatCredits($credits)) . "'>";
+                    }
                     echo "<button type='submit' name='update' value='1' class='btn btn-sm btn-outline-primary' title='" . __('Update') . "'><i class='fas fa-save'></i></button>";
                     Html::closeForm();
                     echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline;margin-right:4px;'>";
@@ -291,6 +362,9 @@ class SprintItemDependency extends CommonDBRelation
         echo "<tr class='tab_bg_2'>";
         echo "<th class='right'>" . __('Open dependency capacity', 'sprint') . "</th>";
         echo "<th class='center'>" . SprintMember::formatCapacity($openCap) . "%</th>";
+        if ($showCredits) {
+            echo "<th class='center'>" . htmlescape(SprintCustomer::formatCredits($totalCredits)) . "</th>";
+        }
         echo "<th class='center'><span class='text-muted'>" . sprintf(__('Resolved: %s%%', 'sprint'), SprintMember::formatCapacity($resolvedCap)) . "</span></th>";
         if ($canedit) {
             echo "<th></th>";
@@ -298,6 +372,85 @@ class SprintItemDependency extends CommonDBRelation
         echo "</tr>";
 
         echo "</table></div>";
+    }
+
+    /**
+     * Dependency credits per parent item, resolved rows included: a helper's
+     * check was delivered and billed whether or not the dependency is still
+     * open. Same shape as getCapacityByItem().
+     *
+     * @param int[] $itemIds
+     * @return array<int,float> item id => credits
+     */
+    public static function getCreditsByItem(array $itemIds): array
+    {
+        global $DB;
+        $out     = [];
+        $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+        if (empty($itemIds) || !self::isTableReady() || !$DB->fieldExists(self::getTable(), 'credits')) {
+            return $out;
+        }
+        foreach ($DB->request([
+            'SELECT' => ['plugin_sprint_sprintitems_id', 'SUM' => 'credits AS total'],
+            'FROM'   => self::getTable(),
+            'WHERE'  => ['plugin_sprint_sprintitems_id' => $itemIds],
+            'GROUPBY' => 'plugin_sprint_sprintitems_id',
+        ]) as $r) {
+            $out[(int)$r['plugin_sprint_sprintitems_id']] = (float)$r['total'];
+        }
+        return $out;
+    }
+
+    /**
+     * Every dependency row that carries credits, with the parent item's
+     * customer, sprint, status, parked flag, category and product — the shape
+     * SprintCustomer::bucketFor() and the credit flow charts consume. The
+     * parent's product is only a fallback: a helper's check normally picks
+     * its own catalogue entry.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function creditRows(): array
+    {
+        global $DB;
+        if (!self::isTableReady() || !$DB->fieldExists(self::getTable(), 'credits')) {
+            return [];
+        }
+        $out = [];
+        foreach ($DB->request([
+            'SELECT' => [
+                'd.id AS dependency_id',
+                'd.plugin_sprint_sprintitems_id AS item_id',
+                'd.credits AS credits',
+                'd.plugin_sprint_sprintcreditproducts_id AS product_id',
+                'i.plugin_sprint_sprintcustomers_id',
+                'i.plugin_sprint_sprints_id',
+                'i.proposed_sprints_id',
+                'i.status',
+                'i.is_parked',
+                'i.plugin_sprint_sprintcategories_id',
+                'i.plugin_sprint_sprintcreditproducts_id AS item_product_id',
+            ],
+            'FROM'   => self::getTable() . ' AS d',
+            'INNER JOIN' => [
+                SprintItem::getTable() . ' AS i' => ['ON' => ['d' => 'plugin_sprint_sprintitems_id', 'i' => 'id']],
+            ],
+            'WHERE'  => ['NOT' => ['d.credits' => 0]],
+        ]) as $r) {
+            $out[] = [
+                'dependency_id'                        => (int)$r['dependency_id'],
+                'id'                                   => (int)$r['item_id'],
+                'credits'                              => (float)$r['credits'],
+                'plugin_sprint_sprintcreditproducts_id' => (int)$r['product_id'] > 0 ? (int)$r['product_id'] : (int)$r['item_product_id'],
+                'plugin_sprint_sprintcustomers_id'     => (int)$r['plugin_sprint_sprintcustomers_id'],
+                'plugin_sprint_sprints_id'             => (int)$r['plugin_sprint_sprints_id'],
+                'proposed_sprints_id'                  => (int)$r['proposed_sprints_id'],
+                'status'                               => (string)$r['status'],
+                'is_parked'                            => (int)$r['is_parked'],
+                'plugin_sprint_sprintcategories_id'    => (int)$r['plugin_sprint_sprintcategories_id'],
+            ];
+        }
+        return $out;
     }
 
     /**

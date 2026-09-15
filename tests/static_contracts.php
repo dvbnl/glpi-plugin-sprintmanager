@@ -129,6 +129,30 @@ foreach (['templates/sprintmeeting.form.html.twig', 'templates/meeting/items_tab
 }
 
 $setup = file_get_contents($root . '/setup.php');
+// 1.4.0: dependency credits, the credit flow card, required tags and the
+// catalogue drag order all need their schema / surfaces in place.
+$hook = file_get_contents($root . '/hook.php');
+foreach (["'credits'", "'sort_order'"] as $needle) {
+    if (!str_contains($hook, $needle)) {
+        fwrite(STDERR, "Missing 1.4.0 migration column {$needle}\n");
+        exit(1);
+    }
+}
+foreach ([
+    'src/SprintItemDependency.php' => 'function creditRows',
+    'src/SprintCreditFlow.php'     => 'function collect',
+    'src/SprintCredits.php'        => 'SprintCreditFlow::render(',
+    'src/Config.php'               => 'function isTagRequired',
+    'src/SprintItem.php'           => 'validateRequiredTags(',
+    'src/SprintCreditProduct.php'  => 'sprint-catalogue-grip',
+    'ajax/catalogreorder.php'      => 'sort_order',
+] as $file => $needle) {
+    if (!str_contains((string)file_get_contents($root . '/' . $file), $needle)) {
+        fwrite(STDERR, "{$file} must contain {$needle}\n");
+        exit(1);
+    }
+}
+
 if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.3.0")) {
     fwrite(STDERR, "Version was not advanced to 1.3.0\n");
     exit(1);

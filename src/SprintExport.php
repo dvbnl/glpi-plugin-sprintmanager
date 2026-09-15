@@ -1644,9 +1644,11 @@ HTML;
         // Delivered versus still open, over the exported items (so a category
         // filter narrows these two columns, never the customer totals). Same
         // rule as the balances: parked open work claims nothing.
+        // Credits a helper charges on a dependency follow the parent item.
+        $depCredits = SprintItemDependency::getCreditsByItem(array_map(static fn($r) => (int)($r['id'] ?? 0), $items));
         $inSprint = [];
         foreach ($items as $row) {
-            $credits = (float)($row['credits'] ?? 0);
+            $credits = (float)($row['credits'] ?? 0) + (float)($depCredits[(int)($row['id'] ?? 0)] ?? 0);
             if ($credits == 0.0 || SprintCustomer::bucketFor($row) === null) {
                 continue;
             }
@@ -1725,7 +1727,8 @@ HTML;
      */
     private static function writeCsvCategoryTotals($out, array $items): void
     {
-        $totals = [];
+        $totals     = [];
+        $depCredits = SprintItemDependency::getCreditsByItem(array_map(static fn($r) => (int)($r['id'] ?? 0), $items));
         foreach ($items as $row) {
             $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
             $totals[$cid] ??= [
@@ -1736,7 +1739,7 @@ HTML;
             $totals[$cid]['items']++;
             $totals[$cid]['points']  += (int)$row['story_points'];
             $totals[$cid]['planned'] += self::csvItemCapacity($row);
-            $totals[$cid]['credits'] += (float)($row['credits'] ?? 0);
+            $totals[$cid]['credits'] += (float)($row['credits'] ?? 0) + (float)($depCredits[(int)($row['id'] ?? 0)] ?? 0);
             if ($done) {
                 $totals[$cid]['done']++;
                 $totals[$cid]['points_done'] += (int)$row['story_points'];
@@ -1847,6 +1850,8 @@ HTML;
             __('Owner', 'sprint'),
             __('Helper', 'sprint'),
             __('Capacity', 'sprint') . ' %',
+            __('Credits', 'sprint'),
+            SprintCreditProduct::getTypeName(1),
             __('Resolved', 'sprint'),
             __('Comments'),
             __('Creation date'),
@@ -1868,6 +1873,9 @@ HTML;
                 ((int)$parent['users_id'] > 0) ? SprintCache::userName((int)$parent['users_id']) : __('Unassigned', 'sprint'),
                 SprintCache::userName((int)$r['users_id']),
                 SprintMember::formatCapacity($r['capacity']),
+                SprintCustomer::formatCredits($r['credits'] ?? 0),
+                (int)($r['plugin_sprint_sprintcreditproducts_id'] ?? 0) > 0
+                    ? SprintCreditProduct::getFullNameFor((int)$r['plugin_sprint_sprintcreditproducts_id']) : '',
                 ((int)($r['is_resolved'] ?? 0) === 1) ? __('Yes') : __('No'),
                 (string)($r['comment'] ?? ''),
                 (string)($r['date_creation'] ?? ''),

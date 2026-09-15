@@ -372,6 +372,24 @@ class SprintCustomer extends CommonDBTM
             self::$usageCache[$cid][$sid] ??= ['consumed' => 0.0, 'reserved' => 0.0, 'pipeline' => 0.0];
             self::$usageCache[$cid][$sid][$bucket] += (float)$row['credits'];
         }
+        // A helper's credits on a dependency are charged to the parent item's
+        // customer and follow the parent's sprint and status, so the same
+        // visibility and bucket rules apply.
+        $visibleCustomers = array_flip(array_merge([0], self::visibleIds()));
+        $visibleSprints   = array_flip(array_merge([0], self::visibleSprintIds()));
+        foreach (SprintItemDependency::creditRows() as $row) {
+            $cid = (int)$row['plugin_sprint_sprintcustomers_id'];
+            $sid = (int)$row['plugin_sprint_sprints_id'];
+            if (!isset($visibleCustomers[$cid]) || !isset($visibleSprints[$sid])) {
+                continue;
+            }
+            $bucket = self::bucketFor($row);
+            if ($bucket === null) {
+                continue;
+            }
+            self::$usageCache[$cid][$sid] ??= ['consumed' => 0.0, 'reserved' => 0.0, 'pipeline' => 0.0];
+            self::$usageCache[$cid][$sid][$bucket] += (float)$row['credits'];
+        }
         return self::$usageCache;
     }
 

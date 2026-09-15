@@ -518,7 +518,7 @@ HTML;
     }
 
     /** Customer pill + credit amount for a list cell; '' when neither is set. */
-    public static function renderCreditCell(int $customerId, $credits, int $productId = 0): string
+    public static function renderCreditCell(int $customerId, $credits, int $productId = 0, float $dependencyCredits = 0.0): string
     {
         $credits = (float)$credits;
         $out     = $customerId > 0 ? SprintCustomer::renderPill($customerId) : '';
@@ -526,6 +526,13 @@ HTML;
             $product = $productId > 0 ? SprintCreditProduct::getFullNameFor($productId) : '';
             $out .= " <span class='sprint-credit-chip' title='" . htmlescape($product !== '' ? $product : __('Credits', 'sprint')) . "'>"
                 . "<i class='fas fa-coins'></i> " . htmlescape(SprintCustomer::formatCredits($credits)) . "</span>";
+        }
+        // Credits the helpers charge on top of the item's own (see the
+        // Dependencies tab); shown apart so the item figure stays what was entered.
+        if ($dependencyCredits > 0) {
+            $out .= " <span class='sprint-credit-chip' style='opacity:0.8;' title='"
+                . htmlescape(__('Credits on dependencies (helpers)', 'sprint')) . "'>"
+                . "<i class='fas fa-link'></i> +" . htmlescape(SprintCustomer::formatCredits($dependencyCredits)) . "</span>";
         }
         return $out !== '' ? $out : "<span class='text-muted'>-</span>";
     }
@@ -1038,6 +1045,7 @@ HTML;
 
         $itemIds  = array_map(fn($r) => (int)$r['id'], $items);
         $tagsById = self::getTagsForItems($itemIds);
+        $depCreditsById = SprintCustomer::canUseCredits() ? SprintItemDependency::getCreditsByItem($itemIds) : [];
         $depsById = SprintItemDependency::getOpenSummariesForItems($itemIds);
 
         echo "<table class='tab_cadre_fixe sprint-themed sprint-items-list-table'>";
@@ -1103,7 +1111,8 @@ HTML;
                 echo "<td class='sprint-cell-credits'>" . self::renderCreditCell(
                     (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0),
                     $row['credits'] ?? 0,
-                    (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0)
+                    (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0),
+                    (float)($depCreditsById[(int)$row['id']] ?? 0)
                 ) . "</td>";
             }
             if ($canedit) {
@@ -1674,8 +1683,11 @@ HTML;
         echo "<textarea name='note' class='form-control' rows='8' style='min-height:180px;'></textarea></div>";
 
         if (!empty($definedTags)) {
-            echo "<div class='mb-3 sprint-qe-tags-block'><label class='form-label'>"
-                . "<i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint') . "</label>";
+            $tagRequired = Config::isTagRequired();
+            echo "<div class='mb-3 sprint-qe-tags-block' data-tag-required='" . ($tagRequired ? 1 : 0) . "'><label class='form-label'>"
+                . "<i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint')
+                . ($tagRequired ? " <span class='text-danger' title='" . __s('Required', 'sprint') . "'>*</span>" : '')
+                . "</label>";
             echo "<div class='d-flex flex-wrap gap-3'>";
             foreach ($definedTags as $tag) {
                 echo "<label style='display:inline-flex;align-items:center;gap:6px;'>"
@@ -1719,13 +1731,21 @@ HTML;
             echo "<option value='" . htmlescape((string)$val) . "'" . ((string)$val === '5' ? ' selected' : '') . ">" . htmlescape((string)$label) . "</option>";
         }
         echo "</select>";
+        if (SprintCustomer::canUseCredits()) {
+            // The helper's own billable share, charged to the item's customer.
+            echo self::productSelect('_qe_dep_product', 0, '_qe_dep_credits', 'form-select-sm sprint-qe-dep-product');
+            echo "<input type='number' min='0' step='0.25' name='_qe_dep_credits' class='form-control form-control-sm sprint-qe-dep-credits' "
+                . "style='max-width:90px;' value='0' title='" . __s('Credits', 'sprint') . "' placeholder='" . __s('Credits', 'sprint') . "'>";
+        }
         echo "<button type='button' class='btn btn-sm btn-outline-success sprint-qe-dep-add'>"
             . "<i class='fas fa-plus me-1'></i>" . __('Add helper', 'sprint') . "</button>";
         echo "<a href='#' class='btn btn-sm btn-outline-secondary sprint-qe-dep-manage' target='_blank' rel='noopener'>"
             . "<i class='fas fa-external-link-alt me-1'></i>" . __('Manage dependencies', 'sprint') . "</a>";
         echo "</div>";
         echo "<div class='form-text sprint-small text-muted'>"
-            . htmlescape(__("Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove.", 'sprint'))
+            . htmlescape(SprintCustomer::canUseCredits()
+                ? __("Couples a colleague to this item with their own capacity % and, when their share is billable, their own credits on this item's customer. Open 'Manage' to resolve, reopen or remove.", 'sprint')
+                : __("Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove.", 'sprint'))
             . "</div></div>";
 
         echo "</div>";
@@ -1748,7 +1768,9 @@ HTML;
         $depResolvedTxt  = addslashes(__('resolved', 'sprint'));
         $depRemoveTxt    = addslashes(__('Remove dependency', 'sprint'));
         $depRemoveConfirm = addslashes(__('Remove this dependency?', 'sprint'));
+        $depCreditsTxt    = addslashes(__('Credits', 'sprint'));
         $lblInactive      = addslashes(__('inactive', 'sprint'));
+        $msgTagRequired   = addslashes(__('Pick at least one tag — tags are required on every item.', 'sprint'));
 
         echo <<<JS
 <script>
@@ -1922,6 +1944,16 @@ $(function() {
         var \$btn = \$(this);
         var id = \$modal.find('input[name=id]').val();
         \$modal.find('.sprint-qe-error').hide().text('');
+
+        // Tag required (plugin setting): refuse client-side before the round
+        // trip; the server enforces the same rule.
+        var \$tagBlock = \$modal.find('.sprint-qe-tags-block');
+        if (\$tagBlock.length && parseInt(\$tagBlock.attr('data-tag-required'), 10) === 1
+            && \$modal.find('.sprint-qe-tag:checked').length === 0) {
+            \$modal.find('.sprint-qe-error').text("{$msgTagRequired}").show();
+            \$tagBlock[0].scrollIntoView({block: 'nearest'});
+            return;
+        }
 
         // Guarded capacity/category edits become approval requests: collect
         // the requester's motivation for the Scrum Master first. Dismissing the
@@ -2226,6 +2258,8 @@ $(function() {
         var itemId = \$modal.find('input[name=id]').val();
         var userId = parseInt(\$modal.find('.sprint-qe-dep-user').val(), 10) || 0;
         var cap    = parseFloat(\$modal.find('.sprint-qe-dep-cap').val()) || 0;
+        var \$depCredits = \$modal.find('.sprint-qe-dep-credits');
+        var \$depProduct = \$modal.find('.sprint-qe-dep-product');
         var \$status = \$modal.find('.sprint-qe-dep-status');
 
         if (!itemId || userId <= 0 || cap <= 0) {
@@ -2246,6 +2280,8 @@ $(function() {
                     plugin_sprint_sprintitems_id: itemId,
                     users_id: userId,
                     capacity: cap,
+                    credits: \$depCredits.length ? \$depCredits.val() : undefined,
+                    plugin_sprint_sprintcreditproducts_id: \$depProduct.length ? \$depProduct.val() : undefined,
                     confirm_overflow: confirmOverflow ? 1 : 0,
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 }
@@ -2266,6 +2302,8 @@ $(function() {
                 \$status.removeClass('alert-info alert-danger').addClass('alert-success')
                     .text(resp.message).show();
                 \$modal.find('.sprint-qe-dep-user').val('0');
+                if (\$depCredits.length) { \$depCredits.val('0'); }
+                if (\$depProduct.length) { \$depProduct.val('0'); }
                 \$modal.data('deps-added', (parseInt(\$modal.data('deps-added'), 10) || 0) + 1);
                 loadQeDeps(\$modal.find('input[name=id]').val());
             } else {
@@ -2286,6 +2324,7 @@ $(function() {
 
     // ---- Existing dependencies: live list + inline edit/remove ----
     var depCapOptions = "{$depCapOptions}";
+    var depCreditsOn  = \$modal.find('.sprint-qe-dep-credits').length > 0;
 
     function qeEscapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
@@ -2315,6 +2354,11 @@ $(function() {
                     + '</span>'
                     + '<select class="form-select form-select-sm sprint-qe-dep-edit-cap" data-dep-id="' + d.id + '"'
                     + (d.is_resolved ? ' disabled' : '') + ' style="max-width:90px;">' + depCapOptions + '</select>'
+                    + (depCreditsOn
+                        ? '<input type="number" min="0" step="0.25" class="form-control form-control-sm sprint-qe-dep-edit-credits" '
+                            + 'data-dep-id="' + d.id + '" style="max-width:80px;" title="' + qeEscapeHtml(d.product || '{$depCreditsTxt}') + '" '
+                            + 'value="' + qeEscapeHtml(d.credits) + '">'
+                        : '')
                     + '<button type="button" class="btn btn-sm btn-outline-danger sprint-qe-dep-remove" '
                     + 'data-dep-id="' + d.id + '" title="{$depRemoveTxt}"><i class="fas fa-trash"></i></button>'
                     + '</div>';
@@ -2361,6 +2405,41 @@ $(function() {
             \$status.removeClass('alert-info alert-success').addClass('alert-danger').text('Network error').show();
         }).always(function() {
             \$sel.prop('disabled', false);
+        });
+    });
+
+    \$(document).on('change', '.sprint-qe-dep-edit-credits', function() {
+        var \$inp   = \$(this);
+        var depId   = parseInt(\$inp.data('dep-id'), 10) || 0;
+        var itemId  = \$modal.find('input[name=id]').val();
+        var \$status = \$modal.find('.sprint-qe-dep-status');
+        if (depId <= 0) { return; }
+        \$inp.prop('disabled', true);
+        \$.ajax({
+            url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
+            type: 'GET', dataType: 'json', cache: false
+        }).then(function(tok) {
+            return \$.ajax({
+                url: {$cfgRoot} + '/plugins/sprint/ajax/dependencies.php',
+                type: 'POST', dataType: 'json',
+                data: {
+                    action: 'update', plugin_sprint_sprintitems_id: itemId, id: depId,
+                    credits: \$inp.val(), _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                if (typeof resp.credits !== 'undefined') { \$inp.val(resp.credits); }
+                \$status.removeClass('alert-info alert-danger').addClass('alert-success').text(resp.message).show();
+                \$modal.data('deps-added', (parseInt(\$modal.data('deps-added'), 10) || 0) + 1);
+            } else {
+                \$status.removeClass('alert-info alert-success').addClass('alert-danger')
+                    .text(resp && resp.message ? resp.message : 'Could not update dependency').show();
+            }
+        }).fail(function() {
+            \$status.removeClass('alert-info alert-success').addClass('alert-danger').text('Network error').show();
+        }).always(function() {
+            \$inp.prop('disabled', false);
         });
     });
 
@@ -2686,6 +2765,9 @@ JS;
         $input = $this->resolveLinkedItem($input);
         $input = $this->enforceLinkedItemName($input);
         $input = self::normalizeDodInput($input);
+        if (!self::validateRequiredTags($input)) {
+            return false;
+        }
 
         if (isset($input['status'])) {
             $candidate = new self();
@@ -2770,6 +2852,9 @@ JS;
         $input = $this->resolveLinkedItem($input);
         $input = $this->enforceLinkedItemName($input);
         $input = self::normalizeDodInput($input);
+        if (!self::validateRequiredTags($input)) {
+            return false;
+        }
 
         if (isset($input['status'])) {
             $policyItem = clone $this;
@@ -3251,16 +3336,12 @@ JS;
     }
 
     /**
-     * Replace an item's tags with the intersection of input and the admin
-     * pool — tags outside the pool are dropped, so a stale form submission
-     * can't smuggle in unknown labels.
+     * Tags from a form, reduced to the admin pool (pool casing, de-duplicated).
+     *
+     * @return array<string,string> lowercased key => pool label
      */
-    public static function setTagsForItem(int $itemId, array $tags): void
+    public static function filterTagsToPool(array $tags): array
     {
-        global $DB;
-        if ($itemId <= 0 || !$DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
-            return;
-        }
         $allowed = [];
         foreach (Config::getDefinedTags() as $tag) {
             $allowed[mb_strtolower($tag)] = $tag;
@@ -3272,6 +3353,43 @@ JS;
                 $kept[$key] = $allowed[$key];
             }
         }
+        return $kept;
+    }
+
+    /**
+     * The "tag required" setting: a save that carries the tag field must keep
+     * at least one pool tag. Saves without the field (status drags, linked
+     * item sync, templates, carry-over) are not judged, so automation never
+     * stalls on it.
+     */
+    private static function validateRequiredTags(array $input): bool
+    {
+        if (!array_key_exists('_tags', $input) || !Config::isTagRequired()) {
+            return true;
+        }
+        if (count(self::filterTagsToPool((array)$input['_tags'])) > 0) {
+            return true;
+        }
+        Session::addMessageAfterRedirect(
+            __('Pick at least one tag — tags are required on every item.', 'sprint'),
+            false,
+            ERROR
+        );
+        return false;
+    }
+
+    /**
+     * Replace an item's tags with the intersection of input and the admin
+     * pool — tags outside the pool are dropped, so a stale form submission
+     * can't smuggle in unknown labels.
+     */
+    public static function setTagsForItem(int $itemId, array $tags): void
+    {
+        global $DB;
+        if ($itemId <= 0 || !$DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+            return;
+        }
+        $kept = self::filterTagsToPool($tags);
         $DB->delete('glpi_plugin_sprint_sprintitemtags', [
             'plugin_sprint_sprintitems_id' => $itemId,
         ]);
@@ -3857,7 +3975,9 @@ JS;
         if (!empty($definedTags)) {
             $assigned = $this->getID() > 0 ? self::getTagsForItem((int)$this->getID()) : [];
             $assignedKeys = array_flip(array_map('mb_strtolower', $assigned));
-            echo "<tr class='tab_bg_1'><td>" . __('Tags', 'sprint') . "</td>";
+            echo "<tr class='tab_bg_1'><td>" . __('Tags', 'sprint')
+                . (Config::isTagRequired() ? " <span class='text-danger' title='" . __s('Required', 'sprint') . "'>*</span>" : '')
+                . "</td>";
             echo "<td colspan='3'>";
             echo "<input type='hidden' name='_tags' value=''>";
             echo "<div class='d-flex flex-wrap gap-3'>";

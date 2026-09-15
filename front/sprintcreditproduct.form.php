@@ -16,13 +16,20 @@ if (!SprintCreditProduct::canView()) {
 
 $product = new SprintCreditProduct();
 
+// A saved product or folder lands back on the catalogue: that is where the
+// next entry is added or the next edit starts. A refused save stays on the
+// form so the input can be corrected.
 if (isset($_POST['add'])) {
     $product->check(-1, CREATE, $_POST);
-    $product->add($_POST);
+    if ($product->add($_POST)) {
+        Html::redirect(SprintCreditProduct::getSearchURL());
+    }
     Html::back();
 } elseif (isset($_POST['update'])) {
     $product->check((int)$_POST['id'], UPDATE);
-    $product->update($_POST);
+    if ($product->update($_POST)) {
+        Html::redirect(SprintCreditProduct::getSearchURL());
+    }
     Html::back();
 } elseif (isset($_POST['purge'])) {
     $product->check((int)$_POST['id'], PURGE);

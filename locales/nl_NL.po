@@ -4540,3 +4540,45 @@ msgstr "Overrulen als Scrum Master"
 
 msgid "As Scrum Master you can move this item on without completing every check. The skipped checks are recorded in the history."
 msgstr "Als Scrum Master kun je dit item doorzetten zonder alle checks af te vinken. De overgeslagen checks worden in de historie vastgelegd."
+
+msgid "Require a tag on every item"
+msgstr "Tag verplicht op elk item"
+
+msgid "When enabled, the item form, the quick-edit dialog and the backlog edit dialog refuse to save an item without at least one tag. Only applies while the tag list above has entries."
+msgstr "Indien ingeschakeld weigeren het itemformulier, het snel-bewerken-venster en het backlog-bewerkvenster een item op te slaan zonder minstens één tag. Geldt alleen zolang de taglijst hierboven gevuld is."
+
+msgid "Pick at least one tag — tags are required on every item."
+msgstr "Kies minstens één tag — een tag is verplicht op elk item."
+
+msgid "Required"
+msgstr "Verplicht"
+
+msgid "Couples a colleague to this item with their own capacity % and, when their share is billable, their own credits on this item's customer. Open 'Manage' to resolve, reopen or remove."
+msgstr "Koppelt een collega aan dit item met een eigen capaciteits-% en, als zijn aandeel factureerbaar is, eigen credits op de klant van dit item. Open 'Beheer' om af te ronden, te heropenen of te verwijderen."
+
+msgid "%s credits"
+msgstr "%s credits"
+
+msgid "Credits on dependencies (helpers)"
+msgstr "Credits op afhankelijkheden (helpers)"
+
+msgid "Credit flow per customer per sprint"
+msgstr "Creditflow per klant per sprint"
+
+msgid "Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint."
+msgstr "Per klant: naar welke catalogusmappen de credits gingen en per tag welke categorieën die tag heeft opgepakt, sprint voor sprint."
+
+msgid "Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint. Open and delivered work in the sprint counts; a dependency's credits follow the parent item."
+msgstr "Per klant: naar welke catalogusmappen de credits gingen en per tag welke categorieën die tag heeft opgepakt, sprint voor sprint. Open en opgeleverd werk in de sprint telt mee; de credits van een afhankelijkheid volgen het bovenliggende item."
+
+msgid "Credits per catalogue folder"
+msgstr "Credits per catalogusmap"
+
+msgid "Tags × categories"
+msgstr "Tags × categorieën"
+
+msgid "Every tag bar is scaled to 100 %: the split shows which categories that tag worked on in the sprint; the figure is the tag's credits."
+msgstr "Elke tagbalk is geschaald naar 100 %: de verdeling toont aan welke categorieën die tag in de sprint heeft gewerkt; het getal zijn de credits van de tag."
+
+msgid "No tag"
+msgstr "Geen tag"
