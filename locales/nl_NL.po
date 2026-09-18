@@ -4582,3 +4582,103 @@ msgstr "Elke tagbalk is geschaald naar 100 %: de verdeling toont aan welke categ
 
 msgid "No tag"
 msgstr "Geen tag"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "No work planned"
+msgstr "Geen werk gepland"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "All work done"
+msgstr "Al het werk klaar"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "On track"
+msgstr "Op schema"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Behind schedule"
+msgstr "Achter op schema"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Ends today"
+msgstr "Eindigt vandaag"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "%1$d of %2$d points done"
+msgstr "%1$d van %2$d punten klaar"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "expected by now %d"
+msgstr "verwacht nu %d"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "forecast %d"
+msgstr "prognose %d"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "time elapsed %d%%"
+msgstr "tijd verstreken %d%%"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "Progress %1$d%% · time elapsed %2$d%%"
+msgstr "Voortgang %1$d%% · tijd verstreken %2$d%%"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Status mix"
+msgstr "Statusverdeling"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "remaining vs. ideal"
+msgstr "resterend vs. ideaal"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Points remaining"
+msgstr "Punten resterend"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "WIP breaches"
+msgstr "WIP-overschrijdingen"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Team load"
+msgstr "Teambelasting"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "%d over"
+msgid_plural "%d over"
+msgstr[0] "%d over"
+msgstr[1] "%d over"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Next meeting"
+msgstr "Volgende meeting"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "No story points to burn down yet"
+msgstr "Nog geen story points om af te bouwen"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Credits per tag"
+msgstr "Credits per tag"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Categories per tag"
+msgstr "Categorieën per tag"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Credits the customer's items claimed per sprint, split over the top-level catalogue folders. Click a folder in the legend to isolate it."
+msgstr "Credits die de items van de klant per sprint hebben opgeëist, verdeeld over de bovenste catalogusmappen. Klik op een map in de legenda om die te isoleren."
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "The same credits per sprint, split over the tags. An item with several tags counts on each of them, so a column can exceed the folder total."
+msgstr "Dezelfde credits per sprint, verdeeld over de tags. Een item met meerdere tags telt op elk daarvan mee, dus een kolom kan boven het maptotaal uitkomen."
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Every tag bar is scaled to 100 %: which categories that tag worked on in the sprint. Click a column above or pick a sprint."
+msgstr "Elke tagbalk is geschaald naar 100 %: aan welke categorieën die tag in de sprint heeft gewerkt. Klik op een kolom hierboven of kies een sprint."

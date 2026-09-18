@@ -4721,3 +4721,103 @@ msgstr ""
 
 msgid "No tag"
 msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "No work planned"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "All work done"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "On track"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Behind schedule"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Ends today"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "%1$d of %2$d points done"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "expected by now %d"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "forecast %d"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "time elapsed %d%%"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "Progress %1$d%% · time elapsed %2$d%%"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Status mix"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "remaining vs. ideal"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Points remaining"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "WIP breaches"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Team load"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "%d over"
+msgid_plural "%d over"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Next meeting"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "No story points to burn down yet"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Credits per tag"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Categories per tag"
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Credits the customer's items claimed per sprint, split over the top-level catalogue folders. Click a folder in the legend to isolate it."
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "The same credits per sprint, split over the tags. An item with several tags counts on each of them, so a column can exceed the folder total."
+msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Every tag bar is scaled to 100 %: which categories that tag worked on in the sprint. Click a column above or pick a sprint."
+msgstr ""

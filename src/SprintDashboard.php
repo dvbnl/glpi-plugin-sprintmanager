@@ -1523,14 +1523,21 @@ class SprintDashboard extends CommonGLPI
         $nDays   = count($days);
         $actual  = [];   // index => remaining points (or null for future days)
         $blocked = [];   // index => points sitting in blocked status that day
+        // One log query for every day instead of one per day.
+        $stamps = [];
+        foreach ($days as $i => $day) {
+            if ($day <= $today) {
+                $stamps[$i] = $day->format('Y-m-d') . ' 23:59:59';
+            }
+        }
+        $timeline = SprintAudit::getItemStatusTimeline($itemIds, array_values($stamps), $currentStatuses);
         foreach ($days as $i => $day) {
             if ($day > $today) {
                 $actual[$i]  = null;
                 $blocked[$i] = null;
                 continue;
             }
-            $eod        = $day->format('Y-m-d') . ' 23:59:59';
-            $statusAt   = SprintAudit::getItemStatusAtTimestamp($itemIds, $eod, $currentStatuses);
+            $statusAt   = $timeline[$stamps[$i]] ?? [];
             $remaining  = 0;
             $blockedPts = 0;
             foreach ($itemIds as $id) {

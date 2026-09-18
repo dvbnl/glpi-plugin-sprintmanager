@@ -214,87 +214,75 @@ final class SprintCreditFlow
         echo "</div></div>";
     }
 
-    /** Stacked bar per sprint, one segment per top-level catalogue folder. */
+    /** Stacked column per sprint, one segment per top-level catalogue folder. */
     private static function renderFolderView(array $window, array $bySprint): void
     {
-        $max     = 0.01;
         $folders = [];
-        foreach ($bySprint as $cell) {
-            $max = max($max, (float)$cell['total']);
+        $columns = [];
+        foreach ($bySprint as $sid => $cell) {
             foreach ($cell['folders'] as $fid => $v) {
-                $folders[(int)$fid] = ($folders[(int)$fid] ?? 0.0) + (float)$v;
+                $folders[(int)$fid]        = ($folders[(int)$fid] ?? 0.0) + (float)$v;
+                $columns[(int)$sid][(int)$fid] = (float)$v;
             }
         }
         // Folders in catalogue order, manual credits last.
-        $order = [];
+        $series = [];
         foreach (SprintCreditProduct::getAll(false) as $id => $row) {
             if (isset($folders[(int)$id])) {
-                $order[] = (int)$id;
+                $series[(int)$id] = ['label' => self::folderLabel((int)$id), 'color' => self::folderColor((int)$id), 'total' => $folders[(int)$id]];
             }
         }
         if (isset($folders[self::FOLDER_MANUAL])) {
-            $order[] = self::FOLDER_MANUAL;
+            $series[self::FOLDER_MANUAL] = ['label' => self::folderLabel(self::FOLDER_MANUAL), 'color' => self::NEUTRAL, 'total' => $folders[self::FOLDER_MANUAL]];
         }
 
         echo "<div class='sprint-creditflow-block'>";
         echo "<div class='sprint-creditflow-title'><i class='fas fa-folder-tree me-1'></i>"
             . __('Credits per catalogue folder', 'sprint') . "</div>";
-        echo "<div class='sprint-credit-chart'>";
-        foreach ($window as $sprint) {
-            $sid  = (int)$sprint['id'];
-            $cell = $bySprint[$sid] ?? null;
-            echo "<div class='sprint-credit-chart-row'>";
-            echo "<div class='sprint-credit-chart-label'><a href='" . Sprint::getFormURLWithID($sid) . "'>"
-                . htmlescape((string)$sprint['name']) . "</a></div>";
-            echo "<div class='sprint-credit-chart-track'>";
-            if ($cell) {
-                foreach ($order as $fid) {
-                    $v = (float)($cell['folders'][$fid] ?? 0);
-                    if ($v <= 0) {
-                        continue;
-                    }
-                    $pct = round(100 * $v / $max, 2);
-                    echo "<span class='sprint-creditflow-seg' data-folder='" . $fid . "' style='width:{$pct}%;background:"
-                        . htmlescape(self::folderColor($fid)) . ";' title='"
-                        . htmlescape(self::folderLabel($fid) . ': ' . SprintCustomer::formatCredits($v)
-                            . ' (' . round(100 * $v / max($cell['total'], 0.01)) . '%)') . "'></span>";
-                }
-            }
-            echo "</div>";
-            echo "<div class='sprint-credit-chart-value'>"
-                . ($cell ? htmlescape(SprintCustomer::formatCredits($cell['total'])) : "<span class='text-muted'>—</span>")
-                . "</div>";
-            echo "</div>";
-        }
-        echo "</div>";
-
-        echo "<div class='sprint-credit-legend'>";
-        foreach ($order as $fid) {
-            echo "<span class='sprint-credit-legend-item'>"
-                . "<span class='sprint-matrix-dot' style='background:" . htmlescape(self::folderColor($fid)) . ";'></span>"
-                . htmlescape(self::folderLabel($fid))
-                . " <span class='text-muted'>" . htmlescape(SprintCustomer::formatCredits($folders[$fid])) . "</span>"
-                . "</span>";
-        }
-        echo "</div>";
+        echo "<div class='text-muted sprint-small mb-2'>"
+            . htmlescape(__('Credits the customer\'s items claimed per sprint, split over the top-level catalogue folders. Click a folder in the legend to isolate it.', 'sprint'))
+            . "</div>";
+        self::renderColumnChart($window, $columns, $series, false);
         echo "</div>";
     }
 
-    /** Per sprint a 100 %-stacked bar per tag, split over the categories. */
+    /**
+     * Stacked column per sprint, one segment per tag, and below it the
+     * category split of every tag for the sprint picked in the chart.
+     */
     private static function renderTagView(array $window, array $bySprint): void
     {
         $tagOrder = [];
         $catSeen  = [];
+        $tagTotal = [];
+        $columns  = [];
         foreach (Config::getDefinedTags() as $tag) {
             $tagOrder[$tag] = true;
         }
-        foreach ($bySprint as $cell) {
+        foreach ($bySprint as $sid => $cell) {
             foreach ($cell['tags'] as $tag => $byCat) {
                 $tagOrder[$tag] = true;
+                $sum = array_sum($byCat);
+                $tagTotal[$tag] = ($tagTotal[$tag] ?? 0.0) + $sum;
+                $columns[(int)$sid][$tag] = $sum;
                 foreach ($byCat as $catId => $v) {
                     $catSeen[(int)$catId] = true;
                 }
             }
+        }
+        $series = [];
+        foreach (array_keys($tagOrder) as $tag) {
+            $tag = (string)$tag;
+            if (!isset($tagTotal[$tag])) {
+                continue;
+            }
+            $series[$tag] = ['label' => self::tagLabel($tag), 'color' => self::tagColor($tag), 'total' => $tagTotal[$tag]];
+        }
+        // "No tag" always sits on top of the stack.
+        if (isset($series[self::TAG_NONE])) {
+            $none = $series[self::TAG_NONE];
+            unset($series[self::TAG_NONE]);
+            $series[self::TAG_NONE] = $none;
         }
         // Categories in tree order, "no category" last.
         $catOrder = [];
@@ -310,54 +298,63 @@ final class SprintCreditFlow
 
         echo "<div class='sprint-creditflow-block'>";
         echo "<div class='sprint-creditflow-title'><i class='fas fa-tags me-1'></i>"
-            . __('Tags × categories', 'sprint') . "</div>";
+            . __('Credits per tag', 'sprint') . "</div>";
         echo "<div class='text-muted sprint-small mb-2'>"
-            . htmlescape(__('Every tag bar is scaled to 100 %: the split shows which categories that tag worked on in the sprint; the figure is the tag\'s credits.', 'sprint'))
+            . htmlescape(__('The same credits per sprint, split over the tags. An item with several tags counts on each of them, so a column can exceed the folder total.', 'sprint'))
             . "</div>";
-        echo "<div class='sprint-credit-chart'>";
-        foreach ($window as $sprint) {
+        self::renderColumnChart($window, $columns, $series, true);
+
+        // Category split per tag, one sprint at a time.
+        $withData = array_values(array_filter($window, static fn($s) => !empty($columns[(int)$s['id']])));
+        if (!$withData) {
+            echo "</div>";
+            return;
+        }
+        $selected = (int)$withData[count($withData) - 1]['id'];
+        echo "<div class='sprint-cf-mix'>";
+        echo "<div class='d-flex flex-wrap align-items-center gap-2 mb-1'>";
+        echo "<span class='sprint-creditflow-title mb-0'><i class='fas fa-sitemap me-1'></i>" . __('Categories per tag', 'sprint') . "</span>";
+        echo "<select class='form-select form-select-sm sprint-cf-mix-pick' style='max-width:240px;'>";
+        foreach ($withData as $sprint) {
+            $sid = (int)$sprint['id'];
+            echo "<option value='{$sid}'" . ($sid === $selected ? ' selected' : '') . ">" . htmlescape((string)$sprint['name']) . "</option>";
+        }
+        echo "</select></div>";
+        echo "<div class='text-muted sprint-small mb-2'>"
+            . htmlescape(__('Every tag bar is scaled to 100 %: which categories that tag worked on in the sprint. Click a column above or pick a sprint.', 'sprint'))
+            . "</div>";
+        foreach ($withData as $sprint) {
             $sid  = (int)$sprint['id'];
-            $cell = $bySprint[$sid] ?? null;
-            echo "<div class='sprint-creditflow-tagrow'>";
-            echo "<div class='sprint-credit-chart-label'><a href='" . Sprint::getFormURLWithID($sid) . "'>"
-                . htmlescape((string)$sprint['name']) . "</a></div>";
-            echo "<div class='sprint-creditflow-tags'>";
-            $any = false;
-            foreach (array_keys($tagOrder) as $tag) {
+            $cell = $bySprint[$sid];
+            echo "<div class='sprint-cf-mix-sprint' data-sprint='{$sid}'" . ($sid === $selected ? '' : ' hidden') . ">";
+            foreach (array_keys($series) as $tag) {
                 $tag   = (string)$tag;
                 $byCat = $cell['tags'][$tag] ?? null;
                 if (!$byCat) {
                     continue;
                 }
-                $any      = true;
-                $tagTotal = array_sum($byCat);
-                echo "<div class='sprint-creditflow-tag'>";
-                echo "<div class='sprint-creditflow-tagname'>"
-                    . ($tag === self::TAG_NONE
-                        ? "<span class='text-muted'>" . htmlescape(self::tagLabel($tag)) . "</span>"
-                        : htmlescape($tag))
-                    . " <span class='text-muted'>" . htmlescape(SprintCustomer::formatCredits($tagTotal)) . "</span></div>";
-                echo "<div class='sprint-credit-chart-track'>";
+                $sum = max(array_sum($byCat), 0.01);
+                echo "<div class='sprint-cf-mix-row'>";
+                echo "<div class='sprint-cf-mix-tag'><span class='sprint-matrix-dot' style='background:" . htmlescape(self::tagColor($tag)) . ";'></span>"
+                    . ($tag === self::TAG_NONE ? "<span class='text-muted'>" . htmlescape(self::tagLabel($tag)) . "</span>" : htmlescape($tag))
+                    . "</div>";
+                echo "<div class='sprint-credit-chart-track sprint-cf-mix-track'>";
                 foreach ($catOrder as $catId) {
                     $v = (float)($byCat[$catId] ?? 0);
                     if ($v <= 0) {
                         continue;
                     }
-                    $pct = round(100 * $v / max($tagTotal, 0.01), 2);
+                    $pct = round(100 * $v / $sum, 2);
                     echo "<span style='width:{$pct}%;background:" . htmlescape($catColor($catId)) . ";' title='"
                         . htmlescape(self::tagLabel($tag) . ' · ' . self::categoryLabel($catId) . ': '
                             . SprintCustomer::formatCredits($v) . ' (' . round($pct) . '%)') . "'></span>";
                 }
-                echo "</div></div>";
+                echo "</div>";
+                echo "<div class='sprint-credit-chart-value'>" . htmlescape(SprintCustomer::formatCredits($sum)) . "</div>";
+                echo "</div>";
             }
-            if (!$any) {
-                echo "<span class='text-muted'>—</span>";
-            }
-            echo "</div>";
             echo "</div>";
         }
-        echo "</div>";
-
         echo "<div class='sprint-credit-legend'>";
         foreach ($catOrder as $catId) {
             echo "<span class='sprint-credit-legend-item'>"
@@ -366,6 +363,154 @@ final class SprintCreditFlow
         }
         echo "</div>";
         echo "</div>";
+        echo "</div>";
+    }
+
+    /**
+     * Inline SVG stacked column chart in the dashboard's style: one column per
+     * sprint of the window, one segment per series, the total on the cap and a
+     * legend that isolates a series on click.
+     *
+     * @param array<int,array<string|int,float>>                                     $columns    [sprint id][series key] => credits
+     * @param array<string|int,array{label:string,color:string,total:float}>         $series     stack order, bottom first
+     * @param bool                                                                    $selectable columns act as a sprint picker
+     */
+    private static function renderColumnChart(array $window, array $columns, array $series, bool $selectable): void
+    {
+        $w = 860; $h = 250;
+        $padL = 48; $padR = 14; $padT = 24; $padB = 40;
+        $plotW = $w - $padL - $padR;
+        $plotH = $h - $padT - $padB;
+
+        $max = 0.0;
+        foreach ($columns as $cell) {
+            $max = max($max, array_sum($cell));
+        }
+        $max  = $max > 0 ? $max : 1.0;
+        $step = pow(10, max(0, (int)floor(log10($max)) - 1));
+        $max  = ceil($max / (4 * $step)) * 4 * $step;
+
+        $n    = max(1, count($window));
+        $slot = $plotW / $n;
+        $barW = min(30.0, max(10.0, $slot * 0.55));
+        $num  = static fn(float $v) => number_format($v, 2, '.', '');
+        $yAt  = static fn(float $v) => $padT + $plotH * (1 - $v / $max);
+        $ink  = 'var(--tblr-secondary,#6c757d)';
+        $grid = 'var(--tblr-border-color,#e9ecef)';
+        $halo = "paint-order:stroke;stroke:var(--tblr-bg-surface,#fff);stroke-width:3px;stroke-linejoin:round;";
+
+        echo "<div class='sprint-cf-chart'>";
+        echo "<div class='sprint-credit-chartbox'>";
+        echo "<svg viewBox='0 0 {$w} {$h}' class='sprint-credit-svg sprint-cf-svg' preserveAspectRatio='xMidYMid meet' role='img'>";
+        for ($g = 0; $g <= 4; $g++) {
+            $value = $max * $g / 4;
+            $y     = $num($yAt($value));
+            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($w - $padR) . "' y2='{$y}' stroke='{$grid}' stroke-width='1'/>";
+            echo "<text x='" . ($padL - 8) . "' y='" . $num($yAt($value) + 4) . "' fill='{$ink}' font-size='10' text-anchor='end'>"
+                . htmlescape(SprintCustomer::formatCredits($value)) . "</text>";
+        }
+        $base = $num($yAt(0));
+        foreach ($window as $i => $sprint) {
+            $sid   = (int)$sprint['id'];
+            $cx    = $padL + $slot * $i + $slot / 2;
+            $x     = $num($cx - $barW / 2);
+            $cell  = $columns[$sid] ?? [];
+            $total = array_sum($cell);
+            [$line1, $line2] = self::splitLabel((string)$sprint['name']);
+            echo "<text x='" . $num($cx) . "' y='" . ($h - $padB + 15) . "' fill='{$ink}' font-size='10' text-anchor='middle'>" . htmlescape($line1) . "</text>";
+            if ($line2 !== '') {
+                echo "<text x='" . $num($cx) . "' y='" . ($h - $padB + 27) . "' fill='{$ink}' font-size='9' opacity='0.8' text-anchor='middle'>" . htmlescape($line2) . "</text>";
+            }
+
+            echo "<g class='sprint-cf-col' data-sprint='{$sid}'" . ($selectable && $total > 0 ? " role='button' tabindex='0'" : '') . ">";
+            echo "<rect class='sprint-cf-hit' x='" . $num($padL + $slot * $i + 1) . "' y='{$padT}' width='" . $num(max(0, $slot - 2)) . "' height='{$plotH}' rx='4'/>";
+            if ($selectable) {
+                // Marker under the axis for the sprint whose split is shown below.
+                echo "<line class='sprint-cf-mark' x1='" . $num($cx - $barW / 2) . "' y1='" . ($h - $padB + 4) . "' x2='" . $num($cx + $barW / 2) . "' y2='" . ($h - $padB + 4) . "' stroke='#0d6efd' stroke-width='3' stroke-linecap='round'/>";
+            }
+            $stack = [];
+            foreach ($series as $key => $meta) {
+                $v = (float)($cell[$key] ?? 0);
+                if ($v > 0) {
+                    $stack[] = [$key, $v, $meta];
+                }
+            }
+            $top = $yAt(0);
+            foreach ($stack as $idx => [$key, $v, $meta]) {
+                $hPx   = $plotH * $v / $max;
+                $yTop  = $top - $hPx;
+                $isTop = $idx === count($stack) - 1;
+                $title = htmlescape($meta['label'] . ': ' . SprintCustomer::formatCredits($v) . ' (' . round(100 * $v / max($total, 0.01)) . '%)');
+                $color = htmlescape($meta['color']);
+                $attrs = "class='sprint-cf-seg' data-key='" . htmlescape((string)$key) . "' fill='{$color}'";
+                if ($isTop) {
+                    $r = min(4.0, $hPx / 2);
+                    $d = 'M' . $x . ',' . $num($yTop + $r)
+                        . ' a' . $num($r) . ',' . $num($r) . ' 0 0 1 ' . $num($r) . ',-' . $num($r)
+                        . ' h' . $num($barW - 2 * $r)
+                        . ' a' . $num($r) . ',' . $num($r) . ' 0 0 1 ' . $num($r) . ',' . $num($r)
+                        . ' v' . $num($hPx - $r)
+                        . ' h-' . $num($barW) . ' z';
+                    echo "<path d='{$d}' {$attrs}><title>{$title}</title></path>";
+                } else {
+                    // 2px surface gap between this segment and the one above it.
+                    $gapH = max(0.0, $hPx - 2);
+                    echo "<rect x='{$x}' y='" . $num($yTop + 2) . "' width='" . $num($barW) . "' height='" . $num($gapH) . "' {$attrs}><title>{$title}</title></rect>";
+                }
+                $top = $yTop;
+            }
+            if ($total > 0) {
+                echo "<text x='" . $num($cx) . "' y='" . $num(max($top - 6, 10)) . "' fill='var(--tblr-body-color,#1f2937)' font-size='10.5' font-weight='600' text-anchor='middle' style='{$halo}'>"
+                    . htmlescape(SprintCustomer::formatCredits($total)) . "</text>";
+            } else {
+                echo "<line x1='" . $num($cx - 5) . "' y1='{$base}' x2='" . $num($cx + 5) . "' y2='{$base}' stroke='{$ink}' stroke-width='2' opacity='0.5'/>";
+            }
+            echo "</g>";
+        }
+        echo "<line x1='{$padL}' y1='{$base}' x2='" . ($w - $padR) . "' y2='{$base}' stroke='{$ink}' stroke-width='1' opacity='0.6'/>";
+        echo "</svg></div>";
+
+        echo "<div class='sprint-credit-legend'>";
+        foreach ($series as $key => $meta) {
+            echo "<button type='button' class='sprint-credit-legend-item sprint-cf-legend' data-key='" . htmlescape((string)$key) . "'>"
+                . "<span class='sprint-matrix-dot' style='background:" . htmlescape($meta['color']) . ";'></span>"
+                . htmlescape($meta['label'])
+                . " <span class='text-muted'>" . htmlescape(SprintCustomer::formatCredits($meta['total'])) . "</span>"
+                . "</button>";
+        }
+        echo "</div>";
+        echo "</div>";
+    }
+
+    /** "Sprint 12 - 16/09/2026" reads as two axis lines; anything else is shortened. */
+    private static function splitLabel(string $name): array
+    {
+        foreach ([' - ', ' – ', ' — '] as $sep) {
+            $pos = mb_strpos($name, $sep);
+            if ($pos !== false && $pos > 0) {
+                return [mb_substr($name, 0, $pos), mb_substr($name, $pos + mb_strlen($sep))];
+            }
+        }
+        return [mb_strlen($name) > 12 ? mb_substr($name, 0, 11) . '…' : $name, ''];
+    }
+
+    /** Colour per tag: the configured tags in their order, then any other tag as met. */
+    public static function tagColor(string $tag): string
+    {
+        static $map = null;
+        if ($map === null) {
+            $map = [];
+            foreach (Config::getDefinedTags() as $i => $name) {
+                $map[(string)$name] = self::PALETTE[$i % count(self::PALETTE)];
+            }
+        }
+        if ($tag === self::TAG_NONE) {
+            return self::NEUTRAL;
+        }
+        if (!isset($map[$tag])) {
+            $map[$tag] = self::PALETTE[count($map) % count(self::PALETTE)];
+        }
+        return $map[$tag];
     }
 
     private static function customerLabel(int $cid, array $balances): string
@@ -389,6 +534,41 @@ final class SprintCreditFlow
         jQuery(this).closest('.card-body').find('.sprint-creditflow-customer').each(function(){
             this.hidden = (this.getAttribute('data-customer') !== id);
         });
+    });
+    // Legend click isolates one series of that chart; clicking again restores all.
+    jQuery(document).on('click', '.sprint-cf-legend', function(){
+        var chart = jQuery(this).closest('.sprint-cf-chart');
+        var key = this.getAttribute('data-key');
+        var on = !jQuery(this).hasClass('is-active');
+        chart.find('.sprint-cf-legend').removeClass('is-active');
+        chart.find('.sprint-cf-seg').removeClass('is-muted');
+        if (on) {
+            jQuery(this).addClass('is-active');
+            chart.find('.sprint-cf-seg').each(function(){
+                if (this.getAttribute('data-key') !== key) { jQuery(this).addClass('is-muted'); }
+            });
+        }
+    });
+    // A column of the tag chart picks the sprint for the category split.
+    function pickSprint(block, id) {
+        block.find('.sprint-cf-mix-pick').val(id);
+        block.find('.sprint-cf-mix-sprint').each(function(){
+            this.hidden = (this.getAttribute('data-sprint') !== id);
+        });
+        block.find('.sprint-cf-col').each(function(){
+            jQuery(this).toggleClass('is-selected', this.getAttribute('data-sprint') === id);
+        });
+    }
+    jQuery(document).on('change', '.sprint-cf-mix-pick', function(){
+        pickSprint(jQuery(this).closest('.sprint-creditflow-block'), String(jQuery(this).val()));
+    });
+    jQuery(document).on('click keydown', '.sprint-cf-col[role="button"]', function(e){
+        if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') { return; }
+        e.preventDefault();
+        pickSprint(jQuery(this).closest('.sprint-creditflow-block'), String(this.getAttribute('data-sprint')));
+    });
+    jQuery('.sprint-cf-mix-pick').each(function(){
+        pickSprint(jQuery(this).closest('.sprint-creditflow-block'), String(jQuery(this).val()));
     });
 })();
 </script>

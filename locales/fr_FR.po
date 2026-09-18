@@ -4568,3 +4568,103 @@ msgstr ""
 
 msgid "No tag"
 msgstr ""
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "No work planned"
+msgstr "Aucun travail planifié"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "All work done"
+msgstr "Tout le travail est terminé"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "On track"
+msgstr "Dans les temps"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Behind schedule"
+msgstr "En retard"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Ends today"
+msgstr "Se termine aujourd'hui"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "%1$d of %2$d points done"
+msgstr "%1$d points sur %2$d terminés"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "expected by now %d"
+msgstr "attendu à ce stade %d"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "forecast %d"
+msgstr "prévision %d"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "time elapsed %d%%"
+msgstr "temps écoulé %d %%"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "Progress %1$d%% · time elapsed %2$d%%"
+msgstr "Progression %1$d %% · temps écoulé %2$d %%"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Status mix"
+msgstr "Répartition des statuts"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "remaining vs. ideal"
+msgstr "restant vs idéal"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Points remaining"
+msgstr "Points restants"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "WIP breaches"
+msgstr "Dépassements WIP"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Team load"
+msgstr "Charge de l'équipe"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+#, php-format
+msgid "%d over"
+msgid_plural "%d over"
+msgstr[0] "%d au-dessus"
+msgstr[1] "%d au-dessus"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Next meeting"
+msgstr "Prochaine réunion"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "No story points to burn down yet"
+msgstr "Pas encore de story points à consommer"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Credits per tag"
+msgstr "Crédits par tag"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Categories per tag"
+msgstr "Catégories par tag"
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Credits the customer's items claimed per sprint, split over the top-level catalogue folders. Click a folder in the legend to isolate it."
+msgstr "Crédits réclamés par les éléments du client par sprint, répartis sur les dossiers de premier niveau du catalogue. Cliquez sur un dossier dans la légende pour l'isoler."
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "The same credits per sprint, split over the tags. An item with several tags counts on each of them, so a column can exceed the folder total."
+msgstr "Les mêmes crédits par sprint, répartis sur les tags. Un élément avec plusieurs tags compte sur chacun d'eux, une colonne peut donc dépasser le total des dossiers."
+
+#: src/SprintOverview.php src/SprintCreditFlow.php
+msgid "Every tag bar is scaled to 100 %: which categories that tag worked on in the sprint. Click a column above or pick a sprint."
+msgstr "Chaque barre de tag est ramenée à 100 % : les catégories sur lesquelles ce tag a travaillé dans le sprint. Cliquez sur une colonne ci-dessus ou choisissez un sprint."

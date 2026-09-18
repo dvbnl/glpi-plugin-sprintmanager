@@ -1328,36 +1328,212 @@ button.sprint-credit-legend-item.is-active { font-weight: 700; }
     font-weight: 600;
     margin-bottom: 8px;
 }
-.sprint-creditflow-tagrow {
-    display: grid;
-    grid-template-columns: minmax(90px, 150px) 1fr;
-    align-items: start;
-    gap: 10px;
-}
-.sprint-creditflow-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 14px;
-}
-.sprint-creditflow-tag {
-    min-width: 130px;
-    flex: 1 1 130px;
-    max-width: 220px;
-}
-.sprint-creditflow-tagname {
-    font-size: 0.8em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 2px;
-}
-.sprint-creditflow-tag .sprint-credit-chart-track {
-    height: 10px;
-}
-
 /* Credit catalogue: drag to reorder */
 .sprint-catalogue-grip { cursor: grab; width: 26px; text-align: center; }
 .sprint-catalogue-dragging { opacity: 0.4; }
 .sprint-catalogue-over-top > td { box-shadow: inset 0 2px 0 0 var(--tblr-primary, #0d6efd); }
 .sprint-catalogue-over-bottom > td { box-shadow: inset 0 -2px 0 0 var(--tblr-primary, #0d6efd); }
 .sprint-qe-dep-product, .sprint-deps-product { max-width: 260px; }
+
+/* === Live sprint status (overview) ======================================
+   One full-width card per active sprint: headline, meters, burndown
+   sparkline and the facts. Widths collapse to two columns, then one. */
+.sprint-live-list { display: flex; flex-direction: column; gap: 10px; }
+.sprint-live-card { --sprint-pace: #0d6efd; }
+.sprint-live-grid {
+    display: grid;
+    grid-template-columns: minmax(190px, 1.05fr) minmax(230px, 1.5fr) minmax(220px, 1.4fr) minmax(230px, 1.3fr);
+    gap: 14px 22px;
+    padding: 14px 18px;
+    align-items: stretch;
+}
+@media (max-width: 1400px) {
+    .sprint-live-grid { grid-template-columns: minmax(190px, 1fr) minmax(230px, 1.5fr); }
+}
+@media (max-width: 767px) {
+    .sprint-live-grid { grid-template-columns: 1fr; }
+}
+.sprint-live-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sprint-live-name {
+    font-weight: 600;
+    font-size: 1.02em;
+    color: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sprint-live-name:hover { text-decoration: underline; }
+.sprint-live-hero { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.sprint-live-hero-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--sprint-pace);
+    letter-spacing: -0.02em;
+}
+.sprint-live-hero-label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-live-pace {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 2px;
+    margin: 4px 0 2px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    color: var(--sprint-pace);
+    background: color-mix(in srgb, var(--sprint-pace) 14%, transparent);
+}
+.sprint-live-meters { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.sprint-live-meter-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+.sprint-live-meter-head .text-muted { font-weight: 400; white-space: nowrap; }
+.sprint-live-track {
+    position: relative;
+    display: flex;
+    height: 12px;
+    border-radius: 6px;
+    background: color-mix(in srgb, currentColor 9%, transparent);
+    overflow: visible;
+}
+.sprint-live-track > span { display: block; height: 100%; border-radius: 6px; }
+.sprint-live-fill { background: var(--sprint-pace); transition: width 0.4s; }
+/* Where today sits on the calendar: the bar should have reached this mark. */
+.sprint-live-tick {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 2px;
+    margin-left: -1px;
+    background: var(--tblr-body-color, #1f2937);
+    border-radius: 1px;
+}
+.sprint-live-tick::after {
+    content: '';
+    position: absolute;
+    left: -3px;
+    top: -3px;
+    border: 4px solid transparent;
+    border-top: 5px solid var(--tblr-body-color, #1f2937);
+}
+.sprint-live-stack { gap: 2px; }
+.sprint-live-stack > span { border-radius: 2px; min-width: 3px; }
+.sprint-live-stack > span:first-child { border-radius: 6px 2px 2px 6px; }
+.sprint-live-stack > span:last-child { border-radius: 2px 6px 6px 2px; }
+.sprint-live-stack > span:only-child { border-radius: 6px; }
+.sprint-live-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 12px;
+    margin-top: 6px;
+    font-size: 0.76em;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-live-legend-item { white-space: nowrap; }
+.sprint-live-legend-item.is-zero { opacity: 0.5; }
+.sprint-live-legend b { color: var(--tblr-body-color, inherit); font-weight: 600; }
+.sprint-live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: baseline;
+}
+.sprint-live-burndown { display: flex; flex-direction: column; min-width: 0; }
+.sprint-live-spark { display: block; width: 100%; height: auto; max-height: 92px; font-family: sans-serif; }
+.sprint-live-placeholder {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60px;
+    border: 1px dashed var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    text-align: center;
+    padding: 6px;
+}
+.sprint-live-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 8px;
+    align-content: center;
+}
+.sprint-live-fact {
+    --sprint-fact: var(--tblr-secondary, #6c757d);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--sprint-fact) 8%, transparent);
+}
+.sprint-live-fact > i { color: var(--sprint-fact); font-size: 0.85em; flex: 0 0 auto; }
+.sprint-live-fact > div { min-width: 0; }
+.sprint-live-fact-value {
+    font-weight: 700;
+    font-size: 1.02em;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sprint-live-fact-label {
+    font-size: 0.7em;
+    line-height: 1.15;
+    color: var(--tblr-secondary, #6c757d);
+    overflow-wrap: anywhere;
+}
+.sprint-live-fact.is-bad { --sprint-fact: #dc3545; }
+.sprint-live-fact.is-warn { --sprint-fact: #fd7e14; }
+.sprint-live-fact.is-note { --sprint-fact: #20c997; }
+.sprint-live-fact.is-date { --sprint-fact: #6f42c1; }
+.sprint-live-fact.is-date .sprint-live-fact-value { font-size: 0.84em; white-space: normal; }
+.sprint-live-fact.is-bad .sprint-live-fact-value,
+.sprint-live-fact.is-warn .sprint-live-fact-value { color: var(--sprint-fact); }
+
+/* Credit flow: stacked column charts + category split of one sprint */
+.sprint-cf-svg { min-width: 560px; }
+.sprint-cf-seg { transition: opacity 0.15s ease; }
+.sprint-cf-seg.is-muted { opacity: 0.12; }
+.sprint-cf-hit { fill: transparent; }
+.sprint-cf-col[role="button"] { cursor: pointer; outline: none; }
+.sprint-cf-col[role="button"]:hover .sprint-cf-hit,
+.sprint-cf-col[role="button"]:focus-visible .sprint-cf-hit { fill: color-mix(in srgb, currentColor 5%, transparent); }
+.sprint-cf-col.is-selected .sprint-cf-hit { fill: color-mix(in srgb, currentColor 3%, transparent); }
+.sprint-cf-mark { opacity: 0; transition: opacity 0.15s ease; }
+.sprint-cf-col.is-selected .sprint-cf-mark { opacity: 1; }
+.sprint-cf-mix { margin-top: 14px; }
+.sprint-cf-mix .sprint-creditflow-title { margin-bottom: 0; }
+.sprint-cf-mix-sprint { display: flex; flex-direction: column; gap: 7px; }
+.sprint-cf-mix-row {
+    display: grid;
+    grid-template-columns: minmax(110px, 170px) 1fr 60px;
+    align-items: center;
+    gap: 10px;
+}
+.sprint-cf-mix-tag {
+    font-size: 0.84em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sprint-cf-mix-track { gap: 2px; background: transparent; overflow: visible; }
+.sprint-cf-mix-track > span { border-radius: 2px; min-width: 2px; }
+.sprint-cf-mix-track > span:first-child { border-radius: 5px 2px 2px 5px; }
+.sprint-cf-mix-track > span:last-child { border-radius: 2px 5px 5px 2px; }
+.sprint-cf-mix-track > span:only-child { border-radius: 5px; }
