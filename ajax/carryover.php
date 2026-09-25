@@ -29,7 +29,7 @@ if ($id <= 0 || $sprintId <= 0) {
 }
 
 $item = new GlpiPlugin\Sprint\SprintItem();
-if (!$item->getFromDB($id)) {
+if (!$item->getFromDB($id) || !$item->hasEntityAccess()) {
     echo json_encode($response);
     return;
 }
@@ -54,7 +54,12 @@ if (!$sprint->getFromDB($sprintId)
     return;
 }
 
-$newId = GlpiPlugin\Sprint\SprintItem::carryOverTo($id, $sprintId);
+$carryCapacity = isset($_POST['carry_capacity']) && $_POST['carry_capacity'] !== '' ? (float)$_POST['carry_capacity'] : null;
+$carryCredits  = isset($_POST['carry_credits']) && $_POST['carry_credits'] !== '' ? (float)$_POST['carry_credits'] : null;
+if (!GlpiPlugin\Sprint\SprintCustomer::canUseCredits()) {
+    $carryCredits = $carryCapacity !== null ? 0.0 : null;
+}
+$newId = GlpiPlugin\Sprint\SprintItem::carryOverTo($id, $sprintId, $carryCapacity, $carryCredits);
 
 if ($newId <= 0) {
     echo json_encode([

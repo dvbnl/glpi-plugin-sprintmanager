@@ -522,16 +522,31 @@ class SprintAudit extends CommonGLPI
      */
     public static function getItemStatusAtTimestamp(array $itemIds, string $timestamp, array $currentStatuses = []): array
     {
+        return self::getItemStatusTimeline($itemIds, [$timestamp], $currentStatuses)[$timestamp] ?? [];
+    }
+
+    /**
+     * Status of every item at each of the given timestamps, from one query on
+     * the log. Same reconstruction as {@see getItemStatusAtTimestamp()} — the
+     * burndowns ask for every day of a sprint, which used to cost a query a day.
+     *
+     * @param int[]    $itemIds
+     * @param string[] $timestamps 'Y-m-d H:i:s'
+     * @return array<string,array<int,string>> [timestamp][item id] => status
+     */
+    public static function getItemStatusTimeline(array $itemIds, array $timestamps, array $currentStatuses = []): array
+    {
         global $DB;
 
-        $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
-        $out = [];
-        if (empty($itemIds)) {
+        $itemIds    = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+        $timestamps = array_values(array_unique(array_map('strval', $timestamps)));
+        $out        = array_fill_keys($timestamps, []);
+        if (empty($itemIds) || empty($timestamps)) {
             return $out;
         }
 
         $logsByItem = [];
-        if ($timestamp !== '' && $DB->tableExists('glpi_logs')) {
+        if ($DB->tableExists('glpi_logs')) {
             foreach ($DB->request([
                 'SELECT' => ['items_id', 'date_mod', 'old_value', 'new_value'],
                 'FROM'   => 'glpi_logs',
@@ -546,22 +561,26 @@ class SprintAudit extends CommonGLPI
             }
         }
 
-        foreach ($itemIds as $id) {
-            $valueBefore   = null;
-            $firstAfterOld = null;
-            foreach ($logsByItem[$id] ?? [] as $log) {
-                if ((string)$log['date_mod'] <= $timestamp) {
-                    $valueBefore = (string)$log['new_value'];
-                } elseif ($firstAfterOld === null) {
-                    $firstAfterOld = (string)$log['old_value'];
+        foreach ($timestamps as $timestamp) {
+            foreach ($itemIds as $id) {
+                $valueBefore   = null;
+                $firstAfterOld = null;
+                if ($timestamp !== '') {
+                    foreach ($logsByItem[$id] ?? [] as $log) {
+                        if ((string)$log['date_mod'] <= $timestamp) {
+                            $valueBefore = (string)$log['new_value'];
+                        } elseif ($firstAfterOld === null) {
+                            $firstAfterOld = (string)$log['old_value'];
+                        }
+                    }
                 }
-            }
-            if ($valueBefore !== null) {
-                $out[$id] = $valueBefore;
-            } elseif ($firstAfterOld !== null) {
-                $out[$id] = $firstAfterOld;
-            } else {
-                $out[$id] = (string)($currentStatuses[$id] ?? '');
+                if ($valueBefore !== null) {
+                    $out[$timestamp][$id] = $valueBefore;
+                } elseif ($firstAfterOld !== null) {
+                    $out[$timestamp][$id] = $firstAfterOld;
+                } else {
+                    $out[$timestamp][$id] = (string)($currentStatuses[$id] ?? '');
+                }
             }
         }
 

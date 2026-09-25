@@ -24,7 +24,7 @@ if ($id <= 0) {
 }
 
 $item = new GlpiPlugin\Sprint\SprintItem();
-if (!$item->getFromDB($id)) {
+if (!$item->getFromDB($id) || !$item->hasEntityAccess()) {
     echo json_encode($response);
     return;
 }

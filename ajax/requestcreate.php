@@ -19,7 +19,7 @@ Session::checkRight('plugin_sprint_item', READ);
 $id = (int)($_POST['id'] ?? 0);
 
 $item = new GlpiPlugin\Sprint\SprintItem();
-if ($id <= 0 || !$item->getFromDB($id)) {
+if ($id <= 0 || !$item->getFromDB($id) || !$item->hasEntityAccess()) {
     echo json_encode(['success' => false, 'message' => __('Request failed', 'sprint')]);
     return;
 }
@@ -36,7 +36,8 @@ if ($sprintId <= 0) {
 }
 
 $sprint = new GlpiPlugin\Sprint\Sprint();
-if (!$sprint->getFromDB($sprintId)) {
+if (!$sprint->getFromDB($sprintId)
+    || !GlpiPlugin\Sprint\SprintItem::sprintEntityAccessible($sprintId)) {
     echo json_encode(['success' => false, 'message' => __('Please select a sprint', 'sprint')]);
     return;
 }

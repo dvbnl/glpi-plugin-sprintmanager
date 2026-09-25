@@ -23,7 +23,7 @@ if (!isset($_POST['id'])) {
 }
 
 $item = new GlpiPlugin\Sprint\SprintItem();
-if (!$item->getFromDB((int)$_POST['id'])) {
+if (!$item->getFromDB((int)$_POST['id']) || !$item->hasEntityAccess()) {
     echo json_encode($response);
     return;
 }
@@ -43,7 +43,7 @@ $update = ['id' => (int)$_POST['id']];
 // is_adhoc is additionally restricted to the sprint's Scrum Master inside
 // SprintItem::prepareInputForUpdate().
 $allowed = ['name', 'status', 'priority', 'users_id', 'story_points', 'capacity', 'note',
-    'capacity_actual',
+    'plugin_sprint_sprintcustomers_id', 'credits', 'plugin_sprint_sprintcreditproducts_id',
     'proposed_sprints_id', 'is_fastlane', 'is_blocked', 'is_adhoc', 'is_parked',
     'plugin_sprint_sprintcategories_id'];
 
@@ -67,6 +67,12 @@ foreach ($allowed as $field) {
     if (array_key_exists($field, $_POST)) {
         $update[$field] = $_POST[$field];
     }
+}
+// A customer picker whose selection never loaded posts an empty string;
+// that is "field not sent", not "detach the customer" (an explicit 0).
+if (array_key_exists('plugin_sprint_sprintcustomers_id', $update)
+    && (string)$update['plugin_sprint_sprintcustomers_id'] === '') {
+    unset($update['plugin_sprint_sprintcustomers_id']);
 }
 
 if (array_key_exists('_tags_json', $_POST)) {
@@ -193,10 +199,22 @@ if ($carryOverSprintId > 0) {
         $sprint = new GlpiPlugin\Sprint\Sprint();
         if ($sprint->getFromDB($carryOverSprintId)
             && Session::haveAccessToEntity($sprint->fields['entities_id'] ?? 0)) {
+            // Optional split from the carry-over dialog: the share that
+            // moves on; absent means an unowned copy at 0, as before.
+            $carryCapacity = isset($_POST['carry_capacity']) && $_POST['carry_capacity'] !== '' ? (float)$_POST['carry_capacity'] : null;
+            $carryCredits  = isset($_POST['carry_credits']) && $_POST['carry_credits'] !== '' ? (float)$_POST['carry_credits'] : null;
+            // Moving credits takes the same right as editing them.
+            if (!GlpiPlugin\Sprint\SprintCustomer::canUseCredits()) {
+                $carryCredits = $carryCapacity !== null ? 0.0 : null;
+            }
             $carryOverId = GlpiPlugin\Sprint\SprintItem::carryOverTo(
                 (int)$_POST['id'],
-                $carryOverSprintId
+                $carryOverSprintId,
+                $carryCapacity,
+                $carryCredits
             );
+            // The split came off the source row; answer with what is left.
+            $item->getFromDB((int)$_POST['id']);
             if ($carryOverId > 0) {
                 $carryOverMessage = sprintf(
                     __('Carried over to %s', 'sprint'),
@@ -209,7 +227,24 @@ if ($carryOverSprintId > 0) {
 
 $updatedTags = GlpiPlugin\Sprint\SprintItem::getTagsForItem((int)$_POST['id']);
 
-echo json_encode([
+// Credit figures only travel to clients allowed to see them.
+$creditFields = [];
+if (GlpiPlugin\Sprint\SprintCustomer::canUseCredits()) {
+    $customerId   = (int)($item->fields['plugin_sprint_sprintcustomers_id'] ?? 0);
+    $creditFields = [
+        'customer_id'      => $customerId,
+        'customer_name'    => GlpiPlugin\Sprint\SprintCustomer::getNameFor($customerId),
+        'credits'          => GlpiPlugin\Sprint\SprintCustomer::formatCredits($item->fields['credits'] ?? 0),
+        'credit_product_id' => (int)($item->fields['plugin_sprint_sprintcreditproducts_id'] ?? 0),
+        'credit_cell_html' => GlpiPlugin\Sprint\SprintItem::renderCreditCell(
+            $customerId,
+            $item->fields['credits'] ?? 0,
+            (int)($item->fields['plugin_sprint_sprintcreditproducts_id'] ?? 0)
+        ),
+    ];
+}
+
+echo json_encode($creditFields + [
     'success'              => true,
     'message'              => $messages ? implode("\n", $messages) : 'Item updated',
     'name'                 => (string)$item->fields['name'],
@@ -218,7 +253,6 @@ echo json_encode([
     'users_id'             => (int)$item->fields['users_id'],
     'story_points'         => (int)$item->fields['story_points'],
     'capacity'             => GlpiPlugin\Sprint\SprintMember::formatCapacity($item->fields['capacity'] ?? 0),
-    'capacity_actual'      => GlpiPlugin\Sprint\SprintItem::formatActualCapacity($item->fields['capacity_actual'] ?? null),
     'note'                 => (string)($item->fields['note'] ?? ''),
     'is_fastlane'          => (int)($item->fields['is_fastlane'] ?? 0),
     'is_blocked'           => (int)($item->fields['is_blocked'] ?? 0),

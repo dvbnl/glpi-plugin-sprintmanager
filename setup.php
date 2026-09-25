@@ -30,7 +30,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.2.2');
+define('PLUGIN_SPRINT_VERSION', '1.3.0');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
@@ -68,11 +68,57 @@ function plugin_version_sprint(): array
 /**
  * @return void
  */
+/**
+ * Columns that arrived after 1.3.0 shipped, without a version bump: an
+ * install that already ran the 1.3.0 migration never passes through the
+ * upgrade path again, so the missing ones are added on first use. Cheap:
+ * fieldExists() reads GLPI's per-request column cache and the ALTER runs
+ * once per column, ever.
+ */
+function plugin_sprint_ensure_schema(): void
+{
+    global $DB;
+
+    static $done = false;
+    if ($done || !($DB instanceof DBmysql) || empty($DB->connected)) {
+        return;
+    }
+    $done = true;
+
+    $wanted = [
+        'glpi_plugin_sprint_sprintitemdependencies' => [
+            'credits' => "ADD COLUMN `credits` DECIMAL(10,2) NOT NULL DEFAULT 0 "
+                . "COMMENT 'Credits the helper charges to the parent item customer' AFTER `capacity`",
+            'plugin_sprint_sprintcreditproducts_id' => "ADD COLUMN `plugin_sprint_sprintcreditproducts_id` INT NOT NULL DEFAULT 0 "
+                . "COMMENT 'Catalogue entry the credits were taken from, 0 = by hand' AFTER `credits`, "
+                . "ADD KEY `plugin_sprint_sprintcreditproducts_id` (`plugin_sprint_sprintcreditproducts_id`)",
+        ],
+        'glpi_plugin_sprint_sprintcreditproducts' => [
+            'sort_order' => "ADD COLUMN `sort_order` INT NOT NULL DEFAULT 0 "
+                . "COMMENT 'Drag order among siblings, 0 = by name' AFTER `is_folder`",
+        ],
+    ];
+    foreach ($wanted as $table => $columns) {
+        if (!$DB->tableExists($table)) {
+            continue;
+        }
+        foreach ($columns as $column => $ddl) {
+            if (!$DB->fieldExists($table, $column, false)) {
+                $DB->doQuery("ALTER TABLE `{$table}` {$ddl}");
+            }
+        }
+    }
+}
+
 function plugin_init_sprint(): void
 {
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS['csrf_compliant']['sprint'] = true;
+
+    if (Plugin::isPluginActive('sprint')) {
+        plugin_sprint_ensure_schema();
+    }
 
     // "Configure" wrench icon in the Plugins list → opens the settings page.
     $PLUGIN_HOOKS['config_page']['sprint'] = 'front/config.php';
@@ -119,6 +165,24 @@ function plugin_init_sprint(): void
     Plugin::registerClass(
         'GlpiPlugin\Sprint\SprintOverview',
         ['addtabon' => []]
+    );
+
+    // Credits: customers, the credits they buy and what the sprints claim of
+    // them. Gated on the plugin_sprint_credits right.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintCredits',
+        ['addtabon' => []]
+    );
+
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintCustomer',
+        ['addtabon' => []]
+    );
+
+    // Credit ledger: tab on the customer.
+    Plugin::registerClass(
+        'GlpiPlugin\Sprint\SprintCredit',
+        ['addtabon' => ['GlpiPlugin\Sprint\SprintCustomer']]
     );
 
     Plugin::registerClass(

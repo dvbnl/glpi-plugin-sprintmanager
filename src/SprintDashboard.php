@@ -356,7 +356,12 @@ class SprintDashboard extends CommonGLPI
                 . ' data-owner-name="' . htmlescape($ownerNameRaw) . '"'
                 . ' data-story-points="' . (int)$row['story_points'] . '"'
                 . ' data-capacity="' . SprintMember::formatCapacity($row['capacity'] ?? 0) . '"'
-                . ' data-capacity-actual="' . SprintItem::formatActualCapacity($row['capacity_actual'] ?? null) . '"'
+                . (SprintCustomer::canUseCredits()
+                    ? ' data-customer-id="' . (int)($row['customer_id'] ?? 0) . '"'
+                        . ' data-customer-name="' . htmlescape(SprintCustomer::getNameFor((int)($row['customer_id'] ?? 0))) . '"'
+                        . ' data-credits="' . htmlescape(SprintCustomer::formatCredits($row['credits'] ?? 0)) . '"'
+                        . ' data-credit-product-id="' . (int)($row['credit_product_id'] ?? 0) . '"'
+                    : '')
                 . ' data-is-fastlane="0"'
                 . ' data-is-adhoc="' . ($isAdhoc ? 1 : 0) . '"'
                 . ' data-item-tags="' . htmlescape(SprintItem::tagsToBlob($rowTags)) . '"'
@@ -415,25 +420,16 @@ class SprintDashboard extends CommonGLPI
             return;
         }
 
-        // Regular (non-fastlane) per-user usage
-        $si = new SprintItem();
-        $regularUsed = [];
-        foreach ($si->find([
-            'plugin_sprint_sprints_id' => $sprintId,
-            'is_fastlane'              => 0,
-        ]) as $row) {
-            $uid = (int)$row['users_id'];
-            if ($uid > 0) {
-                $regularUsed[$uid] = ($regularUsed[$uid] ?? 0) + (float)($row['capacity'] ?? 0);
-            }
-        }
-
+        // One capacity dataset for the whole team (three grouped queries).
+        $usedBySprint   = SprintMember::usedCapacityBySprint($sprintId);
+        $regularUsed    = [];
         $fastlaneUsed   = [];
         $dependencyUsed = [];
         foreach ($members as $row) {
             $uid = (int)$row['users_id'];
-            $fastlaneUsed[$uid]   = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $uid);
-            $dependencyUsed[$uid] = SprintItemDependency::getUsedDependencyCapacityForUser($sprintId, $uid);
+            $regularUsed[$uid]    = (float)($usedBySprint[$uid]['regular'] ?? 0.0);
+            $fastlaneUsed[$uid]   = (float)($usedBySprint[$uid]['fastlane'] ?? 0.0);
+            $dependencyUsed[$uid] = (float)($usedBySprint[$uid]['dependency'] ?? 0.0);
         }
 
         $roles = SprintMember::getAllRoles();
@@ -670,14 +666,17 @@ class SprintDashboard extends CommonGLPI
             $rowTags = $tagsById[$itemId] ?? [];
             $rowDeps = $depsById[$itemId] ?? [];
 
-            echo "<tr class='tab_bg_1' " . SprintItem::buildItemDataAttrs($row, $rowTags) . ">";
-            echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
-                "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>" .
+            // sprint-row + sprint-cell-* let the quick-edit save refresh this
+            // row in place; the bolt sits outside the link so the name update
+            // does not wipe it.
+            echo "<tr class='tab_bg_1 sprint-row' " . SprintItem::buildItemDataAttrs($row, $rowTags) . ">";
+            echo "<td class='sprint-cell-name'><i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;'></i>"
+                . "<a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
                 htmlescape($row['name']) . "</a>"
                 . SprintCategory::renderPill((int)($row['plugin_sprint_sprintcategories_id'] ?? 0))
                 . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td>{$linkedDisplay}</td>";
-            echo "<td><span class='sprint-badge' style='display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{$statusBg};'>" .
+            echo "<td class='sprint-cell-status'><span class='sprint-badge' style='display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{$statusBg};'>" .
                 $statusLabel . "</span></td>";
             echo "<td>" . (count($memberLines) > 0 ? implode('<br>', $memberLines) :
                 "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
@@ -849,7 +848,7 @@ class SprintDashboard extends CommonGLPI
                 "<i class='fas fa-link' style='color:#20c997;margin-right:4px;'></i>" .
                 htmlescape($row['name']) . "</a></td>";
             echo "<td>{$ownerName}</td>";
-            echo "<td><span class='sprint-badge' style='display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{$statusBg};'>" .
+            echo "<td class='sprint-cell-status'><span class='sprint-badge' style='display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{$statusBg};'>" .
                 $statusLabel . "</span></td>";
             echo "<td>" . (count($helperLines) > 0 ? implode('<br>', $helperLines) :
                 "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
@@ -946,7 +945,9 @@ class SprintDashboard extends CommonGLPI
                 'raw_priority'  => (int)($row['priority'] ?? 3),
                 'story_points'  => (int)$row['story_points'],
                 'capacity'      => (float)($row['capacity'] ?? 0),
-                'capacity_actual' => $row['capacity_actual'] ?? null,
+                'customer_id'   => (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0),
+                'credits'       => (float)($row['credits'] ?? 0),
+                'credit_product_id' => (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0),
                 'users_id'      => (int)$row['users_id'],
                 'is_adhoc'      => (int)($row['is_adhoc'] ?? 0),
                 'note'          => (string)($row['note'] ?? ''),
@@ -979,17 +980,10 @@ class SprintDashboard extends CommonGLPI
             return;
         }
 
-        $si = new SprintItem();
-        $regularUsed = 0.0;
-        foreach ($si->find([
-            'plugin_sprint_sprints_id' => $sprintId,
-            'users_id'                 => $userId,
-            'is_fastlane'              => 0,
-        ]) as $row) {
-            $regularUsed += (float)($row['capacity'] ?? 0);
-        }
-        $fastlaneUsed   = SprintFastlaneMember::getUsedFastlaneCapacityForUser($sprintId, $userId);
-        $dependencyUsed = SprintItemDependency::getUsedDependencyCapacityForUser($sprintId, $userId);
+        $usedBySprint   = SprintMember::usedCapacityBySprint($sprintId);
+        $regularUsed    = (float)($usedBySprint[$userId]['regular'] ?? 0.0);
+        $fastlaneUsed   = (float)($usedBySprint[$userId]['fastlane'] ?? 0.0);
+        $dependencyUsed = (float)($usedBySprint[$userId]['dependency'] ?? 0.0);
         $usedCapacity   = $regularUsed + $fastlaneUsed + $dependencyUsed;
 
         $roles = SprintMember::getAllRoles();
@@ -1532,14 +1526,21 @@ class SprintDashboard extends CommonGLPI
         $nDays   = count($days);
         $actual  = [];   // index => remaining points (or null for future days)
         $blocked = [];   // index => points sitting in blocked status that day
+        // One log query for every day instead of one per day.
+        $stamps = [];
+        foreach ($days as $i => $day) {
+            if ($day <= $today) {
+                $stamps[$i] = $day->format('Y-m-d') . ' 23:59:59';
+            }
+        }
+        $timeline = SprintAudit::getItemStatusTimeline($itemIds, array_values($stamps), $currentStatuses);
         foreach ($days as $i => $day) {
             if ($day > $today) {
                 $actual[$i]  = null;
                 $blocked[$i] = null;
                 continue;
             }
-            $eod        = $day->format('Y-m-d') . ' 23:59:59';
-            $statusAt   = SprintAudit::getItemStatusAtTimestamp($itemIds, $eod, $currentStatuses);
+            $statusAt   = $timeline[$stamps[$i]] ?? [];
             $remaining  = 0;
             $blockedPts = 0;
             foreach ($itemIds as $id) {

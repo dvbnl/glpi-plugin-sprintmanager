@@ -29,6 +29,10 @@ class Config extends CommonDBTM
      *  members pick from it, only admins add new entries. */
     const CFG_SPRINT_ITEM_TAGS = 'sprint_item_tags';
 
+    /** Every save that carries the tag field (item form, quick edit, backlog
+     *  edit) must keep at least one tag on the item. Default off. */
+    const CFG_TAG_REQUIRED = 'sprint_item_tag_required';
+
     /** When a backlog item with an estimated capacity %% joins a sprint,
      *  seed its story points from that capacity (1%% = 1 SP). Default off. */
     const CFG_CAPACITY_TO_POINTS = 'backlog_capacity_to_story_points';
@@ -45,9 +49,9 @@ class Config extends CommonDBTM
      *  Applied to sprints that have no explicit limits for that category. */
     const CFG_CATEGORY_DEFAULT_LIMITS = 'category_default_limits';
 
-    /** Track a planned and an actual capacity %% per sprint item. Off = a
-     *  single capacity figure, as before. */
-    const CFG_PLANNED_ACTUAL = 'planned_actual_capacity';
+    /** Named credit managers, JSON {"<userId>":"view"|"manage"}: credit access
+     *  for individual users, on top of the profile right. */
+    const CFG_CREDIT_MANAGERS = 'credit_managers';
 
     /** Global Definition of Ready / Definition of Done, one check per line. */
     const CFG_DEFINITION_READY = 'definition_ready';
@@ -74,11 +78,12 @@ class Config extends CommonDBTM
             self::CFG_SCRUM_MASTER_CAPACITY => 0,
             self::CFG_REPORT_LOGO_URL       => '',
             self::CFG_SPRINT_ITEM_TAGS      => '[]',
+            self::CFG_TAG_REQUIRED          => 0,
             self::CFG_CAPACITY_TO_POINTS    => 0,
             self::CFG_BACKLOG_AUTO_CLEANUP  => 1,
             self::CFG_BACKLOG_AGING_DAYS    => 21,
             self::CFG_CATEGORY_DEFAULT_LIMITS => '{}',
-            self::CFG_PLANNED_ACTUAL        => 0,
+            self::CFG_CREDIT_MANAGERS       => '{}',
             self::CFG_DEFINITION_READY      => '',
             self::CFG_DEFINITION_DONE       => '',
         ];
@@ -114,6 +119,16 @@ class Config extends CommonDBTM
             $out[]      = $tag;
         }
         return $out;
+    }
+
+    /**
+     * Whether an item must carry at least one tag. Only meaningful while the
+     * admin pool has tags to pick from, so an empty pool never locks saves.
+     */
+    public static function isTagRequired(): bool
+    {
+        $cfg = self::getConfig();
+        return (int)($cfg[self::CFG_TAG_REQUIRED] ?? 0) === 1 && count(self::getDefinedTags()) > 0;
     }
 
     /** @return string[] Global Definition of Ready checks. */
@@ -163,11 +178,59 @@ class Config extends CommonDBTM
         return (int)($cfg[self::CFG_BACKLOG_AUTO_CLEANUP] ?? 1) === 1;
     }
 
-    /** Whether every sprint item carries a planned and an actual capacity %. */
-    public static function isPlannedActualEnabled(): bool
+    /**
+     * Credit access granted per user, on top of the profile right.
+     *
+     * @return array<int,string> user id => 'view' | 'manage'
+     */
+    public static function getCreditManagers(): array
     {
-        $cfg = self::getConfig();
-        return (int)($cfg[self::CFG_PLANNED_ACTUAL] ?? 0) === 1;
+        $raw  = json_decode((string)(self::getConfig()[self::CFG_CREDIT_MANAGERS] ?? '{}'), true);
+        $out  = [];
+        foreach (is_array($raw) ? $raw : [] as $uid => $level) {
+            $uid = (int)$uid;
+            if ($uid > 0) {
+                $out[$uid] = $level === 'manage' ? 'manage' : 'view';
+            }
+        }
+        return $out;
+    }
+
+    /** '' when not listed. Cached: the right checks run once per rendered row. */
+    public static function currentUserCreditLevel(): string
+    {
+        static $level = null;
+        if ($level === null) {
+            $uid   = (int)Session::getLoginUserID();
+            $level = $uid > 0 ? (self::getCreditManagers()[$uid] ?? '') : '';
+        }
+        return $level;
+    }
+
+    /** Persist the credit-manager rows from the settings form. */
+    public static function saveCreditManagers(array $input): void
+    {
+        if (!Session::haveRight('config', UPDATE)) {
+            return;
+        }
+        $levels = (array)($input['credit_level'] ?? []);
+        $delete = array_map('intval', (array)($input['credit_delete'] ?? []));
+
+        $out = [];
+        foreach ($levels as $uid => $level) {
+            $uid = (int)$uid;
+            if ($uid > 0 && !in_array($uid, $delete, true)) {
+                $out[$uid] = $level === 'manage' ? 'manage' : 'view';
+            }
+        }
+        $newId = (int)($input['credit_new_user'] ?? 0);
+        if ($newId > 0) {
+            $out[$newId] = ($input['credit_new_level'] ?? '') === 'manage' ? 'manage' : 'view';
+        }
+
+        GlpiConfig::setConfigurationValues(self::CONTEXT, [
+            self::CFG_CREDIT_MANAGERS => json_encode($out),
+        ]);
     }
 
     /** Aging badge threshold in days, 0 = disabled. */
@@ -230,10 +293,10 @@ class Config extends CommonDBTM
             self::CFG_SCRUM_MASTER_CAPACITY => (int)(bool)($input[self::CFG_SCRUM_MASTER_CAPACITY] ?? 0),
             self::CFG_REPORT_LOGO_URL       => trim((string)($input[self::CFG_REPORT_LOGO_URL] ?? '')),
             self::CFG_SPRINT_ITEM_TAGS      => self::normalizeTagInput((string)($input[self::CFG_SPRINT_ITEM_TAGS] ?? '')),
+            self::CFG_TAG_REQUIRED          => (int)(bool)($input[self::CFG_TAG_REQUIRED] ?? 0),
             self::CFG_CAPACITY_TO_POINTS    => (int)(bool)($input[self::CFG_CAPACITY_TO_POINTS] ?? 0),
             self::CFG_BACKLOG_AUTO_CLEANUP  => (int)(bool)($input[self::CFG_BACKLOG_AUTO_CLEANUP] ?? 0),
             self::CFG_BACKLOG_AGING_DAYS    => max(0, min(365, (int)($input[self::CFG_BACKLOG_AGING_DAYS] ?? 21))),
-            self::CFG_PLANNED_ACTUAL        => (int)(bool)($input[self::CFG_PLANNED_ACTUAL] ?? 0),
             self::CFG_DEFINITION_READY      => implode("\n", SprintAgility::checklist((string)($input[self::CFG_DEFINITION_READY] ?? ''))),
             self::CFG_DEFINITION_DONE       => implode("\n", SprintAgility::checklist((string)($input[self::CFG_DEFINITION_DONE] ?? ''))),
         ];
@@ -265,17 +328,19 @@ class Config extends CommonDBTM
     }
 
     /**
-     * Whether the current user is the sprint's Scrum Master. New sprints
-     * (no id yet) return true so the creation flow isn't gated.
+     * Whether the current user is the sprint's Scrum Master. An unknown or
+     * missing sprint id returns false; no caller runs during sprint creation.
      */
     public static function isCurrentUserScrumMaster(int $sprintId): bool
     {
+        // Fail closed: without a (valid) sprint there is no Scrum Master, so
+        // nobody passes a Scrum-Master-only gate on that basis.
         if ($sprintId <= 0) {
-            return true;
+            return false;
         }
         $sprint = new Sprint();
         if (!$sprint->getFromDB($sprintId)) {
-            return true;
+            return false;
         }
         return (int)$sprint->fields['users_id'] === (int)Session::getLoginUserID();
     }
@@ -368,23 +433,6 @@ class Config extends CommonDBTM
         echo "</label>";
         echo "</td></tr>";
 
-        // Planned vs actual capacity per item
-        $checkedPa = (int)$cfg[self::CFG_PLANNED_ACTUAL] === 1 ? 'checked' : '';
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Planned / actual capacity', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('When enabled, every sprint item gets a second capacity figure: the planned % is estimated up front, the actual % is filled in as the work is done and may deviate. The capacity-per-category matrix and the category trend chart can be flipped between the two.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<input type='hidden' name='" . self::CFG_PLANNED_ACTUAL . "' value='0'>";
-        echo "<label class='form-check form-switch'>";
-        echo "<input class='form-check-input' type='checkbox' role='switch' "
-            . "name='" . self::CFG_PLANNED_ACTUAL . "' value='1' {$checkedPa}"
-            . ($canedit ? '' : ' disabled') . ">";
-        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
-        echo "</label>";
-        echo "</td></tr>";
-
         // Aging badge threshold
         $agingDays = (int)$cfg[self::CFG_BACKLOG_AGING_DAYS];
         echo "<tr class='tab_bg_1'>";
@@ -448,6 +496,23 @@ class Config extends CommonDBTM
             . "</textarea>";
         echo "</td></tr>";
 
+        // Tag required on save
+        $checkedTag = (int)$cfg[self::CFG_TAG_REQUIRED] === 1 ? 'checked' : '';
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Require a tag on every item', 'sprint') . "<br>";
+        echo "<span class='text-muted' style='font-size:0.85em;'>" .
+            __('When enabled, the item form, the quick-edit dialog and the backlog edit dialog refuse to save an item without at least one tag. Only applies while the tag list above has entries.', 'sprint') .
+            "</span></td>";
+        echo "<td>";
+        echo "<input type='hidden' name='" . self::CFG_TAG_REQUIRED . "' value='0'>";
+        echo "<label class='form-check form-switch'>";
+        echo "<input class='form-check-input' type='checkbox' role='switch' "
+            . "name='" . self::CFG_TAG_REQUIRED . "' value='1' {$checkedTag}"
+            . ($canedit ? '' : ' disabled') . ">";
+        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
+        echo "</label>";
+        echo "</td></tr>";
+
         if ($canedit) {
             echo "<tr class='tab_bg_1'><td colspan='2' class='center'>";
             echo Html::submit(__('Save'), [
@@ -465,5 +530,80 @@ class Config extends CommonDBTM
 
         // Backlog category manager — its own form, below the settings table.
         SprintCategory::showManager();
+        self::showCreditManagers();
+    }
+
+    /** Named users who get credit access without a profile carrying the right. */
+    private static function showCreditManagers(): void
+    {
+        $canedit  = Session::haveRight('config', UPDATE);
+        $managers = self::getCreditManagers();
+        $levels   = [
+            'view'   => __('View credits', 'sprint'),
+            'manage' => __('Manage credits', 'sprint'),
+        ];
+
+        echo "<div class='center' style='margin-top:18px;'>";
+        if ($canedit) {
+            echo "<form method='post' action='" . \Plugin::getWebDir('sprint') . "/front/config.form.php'>";
+        }
+        echo "<table class='tab_cadre_fixe sprint-themed'>";
+        echo "<tr class='tab_bg_2'><th colspan='3'><i class='fas fa-coins' style='margin-right:6px;'></i>"
+            . __('Credit managers', 'sprint') . "</th></tr>";
+        echo "<tr class='tab_bg_1'><td colspan='3' class='text-muted' style='font-size:0.85em;'>"
+            . __('Grant credit access to individual users on top of the profile right. View opens the Credits page, the customers and their balances; manage additionally allows creating customers, booking credits and setting the per-sprint agreements. Picking a customer and a credit amount on a sprint item needs neither — that follows the item rights.', 'sprint')
+            . "</td></tr>";
+
+        echo "<tr class='tab_bg_2'>"
+            . "<th>" . \User::getTypeName(1) . "</th>"
+            . "<th style='width:200px;'>" . __('Access', 'sprint') . "</th>"
+            . "<th style='width:90px;'>" . __('Delete') . "</th></tr>";
+
+        foreach ($managers as $uid => $level) {
+            echo "<tr class='tab_bg_1'>";
+            echo "<td>" . htmlescape(\getUserName($uid)) . "</td>";
+            echo "<td class='center'>";
+            \Dropdown::showFromArray("credit_level[{$uid}]", $levels, [
+                'value'   => $level,
+                'display' => true,
+            ]);
+            echo "</td>";
+            echo "<td class='center'><input type='checkbox' name='credit_delete[]' value='{$uid}'"
+                . ($canedit ? '' : ' disabled') . "></td>";
+            echo "</tr>";
+        }
+
+        if (count($managers) === 0) {
+            echo "<tr class='tab_bg_1'><td colspan='3' class='center text-muted'>"
+                . __('No named credit managers — access follows the profile right only.', 'sprint') . "</td></tr>";
+        }
+
+        if ($canedit) {
+            echo "<tr class='tab_bg_1'>";
+            echo "<td>";
+            \User::dropdown([
+                'name'   => 'credit_new_user',
+                'value'  => 0,
+                'right'  => 'all',
+                'entity' => $_SESSION['glpiactiveentities'] ?? -1,
+                'width'  => '100%',
+            ]);
+            echo "</td>";
+            echo "<td class='center'>";
+            \Dropdown::showFromArray('credit_new_level', $levels, ['value' => 'view']);
+            echo "</td><td></td></tr>";
+            echo "<tr class='tab_bg_1'><td colspan='3' class='center'>";
+            echo Html::submit(__('Save'), [
+                'name'  => 'save_sprint_credit_managers',
+                'class' => 'btn btn-primary',
+            ]);
+            echo "</td></tr>";
+        }
+
+        echo "</table>";
+        if ($canedit) {
+            Html::closeForm();
+        }
+        echo "</div>";
     }
 }

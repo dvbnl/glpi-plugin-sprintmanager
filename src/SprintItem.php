@@ -21,6 +21,8 @@ class SprintItem extends CommonDBTM
 
     /** @see withoutAssignGuard() */
     private static bool $skipAssignGuard = false;
+    /** @var bool guard bypass for server-side writes touching customer/credits */
+    private static bool $skipCreditGuard = false;
     private static bool $linkedStatusAutomation = false;
 
     /**
@@ -102,8 +104,43 @@ class SprintItem extends CommonDBTM
             && Session::haveRight(self::$rightname, Profile::RIGHT_OWN_ITEMS);
     }
 
+    /**
+     * Entity scoping for sprint items. The items table has no entities_id, so
+     * CommonDBTM's automatic entity check never engages; the parent sprint's
+     * entity is authoritative instead. Backlog items (no sprint) are not
+     * entity-scoped, and neither is a row whose sprint no longer exists.
+     */
+    public static function sprintEntityAccessible(int $sprintId): bool
+    {
+        if ($sprintId <= 0) {
+            return true;
+        }
+        $sprint = SprintCache::getObject(Sprint::class, $sprintId);
+        if ($sprint === null) {
+            return true;
+        }
+        return Session::haveAccessToEntity(
+            (int)($sprint->fields['entities_id'] ?? 0),
+            (bool)($sprint->fields['is_recursive'] ?? false)
+        );
+    }
+
+    /** Whether the current user may reach this item's sprint entity. */
+    public function hasEntityAccess(): bool
+    {
+        return self::sprintEntityAccessible((int)($this->fields['plugin_sprint_sprints_id'] ?? 0));
+    }
+
+    public function canViewItem(): bool
+    {
+        return $this->hasEntityAccess() && parent::canViewItem();
+    }
+
     public function canCreateItem(): bool
     {
+        if (!$this->hasEntityAccess()) {
+            return false;
+        }
         // OWN_ITEMS right lets users create (assigned to themselves).
         if (self::hasOnlyOwnRight(CREATE)) {
             return true;
@@ -113,6 +150,9 @@ class SprintItem extends CommonDBTM
 
     public function canUpdateItem(): bool
     {
+        if (!$this->hasEntityAccess()) {
+            return false;
+        }
         if (self::hasOnlyOwnRight(UPDATE)) {
             return $this->isOwnItem();
         }
@@ -121,6 +161,9 @@ class SprintItem extends CommonDBTM
 
     public function canDeleteItem(): bool
     {
+        if (!$this->hasEntityAccess()) {
+            return false;
+        }
         if (self::hasOnlyOwnRight(DELETE)) {
             return $this->isOwnItem();
         }
@@ -129,6 +172,9 @@ class SprintItem extends CommonDBTM
 
     public function canPurgeItem(): bool
     {
+        if (!$this->hasEntityAccess()) {
+            return false;
+        }
         if (self::hasOnlyOwnRight(PURGE)) {
             return $this->isOwnItem();
         }
@@ -178,13 +224,30 @@ class SprintItem extends CommonDBTM
             // DECIMAL(5,1) column; 'integer' would strip the decimal point in filterValues() ("0.5" → 5)
             'datatype' => 'decimal',
         ];
-        if (Config::isPlannedActualEnabled()) {
+        if (SprintCustomer::canUseCredits()) {
             $tab[] = [
-                'id'       => 12,
+                'id'        => 12,
+                'table'     => SprintCustomer::getTable(),
+                'field'     => 'name',
+                'linkfield' => 'plugin_sprint_sprintcustomers_id',
+                'name'      => SprintCustomer::getTypeName(1),
+                'datatype'  => 'dropdown',
+            ];
+            $tab[] = [
+                'id'       => 14,
                 'table'    => $this->getTable(),
-                'field'    => 'capacity_actual',
-                'name'     => __('Actual capacity (%)', 'sprint'),
+                'field'    => 'credits',
+                'name'     => __('Credits', 'sprint'),
+                // DECIMAL(10,2) column; 'integer' would strip the decimal point.
                 'datatype' => 'decimal',
+            ];
+            $tab[] = [
+                'id'        => 15,
+                'table'     => SprintCreditProduct::getTable(),
+                'field'     => 'name',
+                'linkfield' => 'plugin_sprint_sprintcreditproducts_id',
+                'name'      => SprintCreditProduct::getTypeName(1),
+                'datatype'  => 'dropdown',
             ];
         }
         $tab[] = [
@@ -433,22 +496,71 @@ class SprintItem extends CommonDBTM
             . htmlescape($projectName) . "</span>";
     }
 
-    /**
-     * Capacity of a row for the requested view: the actual figure when the
-     * planned/actual setting is on and one was recorded, else the planned one.
-     */
-    public static function capacityFor(array $row, bool $actual): float
+    /** Customer picker; disabled for a session without the item READ right (see SprintCustomer::canUseCredits()). */
+    public static function customerSelect(string $name, int $selected, string $extraClass = ''): string
     {
-        if ($actual && isset($row['capacity_actual']) && $row['capacity_actual'] !== '' && $row['capacity_actual'] !== 'NULL') {
-            return (float)$row['capacity_actual'];
-        }
-        return (float)($row['capacity'] ?? 0);
+        $disabled = SprintCustomer::canUseCredits() ? '' : ' disabled';
+        $class    = trim('form-select ' . $extraClass);
+        return "<select name='" . htmlescape($name) . "' class='" . htmlescape($class) . "'{$disabled}>"
+            . "<option value='0'>-----</option>"
+            . SprintCustomer::dropdownOptionsPreserving($selected)
+            . "</select>";
     }
 
-    /** '' when no actual capacity was recorded, else the formatted figure. */
-    public static function formatActualCapacity($value): string
+    /** Credit amount input; read-only for a session without the item READ right (see SprintCustomer::canUseCredits()). */
+    public static function creditsInput(string $name, $value, string $extraClass = ''): string
     {
-        return ($value === null || $value === '' || $value === 'NULL') ? '' : SprintMember::formatCapacity($value);
+        $readonly = SprintCustomer::canUseCredits() ? '' : ' readonly';
+        $class    = trim('form-control ' . $extraClass);
+        return "<input type='number' min='0' step='0.25' name='" . htmlescape($name) . "' "
+            . "class='" . htmlescape($class) . "' style='max-width:140px;' value='"
+            . htmlescape(SprintCustomer::formatCredits($value)) . "'{$readonly}>";
+    }
+
+    /**
+     * Catalogue picker: choosing a product fills and locks the credits input
+     * named $creditsInputName in the same form or modal (see js/sprint.js);
+     * a different amount needs the "Manual credits" option.
+     */
+    public static function productSelect(string $name, int $selected, string $creditsInputName, string $extraClass = ''): string
+    {
+        $disabled = SprintCustomer::canUseCredits() ? '' : ' disabled';
+        $class    = trim('form-select sprint-credit-product ' . $extraClass);
+        return "<select name='" . htmlescape($name) . "' class='" . htmlescape($class) . "' "
+            . "data-credits-for='" . htmlescape($creditsInputName) . "'{$disabled}>"
+            . "<option value='0' data-credits=''>" . htmlescape(__('Manual credits', 'sprint')) . "</option>"
+            . SprintCreditProduct::dropdownOptions($selected)
+            . "</select>";
+    }
+
+    /**
+     * Re-syncs every productSelect() just rendered; the behaviour itself is
+     * in js/sprint.js. Needed for markup that arrives over AJAX (tabs), where
+     * no DOMContentLoaded follows.
+     */
+    public static function creditProductScript(): void
+    {
+        echo "<script>if (window.sprintCreditProductSync) { window.sprintCreditProductSync(); }</script>";
+    }
+
+    /** Customer pill + credit amount for a list cell; '' when neither is set. */
+    public static function renderCreditCell(int $customerId, $credits, int $productId = 0, float $dependencyCredits = 0.0): string
+    {
+        $credits = (float)$credits;
+        $out     = $customerId > 0 ? SprintCustomer::renderPill($customerId) : '';
+        if ($credits > 0) {
+            $product = $productId > 0 ? SprintCreditProduct::getFullNameFor($productId) : '';
+            $out .= " <span class='sprint-credit-chip' title='" . htmlescape($product !== '' ? $product : __('Credits', 'sprint')) . "'>"
+                . "<i class='fas fa-coins'></i> " . htmlescape(SprintCustomer::formatCredits($credits)) . "</span>";
+        }
+        // Credits the helpers charge on top of the item's own (see the
+        // Dependencies tab); shown apart so the item figure stays what was entered.
+        if ($dependencyCredits > 0) {
+            $out .= " <span class='sprint-credit-chip' style='opacity:0.8;' title='"
+                . htmlescape(__('Credits on dependencies (helpers)', 'sprint')) . "'>"
+                . "<i class='fas fa-link'></i> +" . htmlescape(SprintCustomer::formatCredits($dependencyCredits)) . "</span>";
+        }
+        return $out !== '' ? $out : "<span class='text-muted'>-</span>";
     }
 
     /**
@@ -899,12 +1011,6 @@ class SprintItem extends CommonDBTM
             Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
                 'value' => 0,
             ]);
-            if (Config::isPlannedActualEnabled()) {
-                echo " <span class='text-muted sprint-small ms-2'>" . __('Actual', 'sprint') . "</span> ";
-                Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
-                    'value' => '',
-                ]);
-            }
             echo "</td>";
             echo "<td>" . __('Priority') . "</td>";
             echo "<td>";
@@ -913,7 +1019,22 @@ class SprintItem extends CommonDBTM
                 4 => __('High'), 5 => __('Very high'),
             ], ['value' => 3]);
             echo "</td>";
-            echo "<td colspan='2'>";
+            if (SprintCustomer::canUseCredits()) {
+                echo "<td>" . SprintCustomer::getTypeName(1) . "</td>";
+                echo "<td>";
+                echo self::customerSelect('plugin_sprint_sprintcustomers_id', 0);
+                echo "</td></tr>";
+
+                echo "<tr class='tab_bg_1'>";
+                echo "<td>" . __('Credits', 'sprint') . "</td>";
+                echo "<td><div class='d-flex flex-wrap gap-2 align-items-center'>"
+                    . self::productSelect('plugin_sprint_sprintcreditproducts_id', 0, 'credits', 'w-auto')
+                    . self::creditsInput('credits', 0) . "</div></td>";
+                self::creditProductScript();
+                echo "<td colspan='4'>";
+            } else {
+                echo "<td colspan='2'>";
+            }
             echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
             echo "</td></tr>";
 
@@ -933,7 +1054,6 @@ class SprintItem extends CommonDBTM
         );
 
         $statuses   = self::getAllStatuses();
-        $plannedActual = Config::isPlannedActualEnabled();
         $priorities = [
             1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
             4 => __('High'), 5 => __('Very high'),
@@ -951,6 +1071,7 @@ class SprintItem extends CommonDBTM
 
         $itemIds  = array_map(fn($r) => (int)$r['id'], $items);
         $tagsById = self::getTagsForItems($itemIds);
+        $depCreditsById = SprintCustomer::canUseCredits() ? SprintItemDependency::getCreditsByItem($itemIds) : [];
         $depsById = SprintItemDependency::getOpenSummariesForItems($itemIds);
 
         echo "<table class='tab_cadre_fixe sprint-themed sprint-items-list-table'>";
@@ -964,13 +1085,17 @@ class SprintItem extends CommonDBTM
         echo "<th class='sprint-sortable' data-sort-type='story_points' style='cursor:pointer;' {$sc}>" . __('Story Points', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th class='sprint-sortable' data-sort-type='capacity' style='cursor:pointer;' {$sc}>" . __('Capacity (%)', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
         echo "<th class='sprint-sortable' data-sort-type='owner' style='cursor:pointer;' {$sc}>" . __('Owner', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
+        $showCredits = SprintCustomer::canUseCredits();
+        if ($showCredits) {
+            echo "<th>" . __('Customer / credits', 'sprint') . "</th>";
+        }
         if ($canedit) {
             echo "<th>" . __('Actions') . "</th>";
         }
         echo "</tr>";
 
         if (count($items) === 0) {
-            $cols = $canedit ? 9 : 8;
+            $cols = 8 + ($canedit ? 1 : 0) + ($showCredits ? 1 : 0);
             echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
                 __('No items found', 'sprint') . "</td></tr>";
         }
@@ -1005,13 +1130,17 @@ class SprintItem extends CommonDBTM
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td class='center sprint-cell-story-points'>" . (int)$row['story_points'] . "</td>";
             echo "<td class='center sprint-cell-capacity'>" . SprintMember::formatCapacity($row['capacity'] ?? 0) . "%";
-            if ($plannedActual && self::formatActualCapacity($row['capacity_actual'] ?? null) !== '') {
-                echo " <span class='text-muted sprint-small' title='" . __s('Actual capacity', 'sprint') . "'>/ "
-                    . SprintMember::formatCapacity($row['capacity_actual']) . "%</span>";
-            }
             echo "</td>";
             echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? htmlescape(SprintCache::userName($row['users_id'])) :
                 '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
+            if ($showCredits) {
+                echo "<td class='sprint-cell-credits'>" . self::renderCreditCell(
+                    (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0),
+                    $row['credits'] ?? 0,
+                    (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0),
+                    (float)($depCreditsById[(int)$row['id']] ?? 0)
+                ) . "</td>";
+            }
             if ($canedit) {
                 $isOwn = (int)$row['users_id'] === (int)Session::getLoginUserID();
                 $canEditRow = self::canUpdate() || (self::hasOnlyOwnRight(UPDATE) && $isOwn);
@@ -1210,7 +1339,6 @@ HTML;
             'data-owner-name'        => $ownerName,
             'data-story-points'      => (int)($row['story_points'] ?? 0),
             'data-capacity'          => SprintMember::formatCapacity($row['capacity'] ?? 0),
-            'data-capacity-actual'   => self::formatActualCapacity($row['capacity_actual'] ?? null),
             'data-is-fastlane'       => (int)($row['is_fastlane'] ?? 0),
             'data-is-adhoc'          => (int)($row['is_adhoc'] ?? 0),
             'data-note'              => (string)($row['note'] ?? ''),
@@ -1221,6 +1349,14 @@ HTML;
             'data-category-id'       => (int)($row['plugin_sprint_sprintcategories_id'] ?? 0),
             'data-category-name'     => SprintCategory::getFullNameFor((int)($row['plugin_sprint_sprintcategories_id'] ?? 0)),
         ];
+
+        if (SprintCustomer::canUseCredits()) {
+            $customerId = (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0);
+            $attrs['data-customer-id']   = $customerId;
+            $attrs['data-customer-name'] = SprintCustomer::getNameFor($customerId);
+            $attrs['data-credits']       = SprintCustomer::formatCredits($row['credits'] ?? 0);
+            $attrs['data-credit-product-id'] = (int)($row['plugin_sprint_sprintcreditproducts_id'] ?? 0);
+        }
 
         $parts = [];
         foreach ($attrs as $k => $v) {
@@ -1236,6 +1372,10 @@ HTML;
      */
     public static function currentUserIsScrumMasterOf(int $sprintId): bool
     {
+        // No sprint means no Scrum Master: fail closed (see Config helper).
+        if ($sprintId <= 0) {
+            return false;
+        }
         return Config::isCurrentUserScrumMaster($sprintId)
             || SprintMember::isScrumMaster($sprintId, (int)Session::getLoginUserID());
     }
@@ -1406,7 +1546,6 @@ HTML;
             4 => __('High'), 5 => __('Very high'),
         ];
         $capacityChoices = SprintMember::getCapacityChoices();
-        $plannedActual   = Config::isPlannedActualEnabled();
         $memberOptions  = $sprintId > 0 ? SprintMember::getSprintMemberOptions($sprintId) : [];
         $moveTargets    = $sprintId > 0 ? Sprint::getMoveTargetOptions($sprintId) : [];
         $definedTags    = Config::getDefinedTags();
@@ -1546,23 +1685,39 @@ HTML;
                 . "<i class='fas fa-user-shield me-1'></i>{$capacityRequestHint}</div>";
         }
         echo "</div>";
-        if ($plannedActual) {
-            echo "<div class='col-md-3 mb-3 sprint-qe-capacity-actual'><label class='form-label text-nowrap' title='" . __s('Actual capacity (%)', 'sprint') . "'>" . __('Actual', 'sprint') . " %</label>";
-            echo "<select name='capacity_actual' class='form-select'>";
-            echo "<option value=''>" . __('Follows planned', 'sprint') . "</option>";
-            foreach ($capacityChoices as $val => $label) {
-                echo "<option value='" . htmlescape((string)$val) . "'>" . htmlescape((string)$label) . "</option>";
-            }
-            echo "</select></div>";
-        }
         echo "</div>";
+
+        if (SprintCustomer::canUseCredits()) {
+            echo "<div class='row g-3'>";
+            echo "<div class='col-md-8 mb-3'><label class='form-label'>"
+                . SprintCustomer::getTypeName(1) . "</label>";
+            echo self::customerSelect('plugin_sprint_sprintcustomers_id', 0);
+            echo "</div>";
+            echo "<div class='col-md-4 mb-3'><label class='form-label'>"
+                . __('Credits', 'sprint') . "</label>";
+            echo self::creditsInput('credits', 0, 'w-100');
+            echo "</div>";
+            echo "</div>";
+            echo "<div class='row g-3'>";
+            echo "<div class='col-md-8 mb-3'><label class='form-label'>"
+                . "<i class='fas fa-tags me-1'></i>" . SprintCreditProduct::getTypeName(1) . "</label>";
+            echo self::productSelect('plugin_sprint_sprintcreditproducts_id', 0, 'credits', 'w-100');
+            echo "<div class='form-text sprint-small text-muted'>"
+                . htmlescape(__('Picking a product sets its credits; choose "Manual credits" to enter a different amount.', 'sprint')) . "</div>";
+            echo "</div>";
+            echo "</div>";
+            self::creditProductScript();
+        }
 
         echo "<div class='mb-3'><label class='form-label'>" . __('Note', 'sprint') . "</label>";
         echo "<textarea name='note' class='form-control' rows='8' style='min-height:180px;'></textarea></div>";
 
         if (!empty($definedTags)) {
-            echo "<div class='mb-3 sprint-qe-tags-block'><label class='form-label'>"
-                . "<i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint') . "</label>";
+            $tagRequired = Config::isTagRequired();
+            echo "<div class='mb-3 sprint-qe-tags-block' data-tag-required='" . ($tagRequired ? 1 : 0) . "'><label class='form-label'>"
+                . "<i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint')
+                . ($tagRequired ? " <span class='text-danger' title='" . __s('Required', 'sprint') . "'>*</span>" : '')
+                . "</label>";
             echo "<div class='d-flex flex-wrap gap-3'>";
             foreach ($definedTags as $tag) {
                 echo "<label style='display:inline-flex;align-items:center;gap:6px;'>"
@@ -1606,13 +1761,21 @@ HTML;
             echo "<option value='" . htmlescape((string)$val) . "'" . ((string)$val === '5' ? ' selected' : '') . ">" . htmlescape((string)$label) . "</option>";
         }
         echo "</select>";
+        if (SprintCustomer::canUseCredits()) {
+            // The helper's own billable share, charged to the item's customer.
+            echo self::productSelect('_qe_dep_product', 0, '_qe_dep_credits', 'form-select-sm sprint-qe-dep-product');
+            echo "<input type='number' min='0' step='0.25' name='_qe_dep_credits' class='form-control form-control-sm sprint-qe-dep-credits' "
+                . "style='max-width:90px;' value='0' title='" . __s('Credits', 'sprint') . "' placeholder='" . __s('Credits', 'sprint') . "'>";
+        }
         echo "<button type='button' class='btn btn-sm btn-outline-success sprint-qe-dep-add'>"
             . "<i class='fas fa-plus me-1'></i>" . __('Add helper', 'sprint') . "</button>";
         echo "<a href='#' class='btn btn-sm btn-outline-secondary sprint-qe-dep-manage' target='_blank' rel='noopener'>"
             . "<i class='fas fa-external-link-alt me-1'></i>" . __('Manage dependencies', 'sprint') . "</a>";
         echo "</div>";
         echo "<div class='form-text sprint-small text-muted'>"
-            . htmlescape(__("Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove.", 'sprint'))
+            . htmlescape(SprintCustomer::canUseCredits()
+                ? __("Couples a colleague to this item with their own capacity % and, when their share is billable, their own credits on this item's customer. Open 'Manage' to resolve, reopen or remove.", 'sprint')
+                : __("Couples a colleague to this item with their own capacity %. Open 'Manage' to resolve, reopen or remove.", 'sprint'))
             . "</div></div>";
 
         echo "</div>";
@@ -1635,6 +1798,9 @@ HTML;
         $depResolvedTxt  = addslashes(__('resolved', 'sprint'));
         $depRemoveTxt    = addslashes(__('Remove dependency', 'sprint'));
         $depRemoveConfirm = addslashes(__('Remove this dependency?', 'sprint'));
+        $depCreditsTxt    = addslashes(__('Credits', 'sprint'));
+        $lblInactive      = addslashes(__('inactive', 'sprint'));
+        $msgTagRequired   = addslashes(__('Pick at least one tag — tags are required on every item.', 'sprint'));
 
         echo <<<JS
 <script>
@@ -1707,29 +1873,47 @@ $(function() {
             \$sel.find('option').each(function() {
                 if (parseFloat(this.value) === num) { match = this.value; return false; }
             });
+            // A carry-over split leaves amounts outside the fixed choices
+            // (15% → 12% + 3%): inject the stored value so saving keeps it.
+            \$sel.find('option.sprint-qe-capacity-legacy').remove();
+            if (match === '' && num > 0) {
+                match = String(num);
+                \$sel.append(jQuery('<option class="sprint-qe-capacity-legacy"></option>').val(match).text(match + '%'));
+            }
             \$sel.val(match);
             // Baseline for the guarded-capacity reason dialog on save.
             \$modal.data('qe-orig-capacity', num);
         })();
         (function() {
-            var \$sel = \$modal.find('select[name=capacity_actual]');
-            if (!\$sel.length) { return; }
-            var raw = \$row.attr('data-capacity-actual');
-            var num = parseFloat(raw);
-            var match = '';
-            if (raw !== undefined && raw !== '' && !isNaN(num)) {
-                \$sel.find('option').each(function() {
-                    if (this.value !== '' && parseFloat(this.value) === num) { match = this.value; return false; }
-                });
+            var \$cust = \$modal.find('select[name=plugin_sprint_sprintcustomers_id]');
+            if (\$cust.length) {
+                // A row charged to a deactivated customer has no matching
+                // option — inject one so saving cannot silently drop it. The
+                // injected option goes when the next item is opened.
+                var cur = String(parseInt(\$row.attr('data-customer-id'), 10) || 0);
+                \$cust.find('option.sprint-qe-customer-legacy').remove();
+                if (cur !== '0' && !\$cust.find("option[value='" + cur + "']").length) {
+                    \$cust.append(jQuery('<option class="sprint-qe-customer-legacy"></option>')
+                        .val(cur)
+                        .text((\$row.attr('data-customer-name') || ('#' + cur)) + ' ({$lblInactive})'));
+                }
+                \$cust.val(cur);
             }
-            \$sel.val(match);
+            var \$cred = \$modal.find('input[name=credits]');
+            if (\$cred.length) { \$cred.val(\$row.attr('data-credits') || '0'); }
+            var \$prod = \$modal.find('select[name=plugin_sprint_sprintcreditproducts_id]');
+            if (\$prod.length) {
+                var pid = String(parseInt(\$row.attr('data-credit-product-id'), 10) || 0);
+                \$prod.val(\$prod.find("option[value='" + pid + "']").length ? pid : '0');
+            }
         })();
         \$modal.find('textarea[name=note]').val(note);
         \$modal.find('select[name=carry_over_to_sprint_id]').val('0');
         \$modal.find('.sprint-qe-error').hide().text('');
-        \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity, .sprint-qe-capacity-actual').toggle(!isFastlane);
+        \$modal.find('.sprint-qe-story-points, .sprint-qe-capacity').toggle(!isFastlane);
         \$modal.data('qe-is-fastlane', isFastlane ? 1 : 0);
         \$modal.removeData('qe-request-reason');
+        \$modal.removeData('qe-carry-split');
         \$modal.find('.sprint-qe-dep-status').hide().removeClass('alert-danger alert-success').addClass('alert-info').text('');
         \$modal.find('.sprint-qe-dep-user').val('0');
         \$modal.find('.sprint-qe-dep-manage').attr(
@@ -1799,6 +1983,16 @@ $(function() {
         var id = \$modal.find('input[name=id]').val();
         \$modal.find('.sprint-qe-error').hide().text('');
 
+        // Tag required (plugin setting): refuse client-side before the round
+        // trip; the server enforces the same rule.
+        var \$tagBlock = \$modal.find('.sprint-qe-tags-block');
+        if (\$tagBlock.length && parseInt(\$tagBlock.attr('data-tag-required'), 10) === 1
+            && \$modal.find('.sprint-qe-tag:checked').length === 0) {
+            \$modal.find('.sprint-qe-error').text("{$msgTagRequired}").show();
+            \$tagBlock[0].scrollIntoView({block: 'nearest'});
+            return;
+        }
+
         // Guarded capacity/category edits become approval requests: collect
         // the requester's motivation for the Scrum Master first. Dismissing the
         // dialog aborts the save. Fastlane items are exempt from the capacity
@@ -1834,6 +2028,25 @@ $(function() {
             return;
         }
 
+        // Carrying over asks first how the work splits over both sprints. A
+        // guarded capacity edit is only a request, so the stored value counts.
+        var carryTo = parseInt(\$modal.find('select[name=carry_over_to_sprint_id]').val(), 10) || 0;
+        if (carryTo > 0 && !\$modal.data('qe-carry-split') && typeof window.sprintCarrySplit === 'function') {
+            var splitCap = capacityGuarded
+                ? parseFloat(\$modal.data('qe-orig-capacity'))
+                : parseFloat(\$modal.find('select[name=capacity]').val());
+            window.sprintCarrySplit({
+                capacity: isFastlaneItem ? 0 : (splitCap || 0),
+                credits: parseFloat(\$modal.find('input[name=credits]').val()) || 0,
+                sprintLabel: \$modal.find('select[name=carry_over_to_sprint_id] option:selected').text()
+            }, function(split) {
+                \$modal.data('qe-carry-split', split);
+                \$btn.trigger('click');
+            });
+            return;
+        }
+        var carrySplit = \$modal.data('qe-carry-split') || {};
+
         function runSave(confirmOverflow) {
             \$btn.prop('disabled', true);
             return \$.ajax({
@@ -1863,11 +2076,19 @@ $(function() {
                     users_id: \$modal.find('select[name=users_id]').val(),
                     story_points: \$modal.find('input[name=story_points]').val(),
                     capacity: \$modal.find('select[name=capacity]').val(),
-                    capacity_actual: \$modal.find('select[name=capacity_actual]').length
-                        ? \$modal.find('select[name=capacity_actual]').val()
+                    plugin_sprint_sprintcustomers_id: \$modal.find('select[name=plugin_sprint_sprintcustomers_id]').length
+                        ? \$modal.find('select[name=plugin_sprint_sprintcustomers_id]').val()
+                        : undefined,
+                    credits: \$modal.find('input[name=credits]').length
+                        ? \$modal.find('input[name=credits]').val()
+                        : undefined,
+                    plugin_sprint_sprintcreditproducts_id: \$modal.find('select[name=plugin_sprint_sprintcreditproducts_id]').length
+                        ? \$modal.find('select[name=plugin_sprint_sprintcreditproducts_id]').val()
                         : undefined,
                     note: \$modal.find('textarea[name=note]').val(),
                     carry_over_to_sprint_id: \$modal.find('select[name=carry_over_to_sprint_id]').val(),
+                    carry_capacity: carrySplit.carry_capacity,
+                    carry_credits: carrySplit.carry_credits,
                     capacity_reason: \$modal.data('qe-request-reason') || undefined,
                     category_reason: \$modal.data('qe-request-reason') || undefined,
                     plugin_sprint_sprintcategories_id: (categoryKnown && \$catSel.length)
@@ -1913,7 +2134,8 @@ $(function() {
                 var prioritySelect = \$modal.find('select[name=priority]');
                 var priorityLabel  = prioritySelect.find('option:selected').text() || '';
                 var capacitySelect = \$modal.find('select[name=capacity]');
-                var capacityLabel  = capacitySelect.find('option:selected').text() || (resp.capacity + '%');
+                // After a carry-over split the row holds what stayed, not the selection.
+                var capacityLabel  = resp.carried_over ? (resp.capacity + '%') : (capacitySelect.find('option:selected').text() || (resp.capacity + '%'));
                 var statusColor    = statusColors[resp.status] || '#6c757d';
                 var ownerId        = parseInt(resp.users_id, 10) || 0;
 
@@ -1927,8 +2149,12 @@ $(function() {
                 \$row.attr('data-owner-name', ownerLabel).data('owner-name', ownerLabel);
                 \$row.attr('data-story-points', resp.story_points).data('story-points', resp.story_points);
                 \$row.attr('data-capacity', resp.capacity).data('capacity', resp.capacity);
-                if (typeof resp.capacity_actual !== 'undefined') {
-                    \$row.attr('data-capacity-actual', resp.capacity_actual);
+                if (typeof resp.credits !== 'undefined') {
+                    \$row.attr('data-credits', resp.credits).data('credits', resp.credits);
+                    \$row.attr('data-customer-id', resp.customer_id).data('customer-id', resp.customer_id);
+                    \$row.attr('data-customer-name', resp.customer_name).data('customer-name', resp.customer_name);
+                    \$row.attr('data-credit-product-id', resp.credit_product_id || 0);
+                    \$row.find('.sprint-cell-credits').html(resp.credit_cell_html);
                 }
                 \$row.attr('data-note', resp.note).data('note', resp.note);
 
@@ -2092,6 +2318,8 @@ $(function() {
         var itemId = \$modal.find('input[name=id]').val();
         var userId = parseInt(\$modal.find('.sprint-qe-dep-user').val(), 10) || 0;
         var cap    = parseFloat(\$modal.find('.sprint-qe-dep-cap').val()) || 0;
+        var \$depCredits = \$modal.find('.sprint-qe-dep-credits');
+        var \$depProduct = \$modal.find('.sprint-qe-dep-product');
         var \$status = \$modal.find('.sprint-qe-dep-status');
 
         if (!itemId || userId <= 0 || cap <= 0) {
@@ -2112,6 +2340,8 @@ $(function() {
                     plugin_sprint_sprintitems_id: itemId,
                     users_id: userId,
                     capacity: cap,
+                    credits: \$depCredits.length ? \$depCredits.val() : undefined,
+                    plugin_sprint_sprintcreditproducts_id: \$depProduct.length ? \$depProduct.val() : undefined,
                     confirm_overflow: confirmOverflow ? 1 : 0,
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 }
@@ -2132,6 +2362,8 @@ $(function() {
                 \$status.removeClass('alert-info alert-danger').addClass('alert-success')
                     .text(resp.message).show();
                 \$modal.find('.sprint-qe-dep-user').val('0');
+                if (\$depCredits.length) { \$depCredits.val('0'); }
+                if (\$depProduct.length) { \$depProduct.val('0'); }
                 \$modal.data('deps-added', (parseInt(\$modal.data('deps-added'), 10) || 0) + 1);
                 loadQeDeps(\$modal.find('input[name=id]').val());
             } else {
@@ -2152,6 +2384,7 @@ $(function() {
 
     // ---- Existing dependencies: live list + inline edit/remove ----
     var depCapOptions = "{$depCapOptions}";
+    var depCreditsOn  = \$modal.find('.sprint-qe-dep-credits').length > 0;
 
     function qeEscapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
@@ -2181,6 +2414,11 @@ $(function() {
                     + '</span>'
                     + '<select class="form-select form-select-sm sprint-qe-dep-edit-cap" data-dep-id="' + d.id + '"'
                     + (d.is_resolved ? ' disabled' : '') + ' style="max-width:90px;">' + depCapOptions + '</select>'
+                    + (depCreditsOn
+                        ? '<input type="number" min="0" step="0.25" class="form-control form-control-sm sprint-qe-dep-edit-credits" '
+                            + 'data-dep-id="' + d.id + '" style="max-width:80px;" title="' + qeEscapeHtml(d.product || '{$depCreditsTxt}') + '" '
+                            + 'value="' + qeEscapeHtml(d.credits) + '">'
+                        : '')
                     + '<button type="button" class="btn btn-sm btn-outline-danger sprint-qe-dep-remove" '
                     + 'data-dep-id="' + d.id + '" title="{$depRemoveTxt}"><i class="fas fa-trash"></i></button>'
                     + '</div>';
@@ -2230,6 +2468,41 @@ $(function() {
         });
     });
 
+    \$(document).on('change', '.sprint-qe-dep-edit-credits', function() {
+        var \$inp   = \$(this);
+        var depId   = parseInt(\$inp.data('dep-id'), 10) || 0;
+        var itemId  = \$modal.find('input[name=id]').val();
+        var \$status = \$modal.find('.sprint-qe-dep-status');
+        if (depId <= 0) { return; }
+        \$inp.prop('disabled', true);
+        \$.ajax({
+            url: {$cfgRoot} + '/plugins/sprint/ajax/csrftoken.php',
+            type: 'GET', dataType: 'json', cache: false
+        }).then(function(tok) {
+            return \$.ajax({
+                url: {$cfgRoot} + '/plugins/sprint/ajax/dependencies.php',
+                type: 'POST', dataType: 'json',
+                data: {
+                    action: 'update', plugin_sprint_sprintitems_id: itemId, id: depId,
+                    credits: \$inp.val(), _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                }
+            });
+        }).done(function(resp) {
+            if (resp && resp.success) {
+                if (typeof resp.credits !== 'undefined') { \$inp.val(resp.credits); }
+                \$status.removeClass('alert-info alert-danger').addClass('alert-success').text(resp.message).show();
+                \$modal.data('deps-added', (parseInt(\$modal.data('deps-added'), 10) || 0) + 1);
+            } else {
+                \$status.removeClass('alert-info alert-success').addClass('alert-danger')
+                    .text(resp && resp.message ? resp.message : 'Could not update dependency').show();
+            }
+        }).fail(function() {
+            \$status.removeClass('alert-info alert-success').addClass('alert-danger').text('Network error').show();
+        }).always(function() {
+            \$inp.prop('disabled', false);
+        });
+    });
+
     \$(document).on('click', '.sprint-qe-dep-remove', function() {
         var depId  = parseInt(\$(this).data('dep-id'), 10) || 0;
         var itemId = \$modal.find('input[name=id]').val();
@@ -2274,6 +2547,156 @@ $(function() {
 JS;
         // Reason dialog for guarded capacity/category edits (approval requests).
         SprintRequest::renderReasonModalUI();
+        self::renderCarrySplitModalUI();
+    }
+
+    /**
+     * "How does the work split?" dialog behind a carry-over, once per page:
+     * window.sprintCarrySplit({capacity, credits, sprintLabel}, callback) asks
+     * what stays and what moves on — both always add up to the original — and
+     * calls back with {carry_capacity, carry_credits}. Nothing to split means
+     * no dialog.
+     */
+    public static function renderCarrySplitModalUI(): void
+    {
+        static $rendered = false;
+        if ($rendered) {
+            return;
+        }
+        $rendered = true;
+
+        $title     = __s('Carry over: split the work', 'sprint');
+        $intro     = __s('Carrying over to %s. What was done stays in this sprint; the rest moves on. Both always add up to the original.', 'sprint');
+        $lblCap    = __s('Capacity (%)', 'sprint');
+        $lblCred   = __s('Credits', 'sprint');
+        $lblStay   = __s('Stays in this sprint', 'sprint');
+        $lblCarry  = __s('Carry over', 'sprint');
+        $lblTotal  = __s('Total', 'sprint');
+        $lblCancel = __s('Cancel');
+
+        echo <<<HTML
+<div class="modal fade" id="sprint-carry-split-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-forward text-success me-1"></i> {$title}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="sprint-small text-muted sprint-carry-split-intro" data-text="{$intro}"></p>
+        <div class="sprint-carry-split-row mb-3" data-kind="capacity" data-step="0.5">
+          <label class="form-label fw-bold">{$lblCap} <span class="text-muted fw-normal">· {$lblTotal}: <span class="sprint-carry-split-total"></span>%</span></label>
+          <div class="row g-2">
+            <div class="col-6"><label class="form-label sprint-small mb-1">{$lblStay}</label>
+              <input type="number" min="0" step="0.5" class="form-control sprint-carry-split-stay"></div>
+            <div class="col-6"><label class="form-label sprint-small mb-1">{$lblCarry}</label>
+              <input type="number" min="0" step="0.5" class="form-control sprint-carry-split-carry"></div>
+          </div>
+        </div>
+        <div class="sprint-carry-split-row" data-kind="credits" data-step="0.25">
+          <label class="form-label fw-bold">{$lblCred} <span class="text-muted fw-normal">· {$lblTotal}: <span class="sprint-carry-split-total"></span></span></label>
+          <div class="row g-2">
+            <div class="col-6"><label class="form-label sprint-small mb-1">{$lblStay}</label>
+              <input type="number" min="0" step="0.25" class="form-control sprint-carry-split-stay"></div>
+            <div class="col-6"><label class="form-label sprint-small mb-1">{$lblCarry}</label>
+              <input type="number" min="0" step="0.25" class="form-control sprint-carry-split-carry"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$lblCancel}</button>
+        <button type="button" class="btn btn-primary sprint-carry-split-confirm">
+          <i class="fas fa-forward me-1"></i> {$lblCarry}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+    if (typeof jQuery === 'undefined') { return; }
+
+    // Same stacking trick as the request-reason dialog: live on <body>, and
+    // drop the stale copy a GLPI ajax-tab reload leaves behind.
+    jQuery(function(){
+        // [id=…] rather than #…: an id lookup stops at the first match.
+        var all = jQuery('[id=sprint-carry-split-modal]');
+        if (all.length > 1) { all.slice(0, all.length - 1).remove(); }
+        var last = jQuery('[id=sprint-carry-split-modal]').last();
+        if (last.length && !last.parent().is('body')) { last.detach().appendTo('body'); }
+    });
+
+    if (window.__sprintCarrySplitBound) { return; }
+    window.__sprintCarrySplitBound = true;
+
+    function fmt(v) { return String(Math.round(v * 100) / 100); }
+    // Snap to the row's step and keep both halves inside [0, total].
+    function clamp(row, v) {
+        var step  = parseFloat(row.attr('data-step')) || 1;
+        var total = parseFloat(row.data('total')) || 0;
+        if (isNaN(v)) { v = 0; }
+        v = Math.round(v / step) * step;
+        return Math.max(0, Math.min(total, v));
+    }
+
+    window.sprintCarrySplit = function(opts, callback){
+        var m = jQuery('[id=sprint-carry-split-modal]').last();
+        var totals = { capacity: parseFloat(opts.capacity) || 0, credits: parseFloat(opts.credits) || 0 };
+        if (!m.length || (totals.capacity <= 0 && totals.credits <= 0)) {
+            callback({});
+            return;
+        }
+        var intro = m.find('.sprint-carry-split-intro');
+        intro.text(String(intro.attr('data-text')).replace('%s', opts.sprintLabel || ''));
+        m.find('.sprint-carry-split-row').each(function(){
+            var row   = jQuery(this);
+            var total = totals[row.attr('data-kind')];
+            row.data('total', total).toggle(total > 0);
+            row.find('.sprint-carry-split-total').text(fmt(total));
+            row.find('input').attr('max', total);
+            row.find('.sprint-carry-split-stay').val(fmt(total));
+            row.find('.sprint-carry-split-carry').val('0');
+        });
+        m.data('cb', callback);
+        bootstrap.Modal.getOrCreateInstance(m[0]).show();
+        setTimeout(function(){ m.find('.sprint-carry-split-row:visible .sprint-carry-split-carry').first().trigger('focus').trigger('select'); }, 200);
+    };
+
+    // Either half drives the other, so the pair always sums to the total.
+    jQuery(document).on('input change', '#sprint-carry-split-modal input', function(e){
+        var input = jQuery(this);
+        var row   = input.closest('.sprint-carry-split-row');
+        var total = parseFloat(row.data('total')) || 0;
+        var v     = clamp(row, parseFloat(input.val()));
+        var other = input.hasClass('sprint-carry-split-stay') ? '.sprint-carry-split-carry' : '.sprint-carry-split-stay';
+        row.find(other).val(fmt(total - v));
+        if (e.type === 'change') { input.val(fmt(v)); }
+    });
+
+    // An answer only holds for the numbers it was given for.
+    jQuery(document).on('change', '#sprint-quickedit-modal select[name=carry_over_to_sprint_id], #sprint-quickedit-modal select[name=capacity], #sprint-quickedit-modal input[name=credits]', function(){
+        jQuery(this).closest('.modal').removeData('qe-carry-split');
+    });
+
+    jQuery(document).on('click', '.sprint-carry-split-confirm', function(){
+        var m = jQuery(this).closest('#sprint-carry-split-modal');
+        var out = {};
+        m.find('.sprint-carry-split-row').each(function(){
+            var row = jQuery(this);
+            if ((parseFloat(row.data('total')) || 0) <= 0) { return; }
+            out['carry_' + row.attr('data-kind')] = clamp(row, parseFloat(row.find('.sprint-carry-split-carry').val()));
+        });
+        // The other half of a split is 0, never "not sent".
+        if (out.carry_capacity === undefined) { out.carry_capacity = 0; }
+        if (out.carry_credits === undefined) { out.carry_credits = 0; }
+        var cb = m.data('cb');
+        m.removeData('cb');
+        bootstrap.Modal.getOrCreateInstance(m[0]).hide();
+        if (typeof cb === 'function') { cb(out); }
+    });
+})();
+</script>
+HTML;
     }
 
     /**
@@ -2552,6 +2975,9 @@ JS;
         $input = $this->resolveLinkedItem($input);
         $input = $this->enforceLinkedItemName($input);
         $input = self::normalizeDodInput($input);
+        if (!self::validateRequiredTags($input)) {
+            return false;
+        }
 
         if (isset($input['status'])) {
             $candidate = new self();
@@ -2562,6 +2988,9 @@ JS;
             if (!$policy['ok']) {
                 Session::addMessageAfterRedirect($policy['message'], false, ERROR);
                 return false;
+            }
+            if (!empty($policy['overridden'])) {
+                Session::addMessageAfterRedirect($policy['message'], false, WARNING);
             }
         }
         if (!isset($input['story_points']) || $input['story_points'] === '' || $input['story_points'] === null) {
@@ -2593,6 +3022,9 @@ JS;
                 false,
                 WARNING
             );
+        }
+        if (!$this->validateCustomer($input, (int)($input['plugin_sprint_sprints_id'] ?? 0))) {
+            return false;
         }
         if (!$this->validateCapacity($input)) {
             return false;
@@ -2626,10 +3058,13 @@ JS;
             }
         }
 
-        $input = self::sanitizeInput($input);
+        $input = self::sanitizeInput($input, $this->fields);
         $input = $this->resolveLinkedItem($input);
         $input = $this->enforceLinkedItemName($input);
         $input = self::normalizeDodInput($input);
+        if (!self::validateRequiredTags($input)) {
+            return false;
+        }
 
         if (isset($input['status'])) {
             $policyItem = clone $this;
@@ -2643,6 +3078,12 @@ JS;
             if (!$policy['ok']) {
                 Session::addMessageAfterRedirect($policy['message'], false, ERROR);
                 return false;
+            }
+            if (!empty($policy['overridden'])) {
+                Session::addMessageAfterRedirect($policy['message'], false, WARNING);
+                // Picked up in post_updateItem(): the skipped checks land in the
+                // item history so an overruled DoD stays auditable.
+                $input['_dod_override_note'] = (string)$policy['message'];
             }
         }
 
@@ -2833,6 +3274,9 @@ JS;
             $validationInput['plugin_sprint_sprints_id'] = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         }
 
+        if (!$this->validateCustomer($input, (int)$validationInput['plugin_sprint_sprints_id'])) {
+            return false;
+        }
         if (!$this->validateCapacity($input, (int)($input['id'] ?? 0))) {
             return false;
         }
@@ -2840,6 +3284,40 @@ JS;
             return false;
         }
         return parent::prepareInputForUpdate($input);
+    }
+
+    /**
+     * The customer charged on an item must be one the session may see and,
+     * once the item sits in a sprint, valid for that sprint's entity. An
+     * invalid pick — or a move into a sprint the customer is not valid for —
+     * is refused with a message, never silently re-attributed. Only a changed
+     * customer or a changed sprint is judged; unrelated edits leave the pair
+     * alone. Server-side bookkeeping (carry-over) is judged on the rows.
+     */
+    private function validateCustomer(array $input, int $sprintId): bool
+    {
+        $current    = (int)($this->fields['plugin_sprint_sprintcustomers_id'] ?? 0);
+        $customerId = (int)($input['plugin_sprint_sprintcustomers_id'] ?? $current);
+        if ($customerId <= 0) {
+            return true;
+        }
+        $changed = array_key_exists('plugin_sprint_sprintcustomers_id', $input) && $customerId !== $current;
+        $moved   = $sprintId > 0 && $sprintId !== (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
+        if (!$changed && !$moved) {
+            return true;
+        }
+        if (SprintCustomer::isChargeableInSprint($customerId, $sprintId, !self::$skipCreditGuard)) {
+            return true;
+        }
+        $name = SprintCustomer::getNameFor($customerId) ?: ('#' . $customerId);
+        Session::addMessageAfterRedirect(
+            $sprintId > 0
+                ? sprintf(__('Customer “%s” is not available in the entity of that sprint.', 'sprint'), $name)
+                : __('This customer is not available in your entities.', 'sprint'),
+            false,
+            ERROR
+        );
+        return false;
     }
 
     public static function applyAutomatedStatus(int $itemId, string $status): bool
@@ -2888,6 +3366,8 @@ JS;
 
     public function post_addItem()
     {
+        SprintCustomer::invalidateCaches();
+        SprintMember::invalidateUsedCapacity();
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         $itemtype = (string)($this->fields['itemtype'] ?? '');
         $itemsId  = (int)($this->fields['items_id'] ?? 0);
@@ -2905,6 +3385,11 @@ JS;
 
     public function post_updateItem($history = true)
     {
+        SprintCustomer::invalidateCaches();
+        SprintMember::invalidateUsedCapacity();
+        if (!empty($this->input['_dod_override_note'])) {
+            \Log::history((int)$this->getID(), self::class, [0, '', (string)$this->input['_dod_override_note']]);
+        }
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
         $itemtype = (string)($this->fields['itemtype'] ?? '');
         $itemsId  = (int)($this->fields['items_id'] ?? 0);
@@ -3061,16 +3546,12 @@ JS;
     }
 
     /**
-     * Replace an item's tags with the intersection of input and the admin
-     * pool — tags outside the pool are dropped, so a stale form submission
-     * can't smuggle in unknown labels.
+     * Tags from a form, reduced to the admin pool (pool casing, de-duplicated).
+     *
+     * @return array<string,string> lowercased key => pool label
      */
-    public static function setTagsForItem(int $itemId, array $tags): void
+    public static function filterTagsToPool(array $tags): array
     {
-        global $DB;
-        if ($itemId <= 0 || !$DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
-            return;
-        }
         $allowed = [];
         foreach (Config::getDefinedTags() as $tag) {
             $allowed[mb_strtolower($tag)] = $tag;
@@ -3082,6 +3563,43 @@ JS;
                 $kept[$key] = $allowed[$key];
             }
         }
+        return $kept;
+    }
+
+    /**
+     * The "tag required" setting: a save that carries the tag field must keep
+     * at least one pool tag. Saves without the field (status drags, linked
+     * item sync, templates, carry-over) are not judged, so automation never
+     * stalls on it.
+     */
+    private static function validateRequiredTags(array $input): bool
+    {
+        if (!array_key_exists('_tags', $input) || !Config::isTagRequired()) {
+            return true;
+        }
+        if (count(self::filterTagsToPool((array)$input['_tags'])) > 0) {
+            return true;
+        }
+        Session::addMessageAfterRedirect(
+            __('Pick at least one tag — tags are required on every item.', 'sprint'),
+            false,
+            ERROR
+        );
+        return false;
+    }
+
+    /**
+     * Replace an item's tags with the intersection of input and the admin
+     * pool — tags outside the pool are dropped, so a stale form submission
+     * can't smuggle in unknown labels.
+     */
+    public static function setTagsForItem(int $itemId, array $tags): void
+    {
+        global $DB;
+        if ($itemId <= 0 || !$DB->tableExists('glpi_plugin_sprint_sprintitemtags')) {
+            return;
+        }
+        $kept = self::filterTagsToPool($tags);
         $DB->delete('glpi_plugin_sprint_sprintitemtags', [
             'plugin_sprint_sprintitems_id' => $itemId,
         ]);
@@ -3132,8 +3650,15 @@ JS;
      * Carry an item over to another sprint: create a fresh copy in the target
      * while leaving the source intact, so unfinished items stay in the current
      * sprint's review and continue in the next as a new planning entry.
+     *
+     * $carryCapacity / $carryCredits split the work: that share moves to the
+     * copy and comes off the source, so both sprints add up to the original
+     * (5% planned, 2% done → keep 2%, carry 3%). The copy then keeps the owner
+     * when they are a member of the target sprint. Without a split (null) the
+     * copy starts unowned at 0 and is re-estimated. Fastlane capacity lives
+     * on SprintFastlaneMember and is never split here.
      */
-    public static function carryOverTo(int $sourceItemId, int $targetSprintId): int
+    public static function carryOverTo(int $sourceItemId, int $targetSprintId, ?float $carryCapacity = null, ?float $carryCredits = null): int
     {
         if ($sourceItemId <= 0 || $targetSprintId <= 0) {
             return 0;
@@ -3171,8 +3696,46 @@ JS;
             }
         }
 
-        $copy = new self();
-        return self::withoutAssignGuard(static function () use ($copy, $targetSprintId, $source, $itemtype, $itemsId) {
+        // The customer travels with the work, but only into a sprint it is
+        // valid for; elsewhere the copy lands unattributed, and says so.
+        $customerId = (int)($source->fields['plugin_sprint_sprintcustomers_id'] ?? 0);
+        if ($customerId > 0 && !SprintCustomer::isChargeableInSprint($customerId, $targetSprintId, false)) {
+            Session::addMessageAfterRedirect(
+                sprintf(
+                    __('Customer “%s” is not available in the entity of the target sprint; the carried-over item has no customer.', 'sprint'),
+                    SprintCustomer::getNameFor($customerId) ?: ('#' . $customerId)
+                ),
+                false,
+                WARNING
+            );
+            $customerId = 0;
+        }
+
+        // The carried share never exceeds what the source holds.
+        $isFastlane = (int)($source->fields['is_fastlane'] ?? 0) === 1;
+        $split      = $carryCapacity !== null || $carryCredits !== null;
+        $capacity   = $isFastlane ? 0.0 : min(
+            SprintMember::normalizeCapacity($carryCapacity ?? 0),
+            (float)($source->fields['capacity'] ?? 0)
+        );
+        $credits    = min(
+            SprintCustomer::normalizeCredits($carryCredits ?? 0),
+            (float)($source->fields['credits'] ?? 0)
+        );
+        $ownerId    = 0;
+        if ($split) {
+            $sourceOwner = (int)($source->fields['users_id'] ?? 0);
+            if ($sourceOwner > 0 && countElementsInTable(SprintMember::getTable(), [
+                'plugin_sprint_sprints_id' => $targetSprintId,
+                'users_id'                 => $sourceOwner,
+            ]) > 0) {
+                $ownerId = $sourceOwner;
+            }
+        }
+
+        $copy  = new self();
+        $newId = self::withoutAssignGuard(static fn() => self::withoutCreditGuard(
+            static function () use ($copy, $targetSprintId, $source, $itemtype, $itemsId, $customerId, $ownerId, $capacity, $credits) {
             return (int)$copy->add([
                 'plugin_sprint_sprints_id' => $targetSprintId,
                 'name'                     => (string)($source->fields['name'] ?? ''),
@@ -3185,13 +3748,48 @@ JS;
                 // Classification travels with the work — execution state resets.
                 'plugin_sprint_sprintcategories_id' => (int)($source->fields['plugin_sprint_sprintcategories_id'] ?? 0),
                 'plugin_sprint_sprintepics_id'      => (int)($source->fields['plugin_sprint_sprintepics_id'] ?? 0),
-                'users_id'                 => 0,
-                'capacity'                 => 0,
+                'plugin_sprint_sprintcustomers_id'  => $customerId,
+                'users_id'                 => $ownerId,
+                // The carried share; 0 without a split, to be re-estimated.
+                'capacity'                 => $capacity,
+                'credits'                  => $credits,
+                'plugin_sprint_sprintcreditproducts_id' => (int)($source->fields['plugin_sprint_sprintcreditproducts_id'] ?? 0),
                 'is_fastlane'              => (int)($source->fields['is_fastlane'] ?? 0),
                 'is_blocked'               => 0,
                 'note'                     => '',
             ]);
-        });
+            }
+        ));
+
+        // What moved on comes off the source. Bookkeeping, not a re-plan: the
+        // total is unchanged, so it skips the capacity approval (an AJAX-layer
+        // guard) and the credits right, like the copy above does.
+        if ($newId > 0 && ($capacity > 0 || $credits > 0)) {
+            $rest = ['id' => $sourceItemId];
+            if ($capacity > 0) {
+                $rest['capacity'] = (float)($source->fields['capacity'] ?? 0) - $capacity;
+            }
+            if ($credits > 0) {
+                $rest['credits'] = (float)($source->fields['credits'] ?? 0) - $credits;
+            }
+            self::withoutCreditGuard(static fn() => $source->update($rest));
+        }
+
+        return $newId;
+    }
+
+    /**
+     * Server-side write that may set customer/credits regardless of the acting
+     * user's right — a carry-over must not drop the customer it is charged to.
+     */
+    public static function withoutCreditGuard(callable $callback)
+    {
+        self::$skipCreditGuard = true;
+        try {
+            return $callback();
+        } finally {
+            self::$skipCreditGuard = false;
+        }
     }
 
     /** Server-side write that may place items in a sprint without the assign guard. */
@@ -3228,7 +3826,7 @@ JS;
     }
 
     /** Validate itemtype against the allowlist and cast numeric fields. */
-    private static function sanitizeInput(array $input): array
+    private static function sanitizeInput(array $input, ?array $stored = null): array
     {
         $allowedTypes = array_keys(self::getLinkedItemTypes());
         if (isset($input['itemtype']) && !in_array($input['itemtype'], $allowedTypes, true)) {
@@ -3240,12 +3838,31 @@ JS;
         if (isset($input['users_id']))    $input['users_id']    = (int)$input['users_id'];
         if (isset($input['story_points'])) $input['story_points'] = max(0, (int)$input['story_points']);
         if (isset($input['capacity']))    $input['capacity']    = SprintMember::normalizeCapacity($input['capacity']);
-        // '' / -1 = no actual figure recorded: the item follows its planned capacity.
-        if (array_key_exists('capacity_actual', $input)) {
-            $raw = $input['capacity_actual'];
-            $input['capacity_actual'] = ($raw === '' || $raw === null || (float)$raw < 0)
-                ? 'NULL'
-                : SprintMember::normalizeCapacity($raw);
+        // An empty customer field means "not sent" (a disabled picker or a
+        // selection that never loaded), never "no customer": only an explicit
+        // 0 detaches. Validity is judged in validateCustomer().
+        if (array_key_exists('plugin_sprint_sprintcustomers_id', $input)) {
+            $raw = $input['plugin_sprint_sprintcustomers_id'];
+            if ($raw === '' || $raw === null) {
+                unset($input['plugin_sprint_sprintcustomers_id']);
+            } else {
+                $input['plugin_sprint_sprintcustomers_id'] = max(0, (int)$raw);
+            }
+        }
+        if (isset($input['credits']))     $input['credits']     = SprintCustomer::normalizeCredits($input['credits']);
+        if (isset($input['plugin_sprint_sprintcreditproducts_id'])) {
+            $productId = (int)$input['plugin_sprint_sprintcreditproducts_id'];
+            // A catalogue entry outside the session's entities is not usable
+            // here; the credits themselves are kept as entered.
+            $input['plugin_sprint_sprintcreditproducts_id'] = (self::$skipCreditGuard ? SprintCreditProduct::isVisible($productId) : SprintCreditProduct::isPickable($productId)) || $productId === 0 ? $productId : 0;
+            // The product is leading (see leadingCredits()); server-side
+            // bookkeeping such as a carry-over sets its own amounts.
+            if (!self::$skipCreditGuard) {
+                $leading = SprintCreditProduct::leadingCredits($input['plugin_sprint_sprintcreditproducts_id'], $input, $stored);
+                if ($leading !== null) {
+                    $input['credits'] = $leading;
+                }
+            }
         }
         if (isset($input['priority']))    $input['priority']    = max(1, min(5, (int)$input['priority']));
         if (isset($input['plugin_sprint_sprints_id'])) $input['plugin_sprint_sprints_id'] = (int)$input['plugin_sprint_sprints_id'];
@@ -3548,19 +4165,34 @@ JS;
             Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
                 'value' => SprintMember::capacityKey($this->fields['capacity'] ?? 0),
             ]);
-            if (Config::isPlannedActualEnabled()) {
-                $actualRaw = $this->fields['capacity_actual'] ?? null;
-                echo " <span class='text-muted sprint-small ms-2' title='"
-                    . __s('Actual capacity: what the item really took, filled in as the work is done. Empty = follows the planned figure.', 'sprint')
-                    . "'>" . __('Actual', 'sprint') . "</span> ";
-                Dropdown::showFromArray('capacity_actual', ['' => __('Follows planned', 'sprint')] + SprintMember::getCapacityChoices(), [
-                    'value' => self::formatActualCapacity($actualRaw) === '' ? '' : SprintMember::capacityKey($actualRaw),
-                ]);
-            }
             echo "</td><td>" . __('Owner', 'sprint') . "</td><td>";
             Dropdown::showFromArray('users_id', $memberOptions, [
                 'value' => $this->fields['users_id'] ?? 0,
             ]);
+            echo "</td></tr>";
+        }
+
+        if (SprintCustomer::canUseCredits()) {
+            echo "<tr class='tab_bg_1'>";
+            echo "<td>" . SprintCustomer::getTypeName(1) . "</td><td>";
+            echo self::customerSelect(
+                'plugin_sprint_sprintcustomers_id',
+                (int)($this->fields['plugin_sprint_sprintcustomers_id'] ?? 0)
+            );
+            echo "</td><td>" . __('Credits', 'sprint') . "<br>";
+            echo "<span class='text-muted sprint-small'>"
+                . htmlescape(__('Charged to the customer once this item is delivered. Pick a product from the catalogue to fill in its default, or enter the credits by hand.', 'sprint')) . "</span>";
+            echo "</td><td>";
+            echo "<div class='d-flex flex-wrap gap-2 align-items-center'>";
+            echo self::productSelect(
+                'plugin_sprint_sprintcreditproducts_id',
+                (int)($this->fields['plugin_sprint_sprintcreditproducts_id'] ?? 0),
+                'credits',
+                'w-auto'
+            );
+            echo self::creditsInput('credits', $this->fields['credits'] ?? 0);
+            echo "</div>";
+            self::creditProductScript();
             echo "</td></tr>";
         }
 
@@ -3602,7 +4234,9 @@ JS;
         if (!empty($definedTags)) {
             $assigned = $this->getID() > 0 ? self::getTagsForItem((int)$this->getID()) : [];
             $assignedKeys = array_flip(array_map('mb_strtolower', $assigned));
-            echo "<tr class='tab_bg_1'><td>" . __('Tags', 'sprint') . "</td>";
+            echo "<tr class='tab_bg_1'><td>" . __('Tags', 'sprint')
+                . (Config::isTagRequired() ? " <span class='text-danger' title='" . __s('Required', 'sprint') . "'>*</span>" : '')
+                . "</td>";
             echo "<td colspan='3'>";
             echo "<input type='hidden' name='_tags' value=''>";
             echo "<div class='d-flex flex-wrap gap-3'>";

@@ -84,6 +84,19 @@ class Sprint extends CommonDBTM
             ];
         }
 
+        if (SprintCustomer::canViewCredits()) {
+            $menu['options']['credits'] = [
+                'title' => SprintCredits::getTypeName(2),
+                'page'  => SprintCredits::getSearchURL(false),
+                'icon'  => SprintCredits::getIcon(),
+                'links' => [
+                    'add'    => SprintCustomer::getFormURL(false),
+                    'search' => SprintCustomer::getSearchURL(false),
+                    'lists'  => SprintCreditProduct::getSearchURL(false),
+                ],
+            ];
+        }
+
         $menu['options']['sprinttemplate'] = [
             'title' => SprintTemplate::getTypeName(2),
             'page'  => SprintTemplate::getSearchURL(false),
@@ -528,6 +541,9 @@ class Sprint extends CommonDBTM
             in_array('status', $this->updates ?? [], true)
             && ($this->fields['status'] ?? '') === self::STATUS_COMPLETED
         ) {
+            // Freeze the credit agreement so a later change to a customer's
+            // retainer cannot rewrite what this sprint granted.
+            SprintCustomer::snapshotAgreements((int)$this->getID());
             SprintAgility::carryImprovementsForward($this);
             $unfinished = countElementsInTable(
                 SprintItem::getTable(),

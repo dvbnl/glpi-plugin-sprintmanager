@@ -130,14 +130,15 @@ class SprintFastlane extends CommonGLPI
             $rowTags = $tagsById[$itemId] ?? [];
             $rowDeps = $depsById[$itemId] ?? [];
 
-            echo "<tr class='tab_bg_1' " . SprintItem::buildItemDataAttrs($row, $rowTags) . ">";
-            echo "<td><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
+            // sprint-row + sprint-cell-* let the quick-edit save refresh this row in place.
+            echo "<tr class='tab_bg_1 sprint-row' " . SprintItem::buildItemDataAttrs($row, $rowTags) . ">";
+            echo "<td class='sprint-cell-name'><a href='" . SprintItem::getFormURLWithID($itemId) . "'>" .
                 htmlescape($row['name']) . "</a>"
                 . SprintCategory::renderPill((int)($row['plugin_sprint_sprintcategories_id'] ?? 0))
                 . SprintItem::renderTagPills($rowTags) . SprintItem::renderDependencyBadge($rowDeps) . "</td>";
             echo "<td>" . $linkedDisplay . "</td>";
-            echo "<td><span class='sprint-badge {$statusClass}'>" . $statusLabel . "</span></td>";
-            echo "<td>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
+            echo "<td class='sprint-cell-status'><span class='sprint-badge {$statusClass}'>" . $statusLabel . "</span></td>";
+            echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td>" . (count($memberNames) > 0 ? implode('<br>', $memberNames) :
                 "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
             echo "<td class='center'><strong>" . SprintMember::formatCapacity($totalCap) . "%</strong></td>";

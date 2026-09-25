@@ -28,13 +28,14 @@ if ($id <= 0 || $sprintId <= 0) {
 }
 
 $item = new GlpiPlugin\Sprint\SprintItem();
-if (!$item->getFromDB($id)) {
+if (!$item->getFromDB($id) || !$item->hasEntityAccess()) {
     echo json_encode($response);
     return;
 }
 
 $sprint = new GlpiPlugin\Sprint\Sprint();
-if (!$sprint->getFromDB($sprintId)) {
+if (!$sprint->getFromDB($sprintId)
+    || !GlpiPlugin\Sprint\SprintItem::sprintEntityAccessible($sprintId)) {
     echo json_encode([
         'success' => false,
         'message' => __('Please select a sprint', 'sprint'),

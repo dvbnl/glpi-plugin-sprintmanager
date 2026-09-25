@@ -28,20 +28,20 @@ function plugin_sprint_safe_redirect(string $target): void
 
 /**
  * Planning fields from the Sprint-tab panel (owner, capacity, sprint,
- * category, fastlane). Only the whitelisted keys reach the item; the values
+ * category, customer, credits, fastlane). Only the whitelisted keys reach the item; the values
  * are normalized inside SprintItem::prepareInputForAdd/Update.
  */
 function plugin_sprint_backlog_plan_fields(array $post): array
 {
     $out = [];
-    foreach (['users_id', 'capacity', 'proposed_sprints_id', 'plugin_sprint_sprintcategories_id', 'is_fastlane'] as $key) {
+    foreach ([
+        'users_id', 'capacity', 'credits', 'proposed_sprints_id',
+        'plugin_sprint_sprintcategories_id', 'plugin_sprint_sprintcustomers_id', 'is_fastlane',
+        'plugin_sprint_sprintcreditproducts_id',
+    ] as $key) {
         if (array_key_exists($key, $post)) {
-            $out[$key] = $key === 'capacity' ? (float)$post[$key] : (int)$post[$key];
+            $out[$key] = in_array($key, ['capacity', 'credits'], true) ? (float)$post[$key] : (int)$post[$key];
         }
-    }
-    // '' = no actual figure (follows planned); normalized in SprintItem.
-    if (array_key_exists('capacity_actual', $post)) {
-        $out['capacity_actual'] = (string)$post['capacity_actual'] === '' ? '' : (float)$post['capacity_actual'];
     }
     return $out;
 }
@@ -194,7 +194,7 @@ if (isset($_POST['assign_to_sprint'])) {
     $id       = (int)($_POST['id'] ?? 0);
     $sprintId = (int)($_POST['plugin_sprint_sprints_id'] ?? 0);
 
-    if ($id <= 0 || $sprintId <= 0) {
+    if ($id <= 0 || $sprintId <= 0 || !GlpiPlugin\Sprint\SprintItem::sprintEntityAccessible($sprintId)) {
         Session::addMessageAfterRedirect(
             __('Please select a sprint', 'sprint'),
             false,
@@ -207,7 +207,7 @@ if (isset($_POST['assign_to_sprint'])) {
     }
 
     $item = new GlpiPlugin\Sprint\SprintItem();
-    if (!$item->getFromDB($id)) {
+    if (!$item->getFromDB($id) || !$item->hasEntityAccess()) {
         Html::back();
     }
 
@@ -220,17 +220,34 @@ if (isset($_POST['assign_to_sprint'])) {
         || GlpiPlugin\Sprint\Config::isCurrentUserScrumMaster($sprintId)
         || GlpiPlugin\Sprint\SprintMember::isScrumMaster($sprintId, $currentUserId);
 
+    // DoR is mandatory on assign (as in ajax/assigntosprint.php); fastlane
+    // items are exempt. The Sprint-tab dialog posts the confirmed checks.
+    $dor    = GlpiPlugin\Sprint\Config::getDefinitionReady();
+    $update = [
+        'id'                       => $id,
+        'plugin_sprint_sprints_id' => $sprintId,
+        'proposed_sprints_id'      => 0,
+    ];
+    $dorOk = true;
+    if ($dor) {
+        $confirmed = array_values(array_intersect($dor, (array)($_POST['ready'] ?? [])));
+        $dorOk     = $isFastlane || count($confirmed) >= count($dor);
+        $update['ready_checks'] = json_encode($confirmed);
+    }
+
     if (!$canAssign) {
         Session::addMessageAfterRedirect(
             __('Only the Scrum Master of the selected sprint can assign items to it.', 'sprint'),
             false,
             ERROR
         );
-    } elseif ($item->update([
-        'id'                       => $id,
-        'plugin_sprint_sprints_id' => $sprintId,
-        'proposed_sprints_id'      => 0,
-    ])) {
+    } elseif (!$dorOk) {
+        Session::addMessageAfterRedirect(
+            __('Definition of Ready incomplete. Confirm every check to assign this item.', 'sprint'),
+            false,
+            ERROR
+        );
+    } elseif ($item->update($update)) {
         GlpiPlugin\Sprint\SprintItem::purgeBacklogCoupling(
             (string)($item->fields['itemtype'] ?? ''),
             (int)($item->fields['items_id'] ?? 0),

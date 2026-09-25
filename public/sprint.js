@@ -1331,3 +1331,64 @@
         bootRail();
     }
 })();
+
+/*
+ * Catalogue product picker (select.sprint-credit-product): the product is
+ * leading. Picking one copies its credits into the input named by
+ * data-credits-for and locks that input; "Manual credits" unlocks it.
+ * Lives here instead of inline so every page and modal gets it, whatever
+ * order its markup and jQuery arrive in.
+ */
+(function() {
+    if (window.__sprintCreditProductBound) { return; }
+    window.__sprintCreditProductBound = true;
+
+    function sync(select, notify) {
+        var target = select.getAttribute('data-credits-for');
+        if (!target) { return; }
+        var scope = select.closest('.modal, form') || document;
+        var input = scope.querySelector("input[name='" + target + "']");
+        if (!input) { return; }
+        var option  = select.options[select.selectedIndex];
+        var credits = option ? option.getAttribute('data-credits') : null;
+        var locked  = !!option && parseInt(option.value, 10) > 0 && credits !== null && credits !== '';
+        if (locked) {
+            // A change always takes the product's amount; on a mere re-sync
+            // (modal opened, markup loaded) a stored amount stands — a
+            // carried-over split keeps its share under the same product.
+            var empty = input.value === '' || parseFloat(input.value) === 0;
+            if ((notify || empty) && input.value !== credits) {
+                input.value = credits;
+                if (notify) { input.dispatchEvent(new Event('change', { bubbles: true })); }
+            }
+            input.readOnly = true;
+            input.classList.add('sprint-credits-locked');
+        } else if (input.classList.contains('sprint-credits-locked')) {
+            // Only undo our own lock: a session without the credits right
+            // gets a read-only input from the server.
+            input.readOnly = false;
+            input.classList.remove('sprint-credits-locked');
+        }
+    }
+
+    function syncAll(root) {
+        (root || document).querySelectorAll('select.sprint-credit-product').forEach(function(select) {
+            sync(select, false);
+        });
+    }
+    window.sprintCreditProductSync = syncAll;
+
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.matches && e.target.matches('select.sprint-credit-product')) {
+            sync(e.target, true);
+        }
+    }, true);
+    // The edit modals fill their fields with .val() right before showing.
+    document.addEventListener('show.bs.modal', function(e) { syncAll(e.target); });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { syncAll(); });
+    } else {
+        syncAll();
+    }
+})();

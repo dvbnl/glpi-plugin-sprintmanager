@@ -60,7 +60,8 @@ foreach ($ready as $row) {
 
     if (!isset($sprintCache[$sprintId])) {
         $sp = new GlpiPlugin\Sprint\Sprint();
-        $sprintCache[$sprintId] = $sp->getFromDB($sprintId) ? $sp : false;
+        $sprintCache[$sprintId] = $sp->getFromDB($sprintId)
+            && GlpiPlugin\Sprint\SprintItem::sprintEntityAccessible($sprintId) ? $sp : false;
     }
     if ($sprintCache[$sprintId] === false) {
         $skipped++;
@@ -79,7 +80,7 @@ foreach ($ready as $row) {
     }
 
     $one = new GlpiPlugin\Sprint\SprintItem();
-    if (!$one->getFromDB($id)) {
+    if (!$one->getFromDB($id) || !$one->hasEntityAccess()) {
         $skipped++;
         continue;
     }

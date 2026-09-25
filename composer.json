@@ -20,7 +20,8 @@
         "lint": "find src front ajax -name '*.php' -print0 | xargs -0 -n1 php -l",
         "test": [
             "php tests/static_contracts.php",
-            "php tests/inline_js_syntax.php"
+            "php tests/inline_js_syntax.php",
+            "php tests/credit_math.php"
         ]
     }
 }

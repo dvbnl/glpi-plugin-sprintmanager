@@ -288,6 +288,8 @@ class SprintBoard extends CommonGLPI
         $ttlDod = htmlescape(__('Definition of Done', 'sprint'));
         $msgDod = htmlescape(__('Confirm every check before moving this item on.', 'sprint'));
         $btnDod = htmlescape(__('Confirm', 'sprint'));
+        $btnDodOverride = htmlescape(__('Overrule as Scrum Master', 'sprint'));
+        $msgDodOverride = htmlescape(__('As Scrum Master you can move this item on without completing every check. The skipped checks are recorded in the history.', 'sprint'));
         echo "<div class='modal fade' id='sprint-dod-modal' tabindex='-1' aria-hidden='true'>"
             . "<div class='modal-dialog modal-dialog-centered'>"
             . "<div class='modal-content'>"
@@ -298,9 +300,13 @@ class SprintBoard extends CommonGLPI
             . "<div class='modal-body'>"
             . "<p class='text-muted sprint-small mb-2'>{$msgDod}</p>"
             . "<div class='sprint-dod-list'></div>"
+            . "<p class='text-muted sprint-small mt-2 mb-0 sprint-dod-override-hint' style='display:none'>"
+            . "<i class='fas fa-hat-wizard me-1'></i>{$msgDodOverride}</p>"
             . "</div>"
             . "<div class='modal-footer'>"
             . "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$btnCancel}</button>"
+            . "<button type='button' class='btn btn-warning sprint-dod-override' style='display:none'>"
+            . "<i class='fas fa-hat-wizard me-1'></i>{$btnDodOverride}</button>"
             . "<button type='button' class='btn btn-success sprint-dod-go' disabled>{$btnDod}</button>"
             . "</div>"
             . "</div></div></div>";
@@ -410,12 +416,13 @@ class SprintBoard extends CommonGLPI
         }
     }
 
-    function persistStatus(id, newStatus, card, fromBody, confirmOpen, doneList) {
+    function persistStatus(id, newStatus, card, fromBody, confirmOpen, doneList, dodOverride) {
         jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
         .then(function(tok){
             var data = {
                 id: id, status: newStatus,
                 confirm_linked_open: confirmOpen ? 1 : 0,
+                dod_override: dodOverride ? 1 : 0,
                 _glpi_csrf_token: tok && tok.token ? tok.token : ''
             };
             if (doneList && doneList.length) { data.done = doneList; }
@@ -431,9 +438,14 @@ class SprintBoard extends CommonGLPI
                     if (window.glpi_toast_error) { window.glpi_toast_error(resp.message || "{$errMove}"); }
                     return;
                 }
-                pendingMove = { id: id, newStatus: newStatus, card: card, fromBody: fromBody, doneList: doneList || null };
+                pendingMove = { id: id, newStatus: newStatus, card: card, fromBody: fromBody, doneList: doneList || null, dodOverride: false };
                 pendingMoveConfirmed = false;
                 var list = dodEl.querySelector('.sprint-dod-list');
+                // Scrum Master only: the overrule button and its hint.
+                var overrideBtn = dodEl.querySelector('.sprint-dod-override');
+                var overrideHint = dodEl.querySelector('.sprint-dod-override-hint');
+                if (overrideBtn) { overrideBtn.style.display = resp.can_override ? '' : 'none'; }
+                if (overrideHint) { overrideHint.style.display = resp.can_override ? '' : 'none'; }
                 list.innerHTML = '';
                 (resp.dod || []).forEach(function(check){
                     var label = document.createElement('label');
@@ -469,7 +481,7 @@ class SprintBoard extends CommonGLPI
                     if (window.glpi_toast_error) { window.glpi_toast_error(resp.message || "{$errMove}"); }
                     return;
                 }
-                pendingMove = { id: id, newStatus: newStatus, card: card, fromBody: fromBody };
+                pendingMove = { id: id, newStatus: newStatus, card: card, fromBody: fromBody, doneList: doneList || null, dodOverride: !!dodOverride };
                 pendingMoveConfirmed = false;
                 var nameEl = modalEl.querySelector('.sprint-lo-name');
                 if (nameEl) { nameEl.textContent = resp.linked_name || ''; }
@@ -487,7 +499,11 @@ class SprintBoard extends CommonGLPI
             }
             if (resp && resp.success) {
                 syncLinkedOpenBadge(card, resp.linked_open_badge_html || '');
-                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || 'Status updated'); }
+                if (resp.dod_overridden && window.glpi_toast_warning) {
+                    window.glpi_toast_warning(resp.message || 'Status updated');
+                } else if (window.glpi_toast_info) {
+                    window.glpi_toast_info(resp.message || 'Status updated');
+                }
             } else {
                 revertMove(card, fromBody);
                 var msg = (resp && resp.message && resp.message !== 'Update failed')
@@ -531,7 +547,7 @@ class SprintBoard extends CommonGLPI
         if (pendingMove) {
             var mv = pendingMove;
             pendingMove = null;
-            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, true, mv.doneList);
+            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, true, mv.doneList, mv.dodOverride);
         }
     });
 
@@ -545,7 +561,21 @@ class SprintBoard extends CommonGLPI
         if (pendingMove) {
             var mv = pendingMove;
             pendingMove = null;
-            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, false, done);
+            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, false, done, false);
+        }
+    });
+
+    // Scrum Master overrule: retry with whatever was ticked plus the override flag.
+    jQuery(document).on('click', '#sprint-dod-modal .sprint-dod-override', function(){
+        var dodEl = document.getElementById('sprint-dod-modal');
+        pendingMoveConfirmed = true;
+        var done = [];
+        dodEl.querySelectorAll('.sprint-dod-check:checked').forEach(function(cb){ done.push(cb.value); });
+        bootstrap.Modal.getOrCreateInstance(dodEl).hide();
+        if (pendingMove) {
+            var mv = pendingMove;
+            pendingMove = null;
+            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, false, done, true);
         }
     });
 

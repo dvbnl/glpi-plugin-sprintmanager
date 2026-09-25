@@ -45,6 +45,17 @@ class Profile extends CommonDBTM
                 ],
             ],
             [
+                'itemtype'  => 'GlpiPlugin\Sprint\SprintCustomer',
+                'label'     => __('Customers & credits', 'sprint'),
+                'field'     => 'plugin_sprint_credits',
+                'rights'    => [
+                    READ   => __('Read'),
+                    CREATE => __('Create'),
+                    UPDATE => __('Update'),
+                    PURGE  => __('Delete permanently'),
+                ],
+            ],
+            [
                 'itemtype'  => 'GlpiPlugin\Sprint\SprintItem',
                 'label'     => __('Sprint items', 'sprint'),
                 'field'     => 'plugin_sprint_item',
@@ -67,6 +78,16 @@ class Profile extends CommonDBTM
     {
         global $DB;
 
+        // Only super-admin profiles get rights by default; every other profile
+        // (Self-Service included) starts without access and is opted in by an
+        // administrator. Existing grants are never touched.
+        $superAdmins = method_exists(\Profile::class, 'getSuperAdminProfilesId')
+            ? array_map('intval', \Profile::getSuperAdminProfilesId())
+            : [];
+        if (!in_array(4, $superAdmins, true)) {
+            $superAdmins[] = 4;
+        }
+
         $rights = self::getAllRights();
         foreach ($rights as $right) {
             $field = $right['field'];
@@ -81,7 +102,14 @@ class Profile extends CommonDBTM
                     ],
                 ]);
                 if (count($existing) === 0) {
-                    $value = ($profile['id'] == 4) ? ALLSTANDARDRIGHT : READ;
+                    $isSuperAdmin = in_array((int)$profile['id'], $superAdmins, true);
+                    if (!$isSuperAdmin) {
+                        $value = 0;
+                    } elseif ($field === 'plugin_sprint_credits') {
+                        $value = READ | CREATE | UPDATE | PURGE;
+                    } else {
+                        $value = ALLSTANDARDRIGHT;
+                    }
                     $DB->insert('glpi_profilerights', [
                         'profiles_id' => $profile['id'],
                         'name'        => $field,

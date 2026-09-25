@@ -22,7 +22,7 @@ if (!isset($_POST['id']) || !isset($_POST['status'])) {
 }
 
 $item = new GlpiPlugin\Sprint\SprintItem();
-if (!$item->getFromDB((int)$_POST['id'])) {
+if (!$item->getFromDB((int)$_POST['id']) || !$item->hasEntityAccess()) {
     echo json_encode($response);
     return;
 }
@@ -50,33 +50,43 @@ if (!in_array($_POST['status'], $validStatuses)) {
 $newStatus = (string)$_POST['status'];
 
 // DoD gate for Review/Done: first attempt returns needs_dod (board shows the
-// dialog), the retry carries done[] which is stored.
+// dialog), the retry carries done[] which is stored. The sprint's Scrum
+// Master gets an extra "overrule" button in that dialog: a dod_override=1
+// retry stores whatever was ticked and moves the item anyway (the transition
+// policy below grants the same exemption, so the two stay in step).
 $dod = GlpiPlugin\Sprint\Config::getDefinitionDone();
 $doneChecks = null;
+$isScrumMaster = GlpiPlugin\Sprint\SprintItem::currentUserIsScrumMasterOf(
+    (int)($item->fields['plugin_sprint_sprints_id'] ?? 0)
+);
+$dodOverride = $isScrumMaster && (int)($_POST['dod_override'] ?? 0) === 1;
 if ($dod && in_array($newStatus, [
     GlpiPlugin\Sprint\SprintItem::STATUS_REVIEW,
     GlpiPlugin\Sprint\SprintItem::STATUS_DONE,
 ], true)) {
     $current = GlpiPlugin\Sprint\SprintAgility::checklist((string)($item->fields['done_checks'] ?? ''));
-    if (isset($_POST['done'])) {
-        $doneChecks = array_values(array_intersect($dod, (array)$_POST['done']));
+    if (isset($_POST['done']) || $dodOverride) {
+        $doneChecks = array_values(array_intersect($dod, (array)($_POST['done'] ?? [])));
         $item->fields['done_checks'] = json_encode($doneChecks);
-    } elseif (array_diff($dod, $current)) {
+    }
+    if (!$dodOverride && array_diff($dod, $doneChecks ?? $current)) {
         echo json_encode([
-            'success'   => false,
-            'needs_dod' => true,
-            'dod'       => array_values($dod),
-            'checked'   => array_values(array_intersect($dod, $current)),
+            'success'      => false,
+            'needs_dod'    => true,
+            'dod'          => array_values($dod),
+            'checked'      => array_values(array_intersect($dod, $doneChecks ?? $current)),
+            'can_override' => $isScrumMaster,
         ]);
         return;
     }
 }
 
-$policy = GlpiPlugin\Sprint\SprintAgility::validateTransition($item, $newStatus);
+$policy = GlpiPlugin\Sprint\SprintAgility::validateTransition($item, $newStatus, $dodOverride);
 if (!$policy['ok']) {
     echo json_encode(['success' => false, 'message' => $policy['message']]);
     return;
 }
+$overrideNotice = !empty($policy['overridden']) ? (string)$policy['message'] : '';
 $confirmLinkedOpen = (int)($_POST['confirm_linked_open'] ?? 0) === 1;
 if (
     !$confirmLinkedOpen
@@ -144,7 +154,8 @@ if ($result) {
 echo json_encode([
     'success'                => (bool)$result,
     'message'                => $result
-        ? 'Status updated'
+        ? ($overrideNotice !== '' ? $overrideNotice : 'Status updated')
         : ($messages ? implode("\n", $messages) : 'Update failed'),
+    'dod_overridden'         => $result && $overrideNotice !== '',
     'linked_open_badge_html' => $badgeHtml,
 ]);

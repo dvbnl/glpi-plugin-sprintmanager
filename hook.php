@@ -89,7 +89,6 @@ function plugin_sprint_install(): bool
             `users_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owner/Assignee',
             `sort_order`               INT NOT NULL DEFAULT 0,
             `capacity`                 DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Capacity usage in %',
-            `capacity_actual`          DECIMAL(5,1) NULL DEFAULT NULL COMMENT 'Actual capacity in %, NULL = follows planned',
             `note`                     TEXT COMMENT 'Standup note',
             `date_creation`            TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                 TIMESTAMP NULL DEFAULT NULL,
@@ -182,14 +181,30 @@ function plugin_sprint_install(): bool
         // work kept out of the active planning sections and capacity totals.
         $migration->addField('glpi_plugin_sprint_sprintitems', 'is_parked', 'bool', ['value' => 0, 'after' => 'is_adhoc']);
         $migration->addKey('glpi_plugin_sprint_sprintitems', 'is_parked');
-        // Planned / actual capacity (plugin setting): NULL = no actual figure
-        // recorded yet, the item follows its planned capacity.
+        // Customer + credits replace the former planned/actual capacity pair:
+        // an item is planned as a capacity %% and charged as credits.
         $migration->addField(
             'glpi_plugin_sprint_sprintitems',
-            'capacity_actual',
-            'DECIMAL(5,1) NULL DEFAULT NULL',
-            ['after' => 'capacity', 'nodefault' => true]
+            'plugin_sprint_sprintcustomers_id',
+            'integer',
+            ['value' => 0, 'after' => 'capacity']
         );
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'plugin_sprint_sprintcustomers_id');
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitems',
+            'credits',
+            "DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Credits charged to the customer for this item'",
+            ['after' => 'plugin_sprint_sprintcustomers_id']
+        );
+        $migration->dropField('glpi_plugin_sprint_sprintitems', 'capacity_actual');
+        // The catalogue entry the credits were taken from, 0 = entered by hand.
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitems',
+            'plugin_sprint_sprintcreditproducts_id',
+            'integer',
+            ['value' => 0, 'after' => 'credits']
+        );
+        $migration->addKey('glpi_plugin_sprint_sprintitems', 'plugin_sprint_sprintcreditproducts_id');
     }
 
     // =========================================================================
@@ -254,6 +269,151 @@ function plugin_sprint_install(): bool
             "DECIMAL(6,1) NOT NULL DEFAULT 0 COMMENT 'Capacity floor in %, 0 = no minimum'",
             ['after' => 'max_percent']
         );
+    }
+
+    // =========================================================================
+    // Customers + their credit ledger
+    // =========================================================================
+    $creditTables = [
+        'glpi_plugin_sprint_sprintcustomers' => "CREATE TABLE `glpi_plugin_sprint_sprintcustomers` (
+            `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `name`          VARCHAR(255) NOT NULL DEFAULT '',
+            `code`          VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Short reference code',
+            `color`         VARCHAR(16) NOT NULL DEFAULT '#0d6efd',
+            `entities_id`   INT UNSIGNED NOT NULL DEFAULT 0,
+            `is_recursive`  TINYINT NOT NULL DEFAULT 0,
+            `contact`       VARCHAR(255) NOT NULL DEFAULT '',
+            `email`         VARCHAR(255) NOT NULL DEFAULT '',
+            `credit_alert`  DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT 'Warn below this many credits left, 0 = no alert',
+            `is_active`     TINYINT NOT NULL DEFAULT 1,
+            `comment`       TEXT,
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`      TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `name` (`name`),
+            KEY `entities_id` (`entities_id`),
+            KEY `is_active` (`is_active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintcreditproducts' => "CREATE TABLE `glpi_plugin_sprint_sprintcreditproducts` (
+            `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `name`          VARCHAR(255) NOT NULL DEFAULT '',
+            `code`          VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Short reference code',
+            `credits`       DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Default credits filled in when the product is picked',
+            `description`   TEXT,
+            `sprintcreditproducts_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Parent folder, 0 = top level',
+            `is_folder`     TINYINT NOT NULL DEFAULT 0 COMMENT 'A folder groups products and cannot be picked',
+            `sort_order`    INT NOT NULL DEFAULT 0 COMMENT 'Drag order among siblings, 0 = by name',
+            `entities_id`   INT UNSIGNED NOT NULL DEFAULT 0,
+            `is_recursive`  TINYINT NOT NULL DEFAULT 1,
+            `is_active`     TINYINT NOT NULL DEFAULT 1,
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`      TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `name` (`name`),
+            KEY `sprintcreditproducts_id` (`sprintcreditproducts_id`),
+            KEY `entities_id` (`entities_id`),
+            KEY `is_active` (`is_active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintretainers' => "CREATE TABLE `glpi_plugin_sprint_sprintretainers` (
+            `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprintcustomers_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `date_start`    DATE NULL DEFAULT NULL COMMENT 'First sprint start date the rule applies to, NULL = from the beginning',
+            `credits_per_sprint` DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT 'Granted every sprint until the next rule starts, 0 = no retainer',
+            `credits_cap_per_sprint` DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT 'Flag a sprint claiming more than this, 0 = no cap',
+            `comment`       VARCHAR(255) NOT NULL DEFAULT '',
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`      TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `plugin_sprint_sprintcustomers_id` (`plugin_sprint_sprintcustomers_id`),
+            KEY `date_start` (`date_start`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintcustomercredits' => "CREATE TABLE `glpi_plugin_sprint_sprintcustomercredits` (
+            `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id`         INT UNSIGNED NOT NULL DEFAULT 0,
+            `plugin_sprint_sprintcustomers_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `credits`       DECIMAL(12,2) NULL DEFAULT NULL COMMENT 'Grant for this sprint, NULL = the customer retainer',
+            `max_credits`   DECIMAL(12,2) NULL DEFAULT NULL COMMENT 'Cap for this sprint, NULL = the customer cap',
+            `date_mod`      TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unicity` (`plugin_sprint_sprints_id`, `plugin_sprint_sprintcustomers_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_sprintcredits' => "CREATE TABLE `glpi_plugin_sprint_sprintcredits` (
+            `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprintcustomers_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `name`          VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Description of the purchase or correction',
+            `reference`     VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'PO / invoice reference',
+            `credits`       DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT 'Positive = bought, negative = correction',
+            `date`          DATE NULL DEFAULT NULL COMMENT 'Booking date',
+            `date_expire`   DATE NULL DEFAULT NULL COMMENT 'Credits stop counting after this date, NULL = never',
+            `users_id`      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Who booked it',
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            `date_mod`      TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `plugin_sprint_sprintcustomers_id` (`plugin_sprint_sprintcustomers_id`),
+            KEY `date` (`date`),
+            KEY `date_expire` (`date_expire`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+    ];
+    foreach ($creditTables as $table => $query) {
+        if (!$DB->tableExists($table)) {
+            $DB->doQueryOrDie($query, $DB->error());
+        }
+    }
+
+    // Catalogue folders: a pre-release table gets the parent + folder flag.
+    if ($DB->tableExists('glpi_plugin_sprint_sprintcreditproducts')) {
+        $migration->addField('glpi_plugin_sprint_sprintcreditproducts', 'sprintcreditproducts_id', 'integer', ['value' => 0, 'after' => 'description']);
+        $migration->addKey('glpi_plugin_sprint_sprintcreditproducts', 'sprintcreditproducts_id');
+        $migration->addField('glpi_plugin_sprint_sprintcreditproducts', 'is_folder', 'bool', ['value' => 0, 'after' => 'sprintcreditproducts_id']);
+        // Drag order on the catalogue page (among siblings, 0 = by name).
+        $migration->addField('glpi_plugin_sprint_sprintcreditproducts', 'sort_order', 'integer', ['value' => 0, 'after' => 'is_folder']);
+    }
+
+    // The retainer moved from four columns on the customer (one figure with
+    // a start/end window) to dated rules in glpi_plugin_sprint_sprintretainers.
+    // A pre-release database carries the figure over as the first rule, an
+    // end date as a closing 0-rule, and only then are the columns dropped —
+    // once, so a second run finds nothing to move.
+    if (
+        $DB->tableExists('glpi_plugin_sprint_sprintcustomers')
+        && $DB->fieldExists('glpi_plugin_sprint_sprintcustomers', 'credits_per_sprint')
+    ) {
+        foreach ($DB->request([
+            'SELECT' => ['id', 'credits_per_sprint', 'credits_cap_per_sprint', 'retainer_start', 'retainer_end'],
+            'FROM'   => 'glpi_plugin_sprint_sprintcustomers',
+        ]) as $row) {
+            $per = (float)$row['credits_per_sprint'];
+            $cap = (float)$row['credits_cap_per_sprint'];
+            if ($per <= 0 && $cap <= 0) {
+                continue;
+            }
+            $start = ($row['retainer_start'] ?? null) === null || str_starts_with((string)$row['retainer_start'], '0000') ? null : substr((string)$row['retainer_start'], 0, 10);
+            $end   = ($row['retainer_end'] ?? null) === null || str_starts_with((string)$row['retainer_end'], '0000') ? null : substr((string)$row['retainer_end'], 0, 10);
+            $now   = date('Y-m-d H:i:s');
+            $DB->insert('glpi_plugin_sprint_sprintretainers', [
+                'plugin_sprint_sprintcustomers_id' => (int)$row['id'],
+                'date_start'                       => $start,
+                'credits_per_sprint'               => $per,
+                'credits_cap_per_sprint'           => $cap,
+                'comment'                          => '',
+                'date_creation'                    => $now,
+                'date_mod'                         => $now,
+            ]);
+            if ($end !== null) {
+                $DB->insert('glpi_plugin_sprint_sprintretainers', [
+                    'plugin_sprint_sprintcustomers_id' => (int)$row['id'],
+                    'date_start'                       => date('Y-m-d', strtotime($end . ' +1 day')),
+                    'credits_per_sprint'               => 0,
+                    'credits_cap_per_sprint'           => 0,
+                    'comment'                          => '',
+                    'date_creation'                    => $now,
+                    'date_mod'                         => $now,
+                ]);
+            }
+        }
+        foreach (['credits_per_sprint', 'credits_cap_per_sprint', 'retainer_start', 'retainer_end'] as $field) {
+            $migration->dropField('glpi_plugin_sprint_sprintcustomers', $field);
+        }
     }
 
     // Sprint flow policies.
@@ -395,6 +555,8 @@ function plugin_sprint_install(): bool
             `plugin_sprint_sprintitems_id`  INT UNSIGNED NOT NULL DEFAULT 0,
             `users_id`                      INT UNSIGNED NOT NULL DEFAULT 0,
             `capacity`                      DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Capacity allocated to this dependency, in %',
+            `credits`                       DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Credits the helper charges to the parent item customer',
+            `plugin_sprint_sprintcreditproducts_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Catalogue entry the credits were taken from, 0 = by hand',
             `is_resolved`                   TINYINT NOT NULL DEFAULT 0,
             `comment`                       TEXT,
             `date_creation`                 TIMESTAMP NULL DEFAULT NULL,
@@ -403,9 +565,27 @@ function plugin_sprint_install(): bool
             UNIQUE KEY `unicity` (`plugin_sprint_sprintitems_id`, `users_id`),
             KEY `plugin_sprint_sprintitems_id` (`plugin_sprint_sprintitems_id`),
             KEY `users_id` (`users_id`),
-            KEY `is_resolved` (`is_resolved`)
+            KEY `is_resolved` (`is_resolved`),
+            KEY `plugin_sprint_sprintcreditproducts_id` (`plugin_sprint_sprintcreditproducts_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
         $DB->doQueryOrDie($query, $DB->error());
+    }
+    // Migration: a dependency charges credits of its own next to its capacity
+    // (a helper's check or review is billable work on the parent's customer).
+    if ($DB->tableExists('glpi_plugin_sprint_sprintitemdependencies')) {
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitemdependencies',
+            'credits',
+            "DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Credits the helper charges to the parent item customer'",
+            ['after' => 'capacity']
+        );
+        $migration->addField(
+            'glpi_plugin_sprint_sprintitemdependencies',
+            'plugin_sprint_sprintcreditproducts_id',
+            'integer',
+            ['value' => 0, 'after' => 'credits']
+        );
+        $migration->addKey('glpi_plugin_sprint_sprintitemdependencies', 'plugin_sprint_sprintcreditproducts_id');
     }
 
     // =========================================================================
@@ -773,6 +953,24 @@ function plugin_sprint_install(): bool
     }
 
     // =========================================================================
+    // Table: glpi_plugin_sprint_userprefs
+    // Per-user preferences (personal backlog view). Key/value per user; also
+    // created lazily by UserPref::ensureTable() on running installations.
+    // =========================================================================
+    if (!$DB->tableExists('glpi_plugin_sprint_userprefs')) {
+        $query = "CREATE TABLE `glpi_plugin_sprint_userprefs` (
+            `id`       INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `users_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `name`     VARCHAR(64) NOT NULL DEFAULT '',
+            `value`    VARCHAR(255) NOT NULL DEFAULT '',
+            `date_mod` TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `user_name` (`users_id`, `name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+        $DB->doQueryOrDie($query, $DB->error());
+    }
+
+    // =========================================================================
     // Table: glpi_plugin_sprint_sprintrequests
     // Approval requests from non-Scrum-Masters: assigning a backlog item to a
     // sprint, or changing an item's capacity % or category inside a sprint.
@@ -960,6 +1158,11 @@ function plugin_sprint_uninstall(): bool
     global $DB;
 
     $tables = [
+        'glpi_plugin_sprint_sprintcreditproducts',
+        'glpi_plugin_sprint_sprintretainers',
+        'glpi_plugin_sprint_sprintcustomercredits',
+        'glpi_plugin_sprint_sprintcredits',
+        'glpi_plugin_sprint_sprintcustomers',
         'glpi_plugin_sprint_backlogflow',
         'glpi_plugin_sprint_sprintcategorycaps',
         'glpi_plugin_sprint_sprintcategories',
@@ -969,6 +1172,7 @@ function plugin_sprint_uninstall(): bool
         'glpi_plugin_sprint_sprintavailabilities',
         'glpi_plugin_sprint_sprintepics',
         'glpi_plugin_sprint_sprintrequests',
+        'glpi_plugin_sprint_userprefs',
         'glpi_plugin_sprint_meetingblockedsnapshots',
         'glpi_plugin_sprint_audit_sources',
         'glpi_plugin_sprint_sprinttemplatemeetings',
