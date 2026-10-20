@@ -14,7 +14,7 @@ header('Content-Type: application/json');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);
 
-$response = ['success' => false, 'message' => 'Request failed'];
+$response = ['success' => false, 'message' => __('Request failed', 'sprint')];
 
 $id = (int)($_POST['id'] ?? 0);
 

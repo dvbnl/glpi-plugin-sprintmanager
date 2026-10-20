@@ -11,7 +11,7 @@ header('Content-Type: application/json');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_sprint', READ);
 
-$response = ['success' => false, 'message' => 'Request failed'];
+$response = ['success' => false, 'message' => __('Request failed', 'sprint')];
 
 $meetingId = (int)($_POST['meeting_id'] ?? 0);
 $meeting   = new GlpiPlugin\Sprint\SprintMeeting();
@@ -67,7 +67,7 @@ switch ($action) {
         $phaseKey  = (string)($_POST['phase_key'] ?? '');
         $validKeys = array_column($phases, 'key');
         if (!in_array($phaseKey, $validKeys, true)) {
-            $response['message'] = 'Unknown phase';
+            $response['message'] = __('Unknown phase', 'sprint');
             echo json_encode($response);
             return;
         }
@@ -81,6 +81,30 @@ switch ($action) {
         $update['phase_notes'] = json_encode($notes);
         break;
 
+    case 'set_prev_sprint':
+        // Retrospective follow-up: the facilitator overrides the predecessor
+        // found in the sprint series (0 = back to automatic). Only earlier
+        // sprints of the same entity are accepted.
+        if ($meetingType !== GlpiPlugin\Sprint\SprintMeeting::TYPE_RETROSPECTIVE) {
+            echo json_encode($response);
+            return;
+        }
+        $sprint = new GlpiPlugin\Sprint\Sprint();
+        $chosen = (int)($_POST['prev_sprint_id'] ?? 0);
+        if (!$sprint->getFromDB($sprintId)
+            || ($chosen > 0 && !isset(GlpiPlugin\Sprint\SprintAgility::resolvePredecessor($sprint->fields)['choices'][$chosen]))) {
+            echo json_encode($response);
+            return;
+        }
+        $notes = json_decode((string)($meeting->fields['phase_notes'] ?? ''), true) ?: [];
+        if ($chosen > 0) {
+            $notes[GlpiPlugin\Sprint\SprintMeeting::PREV_SPRINT_NOTE_KEY] = $chosen;
+        } else {
+            unset($notes[GlpiPlugin\Sprint\SprintMeeting::PREV_SPRINT_NOTE_KEY]);
+        }
+        $update['phase_notes'] = json_encode($notes);
+        break;
+
     case 'end_meeting':
         $update['meeting_status'] = 'completed';
         $update['ended_at']       = $now;
@@ -88,7 +112,7 @@ switch ($action) {
         break;
 
     default:
-        $response['message'] = 'Unknown action';
+        $response['message'] = __('Unknown action', 'sprint');
         echo json_encode($response);
         return;
 }
@@ -103,6 +127,9 @@ if (!$meeting->update($update, $logged)) {
 $meeting->getFromDB($meetingId);
 echo json_encode([
     'success'             => true,
+    // Echoed so the notes autosave can ignore responses to older saves.
+    'seq'                 => (int)($_POST['seq'] ?? 0),
+    'phase_key'           => (string)($_POST['phase_key'] ?? ''),
     'status'              => (string)($meeting->fields['meeting_status'] ?? 'open'),
     'current_phase'       => (int)($meeting->fields['current_phase'] ?? 0),
     'phase_started_at_ts' => !empty($meeting->fields['phase_started_at'])

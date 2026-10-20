@@ -285,22 +285,68 @@ class Config extends CommonDBTM
     }
 
     /**
-     * Persist a full set of plugin settings (called from front/config.form.php).
+     * Persist plugin settings (called from front/config.form.php). Every
+     * settings group posts its own form, so only the keys present in the
+     * input are written: saving one group never resets another. A switch
+     * posts a hidden 0 before its checkbox, so "off" is always present.
      */
     public static function saveConfig(array $input): void
     {
-        $values = [
-            self::CFG_SCRUM_MASTER_CAPACITY => (int)(bool)($input[self::CFG_SCRUM_MASTER_CAPACITY] ?? 0),
-            self::CFG_REPORT_LOGO_URL       => trim((string)($input[self::CFG_REPORT_LOGO_URL] ?? '')),
-            self::CFG_SPRINT_ITEM_TAGS      => self::normalizeTagInput((string)($input[self::CFG_SPRINT_ITEM_TAGS] ?? '')),
-            self::CFG_TAG_REQUIRED          => (int)(bool)($input[self::CFG_TAG_REQUIRED] ?? 0),
-            self::CFG_CAPACITY_TO_POINTS    => (int)(bool)($input[self::CFG_CAPACITY_TO_POINTS] ?? 0),
-            self::CFG_BACKLOG_AUTO_CLEANUP  => (int)(bool)($input[self::CFG_BACKLOG_AUTO_CLEANUP] ?? 0),
-            self::CFG_BACKLOG_AGING_DAYS    => max(0, min(365, (int)($input[self::CFG_BACKLOG_AGING_DAYS] ?? 21))),
-            self::CFG_DEFINITION_READY      => implode("\n", SprintAgility::checklist((string)($input[self::CFG_DEFINITION_READY] ?? ''))),
-            self::CFG_DEFINITION_DONE       => implode("\n", SprintAgility::checklist((string)($input[self::CFG_DEFINITION_DONE] ?? ''))),
+        $normalize = [
+            self::CFG_SCRUM_MASTER_CAPACITY => static fn($v) => (int)(bool)$v,
+            self::CFG_REPORT_LOGO_URL       => static fn($v) => trim((string)$v),
+            self::CFG_SPRINT_ITEM_TAGS      => static fn($v) => self::normalizeTagInput((string)$v),
+            self::CFG_TAG_REQUIRED          => static fn($v) => (int)(bool)$v,
+            self::CFG_CAPACITY_TO_POINTS    => static fn($v) => (int)(bool)$v,
+            self::CFG_BACKLOG_AUTO_CLEANUP  => static fn($v) => (int)(bool)$v,
+            self::CFG_BACKLOG_AGING_DAYS    => static fn($v) => max(0, min(365, (int)$v)),
+            self::CFG_DEFINITION_READY      => static fn($v) => implode("\n", SprintAgility::checklist((string)$v)),
+            self::CFG_DEFINITION_DONE       => static fn($v) => implode("\n", SprintAgility::checklist((string)$v)),
         ];
-        GlpiConfig::setConfigurationValues(self::CONTEXT, $values);
+        $values = [];
+        foreach ($normalize as $key => $fn) {
+            if (array_key_exists($key, $input)) {
+                $values[$key] = $fn($input[$key]);
+            }
+        }
+        if ($values) {
+            GlpiConfig::setConfigurationValues(self::CONTEXT, $values);
+        }
+    }
+
+    /**
+     * The settings groups, in page order: anchor key => [title, icon].
+     *
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getSettingsSections(): array
+    {
+        return [
+            'planning' => [__('Planning & rights', 'sprint'), 'fas fa-user-shield'],
+            'quality'  => [__('Quality', 'sprint'), 'fas fa-clipboard-check'],
+            'backlog'  => [__('Backlog', 'sprint'), 'fas fa-layer-group'],
+            'tags'     => [__('Tags & categories', 'sprint'), 'fas fa-tags'],
+            'credits'  => [__('Credits', 'sprint'), 'fas fa-coins'],
+            'report'   => [__('Sprint report', 'sprint'), 'fas fa-file-lines'],
+        ];
+    }
+
+    /** Remember which form was saved, so its card can confirm it after the redirect. */
+    public static function markSaved(string $form): void
+    {
+        $_SESSION['plugin_sprint_config_saved'] = $form;
+    }
+
+    /** The inline "saved" line for $form, once; '' when another form was saved. */
+    public static function savedNotice(string $form): string
+    {
+        if (($_SESSION['plugin_sprint_config_saved'] ?? '') !== $form) {
+            return '';
+        }
+        unset($_SESSION['plugin_sprint_config_saved']);
+        return "<div class='alert alert-success py-2 mb-3 sprint-small' role='status'>"
+            . "<i class='fas fa-check me-1' aria-hidden='true'></i>"
+            . htmlescape(__('Saved. These settings apply from the next page load.', 'sprint')) . "</div>";
     }
 
     /**
@@ -365,172 +411,176 @@ class Config extends CommonDBTM
     }
 
     /**
-     * Render the settings form on the Config tab.
+     * Render the settings page on the Config tab: one card per group, each
+     * its own form with its own save button and result line, so an admin
+     * always knows which part was saved.
      */
     public static function showConfigForm(): void
     {
-        $canedit = Session::haveRight('config', UPDATE);
-        $cfg     = self::getConfig();
+        $canedit  = Session::haveRight('config', UPDATE);
+        $cfg      = self::getConfig();
+        $sections = self::getSettingsSections();
 
-        echo "<div class='center'>";
+        echo "<div class='sprint-settings' style='max-width:1100px;margin:0 auto;'>";
+        echo "<h2 class='mb-2'><i class='" . self::getIcon() . " me-2' aria-hidden='true'></i>"
+            . htmlescape(__('SprintManager settings', 'sprint')) . "</h2>";
+        if (!$canedit) {
+            echo "<div class='alert alert-info py-2 sprint-small'>"
+                . htmlescape(__('You can view these settings. Changing them needs the right to update the GLPI setup.', 'sprint')) . "</div>";
+        }
+        echo "<nav class='sprint-settings-nav mb-3' aria-label='" . __s('Settings groups', 'sprint') . "'>";
+        foreach ($sections as $key => [$title, $icon]) {
+            echo "<a class='btn btn-sm btn-outline-secondary' href='#sprint-cfg-{$key}'>"
+                . "<i class='{$icon} me-1' aria-hidden='true'></i>" . htmlescape($title) . "</a>";
+        }
+        echo "</nav>";
+
+        // Planning & rights
+        self::openSection('planning', __('Who may change what while a sprint is planned and running.', 'sprint'));
+        self::openForm($canedit, 'planning');
+        self::switchRow($cfg, self::CFG_SCRUM_MASTER_CAPACITY, $canedit,
+            __('Only Scrum Master can edit capacity on sprint items', 'sprint'),
+            __('When enabled, only the sprint\'s Scrum Master may change the capacity % on regular sprint items. Fastlane item capacity remains editable by every sprint member.', 'sprint'));
+        self::switchRow($cfg, self::CFG_CAPACITY_TO_POINTS, $canedit,
+            __('Convert backlog capacity to story points on sprint assignment', 'sprint'),
+            __('When enabled, assigning a backlog item with an estimated capacity % to a sprint automatically sets its story points to that capacity (1% = 1 story point). An explicitly estimated item keeps its own story points.', 'sprint'));
+        self::closeForm($canedit, 'planning');
+        self::closeSection();
+
+        // Quality
+        self::openSection('quality', __('The checklists that guard an item on its way into and out of a sprint.', 'sprint'));
+        self::openForm($canedit, 'quality');
+        self::textareaRow(self::CFG_DEFINITION_READY, implode("\n", self::getDefinitionReady()), $canedit, 4,
+            __('Definition of Ready — one check per line', 'sprint'),
+            __('The Scrum Master confirms these checks when assigning backlog items to a sprint.', 'sprint'));
+        self::textareaRow(self::CFG_DEFINITION_DONE, implode("\n", self::getDefinitionDone()), $canedit, 4,
+            __('Definition of Done — one check per line', 'sprint'),
+            __('Sprint members confirm these checks when moving an item to In Review or Done.', 'sprint'));
+        self::closeForm($canedit, 'quality');
+        self::closeSection();
+
+        // Backlog
+        self::openSection('backlog', __('How the backlog keeps itself tidy.', 'sprint'));
+        self::openForm($canedit, 'backlog');
+        self::switchRow($cfg, self::CFG_BACKLOG_AUTO_CLEANUP, $canedit,
+            __('Automatically remove solved items from the backlog', 'sprint'),
+            __('When enabled, a backlog item is removed as soon as its linked ticket, change, problem or project task is solved or closed. A daily cron task also sweeps the backlog for items solved outside the normal update flow.', 'sprint'));
+        $id = 'sprint-cfg-' . self::CFG_BACKLOG_AGING_DAYS;
+        self::row($id, __('Backlog aging threshold (days)', 'sprint'),
+            __('Unplanned active backlog items older than this get an aging badge (red at twice this value). 0 disables.', 'sprint'),
+            "<input type='number' min='0' max='365' class='form-control' style='max-width:120px;' id='{$id}' aria-describedby='{$id}-help' "
+            . "name='" . self::CFG_BACKLOG_AGING_DAYS . "' value='" . (int)$cfg[self::CFG_BACKLOG_AGING_DAYS] . "'"
+            . ($canedit ? '' : ' readonly') . ">");
+        self::closeForm($canedit, 'backlog');
+        self::closeSection();
+
+        // Tags & categories: two forms, each saved on its own.
+        self::openSection('tags', __('The labels members pick from, and the categories the backlog and the capacity dashboard group by.', 'sprint'));
+        self::openForm($canedit, 'tags');
+        self::textareaRow(self::CFG_SPRINT_ITEM_TAGS, implode("\n", self::getDefinedTags()), $canedit, 5,
+            __('Sprint item tags', 'sprint'),
+            __('One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here.', 'sprint'),
+            'Security&#10;Projects&#10;Incident Response');
+        self::switchRow($cfg, self::CFG_TAG_REQUIRED, $canedit,
+            __('Require a tag on every item', 'sprint'),
+            __('When enabled, the item form, the quick-edit dialog and the backlog edit dialog refuse to save an item without at least one tag. Only applies while the tag list above has entries.', 'sprint'));
+        self::closeForm($canedit, 'tags', __('Save tags', 'sprint'));
+        echo "<hr class='my-3'>";
+        echo self::savedNotice('categories');
+        SprintCategory::showManager();
+        self::closeSection();
+
+        // Credits
+        self::openSection('credits', __('Credit access for named users, on top of the profile right.', 'sprint'));
+        echo self::savedNotice('credits');
+        self::showCreditManagers();
+        self::closeSection();
+
+        // Sprint report
+        self::openSection('report', __('How the printable sprint report looks.', 'sprint'));
+        self::openForm($canedit, 'report');
+        $id = 'sprint-cfg-' . self::CFG_REPORT_LOGO_URL;
+        // Explicit override for the export header, for when custom-CSS
+        // branding (no `central_logo`) defeats logo auto-detection.
+        self::row($id, __('Report logo URL', 'sprint'),
+            __('Optional. Absolute URL or path relative to the GLPI install (e.g. "front/pics/logo.png", "https://example.com/logo.svg") used in the sprint export report header. Leave empty to auto-detect from GLPI\'s configured central logo or your custom CSS.', 'sprint'),
+            "<input type='text' class='form-control' id='{$id}' aria-describedby='{$id}-help' name='" . self::CFG_REPORT_LOGO_URL . "' "
+            . "value='" . htmlescape((string)$cfg[self::CFG_REPORT_LOGO_URL]) . "' placeholder='https://...'"
+            . ($canedit ? '' : ' readonly') . ">");
+        self::closeForm($canedit, 'report');
+        self::closeSection();
+
+        echo "</div>";
+    }
+
+    private static function openSection(string $key, string $intro): void
+    {
+        [$title, $icon] = self::getSettingsSections()[$key];
+        echo "<section class='card mb-3 sprint-settings-section' id='sprint-cfg-{$key}' aria-labelledby='sprint-cfg-{$key}-title'>";
+        echo "<div class='card-header'><h3 class='card-title mb-0' id='sprint-cfg-{$key}-title'>"
+            . "<i class='{$icon} me-2' aria-hidden='true'></i>" . htmlescape($title) . "</h3></div>";
+        echo "<div class='card-body'>";
+        echo "<p class='text-muted sprint-small mb-3'>" . htmlescape($intro) . "</p>";
+    }
+
+    private static function closeSection(): void
+    {
+        echo "</div></section>";
+    }
+
+    private static function openForm(bool $canedit, string $section): void
+    {
+        echo self::savedNotice($section);
         if ($canedit) {
             echo "<form method='post' action='" . \Plugin::getWebDir('sprint') . "/front/config.form.php'>";
+            echo Html::hidden('sprint_config_section', ['value' => $section]);
         }
+    }
 
-        echo "<table class='tab_cadre_fixe sprint-themed'>";
-        echo "<tr class='tab_bg_2'><th colspan='2'>" .
-            "<i class='" . self::getIcon() . "' style='margin-right:6px;'></i>" .
-            __('SprintManager settings', 'sprint') . "</th></tr>";
-
-        // Scrum Master only edits capacity
-        $checked = (int)$cfg[self::CFG_SCRUM_MASTER_CAPACITY] === 1 ? 'checked' : '';
-        echo "<tr class='tab_bg_1'>";
-        echo "<td style='width:50%;'>" . __('Only Scrum Master can edit capacity on sprint items', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('When enabled, only the sprint\'s Scrum Master may change the capacity % on regular sprint items. Fastlane item capacity remains editable by every sprint member.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<input type='hidden' name='" . self::CFG_SCRUM_MASTER_CAPACITY . "' value='0'>";
-        echo "<label class='form-check form-switch'>";
-        echo "<input class='form-check-input' type='checkbox' role='switch' "
-            . "name='" . self::CFG_SCRUM_MASTER_CAPACITY . "' value='1' {$checked}"
-            . ($canedit ? '' : ' disabled') . ">";
-        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
-        echo "</label>";
-        echo "</td></tr>";
-
-        // Backlog capacity → story points on sprint assignment
-        $checkedCap = (int)$cfg[self::CFG_CAPACITY_TO_POINTS] === 1 ? 'checked' : '';
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Convert backlog capacity to story points on sprint assignment', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('When enabled, assigning a backlog item with an estimated capacity % to a sprint automatically sets its story points to that capacity (1% = 1 story point). An explicitly estimated item keeps its own story points.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<input type='hidden' name='" . self::CFG_CAPACITY_TO_POINTS . "' value='0'>";
-        echo "<label class='form-check form-switch'>";
-        echo "<input class='form-check-input' type='checkbox' role='switch' "
-            . "name='" . self::CFG_CAPACITY_TO_POINTS . "' value='1' {$checkedCap}"
-            . ($canedit ? '' : ' disabled') . ">";
-        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
-        echo "</label>";
-        echo "</td></tr>";
-
-        // Auto-purge solved linked items from the backlog
-        $checkedCleanup = (int)$cfg[self::CFG_BACKLOG_AUTO_CLEANUP] === 1 ? 'checked' : '';
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Automatically remove solved items from the backlog', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('When enabled, a backlog item is removed as soon as its linked ticket, change, problem or project task is solved or closed. A daily cron task also sweeps the backlog for items solved outside the normal update flow.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<input type='hidden' name='" . self::CFG_BACKLOG_AUTO_CLEANUP . "' value='0'>";
-        echo "<label class='form-check form-switch'>";
-        echo "<input class='form-check-input' type='checkbox' role='switch' "
-            . "name='" . self::CFG_BACKLOG_AUTO_CLEANUP . "' value='1' {$checkedCleanup}"
-            . ($canedit ? '' : ' disabled') . ">";
-        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
-        echo "</label>";
-        echo "</td></tr>";
-
-        // Aging badge threshold
-        $agingDays = (int)$cfg[self::CFG_BACKLOG_AGING_DAYS];
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Backlog aging threshold (days)', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('Unplanned active backlog items older than this get an aging badge (red at twice this value). 0 disables.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<input type='number' min='0' max='365' class='form-control' style='max-width:120px;' "
-            . "name='" . self::CFG_BACKLOG_AGING_DAYS . "' value='{$agingDays}'"
-            . ($canedit ? '' : ' readonly') . ">";
-        echo "</td></tr>";
-
-        // Report logo URL — explicit override for the export header, for when
-        // custom-CSS branding (no `central_logo`) defeats logo auto-detection.
-        $logoUrl = htmlescape((string)$cfg[self::CFG_REPORT_LOGO_URL]);
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Report logo URL', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('Optional. Absolute URL or path relative to the GLPI install (e.g. "front/pics/logo.png", "https://example.com/logo.svg") used in the sprint export report header. Leave empty to auto-detect from GLPI\'s configured central logo or your custom CSS.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<input type='text' class='form-control' name='" . self::CFG_REPORT_LOGO_URL . "' "
-            . "value='{$logoUrl}' placeholder='https://...' "
-            . ($canedit ? '' : 'readonly') . ">";
-        echo "</td></tr>";
-
-        $dorRaw = implode("\n", self::getDefinitionReady());
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Definition of Ready — one check per line', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('The Scrum Master confirms these checks when assigning backlog items to a sprint.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<textarea name='" . self::CFG_DEFINITION_READY . "' class='form-control' rows='4'"
-            . ($canedit ? '' : ' readonly') . ">" . htmlescape($dorRaw) . "</textarea>";
-        echo "</td></tr>";
-
-        $dodRaw = implode("\n", self::getDefinitionDone());
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Definition of Done — one check per line', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('Sprint members confirm these checks when moving an item to In Review or Done.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<textarea name='" . self::CFG_DEFINITION_DONE . "' class='form-control' rows='4'"
-            . ($canedit ? '' : ' readonly') . ">" . htmlescape($dodRaw) . "</textarea>";
-        echo "</td></tr>";
-
-        $tagsRaw = implode("\n", self::getDefinedTags());
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Sprint item tags', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('One tag per line (commas also accepted). Members can assign these tags to sprint items and filter on them, but only admins extend the list here.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<textarea name='" . self::CFG_SPRINT_ITEM_TAGS . "' class='form-control' rows='5' "
-            . "placeholder='Security&#10;Projects&#10;Incident Response'"
-            . ($canedit ? '' : ' readonly') . ">"
-            . htmlescape($tagsRaw)
-            . "</textarea>";
-        echo "</td></tr>";
-
-        // Tag required on save
-        $checkedTag = (int)$cfg[self::CFG_TAG_REQUIRED] === 1 ? 'checked' : '';
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Require a tag on every item', 'sprint') . "<br>";
-        echo "<span class='text-muted' style='font-size:0.85em;'>" .
-            __('When enabled, the item form, the quick-edit dialog and the backlog edit dialog refuse to save an item without at least one tag. Only applies while the tag list above has entries.', 'sprint') .
-            "</span></td>";
-        echo "<td>";
-        echo "<input type='hidden' name='" . self::CFG_TAG_REQUIRED . "' value='0'>";
-        echo "<label class='form-check form-switch'>";
-        echo "<input class='form-check-input' type='checkbox' role='switch' "
-            . "name='" . self::CFG_TAG_REQUIRED . "' value='1' {$checkedTag}"
-            . ($canedit ? '' : ' disabled') . ">";
-        echo "<span class='form-check-label ms-2'>" . __('Enable') . "</span>";
-        echo "</label>";
-        echo "</td></tr>";
-
-        if ($canedit) {
-            echo "<tr class='tab_bg_1'><td colspan='2' class='center'>";
-            echo Html::submit(__('Save'), [
-                'name'  => 'update_sprint_config',
-                'class' => 'btn btn-primary',
-            ]);
-            echo "</td></tr>";
+    /** The group's own save button, named after the group. */
+    private static function closeForm(bool $canedit, string $section, string $label = ''): void
+    {
+        if (!$canedit) {
+            return;
         }
-
-        echo "</table>";
-        if ($canedit) {
-            Html::closeForm();
-        }
+        $title = self::getSettingsSections()[$section][0];
+        echo "<div class='d-flex justify-content-end'>";
+        echo Html::submit($label !== '' ? $label : sprintf(__('Save %s settings', 'sprint'), $title), [
+            'name'  => 'update_sprint_config',
+            'class' => 'btn btn-primary',
+        ]);
         echo "</div>";
+        Html::closeForm();
+    }
 
-        // Backlog category manager — its own form, below the settings table.
-        SprintCategory::showManager();
-        self::showCreditManagers();
+    /** One labelled setting: label + help on the left, the control on the right. */
+    private static function row(string $id, string $label, string $help, string $control): void
+    {
+        echo "<div class='row g-2 mb-3 sprint-settings-row'>";
+        echo "<div class='col-md-6'><label class='form-label mb-1 fw-bold' for='{$id}'>" . htmlescape($label) . "</label>"
+            . "<div class='text-muted sprint-small' id='{$id}-help'>" . htmlescape($help) . "</div></div>";
+        echo "<div class='col-md-6'>{$control}</div>";
+        echo "</div>";
+    }
+
+    private static function switchRow(array $cfg, string $key, bool $canedit, string $label, string $help): void
+    {
+        $id = 'sprint-cfg-' . $key;
+        self::row($id, $label, $help,
+            "<input type='hidden' name='{$key}' value='0'>"
+            . "<div class='form-check form-switch'>"
+            . "<input class='form-check-input' type='checkbox' role='switch' id='{$id}' aria-describedby='{$id}-help' "
+            . "name='{$key}' value='1'" . ((int)$cfg[$key] === 1 ? ' checked' : '') . ($canedit ? '' : ' disabled') . ">"
+            . "<span class='form-check-label ms-2'>" . htmlescape(__('Enable')) . "</span></div>");
+    }
+
+    private static function textareaRow(string $key, string $value, bool $canedit, int $rows, string $label, string $help, string $placeholder = ''): void
+    {
+        $id = 'sprint-cfg-' . $key;
+        self::row($id, $label, $help,
+            "<textarea name='{$key}' id='{$id}' aria-describedby='{$id}-help' class='form-control' rows='{$rows}'"
+            . ($placeholder !== '' ? " placeholder='{$placeholder}'" : '')
+            . ($canedit ? '' : ' readonly') . ">" . htmlescape($value) . "</textarea>");
     }
 
     /** Named users who get credit access without a profile carrying the right. */
@@ -543,15 +593,15 @@ class Config extends CommonDBTM
             'manage' => __('Manage credits', 'sprint'),
         ];
 
-        echo "<div class='center' style='margin-top:18px;'>";
+        echo "<div>";
         if ($canedit) {
             echo "<form method='post' action='" . \Plugin::getWebDir('sprint') . "/front/config.form.php'>";
         }
-        echo "<table class='tab_cadre_fixe sprint-themed'>";
+        echo "<table class='tab_cadre_fixe sprint-themed' style='width:100%;'>";
         echo "<tr class='tab_bg_2'><th colspan='3'><i class='fas fa-coins' style='margin-right:6px;'></i>"
             . __('Credit managers', 'sprint') . "</th></tr>";
         echo "<tr class='tab_bg_1'><td colspan='3' class='text-muted' style='font-size:0.85em;'>"
-            . __('Grant credit access to individual users on top of the profile right. View opens the Credits page, the customers and their balances; manage additionally allows creating customers, booking credits and setting the per-sprint agreements. Picking a customer and a credit amount on a sprint item needs neither — that follows the item rights.', 'sprint')
+            . __('Grant credit access to individual users on top of the profile right. View opens the Credits page, the customers and their balances. Manage additionally allows creating customers, booking credits and setting the per-sprint agreements. Picking a customer and a credit amount on a sprint item needs neither — that follows the item rights.', 'sprint')
             . "</td></tr>";
 
         echo "<tr class='tab_bg_2'>"
@@ -568,7 +618,8 @@ class Config extends CommonDBTM
                 'display' => true,
             ]);
             echo "</td>";
-            echo "<td class='center'><input type='checkbox' name='credit_delete[]' value='{$uid}'"
+            echo "<td class='center'><input type='checkbox' name='credit_delete[]' value='{$uid}' aria-label='"
+                . htmlescape(sprintf(__('Remove %s from the credit managers', 'sprint'), \getUserName($uid))) . "'"
                 . ($canedit ? '' : ' disabled') . "></td>";
             echo "</tr>";
         }
@@ -593,7 +644,7 @@ class Config extends CommonDBTM
             \Dropdown::showFromArray('credit_new_level', $levels, ['value' => 'view']);
             echo "</td><td></td></tr>";
             echo "<tr class='tab_bg_1'><td colspan='3' class='center'>";
-            echo Html::submit(__('Save'), [
+            echo Html::submit(__('Save credit managers', 'sprint'), [
                 'name'  => 'save_sprint_credit_managers',
                 'class' => 'btn btn-primary',
             ]);

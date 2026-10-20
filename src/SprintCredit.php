@@ -110,18 +110,19 @@ class SprintCredit extends CommonDBTM
             echo "<table class='tab_cadre_fixe sprint-themed'>";
             echo "<tr class='tab_bg_2'><th colspan='4'><i class='" . self::getIcon() . " me-1'></i>"
                 . __('Book credits', 'sprint') . "</th></tr>";
-            echo "<tr class='tab_bg_1'><td colspan='4' class='text-muted' style='font-size:0.85em;'>"
+            echo "<tr class='tab_bg_1'><td colspan='4' class='text-muted' id='sprint-booking-help' style='font-size:0.85em;'>"
                 . __('A positive amount is a purchase, a negative amount a correction or write-off. Leave the expiry date empty for credits that never lapse.', 'sprint')
                 . "</td></tr>";
             echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('Description', 'sprint') . "</td><td>";
-            echo Html::input('name', ['value' => '', 'size' => 30]);
-            echo "</td><td>" . __('Credits', 'sprint') . "</td><td>";
-            echo "<input type='number' class='form-control' name='credits' step='0.25' style='max-width:140px;' value='0'>";
+            echo "<td><label for='sprint-booking-name'>" . __('Description', 'sprint') . "</label></td><td>";
+            echo Html::input('name', ['value' => '', 'size' => 30, 'id' => 'sprint-booking-name']);
+            echo "</td><td><label for='sprint-booking-credits'>" . __('Credits', 'sprint') . "</label></td><td>";
+            echo "<input type='number' class='form-control' id='sprint-booking-credits' name='credits' step='0.25' style='max-width:140px;' value='0' "
+                . "aria-describedby='sprint-booking-help'>";
             echo "</td></tr>";
             echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('Reference', 'sprint') . "</td><td>";
-            echo Html::input('reference', ['value' => '', 'size' => 30]);
+            echo "<td><label for='sprint-booking-reference'>" . __('Reference', 'sprint') . "</label></td><td>";
+            echo Html::input('reference', ['value' => '', 'size' => 30, 'id' => 'sprint-booking-reference']);
             echo "</td><td>" . __('Booking date', 'sprint') . "</td><td>";
             Html::showDateField('date', ['value' => date('Y-m-d')]);
             echo "</td></tr>";
@@ -161,7 +162,8 @@ class SprintCredit extends CommonDBTM
             $credits = (float)$row['credits'];
             $expire  = (string)($row['date_expire'] ?? '');
             $expired = $expire !== '' && $expire !== 'NULL' && $expire < $today;
-            echo "<tr class='tab_bg_1'" . ($expired ? " style='opacity:0.55;'" : '') . ">";
+            echo "<tr class='tab_bg_1 sprint-credit-booking' id='sprint-credit-booking-" . (int)$row['id'] . "'"
+                . ($expired ? " style='opacity:0.55;'" : '') . ">";
             echo "<td>" . htmlescape(Html::convDate((string)($row['date'] ?? ''))) . "</td>";
             echo "<td>" . htmlescape((string)($row['name'] ?? '')) . "</td>";
             echo "<td>" . htmlescape((string)($row['reference'] ?? '')) . "</td>";
@@ -179,8 +181,15 @@ class SprintCredit extends CommonDBTM
                 echo "<td class='center'>";
                 echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
                 echo Html::hidden('id', ['value' => (int)$row['id']]);
+                $what = sprintf(
+                    __('Delete the booking "%1$s" of %2$s credits?', 'sprint'),
+                    (string)($row['name'] ?? ''),
+                    SprintCustomer::formatCredits($credits)
+                );
                 echo "<button type='submit' name='purge' class='btn btn-sm btn-outline-danger' "
-                    . "title='" . __s('Delete permanently') . "'><i class='fas fa-trash'></i></button>";
+                    . "title='" . __s('Delete permanently') . "' aria-label='" . htmlescape($what) . "' "
+                    . "data-sprint-arm='" . htmlescape(__('Click again to delete', 'sprint')) . "'>"
+                    . "<i class='fas fa-trash' aria-hidden='true'></i></button>";
                 Html::closeForm();
                 echo "</td>";
             }
@@ -188,6 +197,50 @@ class SprintCredit extends CommonDBTM
         }
         echo "</table>";
         echo "</div>";
+        echo self::armScript();
+        // Arriving from a link on the Credits page (#sprint-credit-booking-N):
+        // bring that booking into view and mark it.
+        echo "<script>(function(){var m=/^#sprint-credit-booking-(\\d+)$/.exec(window.location.hash||'');"
+            . "if(!m){return;}var rows=document.querySelectorAll('#sprint-credit-booking-'+m[1]);"
+            . "var row=rows[rows.length-1];if(!row){return;}row.classList.add('sprint-credit-booking-target');"
+            . "row.setAttribute('tabindex','-1');row.scrollIntoView({block:'center'});row.focus({preventScroll:true});})();</script>";
+    }
+
+    /**
+     * Two-step delete without a browser dialog: the first click on a
+     * [data-sprint-arm] button arms it (its label says what the next click
+     * does), a second click within a few seconds goes through. Works with
+     * the keyboard and leaves the form submit itself untouched.
+     */
+    public static function armScript(): string
+    {
+        return <<<'HTML'
+<script>
+(function(){
+    if (window.__sprintArmBound) { return; }
+    window.__sprintArmBound = true;
+    document.addEventListener('click', function(ev){
+        var btn = ev.target && ev.target.closest ? ev.target.closest('[data-sprint-arm]') : null;
+        if (!btn) { return; }
+        if (btn.getAttribute('data-sprint-armed') === '1') { return; }
+        ev.preventDefault();
+        ev.stopPropagation();
+        btn.setAttribute('data-sprint-armed', '1');
+        btn.classList.add('sprint-armed');
+        var label = document.createElement('span');
+        label.className = 'sprint-arm-label ms-1';
+        label.textContent = btn.getAttribute('data-sprint-arm');
+        btn.appendChild(label);
+        btn.setAttribute('aria-live', 'polite');
+        setTimeout(function(){
+            btn.removeAttribute('data-sprint-armed');
+            btn.classList.remove('sprint-armed');
+            if (label.parentNode) { label.parentNode.removeChild(label); }
+        }, 5000);
+    }, true);
+})();
+</script>
+HTML;
     }
 
     /**

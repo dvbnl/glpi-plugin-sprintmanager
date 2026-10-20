@@ -14,7 +14,7 @@ header('Content-Type: application/json');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_sprint', CREATE);
 
-$response = ['success' => false, 'message' => 'Request failed'];
+$response = ['success' => false, 'message' => __('Request failed', 'sprint')];
 
 $sprintId    = (int)($_POST['sprint_id'] ?? 0);
 $templateName = trim($_POST['template_name'] ?? '');
@@ -27,7 +27,7 @@ if ($sprintId <= 0) {
 $sprint = new GlpiPlugin\Sprint\Sprint();
 if (!$sprint->getFromDB($sprintId)
     || !Session::haveAccessToEntity($sprint->fields['entities_id'] ?? 0)) {
-    $response['message'] = 'Access denied';
+    $response['message'] = __('Access denied', 'sprint');
     echo json_encode($response);
     return;
 }
@@ -159,7 +159,7 @@ foreach ($meetingsByType as $type => $typeMeetings) {
 
 echo json_encode([
     'success'     => true,
-    'message'     => 'Template created successfully',
+    'message'     => __('Template created successfully', 'sprint'),
     'template_id' => $templateId,
     'template_url' => GlpiPlugin\Sprint\SprintTemplate::getFormURLWithID($templateId),
 ]);

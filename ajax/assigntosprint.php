@@ -14,7 +14,7 @@ header('Content-Type: application/json');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);
 
-$response = ['success' => false, 'message' => 'Request failed'];
+$response = ['success' => false, 'message' => __('Request failed', 'sprint')];
 
 $id       = (int)($_POST['id'] ?? 0);
 $sprintId = (int)($_POST['plugin_sprint_sprints_id'] ?? 0);
@@ -114,8 +114,9 @@ if (!$result) {
 
 echo json_encode([
     'success'      => true,
-    'message'      => sprintf(__('Assigned to %s', 'sprint'), (string)$sprint->fields['name']),
+    'message'      => sprintf(__('Assigned to %s', 'sprint'), plugin_sprint_html((string)$sprint->fields['name'])),
     'sprint_id'    => $sprintId,
-    'sprint_name'  => (string)$sprint->fields['name'],
+    // Plain text: the page escapes it where it lands in HTML.
+    'sprint_name'  => plugin_sprint_text((string)$sprint->fields['name']),
     'sprint_url'   => GlpiPlugin\Sprint\Sprint::getFormURLWithID($sprintId),
 ]);

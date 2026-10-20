@@ -309,11 +309,13 @@ class SprintItemDependency extends CommonDBRelation
             }
             echo "<td class='center'>";
             if ($isResolved) {
-                echo "<span class='sprint-badge' style='background:#198754;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.78em;'>"
-                    . "<i class='fas fa-check'></i> " . __('Resolved', 'sprint') . "</span>";
+                // Resolved help was spent: it still counts as planned capacity.
+                echo "<span class='sprint-badge' style='background:#198754;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.78em;' "
+                    . "title='" . __s('Resolved: the capacity was spent and still counts as planned', 'sprint') . "'>"
+                    . "<i class='fas fa-check' aria-hidden='true'></i> " . __('Resolved', 'sprint') . "</span>";
             } else {
                 echo "<span class='sprint-badge' style='background:#6f42c1;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.78em;'>"
-                    . "<i class='fas fa-link'></i> " . __('Open', 'sprint') . "</span>";
+                    . "<i class='fas fa-link' aria-hidden='true'></i> " . __('Open', 'sprint') . "</span>";
             }
             echo "</td>";
             if ($canedit) {
@@ -321,15 +323,18 @@ class SprintItemDependency extends CommonDBRelation
                 if (!$isResolved) {
                     echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline-flex;gap:4px;align-items:center;margin-right:6px;'>";
                     echo Html::hidden('id', ['value' => $row['id']]);
+                    $capAria = sprintf(__('Capacity (%%) for %s', 'sprint'), SprintCache::userName($uid));
                     Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
-                        'value' => SprintMember::capacityKey($cap),
+                        'value'      => SprintMember::capacityKey($cap),
+                        'aria_label' => $capAria,
                     ]);
                     if ($showCredits) {
                         echo "<input type='number' min='0' step='0.25' name='credits' class='form-control form-control-sm' "
                             . "style='max-width:90px;' title='" . __s('Credits', 'sprint') . "' value='"
                             . htmlescape(SprintCustomer::formatCredits($credits)) . "'>";
                     }
-                    echo "<button type='submit' name='update' value='1' class='btn btn-sm btn-outline-primary' title='" . __('Update') . "'><i class='fas fa-save'></i></button>";
+                    echo "<button type='submit' name='update' value='1' class='btn btn-sm btn-outline-primary' title='" . __s('Update') . "' "
+                        . "aria-label='" . htmlescape(__('Update') . ': ' . $capAria) . "'><i class='fas fa-save' aria-hidden='true'></i></button>";
                     Html::closeForm();
                     echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline;margin-right:4px;'>";
                     echo Html::hidden('id', ['value' => $row['id']]);

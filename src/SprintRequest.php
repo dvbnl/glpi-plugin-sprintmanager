@@ -14,7 +14,10 @@ use Session;
  *  - 'assign':   move a backlog item into its pre-selected sprint
  *  - 'capacity': change an item's capacity % inside a sprint
  *  - 'category': change an item's backlog category inside a sprint
- * Accepting performs the action; rejecting only closes the request.
+ *  - 'adhoc':    set or clear an item's adhoc flag inside a sprint
+ *  - 'carryover': carry an item over into the target sprint (a fresh copy)
+ * Accepting performs the action; rejecting only closes the request. The
+ * requester may cancel their own pending request.
  */
 class SprintRequest extends CommonDBTM
 {
@@ -23,13 +26,19 @@ class SprintRequest extends CommonDBTM
     const TYPE_ASSIGN   = 'assign';
     const TYPE_CAPACITY = 'capacity';
     const TYPE_CATEGORY = 'category';
+    const TYPE_ADHOC    = 'adhoc';
+    const TYPE_CARRYOVER = 'carryover';
 
     /** Every request type this class knows how to create and accept. */
-    const ALL_TYPES = [self::TYPE_ASSIGN, self::TYPE_CAPACITY, self::TYPE_CATEGORY];
+    const ALL_TYPES = [
+        self::TYPE_ASSIGN, self::TYPE_CAPACITY, self::TYPE_CATEGORY,
+        self::TYPE_ADHOC, self::TYPE_CARRYOVER,
+    ];
 
-    const STATUS_PENDING  = 'pending';
-    const STATUS_ACCEPTED = 'accepted';
-    const STATUS_REJECTED = 'rejected';
+    const STATUS_PENDING   = 'pending';
+    const STATUS_ACCEPTED  = 'accepted';
+    const STATUS_REJECTED  = 'rejected';
+    const STATUS_CANCELLED = 'cancelled';
 
     public static function getTypeName($nb = 0): string
     {
@@ -91,7 +100,7 @@ class SprintRequest extends CommonDBTM
         echo "<p class='text-muted' style='text-align:left;'>"
             . ($isMaster
                 ? __('Requests from team members: accepting performs the action (assign to sprint / apply the capacity change).', 'sprint')
-                : __('Pending requests for this sprint — the Scrum Master accepts or rejects them.', 'sprint'))
+                : __('Pending requests for this sprint — the Scrum Master accepts or rejects them. You can cancel your own requests.', 'sprint'))
             . "</p>";
 
         if (count($requests) === 0) {
@@ -103,9 +112,7 @@ class SprintRequest extends CommonDBTM
         self::renderRequestsTable($requests, $isMaster, false);
         echo "</div>";
 
-        if ($isMaster) {
-            self::renderPanelScript();
-        }
+        self::renderPanelScript();
     }
 
     /**
@@ -147,6 +154,13 @@ class SprintRequest extends CommonDBTM
                     . "COMMENT 'Requested backlog category for a category request'"
                 );
             }
+            // Lazy migration: requested on/off value for 'adhoc' requests.
+            if (!$DB->fieldExists($table, 'requested_flag')) {
+                $DB->doQuery(
+                    "ALTER TABLE `{$table}` ADD COLUMN `requested_flag` TINYINT NOT NULL DEFAULT 0 "
+                    . "COMMENT 'Requested adhoc flag for an adhoc request'"
+                );
+            }
             return $ready = true;
         }
 
@@ -154,14 +168,15 @@ class SprintRequest extends CommonDBTM
         $default_collation = \DBConnection::getDefaultCollation();
         $query = "CREATE TABLE IF NOT EXISTS `{$table}` (
             `id`                           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity | category',
+            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity | category | adhoc | carryover',
             `plugin_sprint_sprintitems_id` INT UNSIGNED NOT NULL DEFAULT 0,
-            `plugin_sprint_sprints_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Target sprint (assign) or the item sprint (capacity/category)',
+            `plugin_sprint_sprints_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Target sprint (assign/carryover) or the item sprint (capacity/category/adhoc)',
             `users_id`                     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requester',
-            `requested_capacity`           DECIMAL(5,1) NOT NULL DEFAULT 0,
+            `requested_capacity`           DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Requested capacity, or the share to carry over (0 = none)',
             `requested_category_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requested backlog category for a category request',
+            `requested_flag`               TINYINT NOT NULL DEFAULT 0 COMMENT 'Requested adhoc flag for an adhoc request',
             `reason`                       TEXT NULL COMMENT 'Requester motivation shown to the Scrum Master',
-            `status`                       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending | accepted | rejected',
+            `status`                       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending | accepted | rejected | cancelled',
             `users_id_validate`            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master who handled it',
             `date_creation`                TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                     TIMESTAMP NULL DEFAULT NULL,
@@ -184,7 +199,8 @@ class SprintRequest extends CommonDBTM
         int $sprintId,
         float $requestedCapacity = 0.0,
         string $reason = '',
-        int $requestedCategoryId = 0
+        int $requestedCategoryId = 0,
+        int $requestedFlag = 0
     ): int {
         if ($itemId <= 0 || $sprintId <= 0
             || !in_array($type, self::ALL_TYPES, true)
@@ -194,6 +210,7 @@ class SprintRequest extends CommonDBTM
         $reason = trim($reason);
         // Same 0.5% grid as every other capacity write path.
         $requestedCapacity = SprintMember::normalizeCapacity($requestedCapacity);
+        $requestedFlag     = $requestedFlag ? 1 : 0;
 
         $existing = (new self())->find([
             'request_type'                 => $type,
@@ -209,6 +226,7 @@ class SprintRequest extends CommonDBTM
                 'plugin_sprint_sprints_id' => $sprintId,
                 'requested_capacity'       => $requestedCapacity,
                 'requested_category_id'    => $requestedCategoryId,
+                'requested_flag'           => $requestedFlag,
                 'reason'                   => $reason,
                 'users_id'                 => (int)Session::getLoginUserID(),
             ]);
@@ -223,6 +241,7 @@ class SprintRequest extends CommonDBTM
             'users_id'                     => (int)Session::getLoginUserID(),
             'requested_capacity'           => $requestedCapacity,
             'requested_category_id'        => $requestedCategoryId,
+            'requested_flag'               => $requestedFlag,
             'reason'                       => $reason,
             'status'                       => self::STATUS_PENDING,
             'date_creation'                => $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s'),
@@ -367,7 +386,7 @@ class SprintRequest extends CommonDBTM
             return ['ok' => true, 'message' => sprintf(
                 __('Category updated to %s', 'sprint'),
                 $targetCategory > 0
-                    ? SprintCategory::getFullNameFor($targetCategory)
+                    ? plugin_sprint_html(SprintCategory::getFullNameFor($targetCategory))
                     : __('No category', 'sprint')
             )];
         }
@@ -390,7 +409,58 @@ class SprintRequest extends CommonDBTM
             )];
         }
 
+        if ($type === self::TYPE_ADHOC) {
+            if ((int)$item->fields['plugin_sprint_sprints_id'] !== $sprintId) {
+                $req->closeAs(self::STATUS_REJECTED);
+                return ['ok' => false, 'message' => __('The item is no longer part of this sprint.', 'sprint')];
+            }
+            $flag = (int)$req->fields['requested_flag'] === 1 ? 1 : 0;
+            if (!$item->update(['id' => (int)$item->getID(), 'is_adhoc' => $flag])) {
+                return ['ok' => false, 'message' => __('Could not update the item', 'sprint')];
+            }
+            $req->closeAs(self::STATUS_ACCEPTED);
+            return ['ok' => true, 'message' => $flag
+                ? __('Item marked as adhoc', 'sprint')
+                : __('Adhoc flag removed', 'sprint')];
+        }
+
+        if ($type === self::TYPE_CARRYOVER) {
+            if ((int)$item->fields['plugin_sprint_sprints_id'] === $sprintId) {
+                $req->closeAs(self::STATUS_REJECTED);
+                return ['ok' => false, 'message' => __('The item is already part of this sprint.', 'sprint')];
+            }
+            $share = (float)$req->fields['requested_capacity'];
+            $newId = SprintItem::carryOverTo((int)$item->getID(), $sprintId, $share > 0 ? $share : null, null);
+            if ($newId <= 0) {
+                return ['ok' => false, 'message' => __('Could not carry the item over to the target sprint', 'sprint')];
+            }
+            $req->closeAs(self::STATUS_ACCEPTED);
+            $sprint = new Sprint();
+            return ['ok' => true, 'message' => sprintf(
+                __('Carried over to %s', 'sprint'),
+                $sprint->getFromDB($sprintId) ? plugin_sprint_html((string)$sprint->fields['name']) : ('#' . $sprintId)
+            )];
+        }
+
         return ['ok' => false, 'message' => __('Unknown request type', 'sprint')];
+    }
+
+    /** Withdraw a pending request (its requester only). */
+    public static function cancel(int $requestId): array
+    {
+        if (!self::ensureTable()) {
+            return ['ok' => false, 'message' => __('Request failed', 'sprint')];
+        }
+        $req = new self();
+        if (!$req->getFromDB($requestId)
+            || (string)$req->fields['status'] !== self::STATUS_PENDING) {
+            return ['ok' => false, 'message' => __('Request no longer exists', 'sprint')];
+        }
+        if ((int)$req->fields['users_id'] !== (int)Session::getLoginUserID()) {
+            return ['ok' => false, 'message' => __('Only the requester can cancel this request.', 'sprint')];
+        }
+        $req->closeAs(self::STATUS_CANCELLED);
+        return ['ok' => true, 'message' => __('Request cancelled', 'sprint')];
     }
 
     /** Reject a pending request (Scrum Master of the request's sprint only). */
@@ -487,11 +557,11 @@ class SprintRequest extends CommonDBTM
     private static function renderRequestsTable(array $requests, bool $canModerate, bool $showSprint): void
     {
         $sprintNames = [];
-        $typeLabels  = [
-            self::TYPE_ASSIGN   => __('Assign to sprint', 'sprint'),
-            self::TYPE_CAPACITY => __('Capacity change', 'sprint'),
-            self::TYPE_CATEGORY => __('Category change', 'sprint'),
-        ];
+        // Requesters withdraw their own requests; the column shows when
+        // there is anything to do in it.
+        $me        = (int)Session::getLoginUserID();
+        $hasOwn    = count(array_filter($requests, static fn($r) => (int)$r['users_id'] === $me)) > 0;
+        $showActions = $canModerate || $hasOwn;
 
         echo "<table class='tab_cadre_fixe sprint-themed' style='margin:0;'>";
         echo "<tr class='tab_bg_2'>";
@@ -503,7 +573,7 @@ class SprintRequest extends CommonDBTM
         echo "<th>" . __('Requested by', 'sprint') . "</th>";
         echo "<th style='width:170px;'>" . __('Requested on', 'sprint') . "</th>";
         echo "<th>" . __('Details', 'sprint') . "</th>";
-        if ($canModerate) {
+        if ($showActions) {
             echo "<th style='width:150px;'>" . __('Actions') . "</th>";
         }
         echo "</tr>";
@@ -522,25 +592,15 @@ class SprintRequest extends CommonDBTM
                     : ('#' . $sid);
             }
 
-            $type = (string)$row['request_type'];
-            $details = '-';
-            if ($type === self::TYPE_CAPACITY) {
-                $current = $item->fields['capacity'] ?? 0;
-                $details = sprintf(
-                    __('%1$s%% → %2$s%%', 'sprint'),
-                    SprintMember::formatCapacity($current),
-                    SprintMember::formatCapacity($row['requested_capacity'])
-                );
-            } elseif ($type === self::TYPE_CATEGORY) {
-                $noCategory = __('No category', 'sprint');
-                $currentCat = (int)($item->fields['plugin_sprint_sprintcategories_id'] ?? 0);
-                $targetCat  = (int)($row['requested_category_id'] ?? 0);
-                $details    = ($currentCat > 0 ? SprintCategory::getFullNameFor($currentCat) : $noCategory)
-                    . ' → ' . ($targetCat > 0 ? SprintCategory::getFullNameFor($targetCat) : $noCategory);
-            }
+            $type    = (string)$row['request_type'];
+            $details = self::describeChange($row, $item);
+            $details = $details !== '' ? $details : '-';
 
             echo "<tr class='tab_bg_1 sprint-request-row' data-request-id='" . (int)$row['id'] . "'>";
-            echo "<td>" . htmlescape($typeLabels[$type] ?? $type) . "</td>";
+            // The request is not applied yet: say so next to the type, so a
+            // requester never reads the proposed value as the current one.
+            echo "<td>" . htmlescape(self::getTypeLabel($type))
+                . "<div>" . self::renderWaitingLabel() . "</div></td>";
             echo "<td><a href='" . SprintItem::getFormURLWithID((int)$row['plugin_sprint_sprintitems_id']) . "'>"
                 . htmlescape($itemName) . "</a></td>";
             if ($showSprint) {
@@ -569,19 +629,183 @@ class SprintRequest extends CommonDBTM
                         . "<i class='fas fa-comment-dots me-1'></i>" . htmlescape($reason) . "</div>"
                     : "")
                 . "</td>";
-            if ($canModerate) {
+            if ($showActions) {
                 echo "<td class='center' style='white-space:nowrap;'>";
-                echo "<button type='button' class='btn btn-sm btn-success sprint-request-accept me-1' "
-                    . "data-request-id='" . (int)$row['id'] . "' title='" . __s('Accept', 'sprint') . "'>"
-                    . "<i class='fas fa-check'></i></button>";
-                echo "<button type='button' class='btn btn-sm btn-outline-danger sprint-request-reject' "
-                    . "data-request-id='" . (int)$row['id'] . "' title='" . __s('Reject', 'sprint') . "'>"
-                    . "<i class='fas fa-times'></i></button>";
+                if ($canModerate) {
+                    echo "<button type='button' class='btn btn-sm btn-success sprint-request-accept me-1' "
+                        . "data-request-id='" . (int)$row['id'] . "' title='" . __s('Accept', 'sprint') . "' "
+                        . "aria-label='" . __s('Accept', 'sprint') . ': ' . htmlescape($itemName) . "'>"
+                        . "<i class='fas fa-check'></i></button>";
+                    echo "<button type='button' class='btn btn-sm btn-outline-danger sprint-request-reject me-1' "
+                        . "data-request-id='" . (int)$row['id'] . "' title='" . __s('Reject', 'sprint') . "' "
+                        . "aria-label='" . __s('Reject', 'sprint') . ': ' . htmlescape($itemName) . "'>"
+                        . "<i class='fas fa-times'></i></button>";
+                }
+                if ((int)$row['users_id'] === $me) {
+                    echo self::renderCancelButton((int)$row['id']);
+                }
                 echo "</td>";
             }
             echo "</tr>";
         }
         echo "</table>";
+    }
+
+    /** "Cancel request" button for the requester (needs renderPanelScript()). */
+    public static function renderCancelButton(int $requestId, bool $withLabel = false): string
+    {
+        return "<button type='button' class='btn btn-sm btn-outline-secondary sprint-request-cancel' "
+            . "data-request-id='" . $requestId . "' title='" . __s('Cancel request', 'sprint') . "' "
+            . "aria-label='" . __s('Cancel request', 'sprint') . "'>"
+            . "<i class='fas fa-undo'></i>" . ($withLabel ? ' ' . __s('Cancel request', 'sprint') : '') . "</button>";
+    }
+
+    /**
+     * "Current → requested" for one request row ('' when the type has no
+     * value to compare, e.g. a plain assign). $item is the request's item,
+     * already loaded; its fields hold the value that is still in force.
+     */
+    public static function describeChange(array $row, SprintItem $item): string
+    {
+        $type = (string)($row['request_type'] ?? '');
+        $sid  = (int)($row['plugin_sprint_sprints_id'] ?? 0);
+
+        if ($type === self::TYPE_CAPACITY) {
+            return sprintf(
+                __('%1$s%% → %2$s%%', 'sprint'),
+                SprintMember::formatCapacity($item->fields['capacity'] ?? 0),
+                SprintMember::formatCapacity($row['requested_capacity'] ?? 0)
+            );
+        }
+        if ($type === self::TYPE_CATEGORY) {
+            $noCategory = __('No category', 'sprint');
+            $currentCat = (int)($item->fields['plugin_sprint_sprintcategories_id'] ?? 0);
+            $targetCat  = (int)($row['requested_category_id'] ?? 0);
+            return ($currentCat > 0 ? SprintCategory::getFullNameFor($currentCat) : $noCategory)
+                . ' → ' . ($targetCat > 0 ? SprintCategory::getFullNameFor($targetCat) : $noCategory);
+        }
+        if ($type === self::TYPE_ADHOC) {
+            return (int)($row['requested_flag'] ?? 0) === 1
+                ? __('Mark as adhoc', 'sprint')
+                : __('Remove adhoc flag', 'sprint');
+        }
+        if ($type === self::TYPE_CARRYOVER || $type === self::TYPE_ASSIGN) {
+            $from = new Sprint();
+            $fromName = $from->getFromDB((int)($item->fields['plugin_sprint_sprints_id'] ?? 0))
+                ? (string)$from->fields['name'] : __('Backlog', 'sprint');
+            $to = new Sprint();
+            $details = $fromName . ' → ' . ($to->getFromDB($sid) ? (string)$to->fields['name'] : ('#' . $sid));
+            if ($type === self::TYPE_CARRYOVER && (float)($row['requested_capacity'] ?? 0) > 0) {
+                $details .= ' (' . SprintMember::formatCapacity($row['requested_capacity']) . '%)';
+            }
+            return $details;
+        }
+        return '';
+    }
+
+    /** Human label for a request type. */
+    public static function getTypeLabel(string $type): string
+    {
+        $labels = [
+            self::TYPE_ASSIGN    => __('Assign to sprint', 'sprint'),
+            self::TYPE_CAPACITY  => __('Capacity change', 'sprint'),
+            self::TYPE_CATEGORY  => __('Category change', 'sprint'),
+            self::TYPE_ADHOC     => __('Adhoc', 'sprint'),
+            self::TYPE_CARRYOVER => __('Carry over', 'sprint'),
+        ];
+        return $labels[$type] ?? $type;
+    }
+
+    /**
+     * The one wording for a request that is not applied yet. Inline colours:
+     * `.text-dark` and friends flip in GLPI's dark palettes.
+     */
+    public static function renderWaitingLabel(): string
+    {
+        return "<span class='sprint-request-waiting sprint-small' "
+            . "style='display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:10px;"
+            . "background:#fff3cd;color:#664d03;border:1px solid #ffe69c;font-weight:600;'>"
+            . "<i class='fas fa-hourglass-half' aria-hidden='true'></i>"
+            . __s('Requested — waiting for Scrum Master', 'sprint') . "</span>";
+    }
+
+    /**
+     * Pending requests on one item, for the quick-edit dialogs: what was
+     * asked, current → requested value, and whether the current user filed
+     * it (and may cancel it). 'locked' tells the dialog that the current user
+     * cannot save the item until the Scrum Master has decided.
+     *
+     * @return array{requests: list<array{id:int,type:string,label:string,change:string,own:bool}>, locked: bool}
+     */
+    public static function describePendingForItem(int $itemId): array
+    {
+        $out = ['requests' => [], 'locked' => false];
+        if ($itemId <= 0 || !self::ensureTable()) {
+            return $out;
+        }
+        $item = new SprintItem();
+        if (!$item->getFromDB($itemId)) {
+            return $out;
+        }
+        $me = (int)Session::getLoginUserID();
+        foreach ((new self())->find([
+            'plugin_sprint_sprintitems_id' => $itemId,
+            'status'                       => self::STATUS_PENDING,
+        ], ['date_creation ASC']) as $row) {
+            $type = (string)$row['request_type'];
+            $out['requests'][] = [
+                'id'     => (int)$row['id'],
+                'type'   => $type,
+                // Plain text: the browser escapes it wherever it lands in HTML.
+                'label'  => self::getTypeLabel($type),
+                'change' => plugin_sprint_text(self::describeChange($row, $item)),
+                'own'    => (int)$row['users_id'] === $me,
+            ];
+            // Same rule as SprintItem::prepareInputForUpdate()'s queue lock.
+            $sid = (int)$row['plugin_sprint_sprints_id'];
+            if ($sid > 0 && !SprintItem::currentUserIsScrumMasterOf($sid)) {
+                $out['locked'] = true;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * "Requested" badge per item id for a list of rows (one query), so a list
+     * shows which items carry a pending change that is not applied yet.
+     *
+     * @param int[] $itemIds
+     * @return array<int,string> item id => badge HTML
+     */
+    public static function pendingBadgesForItems(array $itemIds): array
+    {
+        $itemIds = array_values(array_filter(array_map('intval', $itemIds)));
+        if (!$itemIds || !self::ensureTable()) {
+            return [];
+        }
+        $byItem = [];
+        foreach ((new self())->find([
+            'plugin_sprint_sprintitems_id' => $itemIds,
+            'status'                       => self::STATUS_PENDING,
+        ]) as $row) {
+            $byItem[(int)$row['plugin_sprint_sprintitems_id']][] = self::getTypeLabel((string)$row['request_type']);
+        }
+        $out = [];
+        foreach ($byItem as $id => $labels) {
+            $out[$id] = self::renderPendingBadge(implode(', ', array_unique($labels)));
+        }
+        return $out;
+    }
+
+    /** Compact row badge for an item with a pending request. */
+    public static function renderPendingBadge(string $detail = ''): string
+    {
+        $title = __('Requested — waiting for Scrum Master', 'sprint') . ($detail !== '' ? ': ' . $detail : '');
+        return " <span class='sprint-request-pending-badge sprint-small' title='" . htmlescape($title) . "' "
+            . "style='display:inline-flex;align-items:center;gap:3px;padding:0 6px;border-radius:8px;"
+            . "background:#fff3cd;color:#664d03;border:1px solid #ffe69c;font-weight:600;white-space:nowrap;'>"
+            . "<i class='fas fa-hourglass-half' aria-hidden='true'></i>" . __s('Requested', 'sprint')
+            . "<span class='visually-hidden'>: " . htmlescape($title) . "</span></span>";
     }
 
     /** Human-readable age ("2 hours ago"); '' when the date can't be parsed. */
@@ -610,8 +834,14 @@ class SprintRequest extends CommonDBTM
         return sprintf(_n('%d day ago', '%d days ago', $days, 'sprint'), $days);
     }
 
-    /** One-time JS for the accept/reject buttons (idempotent per page). */
-    private static function renderPanelScript(): void
+    /**
+     * One-time JS for the accept/reject/cancel buttons (idempotent per page).
+     * Same feedback pattern as the quick-edit dialogs: saving state on the
+     * button, the error next to it, a short toast on success. A list reload
+     * keeps the scroll position and filters; a cancel from inside the
+     * quick-edit dialog updates the dialog instead of reloading.
+     */
+    public static function renderPanelScript(): void
     {
         static $rendered = false;
         if ($rendered) {
@@ -619,19 +849,44 @@ class SprintRequest extends CommonDBTM
         }
         $rendered = true;
 
-        $handleUrl = Plugin::getWebDir('sprint') . '/ajax/requesthandle.php';
-        $tokenUrl  = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
+        $handleUrl  = Plugin::getWebDir('sprint') . '/ajax/requesthandle.php';
+        $tokenUrl   = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
+        $msgFailed  = __s('Could not handle the request.', 'sprint');
+        $msgNetwork = __s('Could not reach the server. Try again.', 'sprint');
+
+        SprintItem::renderUiHelpersScript();
 
         echo <<<HTML
 <script>
 (function(){
     if (typeof jQuery === 'undefined') { return; }
+    if (window.__sprintRequestPanelBound) { return; }
+    window.__sprintRequestPanelBound = true;
+
+    function toast(msg, level) {
+        if (window.sprintUi) { window.sprintUi.toast(msg, level); return; }
+        var fn = level === 'error' ? window.glpi_toast_error : window.glpi_toast_info;
+        if (typeof fn === 'function') { fn(msg); }
+    }
 
     function handle(action, btn) {
         var \$btn = jQuery(btn);
         var reqId = parseInt(\$btn.data('request-id'), 10) || 0;
         if (reqId <= 0) { return; }
-        \$btn.closest('td').find('button').prop('disabled', true);
+        var \$scope = \$btn.closest('td, li, .sprint-qe-pending');
+        var \$siblings = \$scope.find('button').not(\$btn);
+        \$scope.find('.sprint-request-error').remove();
+        \$siblings.prop('disabled', true);
+        if (window.sprintUi) { window.sprintUi.busy(\$btn, true, ''); } else { \$btn.prop('disabled', true); }
+        function restore() {
+            \$siblings.prop('disabled', false);
+            if (window.sprintUi) { window.sprintUi.busy(\$btn, false); } else { \$btn.prop('disabled', false); }
+        }
+        function fail(msg) {
+            restore();
+            \$scope.append(jQuery('<div class="text-danger sprint-small sprint-request-error" role="alert"></div>').text(msg));
+            toast(msg, 'error');
+        }
         jQuery.ajax({ url: "{$tokenUrl}", type: 'GET', dataType: 'json', cache: false })
         .then(function(tok){
             return jQuery.ajax({
@@ -640,21 +895,32 @@ class SprintRequest extends CommonDBTM
                         _glpi_csrf_token: tok && tok.token ? tok.token : '' }
             });
         }).done(function(resp){
-            if (resp && resp.success) {
-                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || 'OK'); }
-                window.location.reload();
-            } else {
-                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
-                \$btn.closest('td').find('button').prop('disabled', false);
+            if (!(resp && resp.success)) {
+                fail((resp && resp.message) || "{$msgFailed}");
+                return;
             }
+            toast(resp.message, 'success');
+            // Inside the quick-edit dialog: drop the line, unlock when empty.
+            var \$box = \$btn.closest('.sprint-qe-pending');
+            if (\$box.length) {
+                \$btn.closest('li').remove();
+                if (!\$box.find('li').length) {
+                    \$box.hide().empty();
+                    \$box.closest('.modal').find('.sprint-qe-save').prop('disabled', false).removeAttr('aria-disabled');
+                    var itemId = \$box.closest('.modal').find('input[name=id]').val();
+                    jQuery('[data-item-id="' + itemId + '"] .sprint-request-pending-badge').remove();
+                }
+                return;
+            }
+            if (window.sprintUi) { window.sprintUi.reload(); } else { window.location.reload(); }
         }).fail(function(){
-            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
-            \$btn.closest('td').find('button').prop('disabled', false);
+            fail("{$msgNetwork}");
         });
     }
 
     jQuery(document).on('click', '.sprint-request-accept', function(){ handle('accept', this); });
     jQuery(document).on('click', '.sprint-request-reject', function(){ handle('reject', this); });
+    jQuery(document).on('click', '.sprint-request-cancel', function(){ handle('cancel', this); });
 })();
 </script>
 HTML;
@@ -681,24 +947,29 @@ HTML;
         $errReason = __s('Please enter a reason.', 'sprint');
         $lblCancel = __s('Cancel');
         $lblSend   = __s('Send request', 'sprint');
+        $lblClose  = __s('Close');
+        $intro     = __s('Your change is not applied yet: the Scrum Master accepts or rejects it. Until then the item shows "Requested — waiting for Scrum Master".', 'sprint');
+
+        SprintItem::renderUiHelpersScript();
 
         echo <<<HTML
-<div class="modal fade" id="sprint-request-reason-modal" tabindex="-1" aria-hidden="true">
+<div class="modal fade sprint-dialog" id="sprint-request-reason-modal" tabindex="-1" aria-hidden="true" aria-labelledby="sprint-reqreason-heading" aria-describedby="sprint-reqreason-intro">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-paper-plane me-1"></i> {$title}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title" id="sprint-reqreason-heading"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i> {$title}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{$lblClose}"></button>
       </div>
       <div class="modal-body">
-        <label class="form-label fw-bold">{$lblReason}</label>
-        <textarea name="reason" class="form-control" rows="3" placeholder="{$phReason}"></textarea>
-        <div class="text-danger sprint-small mt-1 sprint-reqreason-error" style="display:none;">{$errReason}</div>
+        <p class="sprint-small text-muted" id="sprint-reqreason-intro">{$intro}</p>
+        <label class="form-label fw-bold" for="sprint-reqreason-text">{$lblReason}</label>
+        <textarea name="reason" id="sprint-reqreason-text" class="form-control" rows="3" placeholder="{$phReason}" data-sprint-autofocus="1" aria-describedby="sprint-reqreason-err"></textarea>
+        <div class="text-danger sprint-small mt-1 sprint-reqreason-error" id="sprint-reqreason-err" role="alert" style="display:none;">{$errReason}</div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$lblCancel}</button>
         <button type="button" class="btn btn-primary sprint-reqreason-confirm">
-          <i class="fas fa-paper-plane me-1"></i> {$lblSend}
+          <i class="fas fa-paper-plane me-1" aria-hidden="true"></i> {$lblSend}
         </button>
       </div>
     </div>
@@ -711,9 +982,10 @@ HTML;
     // Move the modal to <body> so it stacks above open modals; a GLPI ajax-tab
     // reload re-echoes it, so drop any stale copy from an earlier load first.
     jQuery(function(){
-        var all = jQuery('#sprint-request-reason-modal, body > #sprint-request-reason-modal');
+        // [id=…] rather than #…: an id lookup stops at the first match.
+        var all = jQuery('[id=sprint-request-reason-modal]');
         if (all.length > 1) { all.slice(0, all.length - 1).remove(); }
-        var last = jQuery('#sprint-request-reason-modal').last();
+        var last = jQuery('[id=sprint-request-reason-modal]').last();
         if (last.length && !last.parent().is('body')) { last.detach().appendTo('body'); }
     });
 
@@ -721,19 +993,24 @@ HTML;
     window.__sprintReqReasonBound = true;
 
     window.sprintRequestReason = function(callback){
-        var m = jQuery('#sprint-request-reason-modal').last();
+        var m = jQuery('[id=sprint-request-reason-modal]').last();
         if (!m.length) { callback(''); return; }
-        m.find('textarea[name=reason]').val('');
+        m.find('textarea[name=reason]').val('').removeClass('is-invalid').removeAttr('aria-invalid');
         m.find('.sprint-reqreason-error').hide();
         m.data('cb', callback);
+        // Back to the action that asked (the Save button underneath).
+        m[0].__sprintReturnFocus = document.activeElement;
         bootstrap.Modal.getOrCreateInstance(m[0]).show();
-        setTimeout(function(){ m.find('textarea[name=reason]').trigger('focus'); }, 200);
     };
 
     jQuery(document).on('click', '.sprint-reqreason-confirm', function(){
         var m = jQuery(this).closest('#sprint-request-reason-modal');
         var reason = (m.find('textarea[name=reason]').val() || '').trim();
-        if (reason === '') { m.find('.sprint-reqreason-error').show(); return; }
+        if (reason === '') {
+            m.find('textarea[name=reason]').addClass('is-invalid').attr('aria-invalid', 'true').trigger('focus');
+            m.find('.sprint-reqreason-error').show();
+            return;
+        }
         var cb = m.data('cb');
         m.removeData('cb');
         bootstrap.Modal.getOrCreateInstance(m[0]).hide();

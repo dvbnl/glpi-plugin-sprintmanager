@@ -11,6 +11,9 @@ class SprintAgility extends CommonGLPI
 {
     public static $rightname = 'plugin_sprint_sprint';
 
+    public const IMPROVEMENTS_TABLE = 'glpi_plugin_sprint_sprintimprovements';
+    public const FOLLOWUPS_TABLE    = 'glpi_plugin_sprint_sprintimprovementfollowups';
+
     public static function getTypeName($nb = 0): string
     {
         return __('Agility', 'sprint');
@@ -114,7 +117,7 @@ class SprintAgility extends CommonGLPI
                 // stay locked because a check cannot (or need not) be ticked.
                 if ($allowScrumMasterOverride && SprintItem::currentUserIsScrumMasterOf($sprintId)) {
                     return ['ok' => true, 'overridden' => true, 'message' => sprintf(
-                        __('Definition of Done overruled by the Scrum Master; skipped: %s', 'sprint'),
+                        __('Definition of Done overruled by the Scrum Master — skipped: %s', 'sprint'),
                         implode(', ', $missing)
                     )];
                 }
@@ -241,7 +244,7 @@ class SprintAgility extends CommonGLPI
             }
         }
         $tomorrow = date('Y-m-d', time() + DAY_TIMESTAMP);
-        foreach ($DB->request(['FROM' => 'glpi_plugin_sprint_sprintimprovements', 'WHERE' => ['status' => 'open', ['due_date' => ['<=', $tomorrow]], ['NOT' => ['users_id' => 0]]]]) as $action) {
+        foreach ($DB->request(['FROM' => 'glpi_plugin_sprint_sprintimprovements', 'WHERE' => ['status' => 'open', ['due_date' => ['<=', $tomorrow]], ['NOT' => ['users_id' => 0]]] + self::ownActionCriteria()]) as $action) {
             $created += self::signalOnce((int)$action['plugin_sprint_sprints_id'], (int)$action['users_id'], 'retro_action', sprintf(__('Improvement action due: %s', 'sprint'), $action['description']), Sprint::getFormURLWithID((int)$action['plugin_sprint_sprints_id'])) ? 1 : 0;
         }
         foreach ($DB->request(['FROM' => Sprint::getTable(), 'WHERE' => ['status' => Sprint::STATUS_ACTIVE]]) as $activeSprint) {
@@ -357,7 +360,8 @@ class SprintAgility extends CommonGLPI
 
         $isCompleted   = in_array((string)($sprint->fields['status'] ?? ''), [Sprint::STATUS_COMPLETED, Sprint::STATUS_CANCELLED], true);
         $doneItems     = count(array_filter($items, fn($r) => ($r['status'] ?? '') === SprintItem::STATUS_DONE));
-        $openActions   = count(self::rows('glpi_plugin_sprint_sprintimprovements', ['plugin_sprint_sprints_id' => $id, 'status' => 'open']));
+        $openActions   = count(self::rows('glpi_plugin_sprint_sprintimprovements', ['plugin_sprint_sprints_id' => $id, 'status' => 'open'] + self::ownActionCriteria()))
+            + count(self::getCarriedOpenActions($sprint->fields));
         $cards = $isCompleted
             ? [
                 [__('Delivered', 'sprint'), $forecast['done'] . ' / ' . $forecast['total'] . ' SP', 'fas fa-chart-line'],
@@ -809,28 +813,17 @@ HTML;
         self::endCard();
     }
 
+    /**
+     * Improvement actions have one persistent identity (1.3.1): an open
+     * action with carry_to_next stays followable from later sprints of the
+     * same series instead of being copied into them. Returns how many such
+     * actions the sprint inherits; nothing is inserted, so creating or
+     * completing sprints repeatedly can never duplicate an action.
+     */
     public static function carryImprovementsToSprint(Sprint $sprint): int
     {
-        global $DB;
-        $id = (int)$sprint->getID();
-        if ($id <= 0 || !$DB->tableExists('glpi_plugin_sprint_sprintimprovements')) return 0;
-        $previous = null;
-        foreach ($DB->request(['FROM' => Sprint::getTable(), 'WHERE' => [
-            'entities_id' => (int)($sprint->fields['entities_id'] ?? 0), 'status' => Sprint::STATUS_COMPLETED,
-            ['NOT' => ['id' => $id]],
-        ], 'ORDER' => ['date_end DESC'], 'LIMIT' => 1]) as $row) { $previous = $row; }
-        if (!$previous) return 0;
-        $count = 0; $now = $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s');
-        foreach (self::rows('glpi_plugin_sprint_sprintimprovements', ['plugin_sprint_sprints_id' => (int)$previous['id'], 'status' => 'open', 'carry_to_next' => 1]) as $row) {
-            if (countElementsInTable('glpi_plugin_sprint_sprintimprovements', ['plugin_sprint_sprints_id' => $id, 'description' => (string)$row['description'], 'status' => 'open']) > 0) continue;
-            $DB->insert('glpi_plugin_sprint_sprintimprovements', [
-                'plugin_sprint_sprints_id' => $id, 'category' => 'action',
-                'description' => (string)$row['description'], 'users_id' => (int)$row['users_id'],
-                'due_date' => $row['due_date'] ?: null, 'status' => 'open', 'votes' => (int)$row['votes'],
-                'carry_to_next' => 1, 'date_creation' => $now, 'date_mod' => $now,
-            ]); $count++;
-        }
-        return $count;
+        if ((int)$sprint->getID() <= 0) return 0;
+        return count(self::getCarriedOpenActions($sprint->fields));
     }
 
     public static function carryImprovementsForward(Sprint $completed): int
@@ -845,6 +838,445 @@ HTML;
         if (!$next) return 0;
         $target = new Sprint();
         return $target->getFromDB((int)$next['id']) ? self::carryImprovementsToSprint($target) : 0;
+    }
+
+    /** Whether the 1.3.1 identity columns exist (they do once migrated). */
+    public static function hasActionIdentity(): bool
+    {
+        global $DB;
+        static $has = null;
+        return $has ??= ($DB->tableExists(self::IMPROVEMENTS_TABLE)
+            && $DB->fieldExists(self::IMPROVEMENTS_TABLE, 'origin_improvements_id'));
+    }
+
+    /** Criteria that skip legacy carry-over copies (they point at their original). */
+    private static function ownActionCriteria(): array
+    {
+        return self::hasActionIdentity() ? ['origin_improvements_id' => 0] : [];
+    }
+
+    /** Sprint $a ran before sprint $b (start date, ids as tie-breaker for undated sprints). */
+    private static function sprintPrecedes(array $a, array $b): bool
+    {
+        $sa = (string)($a['date_start'] ?? ''); $sb = (string)($b['date_start'] ?? '');
+        return ($sa !== '' && $sb !== '') ? $sa < $sb : (int)$a['id'] < (int)$b['id'];
+    }
+
+    /**
+     * Two sprints run at the same time (parallel teams). A shared boundary
+     * day — one sprint ending the day the next starts — is not parallel.
+     */
+    public static function periodsOverlap(array $a, array $b): bool
+    {
+        $as = strtotime((string)($a['date_start'] ?? '')); $ae = strtotime((string)($a['date_end'] ?? ''));
+        $bs = strtotime((string)($b['date_start'] ?? '')); $be = strtotime((string)($b['date_end'] ?? ''));
+        if (!$as || !$ae || !$bs || !$be) return false;
+        return min($ae, $be) - max($as, $bs) > DAY_TIMESTAMP;
+    }
+
+    /** @return array<int,int[]> sprint id => team (members + Scrum Master) */
+    private static function sprintTeams(array $sprintRows): array
+    {
+        global $DB;
+        $teams = [];
+        foreach ($sprintRows as $row) {
+            $teams[(int)$row['id']] = (int)($row['users_id'] ?? 0) > 0 ? [(int)$row['users_id']] : [];
+        }
+        if ($teams) {
+            foreach ($DB->request(['SELECT' => ['plugin_sprint_sprints_id', 'users_id'], 'FROM' => SprintMember::getTable(), 'WHERE' => ['plugin_sprint_sprints_id' => array_keys($teams)]]) as $m) {
+                $teams[(int)$m['plugin_sprint_sprints_id']][] = (int)$m['users_id'];
+            }
+        }
+        return array_map(fn($u) => array_values(array_unique(array_filter($u))), $teams);
+    }
+
+    /** Sprints of the same entity that started before $sprint, newest first. */
+    private static function earlierEntitySprints(array $sprint, array $extra = [], int $limit = 60): array
+    {
+        global $DB;
+        $id = (int)($sprint['id'] ?? 0);
+        $where = ['entities_id' => (int)($sprint['entities_id'] ?? 0), ['NOT' => ['id' => $id]]] + $extra;
+        $start = (string)($sprint['date_start'] ?? '');
+        $where[] = $start !== '' ? ['date_start' => ['<', $start]] : ['id' => ['<', $id]];
+        $out = [];
+        foreach ($DB->request(['FROM' => Sprint::getTable(), 'WHERE' => $where, 'ORDER' => ['date_start DESC', 'id DESC'], 'LIMIT' => $limit]) as $row) {
+            $out[(int)$row['id']] = $row;
+        }
+        return $out;
+    }
+
+    /**
+     * Earlier sprints of the same sprint series, newest first.
+     *
+     * A series is the line of sprints one team runs: same entity, same
+     * template (0 = sprints created without a template) and — when the sprint
+     * has a team — at least one shared member or the same Scrum Master. So
+     * parallel teams in one entity stay apart as soon as they use their own
+     * template or consist of different people.
+     *
+     * @return array<int,array> sprint rows keyed by id
+     */
+    public static function getEarlierSeriesSprints(array $sprint, int $limit = 20): array
+    {
+        if ((int)($sprint['id'] ?? 0) <= 0) return [];
+        $candidates = self::earlierEntitySprints($sprint, [
+            'plugin_sprint_sprinttemplates_id' => (int)($sprint['plugin_sprint_sprinttemplates_id'] ?? 0),
+        ]);
+        if (!$candidates) return [];
+        $team = self::sprintTeams([$sprint])[(int)$sprint['id']] ?? [];
+        if ($team) {
+            $teams = self::sprintTeams($candidates);
+            foreach (array_keys($candidates) as $cid) {
+                if (!array_intersect($team, $teams[$cid] ?? [])) unset($candidates[$cid]);
+            }
+        }
+        return array_slice($candidates, 0, $limit, true);
+    }
+
+    /**
+     * Predecessor of $sprint in its series. A facilitator's explicit choice
+     * ($chosenId, any earlier sprint of the entity) wins. `ambiguous` flags
+     * another series sprint running in parallel with the predecessor, so the
+     * facilitator gets a visible choice instead of a silent guess.
+     *
+     * @return array{predecessor:?array,ambiguous:bool,manual:bool,choices:array<int,string>}
+     */
+    public static function resolvePredecessor(array $sprint, int $chosenId = 0): array
+    {
+        $choiceRows = self::earlierEntitySprints($sprint, [], 25);
+        $choices = [];
+        foreach ($choiceRows as $cid => $row) {
+            $choices[$cid] = (string)$row['name'] . (!empty($row['date_start']) ? ' (' . Html::convDate($row['date_start']) . ')' : '');
+        }
+        $out = ['predecessor' => null, 'ambiguous' => false, 'manual' => false, 'choices' => $choices];
+        if ($chosenId > 0 && isset($choiceRows[$chosenId])) {
+            $out['predecessor'] = $choiceRows[$chosenId];
+            $out['manual'] = true;
+            return $out;
+        }
+        $series = self::getEarlierSeriesSprints($sprint);
+        $pred = $series ? reset($series) : null;
+        if ($pred) {
+            $out['predecessor'] = $pred;
+            foreach ($series as $cid => $row) {
+                if ($cid !== (int)$pred['id'] && self::periodsOverlap($pred, $row)) {
+                    $out['ambiguous'] = true;
+                    break;
+                }
+            }
+        }
+        return $out;
+    }
+
+    /** Moment of the predecessor's retrospective (its latest one), else its end date. */
+    private static function previousRetroMoment(array $pred): string
+    {
+        $moment = '';
+        foreach (self::rows(SprintMeeting::getTable(), [
+            'plugin_sprint_sprints_id' => (int)$pred['id'], 'meeting_type' => SprintMeeting::TYPE_RETROSPECTIVE,
+        ], ['date_meeting DESC']) as $m) {
+            $moment = (string)($m['started_at'] ?: $m['date_meeting']);
+            break;
+        }
+        return $moment !== '' ? $moment : (string)($pred['date_end'] ?? '');
+    }
+
+    /**
+     * Open carry_to_next actions of earlier sprints of the series — what the
+     * old carry-over used to copy in. Keyed by action id.
+     */
+    public static function getCarriedOpenActions(array $sprint): array
+    {
+        $earlier = self::getEarlierSeriesSprints($sprint);
+        if (!$earlier) return [];
+        $out = [];
+        foreach (self::rows(self::IMPROVEMENTS_TABLE, [
+            'plugin_sprint_sprints_id' => array_keys($earlier), 'category' => 'action',
+            'status' => 'open', 'carry_to_next' => 1,
+        ] + self::ownActionCriteria(), ['date_creation ASC']) as $row) {
+            $row['source_sprint_name'] = (string)($earlier[(int)$row['plugin_sprint_sprints_id']]['name'] ?? '');
+            $out[(int)$row['id']] = $row;
+        }
+        return $out;
+    }
+
+    /** @return array<string,string> */
+    public static function helpedOptions(): array
+    {
+        return [
+            ''       => __('Not evaluated yet', 'sprint'),
+            'yes'    => __('Yes, it helped', 'sprint'),
+            'partly' => __('Partly', 'sprint'),
+            'no'     => __('No, it did not help', 'sprint'),
+        ];
+    }
+
+    /**
+     * Follow-up of earlier retrospective actions for a retrospective meeting.
+     *
+     * `previous`: every action agreed in the predecessor sprint, open and
+     * done, so completed changes can be evaluated. `older`: carry_to_next
+     * actions from older sprints of the series that were still open at the
+     * previous retrospective (open now, or completed since). Every action
+     * appears once, under its own identity; actions of the current sprint
+     * never do (they are this retrospective's new actions).
+     */
+    public static function getRetroFollowUp(array $meeting): array
+    {
+        global $DB;
+        $out = ['predecessor' => null, 'ambiguous' => false, 'manual' => false, 'choices' => [], 'previous' => [], 'older' => [], 'ids' => []];
+        $sprintId  = (int)($meeting['plugin_sprint_sprints_id'] ?? 0);
+        $meetingId = (int)($meeting['id'] ?? 0);
+        $sprint = new Sprint();
+        if ($sprintId <= 0 || !$sprint->getFromDB($sprintId) || !$DB->tableExists(self::IMPROVEMENTS_TABLE)) return $out;
+
+        $notes  = json_decode((string)($meeting['phase_notes'] ?? ''), true);
+        $chosen = is_array($notes) ? (int)($notes[SprintMeeting::PREV_SPRINT_NOTE_KEY] ?? 0) : 0;
+        $out = array_merge($out, self::resolvePredecessor($sprint->fields, $chosen));
+        $pred = $out['predecessor'];
+        if ($pred === null || !SprintItem::sprintEntityAccessible((int)$pred['id'])) {
+            $out['predecessor'] = null;
+            return $out;
+        }
+        $predId = (int)$pred['id'];
+        $older  = self::getEarlierSeriesSprints($pred);
+        $since  = self::previousRetroMoment($pred);
+        $own    = ['category' => 'action'] + self::ownActionCriteria();
+
+        $actions = [];
+        foreach (self::rows(self::IMPROVEMENTS_TABLE, $own + ['plugin_sprint_sprints_id' => $predId], ['date_creation ASC', 'id ASC']) as $row) {
+            $actions[(int)$row['id']] = $row + ['group' => 'previous'];
+        }
+        $stillRelevant = fn(array $row): bool => $row['status'] === 'open' || ($since !== '' && (string)$row['date_mod'] >= $since);
+        if ($older) {
+            foreach (self::rows(self::IMPROVEMENTS_TABLE, $own + ['plugin_sprint_sprints_id' => array_keys($older), 'carry_to_next' => 1], ['date_creation ASC', 'id ASC']) as $row) {
+                if ($stillRelevant($row)) $actions[(int)$row['id']] ??= $row + ['group' => 'older'];
+            }
+        }
+        // Legacy carry-over copies (linked by the 1.3.1 migration) stand for
+        // their original: follow the original, once.
+        if (self::hasActionIdentity()) {
+            $originIds = [];
+            foreach (self::rows(self::IMPROVEMENTS_TABLE, [
+                'plugin_sprint_sprints_id' => array_merge([$predId, $sprintId], array_keys($older)),
+                'origin_improvements_id' => ['>', 0],
+            ]) as $copy) {
+                $originIds[] = (int)$copy['origin_improvements_id'];
+            }
+            if ($originIds) {
+                foreach (self::rows(self::IMPROVEMENTS_TABLE, ['id' => array_values(array_unique($originIds))] + $own) as $row) {
+                    if ($stillRelevant($row)) $actions[(int)$row['id']] ??= $row + ['group' => 'older'];
+                }
+            }
+        }
+        if (!$actions) return $out;
+
+        // Source sprints / meetings, entity-checked.
+        $sprintIds = array_values(array_unique(array_map(fn($r) => (int)$r['plugin_sprint_sprints_id'], $actions)));
+        $sprints = [];
+        foreach (self::rows(Sprint::getTable(), ['id' => $sprintIds]) as $s) $sprints[(int)$s['id']] = $s;
+        $followups = [];
+        foreach (self::rows(self::FOLLOWUPS_TABLE, ['plugin_sprint_sprintimprovements_id' => array_keys($actions)], ['date_creation ASC', 'id ASC']) as $fu) {
+            $followups[(int)$fu['plugin_sprint_sprintimprovements_id']][] = $fu;
+        }
+        $meetingIds = [];
+        foreach ($actions as $row) $meetingIds[] = (int)($row['plugin_sprint_sprintmeetings_id'] ?? 0);
+        foreach ($followups as $list) foreach ($list as $fu) $meetingIds[] = (int)$fu['plugin_sprint_sprintmeetings_id'];
+        $meetings = [];
+        $meetingIds = array_values(array_filter(array_unique($meetingIds)));
+        if ($meetingIds) foreach (self::rows(SprintMeeting::getTable(), ['id' => $meetingIds]) as $m) $meetings[(int)$m['id']] = $m;
+        $helped = self::helpedOptions();
+
+        foreach ($actions as $id => $row) {
+            $src = $sprints[(int)$row['plugin_sprint_sprints_id']] ?? null;
+            if ($src === null || !Session::haveAccessToEntity((int)$src['entities_id'], (bool)($src['is_recursive'] ?? false))) continue;
+            $srcMeeting = $meetings[(int)($row['plugin_sprint_sprintmeetings_id'] ?? 0)] ?? null;
+            $lastUpdate = (string)$row['date_mod'];
+            $history = []; $current = null;
+            foreach ($followups[$id] ?? [] as $fu) {
+                if ((string)$fu['date_mod'] > $lastUpdate) $lastUpdate = (string)$fu['date_mod'];
+                if ((int)$fu['plugin_sprint_sprintmeetings_id'] === $meetingId) { $current = $fu; continue; }
+                $fuMeeting = $meetings[(int)$fu['plugin_sprint_sprintmeetings_id']] ?? null;
+                $history[] = [
+                    'meeting_name' => $fuMeeting ? (string)$fuMeeting['name'] : '',
+                    'meeting_url'  => $fuMeeting ? SprintMeeting::getFormURLWithID((int)$fuMeeting['id']) : '',
+                    'date'         => Html::convDateTime((string)($fu['date_mod'] ?: $fu['date_creation'])),
+                    'author'       => (int)$fu['users_id'] > 0 ? SprintCache::userName((int)$fu['users_id']) : '',
+                    'status'       => (string)$fu['status'],
+                    'progress_note' => (string)$fu['progress_note'],
+                    'evaluation'   => (string)$fu['evaluation'],
+                    'helped_label' => (string)$fu['helped'] !== '' ? ($helped[$fu['helped']] ?? '') : '',
+                ];
+            }
+            $out[$row['group']][] = [
+                'id'                  => $id,
+                'description'         => (string)$row['description'],
+                'status'              => (string)$row['status'],
+                'users_id'            => (int)$row['users_id'],
+                'owner_name'          => (int)$row['users_id'] > 0 ? SprintCache::userName((int)$row['users_id']) : '',
+                'due_date'            => !empty($row['due_date']) ? Html::convDate((string)$row['due_date']) : '',
+                'is_overdue'          => $row['status'] !== 'done' && !empty($row['due_date']) && (string)$row['due_date'] < date('Y-m-d'),
+                'last_update'         => $lastUpdate !== '' ? Html::convDateTime($lastUpdate) : '',
+                'source_sprint_name'  => (string)$src['name'],
+                'source_sprint_url'   => Sprint::getFormURLWithID((int)$src['id']),
+                'source_meeting_name' => $srcMeeting ? (string)$srcMeeting['name'] : '',
+                'source_meeting_url'  => $srcMeeting ? SprintMeeting::getFormURLWithID((int)$srcMeeting['id']) : '',
+                'history'             => $history,
+                'progress_note'       => (string)($current['progress_note'] ?? ''),
+                'evaluation'          => (string)($current['evaluation'] ?? ''),
+                'helped'              => (string)($current['helped'] ?? ''),
+            ];
+            $out['ids'][] = $id;
+        }
+        return $out;
+    }
+
+    /**
+     * One-off migration (1.3.1): link the copies the old carry-over inserted
+     * to their original. A copy is recognised by the rules that created it:
+     * a carry_to_next action in a later sprint of the same entity with the
+     * same owner, due date and text as an action of an earlier *completed*
+     * sprint, created no earlier than it. Text alone never links; when the
+     * nearest earlier sprint holds more than one match the row is left alone.
+     * Copies stay (their sprint's history is untouched); the original takes
+     * over the most recently changed status of its chain.
+     */
+    public static function linkLegacyCarryCopies(): int
+    {
+        global $DB;
+        $table = self::IMPROVEMENTS_TABLE;
+        if (!$DB->tableExists($table) || !$DB->fieldExists($table, 'origin_improvements_id')) return 0;
+        $sprints = [];
+        foreach ($DB->request(['SELECT' => ['id', 'entities_id', 'status', 'date_start', 'date_end'], 'FROM' => Sprint::getTable()]) as $s) {
+            $sprints[(int)$s['id']] = $s;
+        }
+        $groups = []; $byId = [];
+        foreach ($DB->request(['FROM' => $table, 'WHERE' => ['category' => 'action', 'carry_to_next' => 1, 'origin_improvements_id' => 0], 'ORDER' => ['date_creation ASC', 'id ASC']]) as $row) {
+            $sid = (int)$row['plugin_sprint_sprints_id'];
+            if (!isset($sprints[$sid])) continue;
+            $key = $sprints[$sid]['entities_id'] . '|' . (int)$row['users_id'] . '|' . (string)$row['due_date'] . '|' . mb_strtolower(trim((string)$row['description']));
+            $groups[$key][] = $row;
+            $byId[(int)$row['id']] = $row;
+        }
+        $linked = 0; $rootOf = []; $chains = [];
+        foreach ($groups as $rows) {
+            if (count($rows) < 2) continue;
+            foreach ($rows as $i => $copy) {
+                $copySprint = $sprints[(int)$copy['plugin_sprint_sprints_id']];
+                $best = []; $bestEnd = null;
+                foreach ($rows as $j => $orig) {
+                    $origSprint = $sprints[(int)$orig['plugin_sprint_sprints_id']];
+                    if ($j === $i || (int)$origSprint['id'] === (int)$copySprint['id']
+                        || $origSprint['status'] !== Sprint::STATUS_COMPLETED
+                        || (string)$orig['date_creation'] > (string)$copy['date_creation']
+                        || !self::sprintPrecedes($origSprint, $copySprint)) {
+                        continue;
+                    }
+                    $end = (string)$origSprint['date_end'];
+                    if ($bestEnd === null || $end > $bestEnd) { $best = [$orig]; $bestEnd = $end; }
+                    elseif ($end === $bestEnd) { $best[] = $orig; }
+                }
+                if (count($best) !== 1) continue;
+                $root = $rootOf[(int)$best[0]['id']] ?? (int)$best[0]['id'];
+                $rootOf[(int)$copy['id']] = $root;
+                $chains[$root][] = $copy;
+                $DB->update($table, ['origin_improvements_id' => $root], ['id' => (int)$copy['id']]);
+                $linked++;
+            }
+        }
+        foreach ($chains as $rootId => $copies) {
+            $latest = $byId[$rootId];
+            foreach ($copies as $copy) {
+                if ((string)$copy['date_mod'] > (string)$latest['date_mod']) $latest = $copy;
+            }
+            if ($latest['status'] !== $byId[$rootId]['status']) {
+                $DB->update($table, ['status' => $latest['status']], ['id' => $rootId]);
+            }
+        }
+        return $linked;
+    }
+
+    /** An action row by id; a legacy copy resolves to its original. */
+    private static function actionRow(int $id): ?array
+    {
+        $rows = self::rows(self::IMPROVEMENTS_TABLE, ['id' => $id]);
+        $row = $rows ? reset($rows) : null;
+        if ($row && (int)($row['origin_improvements_id'] ?? 0) > 0) {
+            $rows = self::rows(self::IMPROVEMENTS_TABLE, ['id' => (int)$row['origin_improvements_id']]);
+            $row = $rows ? reset($rows) : null;
+        }
+        return $row ?: null;
+    }
+
+    /**
+     * Status toggle and follow-up notes for an action, possibly of an earlier
+     * sprint. The action must belong to $sprintId, be part of the follow-up
+     * of the given retrospective of $sprintId, or be carried into $sprintId;
+     * its own sprint's entity must be visible. Scrum Master and facilitator
+     * may act on every followable action, the action owner (a member of
+     * $sprintId) on their own action during the retrospective.
+     */
+    private static function handleActionFollowUp(string $action, array $input, int $sprintId): bool
+    {
+        global $DB;
+        $row = self::actionRow((int)($input['id'] ?? 0));
+        if ($row === null || ($row['category'] ?? '') === '') return false;
+        $actionId  = (int)$row['id'];
+        $meetingId = (int)($input['meeting_id'] ?? 0);
+        $uid       = (int)Session::getLoginUserID();
+        $sprint = new Sprint();
+        if (!$sprint->getFromDB($sprintId)) return false;
+
+        $meeting = null; $inFollowUp = false;
+        if ($meetingId > 0) {
+            $m = new SprintMeeting();
+            if ($m->getFromDB($meetingId) && (int)$m->fields['plugin_sprint_sprints_id'] === $sprintId
+                && (string)$m->fields['meeting_type'] === SprintMeeting::TYPE_RETROSPECTIVE) {
+                $meeting = $m->fields;
+                $inFollowUp = in_array($actionId, self::getRetroFollowUp($meeting)['ids'], true);
+            }
+        }
+        $ownSprint = (int)$row['plugin_sprint_sprints_id'] === $sprintId;
+        $carried   = !$ownSprint && !$inFollowUp && isset(self::getCarriedOpenActions($sprint->fields)[$actionId]);
+        if (!$ownSprint && !$inFollowUp && !$carried) return false;
+        if (!$ownSprint && !SprintItem::sprintEntityAccessible((int)$row['plugin_sprint_sprints_id'])) return false;
+
+        // Same driver rule as the guided meeting (ajax/meetingphase.php).
+        $isScrumMaster = SprintItem::currentUserIsScrumMasterOf($sprintId) && Sprint::canUpdate();
+        $isMember      = self::isCurrentUserMember($sprintId);
+        $isFacilitator = $isMember && self::isCurrentUserMeetingFacilitator($sprintId, $meetingId);
+        $isOwner       = $isMember && $uid > 0 && (int)$row['users_id'] === $uid;
+        $now = $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s');
+
+        if ($action === 'improvement_toggle') {
+            if (!$isScrumMaster && !$isFacilitator && !($inFollowUp && $isOwner)) return false;
+            $status = $row['status'] === 'done' ? 'open' : 'done';
+            if (!$DB->update(self::IMPROVEMENTS_TABLE, ['status' => $status, 'date_mod' => $now], ['id' => $actionId])) return false;
+            if (self::hasActionIdentity()) {
+                // Keep legacy copies in step so older sprint views agree.
+                $DB->update(self::IMPROVEMENTS_TABLE, ['status' => $status], ['origin_improvements_id' => $actionId]);
+            }
+            return true;
+        }
+
+        // improvement_followup: one note per action per retrospective.
+        if ($meeting === null || !$inFollowUp || (!$isScrumMaster && !$isFacilitator && !$isOwner)) return false;
+        if (!$DB->tableExists(self::FOLLOWUPS_TABLE)) return false;
+        $helped = (string)($input['helped'] ?? '');
+        $fields = [
+            'plugin_sprint_sprints_id' => $sprintId,
+            'users_id'      => $uid,
+            'status'        => (string)$row['status'],
+            'progress_note' => mb_substr(trim((string)($input['progress_note'] ?? '')), 0, 5000),
+            'evaluation'    => mb_substr(trim((string)($input['evaluation'] ?? '')), 0, 5000),
+            'helped'        => array_key_exists($helped, self::helpedOptions()) ? $helped : '',
+            'date_mod'      => $now,
+        ];
+        $key = ['plugin_sprint_sprintimprovements_id' => $actionId, 'plugin_sprint_sprintmeetings_id' => $meetingId];
+        if (self::rows(self::FOLLOWUPS_TABLE, $key)) {
+            return (bool)$DB->update(self::FOLLOWUPS_TABLE, $fields, $key);
+        }
+        return (bool)$DB->insert(self::FOLLOWUPS_TABLE, $key + $fields + ['date_creation' => $now]);
     }
 
     private static function renderPolicies(Sprint $sprint, array $limits, string $form, bool $edit): void
@@ -882,7 +1314,11 @@ HTML;
 
     private static function renderImprovements(int $id, string $form, bool $edit, bool $contribute = false): void
     {
-        $rows = self::rows('glpi_plugin_sprint_sprintimprovements', ['plugin_sprint_sprints_id' => $id], ['votes DESC', 'date_creation DESC']);
+        $rows = self::rows('glpi_plugin_sprint_sprintimprovements', ['plugin_sprint_sprints_id' => $id] + self::ownActionCriteria(), ['votes DESC', 'date_creation DESC']);
+        // Open actions of earlier sprints of the series stay followable here
+        // under their own identity (no copies).
+        $sprint = new Sprint();
+        $carried = $sprint->getFromDB($id) ? self::getCarriedOpenActions($sprint->fields) : [];
 
         // Current user's votes, to render the thumbs-up as active/inactive.
         $votedIds = [];
@@ -922,6 +1358,16 @@ HTML;
                 Html::closeForm();
             }
             echo "</td><td><span class='sprint-imp-status' data-status='" . htmlescape($row['status']) . "' data-lbl-open='" . htmlescape(__('Open', 'sprint')) . "' data-lbl-done='" . htmlescape(__('Done', 'sprint')) . "'>" . htmlescape($row['status'] === 'done' ? __('Done', 'sprint') : __('Open', 'sprint')) . '</span>';
+            if ($edit) {
+                echo " <form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'improvement_toggle']) . "<button class='btn btn-sm btn-outline-success' title='" . __('Toggle done', 'sprint') . "'><i class='fas fa-check'></i></button>"; Html::closeForm();
+            }
+            echo '</td></tr>';
+        }
+        foreach ($carried as $row) {
+            echo "<tr data-improvement-id='" . (int)$row['id'] . "'><td><span class=\"badge bg-blue-lt\">" . htmlescape(self::improvementCategories()['action']) . '</span></td><td>' . nl2br(htmlescape($row['description']))
+                . "<div class='text-muted sprint-small'><i class='fas fa-share me-1'></i>" . htmlescape(sprintf(__('Still open from %s', 'sprint'), $row['source_sprint_name'])) . '</div></td><td>'
+                . htmlescape((int)$row['users_id'] > 0 ? SprintCache::userName((int)$row['users_id']) : '') . '</td><td>' . htmlescape((string)$row['due_date']) . "</td><td><span class='text-muted'>—</span></td>";
+            echo "<td><span class='sprint-imp-status' data-status='open' data-lbl-open='" . htmlescape(__('Open', 'sprint')) . "' data-lbl-done='" . htmlescape(__('Done', 'sprint')) . "'>" . htmlescape(__('Open', 'sprint')) . '</span>';
             if ($edit) {
                 echo " <form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'improvement_toggle']) . "<button class='btn btn-sm btn-outline-success' title='" . __('Toggle done', 'sprint') . "'><i class='fas fa-check'></i></button>"; Html::closeForm();
             }
@@ -1027,20 +1473,6 @@ HTML;
         self::endCard();
     }
 
-    public static function renderHomeWidget(): void
-    {
-        global $DB;
-        if (!$DB->tableExists('glpi_plugin_sprint_sprintsignals')) return;
-        self::resolveApprovalSignals();
-        $rows = self::rows('glpi_plugin_sprint_sprintsignals', ['users_id' => (int)Session::getLoginUserID(), 'is_read' => 0], ['date_creation DESC']);
-        if (!$rows) return;
-        echo "<div class='card mb-3 sprint-home-actions'><div class='card-header'><h3 class='card-title'><i class='fas fa-running me-2'></i>" . sprintf(__('My Sprint actions (%d)', 'sprint'), count($rows)) . "</h3></div><div class='list-group list-group-flush'>";
-        foreach (array_slice($rows, 0, 5) as $row) {
-            $url = $row['url'] ?: Sprint::getFormURLWithID((int)$row['plugin_sprint_sprints_id']);
-            echo "<a class='list-group-item list-group-item-action' href='" . htmlescape($url) . "'><span class='badge bg-blue-lt me-2'>" . htmlescape(self::signalTypeLabel((string)$row['signal_type'])) . '</span>' . htmlescape($row['message']) . '</a>';
-        }
-        echo '</div></div>';
-    }
 
     /**
      * Improvement rows for a sprint, votes-first, each with a `voted_by_me`
@@ -1048,7 +1480,8 @@ HTML;
      */
     public static function getImprovementsForSprint(int $sprintId): array
     {
-        $rows = self::rows('glpi_plugin_sprint_sprintimprovements', ['plugin_sprint_sprints_id' => $sprintId], ['votes DESC', 'date_creation DESC']);
+        // Legacy carry-over copies are followed up through their original.
+        $rows = self::rows('glpi_plugin_sprint_sprintimprovements', ['plugin_sprint_sprints_id' => $sprintId] + self::ownActionCriteria(), ['votes DESC', 'date_creation DESC']);
         $votedIds = [];
         if ($rows) {
             foreach (self::rows('glpi_plugin_sprint_sprintimprovementvotes', [
@@ -1079,19 +1512,6 @@ HTML;
         ];
     }
 
-    private static function signalTypeLabel(string $type): string
-    {
-        return match ($type) {
-            'meeting'        => __('Meeting', 'sprint'),
-            'approval'       => __('Approval', 'sprint'),
-            'stale_approval' => __('Approval', 'sprint'),
-            'retro_action'   => __('Improvement action', 'sprint'),
-            'capacity'       => __('Capacity', 'sprint'),
-            'blocked'        => __('Blocked', 'sprint'),
-            'dependency'     => __('Dependency', 'sprint'),
-            default          => $type,
-        };
-    }
 
     private static function memberOptions(int $sprintId): string
     {
@@ -1110,20 +1530,18 @@ HTML;
                 'id' => (int)($input['id'] ?? 0), 'users_id' => (int)Session::getLoginUserID(),
             ]);
         }
-        if ($sprintId <= 0) return false;
+        if ($sprintId <= 0 || !SprintItem::sprintEntityAccessible($sprintId)) return false;
         $action = (string)($input['action'] ?? '');
+        // Status toggles and follow-up notes may target actions of earlier
+        // sprints of the series (retrospective follow-up); see there.
+        if (in_array($action, ['improvement_toggle', 'improvement_followup'], true)) {
+            return self::handleActionFollowUp($action, $input, $sprintId);
+        }
         $isScrumMaster = Config::isCurrentUserScrumMaster($sprintId) && Sprint::canUpdate();
-        // Retro input and voting are open to every sprint member; toggling an
-        // improvement done/open is also allowed for the facilitator of a
-        // meeting of this sprint (guided retro, "previous actions" phase).
-        // The rest stays Scrum-Master-only.
+        // Retro input and voting are open to every sprint member; the rest
+        // stays Scrum-Master-only.
         if (in_array($action, ['improvement', 'improvement_vote'], true)) {
             if (!$isScrumMaster && !self::isCurrentUserMember($sprintId)) return false;
-        } elseif ($action === 'improvement_toggle' && !$isScrumMaster) {
-            if (!self::isCurrentUserMember($sprintId)
-                || !self::isCurrentUserMeetingFacilitator($sprintId, (int)($input['meeting_id'] ?? 0))) {
-                return false;
-            }
         } elseif (!$isScrumMaster) {
             return false;
         }
@@ -1151,13 +1569,21 @@ HTML;
                 // Retro input has no owner picker: the contributor is the owner.
                 $owner = (int)($input['users_id'] ?? 0);
                 if ($owner <= 0 && $category !== 'action') $owner = (int)Session::getLoginUserID();
-                if (!$DB->insert('glpi_plugin_sprint_sprintimprovements', [
+                $fields = [
                     'plugin_sprint_sprints_id' => $sprintId, 'category' => $category,
                     'description' => $description, 'users_id' => $owner,
                     'due_date' => ($input['due_date'] ?? '') ?: null, 'status' => 'open', 'votes' => 0, 'carry_to_next' => 1,
                     'is_anonymous' => isset($input['is_anonymous']) ? 1 : 0,
                     'date_creation' => $now, 'date_mod' => $now,
-                ])) return false;
+                ];
+                // Remember the retrospective the action was agreed in.
+                $meetingId = (int)($input['meeting_id'] ?? 0);
+                if ($meetingId > 0 && self::hasActionIdentity() && countElementsInTable(SprintMeeting::getTable(), [
+                    'id' => $meetingId, 'plugin_sprint_sprints_id' => $sprintId,
+                ]) > 0) {
+                    $fields['plugin_sprint_sprintmeetings_id'] = $meetingId;
+                }
+                if (!$DB->insert('glpi_plugin_sprint_sprintimprovements', $fields)) return false;
                 return (int)$DB->insertId();
             case 'availability':
                 $start = (string)($input['date_start'] ?? ''); $end = (string)($input['date_end'] ?? '');
@@ -1188,11 +1614,6 @@ HTML;
                     'plugin_sprint_sprintimprovements_id' => $id, 'users_id' => $uid, 'date_creation' => $now,
                 ]);
                 return $DB->update('glpi_plugin_sprint_sprintimprovements', ['votes' => (int)$row['votes'] + 1, 'date_mod' => $now], ['id' => $id]);
-            case 'improvement_toggle':
-                $id = (int)($input['id'] ?? 0);
-                $rows = self::rows('glpi_plugin_sprint_sprintimprovements', ['id' => $id, 'plugin_sprint_sprints_id' => $sprintId]);
-                $row = $rows ? reset($rows) : null;
-                return $row ? $DB->update('glpi_plugin_sprint_sprintimprovements', ['status' => $row['status'] === 'done' ? 'open' : 'done', 'date_mod' => $now], ['id' => $id]) : false;
             case 'epic':
                 $name = trim((string)($input['name'] ?? ''));
                 if ($name === '') return false;

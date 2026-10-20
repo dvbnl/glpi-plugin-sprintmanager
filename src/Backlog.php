@@ -15,6 +15,9 @@ use User;
  */
 class Backlog
 {
+    /** UserPref name of the personal backlog view: 'queue' (work queue) or 'planning'. */
+    public const VIEW_PREF = 'backlog_view';
+
     public static function getTypeName($nb = 0): string
     {
         return _n('Backlog', 'Backlog', $nb, 'sprint');
@@ -74,12 +77,7 @@ class Backlog
         }
 
         if (self::isLinkedItemInAnySprint($itemtype, $itemId)) {
-            echo "<div class='center' style='margin:8px 0;'>";
-            echo "<span class='text-muted sprint-small'>"
-                . "<i class='fas fa-info-circle me-1'></i>"
-                . __('Already linked to a sprint — use "Carry over to sprint" to move it between sprints.', 'sprint')
-                . "</span>";
-            echo "</div>";
+            self::showSprintPlanLine($itemtype, $itemId);
             return;
         }
 
@@ -136,7 +134,7 @@ class Backlog
         echo $chip('fas fa-user', __('Owner', 'sprint'), $ownerId > 0 ? htmlescape(SprintCache::userName($ownerId)) : $muted);
         $capValue = $capacity > 0 ? SprintMember::formatCapacity($capacity) . '%' : $muted;
         echo $chip('fas fa-gauge-high', __('Est. capacity', 'sprint'), $capValue);
-        echo $chip('fas fa-flag-checkered', __('Assign to sprint', 'sprint'), $sprintName !== '' ? htmlescape($sprintName) : $muted);
+        echo $chip('fas fa-flag-checkered', __('Proposed sprint', 'sprint'), $sprintName !== '' ? htmlescape($sprintName) : $muted);
         echo $chip('fas fa-folder', __('Category', 'sprint'), $categoryId > 0 ? SprintCategory::renderPill($categoryId) : $muted);
         if (SprintCustomer::canUseCredits()) {
             $customerId = (int)($existing['plugin_sprint_sprintcustomers_id'] ?? 0);
@@ -151,12 +149,8 @@ class Backlog
         if ($isFastlane) {
             echo "<span class='sprint-plan-chip'><i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Fastlane', 'sprint') . "</span>";
         }
-        // Same readiness rule as the backlog row badge.
-        $isReady = $proposedId > 0 && $ownerId > 0 && $capacity > 0;
-        if ($isReady) {
-            echo "<span class='sprint-ready-badge' title='" . __s('Owner, capacity and sprint set — ready for the Scrum Master to assign', 'sprint') . "'>"
-                . "<i class='fas fa-check'></i> " . __('Ready', 'sprint') . "</span>";
-        }
+        // Same planning-completeness rule (and wording) as the backlog row.
+        echo self::renderPlanningBadge($existing);
         echo "<span style='flex:1;'></span>";
         if ($canEdit) {
             echo "<button type='button' class='btn btn-sm btn-outline-primary' data-bs-toggle='modal' data-bs-target='#sprint-plan-modal'>"
@@ -175,18 +169,18 @@ class Backlog
         // POST (front/backlog.form.php update_backlog_item) so it works
         // without the backlog page's scripts.
         $rand = mt_rand();
-        echo "<div class='modal fade' id='sprint-plan-modal' tabindex='-1' aria-hidden='true'>";
-        echo "<div class='modal-dialog modal-dialog-centered modal-lg'><div class='modal-content'>";
+        echo "<div class='modal fade' id='sprint-plan-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-plan-modal-title'>";
+        echo "<div class='modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg'><div class='modal-content'>";
         echo "<form method='post' action='" . self::getFormURL() . "'>";
-        echo "<div class='modal-header'><h5 class='modal-title'><i class='fas fa-pen me-1'></i> " . __('Backlog planning', 'sprint') . "</h5>"
-            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button></div>";
+        echo "<div class='modal-header'><h5 class='modal-title' id='sprint-plan-modal-title'><i class='fas fa-pen me-1' aria-hidden='true'></i> " . __('Backlog planning', 'sprint') . "</h5>"
+            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='" . __s('Close') . "'></button></div>";
         echo "<div class='modal-body'>";
         echo Html::hidden('itemtype', ['value' => $itemtype]);
         echo Html::hidden('items_id', ['value' => $itemId]);
         echo Html::hidden('id', ['value' => (int)$existing['id']]);
         echo "<div class='row g-3'>";
 
-        echo "<div class='col-md-6 mb-2'><label class='form-label'>" . __('Owner', 'sprint') . "</label>";
+        echo "<div class='col-md-6 mb-2'><label class='form-label' for='dropdown_users_id{$rand}'>" . __('Owner', 'sprint') . "</label>";
         User::dropdown([
             'name'   => 'users_id',
             'value'  => $ownerId,
@@ -197,7 +191,7 @@ class Backlog
         ]);
         echo "</div>";
 
-        echo "<div class='col-md-6 mb-2'><label class='form-label'>" . __('Est. capacity', 'sprint') . " %</label>";
+        echo "<div class='col-md-6 mb-2'><label class='form-label' for='dropdown_capacity{$rand}'>" . __('Est. capacity', 'sprint') . " %</label>";
         Dropdown::showFromArray('capacity', ['0' => '-----'] + SprintMember::getCapacityChoices(), [
             'value' => $capacity > 0 ? SprintMember::capacityKey($capacity) : '0',
             'rand'  => $rand,
@@ -205,7 +199,7 @@ class Backlog
         ]);
         echo "</div>";
 
-        echo "<div class='col-md-6 mb-2'><label class='form-label'>" . __('Assign to sprint', 'sprint') . "</label>";
+        echo "<div class='col-md-6 mb-2'><label class='form-label' for='dropdown_proposed_sprints_id{$rand}'>" . __('Proposed sprint', 'sprint') . "</label>";
         Sprint::dropdown([
             'name'  => 'proposed_sprints_id',
             'value' => $proposedId,
@@ -213,11 +207,11 @@ class Backlog
             'width' => '100%',
         ]);
         echo "<div class='form-text sprint-small text-muted'>"
-            . __('Pre-selecting a sprint marks the item for the Scrum Master to assign at kick-off.', 'sprint') . "</div>";
+            . __s('A proposal only: the item stays on the backlog until the Scrum Master assigns it to this sprint.', 'sprint') . "</div>";
         echo "</div>";
 
-        echo "<div class='col-md-6 mb-2'><label class='form-label'><i class='fas fa-folder me-1'></i>" . __('Category', 'sprint') . "</label>";
-        echo "<select class='form-select' name='plugin_sprint_sprintcategories_id'>";
+        echo "<div class='col-md-6 mb-2'><label class='form-label' for='sprint-plan-category{$rand}'><i class='fas fa-folder me-1' aria-hidden='true'></i>" . __('Category', 'sprint') . "</label>";
+        echo "<select class='form-select' id='sprint-plan-category{$rand}' name='plugin_sprint_sprintcategories_id'>";
         echo "<option value='0'>-----</option>";
         echo SprintCategory::dropdownOptions($categoryId);
         echo "</select></div>";
@@ -244,12 +238,36 @@ class Backlog
             SprintItem::creditProductScript();
         }
 
-        echo "<div class='col-12'>";
+        echo "<div class='col-12 d-flex flex-wrap gap-4'>";
         echo "<input type='hidden' name='is_fastlane' value='0'>";
         echo "<label class='form-check form-switch mb-0'>";
         echo "<input class='form-check-input' type='checkbox' name='is_fastlane' value='1'" . ($isFastlane ? ' checked' : '') . ">";
         echo "<span class='form-check-label'><i class='fas fa-bolt' style='color:#fd7e14;'></i> " . __('Fastlane', 'sprint') . "</span>";
+        echo "</label>";
+        // Adhoc can be pre-flagged on the backlog by anyone who may edit the
+        // row; the flag travels with the item into its sprint.
+        $isAdhoc = (int)($existing['is_adhoc'] ?? 0) === 1;
+        echo "<input type='hidden' name='is_adhoc' value='0'>";
+        echo "<label class='form-check form-switch mb-0' title='" . __s('Added to the sprint after kick-off (highlights the item)', 'sprint') . "'>";
+        echo "<input class='form-check-input' type='checkbox' name='is_adhoc' value='1'" . ($isAdhoc ? ' checked' : '') . ">";
+        echo "<span class='form-check-label'><span class='sprint-adhoc-badge'><i class='fas fa-plus-circle' aria-hidden='true'></i> " . __('Adhoc', 'sprint') . "</span></span>";
         echo "</label></div>";
+
+        $definedTags = Config::getDefinedTags();
+        if ($definedTags) {
+            $assigned = array_flip(array_map('mb_strtolower', SprintItem::getTagsForItem((int)$existing['id'])));
+            echo "<fieldset class='col-12 mb-0'><legend class='form-label fs-5 mb-1'><i class='fas fa-tags me-1' aria-hidden='true'></i>" . __('Tags', 'sprint')
+                . (Config::isTagRequired() ? " <span class='text-danger'>*</span>" : '') . "</legend>";
+            echo "<input type='hidden' name='_tags' value=''>";
+            echo "<div class='d-flex flex-wrap gap-3'>";
+            foreach ($definedTags as $tag) {
+                echo "<label style='display:inline-flex;align-items:center;gap:6px;'>"
+                    . "<input type='checkbox' name='_tags[]' value='" . htmlescape($tag) . "'"
+                    . (isset($assigned[mb_strtolower($tag)]) ? ' checked' : '') . ">"
+                    . "<span>" . htmlescape($tag) . "</span></label>";
+            }
+            echo "</div></fieldset>";
+        }
 
         echo "</div></div>";
         echo "<div class='modal-footer'>";
@@ -262,6 +280,172 @@ class Backlog
         // Modals nested in the tab content get clipped by the tab's
         // stacking context; move it to <body> like the other dialogs.
         echo "<script>(function(){var m=document.getElementById('sprint-plan-modal');if(m&&m.parentNode!==document.body){document.body.appendChild(m);}})();</script>";
+    }
+
+    /**
+     * Planning line for a GLPI item that already sits in a sprint: shows its
+     * latest sprint item and offers a quick edit (adhoc, tags) plus carry-over
+     * into a new sprint — the way to pick up a ticket that was reopened after
+     * its sprint was completed, without opening an old meeting. Posts to
+     * front/sprintitem.form.php (update_sprint_plan).
+     */
+    private static function showSprintPlanLine(string $itemtype, int $itemId): void
+    {
+        global $DB;
+
+        // Latest sprint first: that is the one a carry-over continues from.
+        $row = null;
+        foreach ($DB->request([
+            'SELECT'    => ['i.*', 's.name AS sprint_name', 's.status AS sprint_status'],
+            'FROM'      => SprintItem::getTable() . ' AS i',
+            'INNER JOIN' => [
+                Sprint::getTable() . ' AS s' => ['ON' => ['i' => 'plugin_sprint_sprints_id', 's' => 'id']],
+            ],
+            'WHERE'     => ['i.itemtype' => $itemtype, 'i.items_id' => $itemId],
+            'ORDER'     => ['s.date_start DESC', 'i.id DESC'],
+        ]) as $candidate) {
+            if (SprintItem::sprintEntityAccessible((int)$candidate['plugin_sprint_sprints_id'])) {
+                $row = $candidate;
+                break;
+            }
+        }
+        if ($row === null) {
+            return;
+        }
+
+        $item = new SprintItem();
+        if (!$item->getFromDB((int)$row['id'])) {
+            return;
+        }
+        $canEdit  = $item->canUpdateItem();
+        $sprintId = (int)$row['plugin_sprint_sprints_id'];
+        $closed   = in_array((string)$row['sprint_status'], [Sprint::STATUS_COMPLETED, Sprint::STATUS_CANCELLED], true);
+        $sprintStatuses = Sprint::getAllStatuses();
+        $itemStatuses   = SprintItem::getAllStatuses();
+        $isAdhoc  = (int)($row['is_adhoc'] ?? 0) === 1;
+        $tags     = SprintItem::getTagsForItem((int)$row['id']);
+        $muted    = "<span class='text-muted'>-</span>";
+
+        echo "<div class='sprint-plan-panel' style='margin:8px auto 14px;max-width:980px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;"
+            . "padding:8px 14px;border:1px solid var(--tblr-border-color,#e2e8f0);border-radius:8px;text-align:left;'>";
+        echo "<span class='fw-bold'><i class='fas fa-person-running me-1'></i>" . __('Sprint planning', 'sprint') . "</span>";
+        echo "<span class='sprint-plan-chip'><i class='fas fa-flag-checkered text-muted me-1'></i>"
+            . "<a href='" . Sprint::getFormURLWithID($sprintId) . "'>" . htmlescape((string)$row['sprint_name']) . "</a>"
+            . " <span class='badge " . ($closed ? 'bg-secondary' : 'bg-primary') . "'>"
+            . htmlescape($sprintStatuses[$row['sprint_status']] ?? (string)$row['sprint_status']) . "</span></span>";
+        echo "<span class='sprint-plan-chip' title='" . __s('Status') . "'><i class='fas fa-circle-half-stroke text-muted me-1'></i>"
+            . htmlescape($itemStatuses[$row['status']] ?? (string)$row['status']) . "</span>";
+        echo "<span class='sprint-plan-chip' title='" . __s('Owner', 'sprint') . "'><i class='fas fa-user text-muted me-1'></i>"
+            . ((int)$row['users_id'] > 0 ? htmlescape(SprintCache::userName((int)$row['users_id'])) : $muted) . "</span>";
+        if ($isAdhoc) {
+            echo SprintItem::renderAdhocBadge(true);
+        }
+        if ($tags) {
+            echo SprintItem::renderTagPills($tags);
+        }
+        echo "<span style='flex:1;'></span>";
+        echo "<a class='btn btn-sm btn-outline-secondary' href='" . SprintItem::getFormURLWithID((int)$row['id']) . "'>"
+            . "<i class='fas fa-up-right-from-square me-1'></i>" . __('Open sprint item', 'sprint') . "</a>";
+        if ($canEdit) {
+            echo "<button type='button' class='btn btn-sm btn-outline-primary' data-bs-toggle='modal' data-bs-target='#sprint-plan-modal'>"
+                . "<i class='fas fa-pen me-1'></i>" . __('Quick edit', 'sprint') . "</button>";
+        }
+        echo "</div>";
+
+        // Reopened after the sprint closed: point at the next step.
+        if ($closed && $canEdit) {
+            echo "<div class='alert alert-info py-2' style='max-width:980px;margin:0 auto 12px;'>"
+                . "<i class='fas fa-forward me-1'></i>"
+                . htmlescape(__('This item\'s sprint is closed. Use Quick edit to carry it over to a new sprint.', 'sprint'))
+                . "</div>";
+        }
+        if (!$canEdit) {
+            return;
+        }
+
+        $isMaster = SprintItem::currentUserIsScrumMasterOf($sprintId);
+        $targets  = Sprint::getMoveTargetOptions($sprintId);
+        foreach (array_keys($targets) as $tid) {
+            if (SprintItem::isLinkedItemInSprint((int)$tid, $itemtype, $itemId)) {
+                unset($targets[$tid]);
+            }
+        }
+        $pendingCarry = SprintRequest::ensureTable() && countElementsInTable(SprintRequest::getTable(), [
+            'request_type'                 => SprintRequest::TYPE_CARRYOVER,
+            'plugin_sprint_sprintitems_id' => (int)$row['id'],
+            'status'                       => SprintRequest::STATUS_PENDING,
+        ]) > 0;
+
+        echo "<div class='modal fade' id='sprint-plan-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-plan-modal-title'>";
+        echo "<div class='modal-dialog modal-dialog-centered modal-lg'><div class='modal-content'>";
+        echo "<form method='post' action='" . SprintItem::getFormURL() . "'>";
+        echo "<div class='modal-header'><h5 class='modal-title' id='sprint-plan-modal-title'><i class='fas fa-pen me-1'></i> "
+            . htmlescape(sprintf(__('Quick edit: %s', 'sprint'), (string)$row['name'])) . "</h5>"
+            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='" . __s('Close') . "'></button></div>";
+        echo "<div class='modal-body'>";
+        echo Html::hidden('id', ['value' => (int)$row['id']]);
+
+        echo "<div class='mb-3'>";
+        echo "<input type='hidden' name='is_adhoc' value='0'>";
+        echo "<label class='form-check form-switch mb-0'>";
+        echo "<input class='form-check-input' type='checkbox' name='is_adhoc' value='1'" . ($isAdhoc ? ' checked' : '') . ">";
+        echo "<span class='form-check-label'><span class='sprint-adhoc-badge'><i class='fas fa-plus-circle'></i> " . __('Adhoc', 'sprint') . "</span> "
+            . htmlescape(__('Added to the sprint after kick-off (highlights the item)', 'sprint')) . "</span>";
+        echo "</label>";
+        if (!$isMaster) {
+            echo "<div class='form-text sprint-small text-warning'><i class='fas fa-user-shield me-1'></i>"
+                . htmlescape(__('Adhoc changes are sent to the Scrum Master for approval.', 'sprint')) . "</div>";
+        }
+        echo "</div>";
+
+        $definedTags = Config::getDefinedTags();
+        if ($definedTags) {
+            $assigned = array_flip(array_map('mb_strtolower', $tags));
+            echo "<fieldset class='mb-3'><legend class='form-label fs-5'><i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint')
+                . (Config::isTagRequired() ? " <span class='text-danger'>*</span>" : '') . "</legend>";
+            echo "<input type='hidden' name='_tags' value=''>";
+            echo "<div class='d-flex flex-wrap gap-3'>";
+            foreach ($definedTags as $tag) {
+                echo "<label style='display:inline-flex;align-items:center;gap:6px;'>"
+                    . "<input type='checkbox' name='_tags[]' value='" . htmlescape($tag) . "'"
+                    . (isset($assigned[mb_strtolower($tag)]) ? ' checked' : '') . ">"
+                    . "<span>" . htmlescape($tag) . "</span></label>";
+            }
+            echo "</div></fieldset>";
+        }
+
+        echo "<div class='mb-2'><label class='form-label' for='sprint-plan-carry'><i class='fas fa-forward text-success me-1'></i>"
+            . __('Carry over to sprint', 'sprint') . "</label>";
+        if ($pendingCarry) {
+            echo "<div class='text-muted'><i class='fas fa-hourglass-half me-1'></i>"
+                . __('A carry-over is already waiting for the Scrum Master.', 'sprint') . "</div>";
+        } else {
+            echo "<select class='form-select' name='carry_over_to_sprint_id' id='sprint-plan-carry'>";
+            echo "<option value='0'>— " . htmlescape(__('Do not carry over', 'sprint')) . " —</option>";
+            foreach ($targets as $tid => $tlabel) {
+                echo "<option value='" . (int)$tid . "'>" . htmlescape((string)$tlabel) . "</option>";
+            }
+            echo "</select>";
+            echo "<div class='form-text sprint-small text-muted'>"
+                . htmlescape(__('A fresh copy is created in the target sprint. The original stays in this sprint.', 'sprint'))
+                . " " . htmlescape(__('Carry-overs into a sprint you are not Scrum Master of are sent to that sprint\'s Scrum Master for approval.', 'sprint'))
+                . "</div>";
+        }
+        echo "</div>";
+        echo "<div class='mb-2'><label class='form-label' for='sprint-plan-reason'>" . __('Reason', 'sprint') . "</label>";
+        echo "<input type='text' class='form-control' name='carry_reason' id='sprint-plan-reason' placeholder='"
+            . __s('e.g. the ticket was reopened', 'sprint') . "'>";
+        echo "<div class='form-text sprint-small text-muted'>" . __('Shown to the Scrum Master with your request.', 'sprint') . "</div></div>";
+
+        echo "</div>";
+        echo "<div class='modal-footer'>";
+        echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __('Cancel') . "</button>";
+        echo "<button type='submit' name='update_sprint_plan' value='1' class='btn btn-primary'>"
+            . "<i class='fas fa-save me-1'></i>" . __('Save') . "</button>";
+        echo "</div>";
+        Html::closeForm();
+        echo "</div></div></div>";
+        echo "<script>(function(){var all=document.querySelectorAll('#sprint-plan-modal');for(var i=0;i<all.length-1;i++){all[i].parentNode.removeChild(all[i]);}var m=all[all.length-1];if(m&&m.parentNode!==document.body){document.body.appendChild(m);}})();</script>";
     }
 
     /**
@@ -296,12 +480,12 @@ class Backlog
             // DoR configured: the checks are confirmed in a dialog and travel
             // with the POST (front/backlog.form.php enforces them again).
             echo "<button type='button' class='btn btn-sm btn-primary' data-bs-toggle='modal' data-bs-target='#{$modalId}' title='{$btnTitle}'>{$btnLabel}</button>";
-            echo "<div class='modal fade' id='{$modalId}' tabindex='-1' aria-hidden='true'>";
+            echo "<div class='modal fade' id='{$modalId}' tabindex='-1' aria-hidden='true' aria-labelledby='{$modalId}-title'>";
             echo "<div class='modal-dialog modal-dialog-centered'><div class='modal-content'>";
             echo "<form method='post' action='" . self::getFormURL() . "'>";
-            echo "<div class='modal-header'><h5 class='modal-title'><i class='fas fa-clipboard-check me-1'></i> "
+            echo "<div class='modal-header'><h5 class='modal-title' id='{$modalId}-title'><i class='fas fa-clipboard-check me-1' aria-hidden='true'></i> "
                 . __s('Definition of Ready', 'sprint') . "</h5>"
-                . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button></div>";
+                . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='" . __s('Close') . "'></button></div>";
             echo "<div class='modal-body'>";
             echo Html::hidden('id', ['value' => $rowId]);
             echo Html::hidden('plugin_sprint_sprints_id', ['value' => $proposedId]);
@@ -347,8 +531,8 @@ HTML;
             . "title='" . ($hasPending
                 ? __s('Assignment already requested — waiting for the Scrum Master', 'sprint')
                 : __s('Ask the Scrum Master to assign this item to the selected sprint', 'sprint')) . "'>"
-            . "<i class='fas fa-" . ($hasPending ? 'hourglass-half' : 'paper-plane') . " me-1'></i>"
-            . ($hasPending ? __s('Requested', 'sprint') : __s('Ask the Scrum Master', 'sprint'))
+            . "<i class='fas fa-" . ($hasPending ? 'hourglass-half' : 'paper-plane') . " me-1' aria-hidden='true'></i>"
+            . ($hasPending ? __s('Requested — waiting for Scrum Master', 'sprint') : __s('Ask the Scrum Master', 'sprint'))
             . "</button>";
         if ($hasPending) {
             return;
@@ -357,7 +541,10 @@ HTML;
         SprintRequest::renderReasonModalUI();
         $tokenUrl   = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
         $requestUrl = Plugin::getWebDir('sprint') . '/ajax/requestcreate.php';
-        $lblRequested = addslashes(__('Requested', 'sprint'));
+        $lblRequested = addslashes(__('Requested — waiting for Scrum Master', 'sprint'));
+        $msgRequested = json_encode(__('Requested', 'sprint'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
+        $msgFailed    = json_encode(__('Request failed', 'sprint'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
+        $msgNetwork   = json_encode(__('Network error', 'sprint'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
         echo <<<HTML
 <script>
 (function(){
@@ -374,15 +561,15 @@ HTML;
             });
         }).done(function(resp) {
             if (resp && resp.success) {
-                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || 'Requested'); }
+                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || {$msgRequested}); }
                 \$btn.removeClass('btn-outline-primary').addClass('btn-outline-secondary').prop('disabled', true)
                     .html('<i class="fas fa-hourglass-half me-1"></i>{$lblRequested}');
             } else {
-                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
+                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || {$msgFailed}); }
                 \$btn.prop('disabled', false);
             }
         }).fail(function() {
-            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+            if (window.glpi_toast_error) { window.glpi_toast_error({$msgNetwork}); }
             \$btn.prop('disabled', false);
         });
     }
@@ -436,7 +623,7 @@ HTML;
      * request button instead (pending_assign marks an open request).
      * Caches are per-request so rendering many rows stays cheap.
      *
-     * @return array{can_assign: bool, pending_assign: bool}
+     * @return array{can_assign: bool, pending_assign: bool, pending_sprint_id: int}
      */
     public static function computeRowFlags(array $row): array
     {
@@ -450,7 +637,7 @@ HTML;
                     'request_type' => SprintRequest::TYPE_ASSIGN,
                     'status'       => SprintRequest::STATUS_PENDING,
                 ]) as $req) {
-                    $pendingItems[(int)$req['plugin_sprint_sprintitems_id']] = true;
+                    $pendingItems[(int)$req['plugin_sprint_sprintitems_id']] = (int)$req['plugin_sprint_sprints_id'];
                 }
             }
         }
@@ -469,9 +656,80 @@ HTML;
         }
 
         return [
-            'can_assign'     => $canAssign,
-            'pending_assign' => isset($pendingItems[(int)$row['id']]),
+            'can_assign'        => $canAssign,
+            'pending_assign'    => isset($pendingItems[(int)$row['id']]),
+            // Sprint the open request asks for (may differ from the proposal).
+            'pending_sprint_id' => (int)($pendingItems[(int)$row['id']] ?? 0),
         ];
+    }
+
+    /**
+     * Which planning fields of a backlog row are still empty: 'owner',
+     * 'estimate' and/or 'sprint' (the proposed sprint). Empty = planning
+     * complete — administrative completeness only; the Definition of Ready
+     * and the capacity check follow on assignment.
+     *
+     * @return list<string>
+     */
+    public static function planningGaps(array $row): array
+    {
+        $gaps = [];
+        if ((int)($row['users_id'] ?? 0) <= 0) {
+            $gaps[] = 'owner';
+        }
+        if ((float)($row['capacity'] ?? 0) <= 0) {
+            $gaps[] = 'estimate';
+        }
+        if ((int)($row['proposed_sprints_id'] ?? 0) <= 0) {
+            $gaps[] = 'sprint';
+        }
+        return $gaps;
+    }
+
+    /** Translated labels for the planningGaps() keys. */
+    public static function planningGapLabels(): array
+    {
+        return [
+            'owner'    => __('owner', 'sprint'),
+            'estimate' => __('estimate', 'sprint'),
+            'sprint'   => __('proposed sprint', 'sprint'),
+        ];
+    }
+
+    /**
+     * "Planning complete" badge, or what is still missing when the planning
+     * was started but is incomplete. Nothing for an untouched row (the aging
+     * badge and the empty sprint column already say it is unplanned).
+     */
+    public static function renderPlanningBadge(array $row): string
+    {
+        $gaps = self::planningGaps($row);
+        if (!$gaps) {
+            return " <span class='sprint-ready-badge' title='"
+                . __s('Owner, estimate and proposed sprint are set. The Definition of Ready and the capacity check follow when the item is assigned to the sprint.', 'sprint') . "'>"
+                . "<i class='fas fa-check' aria-hidden='true'></i> " . __s('Planning complete', 'sprint') . "</span>";
+        }
+        if (count($gaps) === 3) {
+            return '';
+        }
+        $labels  = self::planningGapLabels();
+        $missing = implode(', ', array_map(static fn($g) => $labels[$g], $gaps));
+        return " <span class='sprint-plan-missing-badge' title='"
+            . __s('Planning is incomplete: fill in the missing fields in the edit dialog.', 'sprint') . "'>"
+            . "<i class='fas fa-circle-exclamation' aria-hidden='true'></i> "
+            . htmlescape(sprintf(__('Missing: %s', 'sprint'), $missing)) . "</span>";
+    }
+
+    /** Personal backlog view of the current user: 'queue' (default) or 'planning'. */
+    public static function viewMode(): string
+    {
+        return UserPref::get(self::VIEW_PREF, 'queue') === 'planning' ? 'planning' : 'queue';
+    }
+
+    /** Give the first <select>/<input> of a rendered helper an id, for <label for>. */
+    private static function withId(string $html, string $id): string
+    {
+        return (string)preg_replace('/<(select|input)\b(?![^>]*\sid=)/', "<$1 id='" . htmlescape($id) . "'", $html, 1);
     }
 
     public static function showBacklog(): void
@@ -505,32 +763,70 @@ HTML;
             }
         }
 
-        echo "<div class='center'>";
-        echo "<h2><i class='" . self::getIcon() . "'></i> " . self::getTypeName(2) . "</h2>";
-        echo "<p class='text-muted'>" .
-            __('Items waiting to be assigned to a sprint. Use the dropdown to move an item into a sprint.', 'sprint') .
-            "</p>";
+        // Personal view: "Work queue" puts the daily work right under the
+        // title and filters; "Planning" adds the approval requests, the
+        // category forecast and the inflow/outflow chart on top. Saved per
+        // user (UserPref), switched client-side without a reload.
+        $view     = self::viewMode();
+        $requests = SprintRequest::getPendingForCurrentMaster();
 
+        echo "<div class='center sprint-backlog-page' data-view='" . htmlescape($view) . "'>";
+        echo "<div class='sprint-backlog-titlebar'>";
+        echo "<h2 class='mb-0'><i class='" . self::getIcon() . "' aria-hidden='true'></i> " . self::getTypeName(2) . "</h2>";
+        echo "<div class='btn-group btn-group-sm sprint-backlog-viewmode' role='group' aria-label='" . __s('Backlog view', 'sprint') . "'>";
+        foreach ([
+            'queue'    => ['fas fa-list-check', __('Work queue', 'sprint'), __('The backlog items first — forecasts and requests stay out of the way', 'sprint')],
+            'planning' => ['fas fa-chart-simple', __('Planning', 'sprint'), __('Approval requests, capacity forecast and inflow/outflow above the backlog items', 'sprint')],
+        ] as $mode => [$icon, $label, $tip]) {
+            echo "<input type='radio' class='btn-check' name='sprint-backlog-viewmode' id='sprint-backlog-viewmode-{$mode}' value='{$mode}'"
+                . ($view === $mode ? ' checked' : '') . ">";
+            echo "<label class='btn btn-outline-secondary' for='sprint-backlog-viewmode-{$mode}' title='" . htmlescape($tip) . "'>"
+                . "<i class='{$icon} me-1' aria-hidden='true'></i>" . htmlescape($label)
+                . ($mode === 'planning' && count($requests) > 0
+                    ? " <span class='badge bg-warning ms-1' style='color:#212529;'>" . count($requests) . "</span>"
+                    : '')
+                . "</label>";
+        }
+        echo "</div>";
+        echo "</div>";
+        echo "<p class='text-muted'>"
+            . __('Items waiting to be planned. Edit an item to set its owner, estimate and proposed sprint. The item stays here until it is assigned to that sprint.', 'sprint')
+            . "</p>";
+
+        // Feedback region for every backlog action (and the toast fallback).
+        echo "<div class='sprint-backlog-live' role='status' aria-live='polite'></div>";
+
+        if (count($requests) > 0) {
+            echo "<div class='sprint-backlog-requests-hint sprint-zone-queue alert alert-warning py-2 sprint-small' style='text-align:left;'"
+                . ($view === 'queue' ? '' : " hidden") . ">"
+                . "<i class='fas fa-inbox me-1' aria-hidden='true'></i>"
+                . htmlescape(sprintf(
+                    _n('%d request is waiting for your approval.', '%d requests are waiting for your approval.', count($requests), 'sprint'),
+                    count($requests)
+                ))
+                . " <button type='button' class='btn btn-link btn-sm p-0 align-baseline sprint-backlog-goto-planning'>"
+                . __s('Show in Planning', 'sprint') . "</button></div>";
+        }
+
+        echo "<div class='sprint-backlog-zone-planning'" . ($view === 'planning' ? '' : " hidden") . ">";
         // Pending assign requests for the sprints this user is Scrum Master of.
         SprintRequest::renderPanel();
-
         // Prognosis views: category × sprint matrix + weekly inflow/outflow.
-        self::renderCategoryDashboard();
+        // The matrix is only fetched once the Planning view is opened.
+        self::renderCategoryDashboard($view !== 'planning');
         self::renderFlowCard();
+        echo "</div>";
 
-        self::renderBlockedSection($blocked, $canedit, $typeLabels, $tagsById, $sprintNames);
-
-        // Count complete items (owner + sprint + capacity, same rule as the
-        // per-row Ready badge) that THIS user may actually assign — the bulk
-        // button only covers those, split per target sprint so a single
-        // sprint can be kicked off while future ones stay queued.
+        // Complete items (owner + sprint + capacity, same rule as the per-row
+        // "Planning complete" badge) that THIS user may actually assign — the
+        // bulk button only covers those, split per target sprint so a single
+        // sprint can be kicked off while future ones stay queued. The names
+        // travel along so the dialog lists what is about to move.
         $assignableReady = 0;
         $readyBySprint   = [];
+        $readyItems      = [];
         foreach (array_merge($blocked, $items) as $r) {
-            $isReady = (int)($r['proposed_sprints_id'] ?? 0) > 0
-                && (int)($r['users_id'] ?? 0) > 0
-                && (float)($r['capacity'] ?? 0) > 0;
-            if (!$isReady) {
+            if (self::planningGaps($r)) {
                 continue;
             }
             $flags = self::computeRowFlags($r);
@@ -540,23 +836,24 @@ HTML;
             $assignableReady++;
             $sid = (int)$r['proposed_sprints_id'];
             $readyBySprint[$sid] = ($readyBySprint[$sid] ?? 0) + 1;
+            $readyItems[] = ['id' => (int)$r['id'], 'name' => (string)$r['name'], 'sprint' => $sid];
         }
 
-        echo "<div style='display:flex;align-items:center;gap:10px;margin-top:20px;'>";
+        echo "<div class='sprint-backlog-itemsbar'>";
         echo "<h3 style='margin:0;text-align:left;flex:1;'>"
-            . "<i class='fas fa-list'></i> " . __('Backlog items', 'sprint')
+            . "<i class='fas fa-list' aria-hidden='true'></i> " . __('Backlog items', 'sprint')
             . " <span class='badge bg-secondary sprint-backlog-count'>" . count($items) . "</span></h3>";
         if ($canedit && $assignableReady > 0) {
             echo "<button type='button' class='btn btn-sm btn-success sprint-backlog-bulk-assign'>"
-                . "<i class='fas fa-layer-group me-1'></i>"
-                . sprintf(__('Assign all ready (%d)', 'sprint'), $assignableReady)
+                . "<i class='fas fa-layer-group me-1' aria-hidden='true'></i>"
+                . sprintf(__('Assign all planned (%d)…', 'sprint'), $assignableReady)
                 . "</button>";
         }
         echo "</div>";
 
         // Owners present in the backlog, for the owner filter.
         $owners = [];
-        foreach (array_merge($blocked, $items) as $r) {
+        foreach ($allRows as $r) {
             $uid = (int)($r['users_id'] ?? 0);
             if ($uid > 0 && !isset($owners[$uid])) {
                 $owners[$uid] = SprintCache::userName($uid);
@@ -564,7 +861,11 @@ HTML;
         }
         asort($owners);
 
+        // The filter bar sits above every list (blocked, categories, parked)
+        // so one filter, one result count and one reset cover them all.
         self::renderFilterBar($typeLabels, $owners, $sprintNames, $canedit);
+
+        self::renderBlockedSection($blocked, $canedit, $typeLabels, $tagsById, $sprintNames);
 
         // One collapsible section per admin-defined category ("mini kanban"),
         // plus a catch-all for uncategorized items. Empty categories still
@@ -605,17 +906,171 @@ HTML;
 
         self::renderParkedSection($parked, $canedit, $typeLabels, $tagsById, $sprintNames);
 
+        // Empty states: an empty backlog and "nothing matches the filters"
+        // are different situations with a different next step.
+        echo "<div class='sprint-backlog-empty-state sprint-backlog-empty-none'" . (count($allRows) > 0 ? ' hidden' : '') . ">"
+            . "<i class='fas fa-inbox fa-2x text-muted mb-2' aria-hidden='true'></i>"
+            . "<div class='fw-bold'>" . __s('No items on the backlog', 'sprint') . "</div>"
+            . "<div class='text-muted sprint-small'>"
+            . __s('Add a ticket, change, problem or project task via its "Sprints" tab ("Add to backlog").', 'sprint') . "</div>"
+            . "</div>";
+        echo "<div class='sprint-backlog-empty-state sprint-backlog-empty-filtered' hidden>"
+            . "<i class='fas fa-filter-circle-xmark fa-2x text-muted mb-2' aria-hidden='true'></i>"
+            . "<div class='fw-bold'>" . __s('No results due to the filters', 'sprint') . "</div>"
+            . "<div class='text-muted sprint-small mb-2'>"
+            . __s('There are backlog items, but none match the active filters.', 'sprint') . "</div>"
+            . "<button type='button' class='btn btn-sm btn-outline-secondary sprint-backlog-filter-reset'>"
+            . "<i class='fas fa-times me-1' aria-hidden='true'></i>" . __s('Reset filters', 'sprint') . "</button>"
+            . "</div>";
+
         echo "</div>";
 
         // Mounts the modal + JS for the quick-edit-linked-item buttons rendered
         // by SprintItem::getLinkedItemDisplay(); without it they're no-ops.
         SprintItem::renderLinkedQuickEditUI();
 
-        self::renderInlineEditScript($readyBySprint, $sprintNames);
+        self::renderFeedbackScript($view);
+        self::renderInlineEditScript($readyBySprint, $sprintNames, $readyItems);
         self::renderDependencyUI();
         if ($canedit) {
             self::renderEditModal();
         }
+    }
+
+    /**
+     * Page-wide backlog plumbing, emitted before the other backlog scripts:
+     * - window.sprintBacklogNotify(type, msg): one feedback pattern for every
+     *   backlog action — GLPI's toast when available, otherwise the inline
+     *   status region under the title (never alert()).
+     * - window.sprintBacklogReload(msg): reload that keeps filters, scroll
+     *   position and a pending confirmation message. The same state is also
+     *   saved on pagehide, so the form POSTs (delete, …) that come back via
+     *   Html::back() land where the user was. Kept per user and only for a
+     *   couple of minutes, so another user on the same browser or a later
+     *   visit starts clean.
+     * - the "Work queue / Planning" switch, saved per user (UserPref).
+     */
+    private static function renderFeedbackScript(string $view): void
+    {
+        $tokenUrl  = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
+        $prefUrl   = Plugin::getWebDir('sprint') . '/ajax/userpref.php';
+        $prefName  = self::VIEW_PREF;
+        $userId    = (int)Session::getLoginUserID();
+        $lblClose  = addslashes(__('Close'));
+        $viewJs    = $view === 'planning' ? 'planning' : 'queue';
+
+        echo <<<HTML
+<script>
+(function(){
+    if (typeof jQuery === 'undefined') { return; }
+    var stateKey = 'sprint.backlog.state.{$userId}';
+    var STATE_TTL = 120000;
+
+    window.sprintBacklogNotify = function(type, msg) {
+        if (!msg) { return; }
+        var toast = type === 'error' ? window.glpi_toast_error
+            : (type === 'warning' ? (window.glpi_toast_warning || window.glpi_toast_info) : window.glpi_toast_info);
+        if (typeof toast === 'function') { toast(msg); return; }
+        var \$live = jQuery('.sprint-backlog-live').first();
+        if (!\$live.length) { return; }
+        var cls = type === 'error' ? 'alert-danger' : (type === 'warning' ? 'alert-warning' : 'alert-success');
+        var \$msg = jQuery('<div class="alert py-2 sprint-small d-flex align-items-start gap-2"></div>').addClass(cls)
+            .append(jQuery('<span class="flex-grow-1" style="white-space:pre-line;"></span>').text(msg))
+            .append(jQuery('<button type="button" class="btn-close"></button>').attr('aria-label', "{$lblClose}")
+                .on('click', function(){ \$msg.remove(); }));
+        \$live.empty().append(\$msg);
+        // Errors stay until dismissed; confirmations fade on their own.
+        if (type !== 'error') { setTimeout(function(){ \$msg.fadeOut(300, function(){ \$msg.remove(); }); }, 8000); }
+    };
+
+    function readFilters() {
+        var out = {};
+        jQuery('.sprint-backlog-filter').first().find('.sf-text, .sf-type, .sf-owner, .sf-sprint, .sf-tag').each(function(){
+            var key = (this.className.match(/\\bsf-[a-z]+\\b/) || [''])[0];
+            if (key && this.value) { out[key] = this.value; }
+        });
+        return out;
+    }
+    function saveState(msg) {
+        try {
+            sessionStorage.setItem(stateKey, JSON.stringify({
+                ts: Date.now(), path: window.location.pathname,
+                filters: readFilters(), scroll: window.scrollY || 0, msg: msg || ''
+            }));
+        } catch (e) {}
+    }
+    window.sprintBacklogReload = function(msg) {
+        saveState(msg);
+        window.location.reload();
+    };
+    window.addEventListener('pagehide', function(){
+        var prev = null;
+        try { prev = JSON.parse(sessionStorage.getItem(stateKey) || 'null'); } catch (e) {}
+        // A reload that just queued a message keeps it.
+        saveState(prev && prev.msg && Date.now() - prev.ts < 2000 ? prev.msg : '');
+    });
+
+    function restoreState() {
+        var st = null;
+        try {
+            st = JSON.parse(sessionStorage.getItem(stateKey) || 'null');
+            sessionStorage.removeItem(stateKey);
+        } catch (e) { return; }
+        if (!st || st.path !== window.location.pathname || Date.now() - (st.ts || 0) > STATE_TTL) { return; }
+        var \$bar = jQuery('.sprint-backlog-filter').first();
+        var touched = null;
+        jQuery.each(st.filters || {}, function(key, value){
+            var el = \$bar.find('.' + key)[0];
+            if (!el) { return; }
+            if (el.tagName === 'SELECT' && !jQuery(el).find('option').filter(function(){ return this.value === value; }).length) { return; }
+            el.value = value;
+            touched = el;
+        });
+        if (touched) {
+            touched.dispatchEvent(new Event(touched.classList.contains('sf-text') ? 'input' : 'change', { bubbles: true }));
+        }
+        if (st.scroll > 0) { window.scrollTo(0, st.scroll); }
+        if (st.msg) { window.sprintBacklogNotify('success', st.msg); }
+    }
+    // After the other ready handlers (sections, sort) have run.
+    jQuery(function(){ setTimeout(restoreState, 0); });
+
+    // Work queue / Planning switch.
+    var currentView = '{$viewJs}';
+    function applyView(view) {
+        currentView = view === 'planning' ? 'planning' : 'queue';
+        jQuery('.sprint-backlog-page').attr('data-view', currentView);
+        jQuery('.sprint-backlog-zone-planning').prop('hidden', currentView !== 'planning');
+        jQuery('.sprint-zone-queue').prop('hidden', currentView !== 'queue');
+        jQuery('#sprint-backlog-viewmode-' + currentView).prop('checked', true);
+        var \$dash = jQuery('.sprint-backlog-dash-body');
+        if (currentView === 'planning' && \$dash.attr('data-stale') === '1' && window.sprintBacklogReloadMatrix) {
+            window.sprintBacklogReloadMatrix();
+        }
+    }
+    function saveView(view) {
+        jQuery.ajax({ url: "{$tokenUrl}", type: 'GET', dataType: 'json', cache: false })
+        .then(function(tok) {
+            return jQuery.ajax({
+                url: "{$prefUrl}", type: 'POST', dataType: 'json',
+                data: { name: '{$prefName}', value: view, _glpi_csrf_token: tok && tok.token ? tok.token : '' }
+            });
+        });
+    }
+    jQuery(document).on('change', 'input[name="sprint-backlog-viewmode"]', function(){
+        applyView(this.value);
+        saveView(currentView);
+    });
+    jQuery(document).on('click', '.sprint-backlog-goto-planning', function(){
+        applyView('planning');
+        saveView('planning');
+        var zone = jQuery('.sprint-backlog-zone-planning')[0];
+        if (zone) { zone.scrollIntoView({ block: 'start' }); }
+        jQuery('#sprint-backlog-viewmode-planning').trigger('focus');
+    });
+})();
+</script>
+HTML;
     }
 
     /**
@@ -627,15 +1082,15 @@ HTML;
     {
         echo "<tr class='tab_bg_2'>";
         if ($reorderable && $canedit) {
-            echo "<th style='width:26px;' title='" . __('Drag to reorder', 'sprint') . "'></th>";
+            echo "<th style='width:26px;' title='" . __s('Drag to reorder', 'sprint') . "'><span class='visually-hidden'>" . __s('Drag to reorder', 'sprint') . "</span></th>";
         }
         if ($reorderable) {
-            echo "<th style='width:40px;' title='" . __s('Priority rank — the higher an item sits, the sooner it should be picked up', 'sprint') . "'>#</th>";
+            echo "<th style='width:" . ($canedit ? '64' : '40') . "px;' title='" . __s('Priority rank — the higher an item sits, the sooner it should be picked up', 'sprint') . "'>#</th>";
         }
         echo "<th>" . __('Name') . "</th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
         echo "<th><i class='fas fa-user' style='margin-right:4px;'></i>" . __('Owner', 'sprint') . "</th>";
-        echo "<th><i class='fas fa-flag-checkered' style='margin-right:4px;'></i>" . __('Sprint') . "</th>";
+        echo "<th><i class='fas fa-flag-checkered' style='margin-right:4px;' aria-hidden='true'></i>" . __('Proposed sprint', 'sprint') . "</th>";
         echo "<th title='" . __('Estimated capacity (informational on backlog, enforced once the item joins a sprint)', 'sprint') . "'>"
             . __('Est. capacity', 'sprint') . " %</th>";
         if (SprintCustomer::canUseCredits()) {
@@ -677,10 +1132,11 @@ HTML;
         echo "<div class='sprint-backlog-cat-section' data-category-id='{$catId}' "
             . "data-parent-category-id='{$parentId}' "
             . "style='{$indent}border:1px solid var(--tblr-border-color,#e2e8f0);border-left:4px solid {$colorEsc};border-radius:8px;overflow:hidden;'>";
-        echo "<div class='sprint-backlog-cat-header' "
+        echo "<div class='sprint-backlog-cat-header' role='button' tabindex='0' aria-expanded='true' "
+            . "aria-controls='sprint-backlog-cat-body-{$catId}' "
             . "style='display:flex;align-items:center;gap:8px;padding:9px 14px;font-weight:700;cursor:pointer;user-select:none;"
             . "background:color-mix(in srgb,{$colorEsc} 8%,var(--tblr-bg-surface,#fff));'>";
-        echo "<i class='fas fa-chevron-down sprint-backlog-cat-chevron' style='transition:transform 0.15s;'></i>";
+        echo "<i class='fas fa-chevron-down sprint-backlog-cat-chevron' style='transition:transform 0.15s;' aria-hidden='true'></i>";
         if ($level > 0) {
             echo "<i class='fas fa-turn-up fa-rotate-90 text-muted' style='font-size:0.8em;'></i>";
         }
@@ -696,7 +1152,7 @@ HTML;
             . "<span class='sprint-backlog-cat-capsum'>{$capLabel}%</span></span>";
         echo "</div>";
 
-        echo "<div class='sprint-backlog-cat-body'>";
+        echo "<div class='sprint-backlog-cat-body' id='sprint-backlog-cat-body-{$catId}'>";
         echo "<table class='tab_cadre_fixe sprint-themed sprint-backlog-table' style='margin:0;'>";
         self::renderTableHeaders($canedit, true);
         $cols = self::columnCount($canedit, true);
@@ -717,18 +1173,18 @@ HTML;
         $count = count($parkedItems);
 
         echo "<div class='sprint-backlog-parked' style='margin:18px 0;border:1px solid var(--tblr-border-color,#e2e8f0);border-radius:8px;overflow:hidden;'>";
-        echo "<div class='sprint-backlog-parked-header' "
+        echo "<div class='sprint-backlog-parked-header' role='button' tabindex='0' aria-expanded='true' aria-controls='sprint-backlog-parked-body' "
             . "style='display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--tblr-bg-surface-secondary,#f8fafc);color:var(--tblr-secondary,#6c757d);font-weight:700;cursor:pointer;user-select:none;'>";
         echo "<i class='fas fa-chevron-down sprint-backlog-parked-chevron' style='transition:transform 0.15s;'></i>";
         echo "<i class='fas fa-box-archive'></i>";
-        echo "<span>" . __('Non-active (long term)', 'sprint') . "</span>";
+        echo "<span>" . __s('Parked (long term)', 'sprint') . "</span>";
         echo "<span class='badge bg-secondary'>" . $count . "</span>";
         echo "<span style='flex:1;'></span>";
         echo "<span class='text-muted sprint-small' style='font-weight:400;'>"
             . __('Low-priority / long-term work, outside the active planning and capacity totals.', 'sprint') . "</span>";
         echo "</div>";
 
-        echo "<div class='sprint-backlog-parked-body' style='padding:0;'>";
+        echo "<div class='sprint-backlog-parked-body' id='sprint-backlog-parked-body' style='padding:0;'>";
         if ($count === 0) {
             echo "<div class='center text-muted' style='padding:14px;'>"
                 . __('No parked items.', 'sprint') . "</div>";
@@ -750,15 +1206,22 @@ HTML;
                 if (!\$wrap.length) return;
                 var \$body = \$wrap.find('.sprint-backlog-parked-body');
                 var \$chev = \$wrap.find('.sprint-backlog-parked-chevron');
-                if (localStorage.getItem(key) !== '0') {
+                var \$head = \$wrap.find('.sprint-backlog-parked-header');
+                var stored = null;
+                try { stored = localStorage.getItem(key); } catch (e) {}
+                if (stored !== '0') {
                     \$body.hide();
                     \$chev.css('transform', 'rotate(-90deg)');
+                    \$head.attr('aria-expanded', 'false');
                 }
-                \$wrap.find('.sprint-backlog-parked-header').on('click', function() {
+                \$head.on('click', function() {
                     var collapsed = \$body.is(':visible');
                     \$body.slideToggle(120);
                     \$chev.css('transform', collapsed ? 'rotate(-90deg)' : 'rotate(0deg)');
-                    localStorage.setItem(key, collapsed ? '1' : '0');
+                    \$head.attr('aria-expanded', collapsed ? 'false' : 'true');
+                    try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
+                }).on('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); \$head.trigger('click'); }
                 });
             });
         })();
@@ -767,10 +1230,12 @@ HTML;
 
     /**
      * Per-row edit modal: the backlog rows are read-only and compact; every
-     * editable field (name, owner, estimated capacity, target sprint,
+     * editable field (name, owner, estimated capacity, proposed sprint,
      * fastlane/blocked flags) lives here. Saving goes through
-     * ajax/updateitemquick.php and reloads the page so derived bits (ready
-     * badge, capacity chip, blocked section) stay consistent.
+     * ajax/updateitemquick.php and swaps the row in place so derived bits
+     * (planning badge, capacity chip, state) stay consistent. The dialog
+     * says where the item stands (backlog / waiting for approval) and keeps
+     * "propose a sprint" apart from the real "assign to sprint" step.
      */
     private static function renderEditModal(): void
     {
@@ -783,7 +1248,7 @@ HTML;
         $lblName     = __s('Name');
         $lblOwner    = __s('Owner', 'sprint');
         $lblCapacity = __s('Est. capacity', 'sprint');
-        $lblSprint   = __s('Assign to sprint', 'sprint');
+        $lblSprint   = __s('Proposed sprint', 'sprint');
         $lblFastlane = __s('Fastlane', 'sprint');
         $lblBlocked  = __s('Blocked', 'sprint');
         $lblAdhoc    = __s('Adhoc', 'sprint');
@@ -793,24 +1258,33 @@ HTML;
         $lblSave     = __s('Save');
         $lblDelete   = __s('Delete');
         $lblDeps     = __s('Add dependency', 'sprint');
-        $sprintHint  = __s('Pre-selecting a sprint marks the item for the Scrum Master to assign at kick-off.', 'sprint');
+        $lblAssign   = __s('Save and assign to sprint', 'sprint');
+        $assignHint  = __s('Saves the item, then assigns it to the proposed sprint (Scrum Master, or anyone for fastlane items). Others send an assignment request instead.', 'sprint');
+        $sprintHint  = __s('A proposal only: the item stays on the backlog until the Scrum Master assigns it to this sprint.', 'sprint');
 
-        echo "<div class='modal fade' id='sprint-backlog-edit-modal' tabindex='-1' aria-hidden='true'>";
-        echo "<div class='modal-dialog modal-dialog-centered modal-lg'>";
+        // GLPI dropdown ids are "dropdown_<name><rand>"; the labels point at them.
+        $idOwner    = 'dropdown__backlog_modal_users_id424242';
+        $idSprint   = 'dropdown__backlog_modal_sprint_id424243';
+        $idCapacity = 'sprint-be-capacity';
+
+        echo "<div class='modal fade' id='sprint-backlog-edit-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-backlog-edit-title'>";
+        echo "<div class='modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down'>";
         echo "<div class='modal-content'>";
         echo "<div class='modal-header'>";
-        echo "<h5 class='modal-title'><i class='fas fa-pen me-1'></i> {$lblTitle}: <span class='sprint-be-title'></span></h5>";
-        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
+        echo "<h5 class='modal-title' id='sprint-backlog-edit-title'><i class='fas fa-pen me-1' aria-hidden='true'></i> {$lblTitle}: <span class='sprint-be-title'></span></h5>";
+        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='" . __s('Close') . "'></button>";
         echo "</div>";
         echo "<div class='modal-body'>";
-        echo "<div class='alert alert-danger sprint-be-error' style='display:none;white-space:pre-line;'></div>";
+        // Where the item stands right now: backlog, proposed, or waiting for approval.
+        echo "<div class='sprint-be-state sprint-small mb-2'></div>";
+        echo "<div class='alert alert-danger sprint-be-error' role='alert' style='display:none;white-space:pre-line;'></div>";
         echo "<input type='hidden' name='id' value=''>";
 
-        echo "<div class='mb-3'><label class='form-label'>{$lblName}</label>";
-        echo "<input type='text' name='name' class='form-control' value=''></div>";
+        echo "<div class='mb-3'><label class='form-label' for='sprint-be-name'>{$lblName}</label>";
+        echo "<input type='text' id='sprint-be-name' name='name' class='form-control' value=''></div>";
 
         echo "<div class='row g-3'>";
-        echo "<div class='col-md-6 mb-3'><label class='form-label'>{$lblOwner}</label>";
+        echo "<div class='col-md-6 mb-3'><label class='form-label' for='{$idOwner}'>{$lblOwner}</label>";
         User::dropdown([
             'name'   => '_backlog_modal_users_id',
             'value'  => 0,
@@ -820,75 +1294,78 @@ HTML;
             'width'  => '100%',
         ]);
         echo "</div>";
-        echo "<div class='col-md-6 mb-3'><label class='form-label'>{$lblCapacity} %</label>";
-        Dropdown::showFromArray('_backlog_modal_capacity', SprintMember::getCapacityChoices(), [
-            'value' => 0,
-            'rand'  => 424244,
-            'width' => '100%',
-        ]);
+        echo "<div class='col-md-6 mb-3'><label class='form-label' for='{$idCapacity}'>{$lblCapacity} %</label>";
+        // Any value on the 0.5 grid (12.5%), with the usual presets offered.
+        echo SprintMember::capacityInput('_backlog_modal_capacity', '', ['id' => $idCapacity]);
         echo "</div>";
         echo "</div>";
 
         echo "<div class='row g-3'>";
-        echo "<div class='col-md-6 mb-3'><label class='form-label'>{$lblSprint}</label>";
+        echo "<div class='col-md-6 mb-3'><label class='form-label' for='{$idSprint}'>{$lblSprint}</label>";
         Sprint::dropdown([
             'name'  => '_backlog_modal_sprint_id',
             'value' => 0,
             'rand'  => 424243,
             'width' => '100%',
         ]);
-        echo "<div class='form-text sprint-small text-muted'>{$sprintHint}</div>";
+        echo "<div class='form-text sprint-small text-muted' id='sprint-be-sprint-hint'>{$sprintHint}</div>";
         echo "</div>";
-        echo "<div class='col-md-6 mb-3'><label class='form-label'>"
-            . "<i class='fas fa-folder me-1'></i>" . __s('Category', 'sprint') . "</label>";
-        echo "<select class='form-select' name='_backlog_modal_category'>";
+        echo "<div class='col-md-6 mb-3'><label class='form-label' for='sprint-be-category'>"
+            . "<i class='fas fa-folder me-1' aria-hidden='true'></i>" . __s('Category', 'sprint') . "</label>";
+        echo "<select class='form-select' id='sprint-be-category' name='_backlog_modal_category'>";
         echo "<option value='0'>-----</option>";
         echo SprintCategory::dropdownOptions();
         echo "</select></div>";
         echo "</div>";
 
+        // Live planning completeness for the values in the dialog.
+        echo "<div class='sprint-be-completeness sprint-small mb-3'></div>";
+
         if (SprintCustomer::canUseCredits()) {
             echo "<div class='row g-3'>";
-            echo "<div class='col-md-8 mb-3'><label class='form-label'>"
-                . "<i class='fas fa-building me-1'></i>" . SprintCustomer::getTypeName(1) . "</label>";
-            echo SprintItem::customerSelect('_backlog_modal_customer', 0);
+            echo "<div class='col-md-8 mb-3'><label class='form-label' for='sprint-be-customer'>"
+                . "<i class='fas fa-building me-1' aria-hidden='true'></i>" . SprintCustomer::getTypeName(1) . "</label>";
+            echo self::withId(SprintItem::customerSelect('_backlog_modal_customer', 0), 'sprint-be-customer');
             echo "</div>";
-            echo "<div class='col-md-4 mb-3'><label class='form-label'>"
-                . "<i class='fas fa-coins me-1'></i>" . __s('Credits', 'sprint') . "</label>";
-            echo SprintItem::creditsInput('_backlog_modal_credits', 0, 'w-100');
+            echo "<div class='col-md-4 mb-3'><label class='form-label' for='sprint-be-credits'>"
+                . "<i class='fas fa-coins me-1' aria-hidden='true'></i>" . __s('Credits', 'sprint') . "</label>";
+            echo self::withId(SprintItem::creditsInput('_backlog_modal_credits', 0, 'w-100'), 'sprint-be-credits');
             echo "</div>";
             echo "</div>";
             echo "<div class='row g-3'>";
-            echo "<div class='col-md-8 mb-3'><label class='form-label'>"
-                . "<i class='fas fa-tags me-1'></i>" . SprintCreditProduct::getTypeName(1) . "</label>";
-            echo SprintItem::productSelect('_backlog_modal_product', 0, '_backlog_modal_credits', 'w-100');
+            echo "<div class='col-md-8 mb-3'><label class='form-label' for='sprint-be-product'>"
+                . "<i class='fas fa-tags me-1' aria-hidden='true'></i>" . SprintCreditProduct::getTypeName(1) . "</label>";
+            echo self::withId(SprintItem::productSelect('_backlog_modal_product', 0, '_backlog_modal_credits', 'w-100'), 'sprint-be-product');
             echo "<div class='form-text sprint-small text-muted'>"
-                . htmlescape(__('Picking a product sets its credits; choose "Manual credits" to enter a different amount.', 'sprint')) . "</div>";
+                . htmlescape(__('Picking a product sets its credits. Choose "Manual credits" to enter a different amount.', 'sprint')) . "</div>";
             echo "</div>";
             echo "</div>";
             SprintItem::creditProductScript();
         }
 
         // Live capacity preview for the chosen owner in the chosen sprint.
-        echo "<div class='sprint-be-cap-preview alert py-2 sprint-small mb-3' style='display:none;'></div>";
+        echo "<div class='sprint-be-cap-preview alert py-2 sprint-small mb-3' role='status' style='display:none;'></div>";
 
-        echo "<div class='d-flex gap-4 mb-2'>";
+        // The switches wrap on narrow screens instead of overflowing.
+        echo "<div class='d-flex flex-wrap gap-3 mb-2 sprint-be-switches'>";
         echo "<div class='form-check form-switch'>";
         echo "<input class='form-check-input' type='checkbox' id='sprint-be-fastlane' name='is_fastlane'>";
-        echo "<label class='form-check-label' for='sprint-be-fastlane'><i class='fas fa-bolt' style='color:#fd7e14;'></i> {$lblFastlane}</label>";
+        echo "<label class='form-check-label' for='sprint-be-fastlane'><i class='fas fa-bolt' style='color:#fd7e14;' aria-hidden='true'></i> {$lblFastlane}</label>";
         echo "</div>";
         echo "<div class='form-check form-switch'>";
         echo "<input class='form-check-input' type='checkbox' id='sprint-be-blocked' name='is_blocked'>";
-        echo "<label class='form-check-label' for='sprint-be-blocked'><i class='fas fa-ban' style='color:#dc3545;'></i> {$lblBlocked}</label>";
+        echo "<label class='form-check-label' for='sprint-be-blocked'><i class='fas fa-ban' style='color:#dc3545;' aria-hidden='true'></i> {$lblBlocked}</label>";
         echo "</div>";
         echo "<div class='form-check form-switch' title='{$adhocHint}'>";
-        echo "<input class='form-check-input' type='checkbox' id='sprint-be-adhoc' name='is_adhoc'>";
-        echo "<label class='form-check-label' for='sprint-be-adhoc'><i class='fas fa-plus-circle' style='color:#6f42c1;'></i> {$lblAdhoc}</label>";
+        echo "<input class='form-check-input' type='checkbox' id='sprint-be-adhoc' name='is_adhoc' aria-describedby='sprint-be-adhoc-hint'>";
+        echo "<label class='form-check-label' for='sprint-be-adhoc'><i class='fas fa-plus-circle' style='color:#6f42c1;' aria-hidden='true'></i> {$lblAdhoc}</label>";
+        echo "<span class='visually-hidden' id='sprint-be-adhoc-hint'>{$adhocHint}</span>";
         echo "</div>";
         $parkedHint = __s('Long-term / low-priority: keeps the item out of the active planning sections and capacity totals.', 'sprint');
         echo "<div class='form-check form-switch' title='{$parkedHint}'>";
-        echo "<input class='form-check-input' type='checkbox' id='sprint-be-parked' name='is_parked'>";
-        echo "<label class='form-check-label' for='sprint-be-parked'><i class='fas fa-box-archive' style='color:#6c757d;'></i> " . __s('Non-active', 'sprint') . "</label>";
+        echo "<input class='form-check-input' type='checkbox' id='sprint-be-parked' name='is_parked' aria-describedby='sprint-be-parked-hint'>";
+        echo "<label class='form-check-label' for='sprint-be-parked'><i class='fas fa-box-archive' style='color:#6c757d;' aria-hidden='true'></i> " . __s('Parked', 'sprint') . "</label>";
+        echo "<span class='visually-hidden' id='sprint-be-parked-hint'>{$parkedHint}</span>";
         echo "</div>";
         echo "</div>";
 
@@ -897,41 +1374,60 @@ HTML;
         $definedTags = Config::getDefinedTags();
         if (!empty($definedTags)) {
             $tagRequired = Config::isTagRequired();
-            echo "<div class='mb-2 sprint-be-tags-block' data-tag-required='" . ($tagRequired ? 1 : 0) . "'><label class='form-label'>"
-                . "<i class='fas fa-tags me-1'></i>" . __('Tags', 'sprint')
-                . ($tagRequired ? " <span class='text-danger' title='" . __s('Required', 'sprint') . "'>*</span>" : '')
-                . "</label>";
+            echo "<fieldset class='mb-2 sprint-be-tags-block' data-tag-required='" . ($tagRequired ? 1 : 0) . "'><legend class='form-label' style='font-size:inherit;'>"
+                . "<i class='fas fa-tags me-1' aria-hidden='true'></i>" . __('Tags', 'sprint')
+                . ($tagRequired ? " <span class='text-danger' title='" . __s('Required', 'sprint') . "'>*<span class='visually-hidden'> " . __s('Required', 'sprint') . "</span></span>" : '')
+                . "</legend>";
             echo "<div class='d-flex flex-wrap gap-3'>";
             foreach ($definedTags as $tag) {
-                echo "<label style='display:inline-flex;align-items:center;gap:6px;'>"
+                echo "<label class='sprint-be-tag-label' style='display:inline-flex;align-items:center;gap:6px;'>"
                     . "<input type='checkbox' class='sprint-be-tag' value='" . htmlescape($tag) . "'>"
                     . "<span>" . htmlescape($tag) . "</span>"
                     . "</label>";
             }
-            echo "</div></div>";
+            echo "</div></fieldset>";
         }
 
-        echo "</div>";
-        echo "<div class='modal-footer'>";
-        // Delete keeps its POST flow (backlog.form.php purge) with confirm.
-        echo "<form method='post' action='" . self::getFormURL() . "' class='me-auto sprint-be-delete-form' "
-            . "onsubmit=\"return confirm('" . __s('Confirm deletion?') . "');\">";
+        // Delete asks inline (no browser confirm()): name + effect, then the
+        // POST flow of backlog.form.php (purge).
+        echo "<div class='alert alert-danger sprint-be-delete-confirm mt-3 mb-0' role='alert' hidden>";
+        echo "<form method='post' action='" . self::getFormURL() . "' class='sprint-be-delete-form d-flex flex-wrap align-items-center gap-2'>";
         echo Html::hidden('id', ['value' => 0]);
-        echo "<button type='submit' name='purge' value='1' class='btn btn-outline-danger'>"
-            . "<i class='fas fa-trash me-1'></i>{$lblDelete}</button>";
+        echo "<span class='flex-grow-1 sprint-be-delete-text'></span>";
+        echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-be-delete-keep'>" . __s('Keep item', 'sprint') . "</button>";
+        echo "<button type='submit' name='purge' value='1' class='btn btn-sm btn-danger'>"
+            . "<i class='fas fa-trash me-1' aria-hidden='true'></i>" . __s('Delete permanently', 'sprint') . "</button>";
         Html::closeForm();
+        echo "</div>";
+
+        echo "</div>";
+        echo "<div class='modal-footer flex-wrap'>";
+        echo "<button type='button' class='btn btn-outline-danger me-auto sprint-be-delete-ask'>"
+            . "<i class='fas fa-trash me-1' aria-hidden='true'></i>{$lblDelete}</button>";
         echo "<button type='button' class='btn btn-outline-secondary sprint-be-deps-open'>"
-            . "<i class='fas fa-link me-1'></i>{$lblDeps}</button>";
+            . "<i class='fas fa-link me-1' aria-hidden='true'></i>{$lblDeps}</button>";
         echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$lblCancel}</button>";
-        echo "<button type='button' class='btn btn-primary sprint-be-save'><i class='fas fa-save me-1'></i> {$lblSave}</button>";
+        echo "<button type='button' class='btn btn-outline-primary sprint-be-assign' title='{$assignHint}'>"
+            . "<i class='fas fa-arrow-right me-1' aria-hidden='true'></i>{$lblAssign}</button>";
+        echo "<button type='button' class='btn btn-primary sprint-be-save'><i class='fas fa-save me-1' aria-hidden='true'></i> {$lblSave}</button>";
         echo "</div>";
         echo "</div></div></div>";
 
         $msgNotMember  = addslashes(__('Owner is not a member of the selected sprint', 'sprint'));
-        $msgPreview    = addslashes(__('Total %total%% — used in sprint %used%%, pending from backlog %pending%%, this item %own%% → %free%% free after assigning', 'sprint'));
         $msgSaveFailed = addslashes(__('Save failed', 'sprint'));
+        $msgNetwork    = addslashes(__('Network error — your changes are still in the dialog, try again.', 'sprint'));
         $lblInactive   = addslashes(__('inactive', 'sprint'));
         $msgTagRequired = addslashes(__('Pick at least one tag — tags are required on every item.', 'sprint'));
+        $msgDelete     = addslashes(__('Delete "%s" permanently? It disappears from the backlog. The linked GLPI item is not touched.', 'sprint'));
+        $stNotPlanned  = addslashes(__('On the backlog — no sprint proposed yet.', 'sprint'));
+        $stProposed    = addslashes(__('On the backlog — proposed for %s. It joins that sprint only once it is assigned.', 'sprint'));
+        $stRequested   = addslashes(__('Requested — waiting for Scrum Master: Backlog → %s', 'sprint'));
+        $okNotPlanned  = addslashes(__('Saved. The item stays on the backlog (no sprint proposed).', 'sprint'));
+        $okProposed    = addslashes(__('Saved. The item stays on the backlog, proposed for %s — not assigned yet.', 'sprint'));
+        $lblComplete   = addslashes(__('Planning complete — the Definition of Ready and the capacity check follow on assignment.', 'sprint'));
+        $lblMissing    = addslashes(__('Missing: %s', 'sprint'));
+        $gapLabels     = json_encode(self::planningGapLabels(), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+        $msgAlreadyReq = addslashes(__('Assignment already requested — waiting for the Scrum Master', 'sprint'));
 
         echo <<<HTML
 <script>
@@ -940,7 +1436,19 @@ HTML;
     var endpoint    = "{$endpoint}";
     var tokenUrl    = "{$tokenUrl}";
     var capacityUrl = "{$capacityUrl}";
-    var \$modal;
+    var gapLabels   = {$gapLabels};
+    var \$modal, \$opener = null;
+
+    function notify(type, msg) {
+        if (window.sprintBacklogNotify) { window.sprintBacklogNotify(type, msg); }
+    }
+    function fmt(tpl, value) { return String(tpl).replace('%s', value); }
+    // Names read from the page are text; the GLPI toast parses HTML.
+    function escH(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+        });
+    }
 
     jQuery(function(){
         \$modal = jQuery('#sprint-backlog-edit-modal');
@@ -948,16 +1456,71 @@ HTML;
         \$modal = \$modal.detach().appendTo('body');
 
         // Live preview refresh when owner / sprint / capacity change; the
-        // dependency button stays greyed out until a sprint is selected.
-        \$modal.on('change', "select[name='_backlog_modal_users_id'], select[name='_backlog_modal_sprint_id'], select[name='_backlog_modal_capacity']", function(){
+        // dependency + assign buttons stay greyed out until a sprint is selected.
+        \$modal.on('change', "select[name='_backlog_modal_users_id'], select[name='_backlog_modal_sprint_id'], input[name='_backlog_modal_capacity']", function(){
             refreshPreview();
             updateDepsButton();
+            updateCompleteness();
+        });
+        \$modal.on('shown.bs.modal', function(){
+            \$modal.find('input[name=name]').trigger('focus');
+        });
+        // Focus goes back to the button that opened the dialog.
+        \$modal.on('hidden.bs.modal', function(){
+            if (\$opener && document.body.contains(\$opener[0])) { \$opener.trigger('focus'); }
+            \$opener = null;
         });
     });
 
+    function selectedSprint() {
+        return parseInt(\$modal.find("select[name='_backlog_modal_sprint_id']").val(), 10) || 0;
+    }
+    function selectedSprintName() {
+        var \$opt = \$modal.find("select[name='_backlog_modal_sprint_id'] option:selected");
+        return \$opt.length ? \$opt.text() : '';
+    }
+
     function updateDepsButton() {
-        var sprintId = parseInt(\$modal.find("select[name='_backlog_modal_sprint_id']").val(), 10) || 0;
-        \$modal.find('.sprint-be-deps-open').prop('disabled', sprintId <= 0);
+        var sprintId = selectedSprint();
+        \$modal.find('.sprint-be-deps-open, .sprint-be-assign').prop('disabled', sprintId <= 0);
+    }
+
+    // Same rule as Backlog::planningGaps(): owner, estimate, proposed sprint.
+    function updateCompleteness() {
+        var gaps = [];
+        if ((parseInt(\$modal.find("select[name='_backlog_modal_users_id']").val(), 10) || 0) <= 0) { gaps.push(gapLabels.owner); }
+        if ((parseFloat(\$modal.find("input[name='_backlog_modal_capacity']").val()) || 0) <= 0) { gaps.push(gapLabels.estimate); }
+        if (selectedSprint() <= 0) { gaps.push(gapLabels.sprint); }
+        var \$box = \$modal.find('.sprint-be-completeness').empty();
+        if (!gaps.length) {
+            \$box.append(jQuery('<span class="sprint-ready-badge ms-0"></span>')
+                .append('<i class="fas fa-check" aria-hidden="true"></i> ')
+                .append(document.createTextNode("{$lblComplete}")));
+        } else {
+            \$box.append(jQuery('<span class="sprint-plan-missing-badge ms-0"></span>')
+                .append('<i class="fas fa-circle-exclamation" aria-hidden="true"></i> ')
+                .append(document.createTextNode(fmt("{$lblMissing}", gaps.join(', ')))));
+        }
+    }
+
+    function renderState(\$row) {
+        var \$box = \$modal.find('.sprint-be-state').empty();
+        var pending = String(\$row.attr('data-pending-assign') || '0') === '1';
+        var proposed = String(\$row.attr('data-proposed-sprint-name') || '');
+        var cls, icon, txt;
+        if (pending) {
+            cls = 'sprint-state-requested'; icon = 'fa-hourglass-half';
+            txt = fmt("{$stRequested}", \$row.attr('data-pending-sprint-name') || proposed);
+        } else if (proposed !== '') {
+            cls = 'sprint-state-proposed'; icon = 'fa-flag-checkered';
+            txt = fmt("{$stProposed}", proposed);
+        } else {
+            cls = 'sprint-state-backlog'; icon = 'fa-layer-group';
+            txt = "{$stNotPlanned}";
+        }
+        \$box.append(jQuery('<span class="sprint-state-badge"></span>').addClass(cls)
+            .append('<i class="fas ' + icon + ' me-1" aria-hidden="true"></i>')
+            .append(document.createTextNode(txt)));
     }
 
     // Select a value without wiping preloaded options (the sprint dropdown is
@@ -971,41 +1534,37 @@ HTML;
         \$sel.val(String(value)).trigger('change');
     }
 
+    var previewSeq = 0;
     function refreshPreview() {
         var \$box     = \$modal.find('.sprint-be-cap-preview');
-        var sprintId = parseInt(\$modal.find("select[name='_backlog_modal_sprint_id']").val(), 10) || 0;
+        var sprintId = selectedSprint();
         var userId   = parseInt(\$modal.find("select[name='_backlog_modal_users_id']").val(), 10) || 0;
-        var own      = parseFloat(\$modal.find("select[name='_backlog_modal_capacity']").val()) || 0;
+        var own      = parseFloat(\$modal.find("input[name='_backlog_modal_capacity']").val()) || 0;
         var itemId   = parseInt(\$modal.find('input[name=id]').val(), 10) || 0;
 
         if (sprintId <= 0 || userId <= 0) {
             \$box.hide();
             return;
         }
+        // Server-rendered with the shared capacity model: same terms, bar and
+        // "almost full" threshold as the sprint views. Late answers are dropped.
+        var seq = ++previewSeq;
         jQuery.ajax({
             url: capacityUrl, type: 'GET', dataType: 'json', cache: false,
-            data: { sprint_id: sprintId, users_id: userId, item_id: itemId }
+            data: { sprint_id: sprintId, users_id: userId, item_id: itemId, capacity: own }
         }).done(function(resp){
+            if (seq !== previewSeq) { return; }
             if (!resp || !resp.success) { \$box.hide(); return; }
             \$box.removeClass('alert-info alert-warning alert-danger alert-success');
             if (!resp.is_member) {
                 \$box.addClass('alert-warning')
-                    .html('<i class="fas fa-user-slash me-1"></i>{$msgNotMember}')
+                    .html('<i class="fas fa-user-slash me-1" aria-hidden="true"></i>{$msgNotMember}')
                     .show();
                 return;
             }
-            var total   = parseFloat(resp.total) || 0;
-            var used    = parseFloat(resp.used) || 0;
-            var pending = parseFloat(resp.pending_other) || 0;
-            var free    = total - used - pending - own;
-            var cls     = free < 0 ? 'alert-danger' : (free < 10 ? 'alert-warning' : 'alert-success');
-            var txt     = '{$msgPreview}'
-                .replace('%total%', total)
-                .replace('%used%', used)
-                .replace('%pending%', pending)
-                .replace('%own%', own)
-                .replace('%free%', Math.round(free * 10) / 10);
-            \$box.addClass(cls).html('<i class="fas fa-gauge-high me-1"></i>' + txt).show();
+            var cls = resp.state === 'over' ? 'alert-danger'
+                : ((resp.state === 'almost_full' || resp.state === 'full') ? 'alert-warning' : 'alert-info');
+            \$box.addClass(cls).html(resp.html || '').show();
         }).fail(function(){ \$box.hide(); });
     }
 
@@ -1014,11 +1573,13 @@ HTML;
         if (!\$row.length) { return; }
         var itemId = parseInt(\$row.data('item-id'), 10) || 0;
         if (itemId <= 0) { return; }
+        \$opener = jQuery(this);
 
         \$modal.find('.sprint-be-error').hide().text('');
-        \$modal.find('.sprint-be-title').text(\$row.data('item-name') || '');
+        \$modal.find('.sprint-be-delete-confirm').prop('hidden', true);
+        \$modal.find('.sprint-be-title').text(\$row.attr('data-item-name') || '');
         \$modal.find('input[name=id]').val(itemId);
-        \$modal.find('input[name=name]').val(\$row.data('item-name') || '');
+        \$modal.find('input[name=name]').val(\$row.attr('data-item-name') || '');
         // Linked items mirror the underlying item's name (server-enforced);
         // only manual items expose an editable name.
         (function() {
@@ -1027,8 +1588,8 @@ HTML;
                 .prop('readonly', isLinked)
                 .attr('title', isLinked ? '{$lblNameFollows}' : '');
         })();
-        \$modal.find('input[name=is_fastlane]').prop('checked', parseInt(\$row.data('is-fastlane'), 10) === 1);
-        \$modal.find('input[name=is_blocked]').prop('checked', parseInt(\$row.data('is-blocked'), 10) === 1);
+        \$modal.find('input[name=is_fastlane]').prop('checked', parseInt(\$row.attr('data-is-fastlane'), 10) === 1);
+        \$modal.find('input[name=is_blocked]').prop('checked', parseInt(\$row.attr('data-is-blocked'), 10) === 1);
         \$modal.find('input[name=is_adhoc]').prop('checked', parseInt(\$row.attr('data-is-adhoc'), 10) === 1);
         \$modal.find('input[name=is_parked]').prop('checked', parseInt(\$row.attr('data-is-parked'), 10) === 1);
         \$modal.find("select[name='_backlog_modal_category']").val(String(parseInt(\$row.attr('data-category-id'), 10) || 0));
@@ -1039,27 +1600,22 @@ HTML;
             jQuery(this).prop('checked', v !== '' && tagBlob.indexOf('|' + v + '|') !== -1);
         });
         \$modal.find('.sprint-be-delete-form input[name=id]').val(itemId);
-        \$modal.find('.sprint-be-deps-open').toggle(parseInt(\$row.data('is-fastlane'), 10) !== 1);
+        \$modal.find('.sprint-be-deps-open').toggle(parseInt(\$row.attr('data-is-fastlane'), 10) !== 1);
+        renderState(\$row);
 
-        var ownerId   = parseInt(\$row.data('users-id'), 10) || 0;
-        var ownerName = \$row.data('owner-name') || '';
+        var ownerId   = parseInt(\$row.attr('data-users-id'), 10) || 0;
+        var ownerName = \$row.attr('data-owner-name') || '';
         setSelect2(\$modal.find("select[name='_backlog_modal_users_id']"), ownerId, ownerId > 0 ? ownerName : '-----');
 
-        var sprintId   = parseInt(\$row.data('proposed-sprint-id'), 10) || 0;
-        var sprintName = \$row.data('proposed-sprint-name') || '';
+        var sprintId   = parseInt(\$row.attr('data-proposed-sprint-id'), 10) || 0;
+        var sprintName = \$row.attr('data-proposed-sprint-name') || '';
         setSelect2(\$modal.find("select[name='_backlog_modal_sprint_id']"), sprintId, sprintId > 0 ? sprintName : '-----');
 
-        // Match the capacity option numerically ("0.5"/"5.0"/5 all resolve to
-        // the same option) so decimal formatting never clears the selection.
+        // Capacity is a number input: "5.0" and "5" are the same value, 0 = no estimate.
         (function() {
-            var \$sel = \$modal.find("select[name='_backlog_modal_capacity']");
-            var num  = parseFloat(\$row.data('capacity'));
-            if (isNaN(num)) { num = 0; }
-            var match = '';
-            \$sel.find('option').each(function() {
-                if (parseFloat(this.value) === num) { match = this.value; return false; }
-            });
-            \$sel.val(match).trigger('change');
+            var num = parseFloat(\$row.attr('data-capacity'));
+            \$modal.find("input[name='_backlog_modal_capacity']")
+                .val(isNaN(num) || num <= 0 ? '' : String(num)).trigger('change');
         })();
 
         (function() {
@@ -1087,7 +1643,21 @@ HTML;
 
         refreshPreview();
         updateDepsButton();
+        updateCompleteness();
         bootstrap.Modal.getOrCreateInstance(\$modal[0]).show();
+    });
+
+    // Delete: inline confirmation naming the item and the effect.
+    jQuery(document).on('click', '.sprint-be-delete-ask', function(){
+        var \$box = \$modal.find('.sprint-be-delete-confirm');
+        \$box.find('.sprint-be-delete-text').text(fmt("{$msgDelete}", \$modal.find('.sprint-be-title').text()));
+        \$box.prop('hidden', false);
+        \$box[0].scrollIntoView({block: 'nearest'});
+        \$box.find('.sprint-be-delete-keep').trigger('focus');
+    });
+    jQuery(document).on('click', '.sprint-be-delete-keep', function(){
+        \$modal.find('.sprint-be-delete-confirm').prop('hidden', true);
+        \$modal.find('.sprint-be-delete-ask').trigger('focus');
     });
 
     // Tag required (plugin setting): checked before every save from this
@@ -1117,8 +1687,8 @@ HTML;
                     id: itemId,
                     name: \$modal.find('input[name=name]').val(),
                     users_id: parseInt(\$modal.find("select[name='_backlog_modal_users_id']").val(), 10) || 0,
-                    capacity: parseFloat(\$modal.find("select[name='_backlog_modal_capacity']").val()) || 0,
-                    proposed_sprints_id: parseInt(\$modal.find("select[name='_backlog_modal_sprint_id']").val(), 10) || 0,
+                    capacity: parseFloat(\$modal.find("input[name='_backlog_modal_capacity']").val()) || 0,
+                    proposed_sprints_id: selectedSprint(),
                     is_fastlane: \$modal.find('input[name=is_fastlane]').is(':checked') ? 1 : 0,
                     is_blocked: \$modal.find('input[name=is_blocked]').is(':checked') ? 1 : 0,
                     is_adhoc: \$modal.find('input[name=is_adhoc]').is(':checked') ? 1 : 0,
@@ -1141,20 +1711,25 @@ HTML;
         });
     }
 
+    function reloadPage() {
+        if (window.sprintBacklogReload) { window.sprintBacklogReload(); } else { window.location.reload(); }
+    }
+
     // In-place row swap; a category change moves the row to its new section
-    // without a page load. Only a blocked/parked tier change still reloads,
-    // because those lists use a different table layout.
+    // without a page load. Only a blocked/parked tier change still reloads
+    // (keeping filters and scroll position), because those lists use a
+    // different table layout.
     function refreshRow(itemId, done) {
         jQuery.ajax({
             url: "{$rowUrl}", type: 'GET', dataType: 'json', cache: false,
             data: { id: itemId }
         }).done(function(resp){
             if (!resp || !resp.success || !resp.html) {
-                window.location.reload();
+                reloadPage();
                 return;
             }
             var \$old = jQuery('tr.sprint-backlog-row[data-item-id="' + itemId + '"]');
-            if (!\$old.length) { window.location.reload(); return; }
+            if (!\$old.length) { reloadPage(); return; }
 
             var wasBlocked = parseInt(\$old.attr('data-is-blocked'), 10) === 1;
             var wasParked  = parseInt(\$old.attr('data-is-parked'), 10) === 1;
@@ -1162,50 +1737,79 @@ HTML;
             var newCat     = parseInt(resp.category_id, 10) || 0;
             if (wasBlocked !== (parseInt(resp.is_blocked, 10) === 1)
                 || wasParked !== (parseInt(resp.is_parked, 10) === 1)) {
-                window.location.reload();
+                reloadPage();
                 return;
             }
             var \$new = jQuery(resp.html);
             if (wasCat !== newCat && !wasBlocked && !wasParked) {
                 var \$target = jQuery('.sprint-backlog-cat-section[data-category-id="' + newCat + '"] .sprint-backlog-table tbody').first();
-                if (!\$target.length) { window.location.reload(); return; }
+                if (!\$target.length) { reloadPage(); return; }
                 \$old.remove();
                 \$target.append(\$new);
             } else {
                 \$old.replaceWith(\$new);
             }
+            \$new.addClass('sprint-row-flash');
+            setTimeout(function(){ \$new.removeClass('sprint-row-flash'); }, 1600);
+            // Re-apply the active filters to the fresh row.
+            var \$text = jQuery('.sprint-backlog-filter .sf-text');
+            if (\$text.length) { \$text[0].dispatchEvent(new Event('input', { bubbles: true })); }
             if (window.sprintBacklogRefreshSections) { window.sprintBacklogRefreshSections(); }
             if (window.sprintBacklogReloadMatrix) { window.sprintBacklogReloadMatrix(); }
-            if (done) { done(); }
-        }).fail(function(){ window.location.reload(); });
+            if (done) { done(\$new); }
+        }).fail(function(){ reloadPage(); });
+    }
+    window.sprintBacklogRefreshRow = refreshRow;
+
+    function savedMessage(resp) {
+        var sid = selectedSprint();
+        var msg = sid > 0 ? fmt("{$okProposed}", escH(selectedSprintName())) : "{$okNotPlanned}";
+        if (resp && resp.message && resp.message !== 'Item updated') { msg += "\\n" + resp.message; }
+        return msg;
     }
 
-    jQuery(document).on('click', '.sprint-be-save', function(){
-        var \$btn   = jQuery(this);
+    // Save (and optionally assign right after). A failure keeps the dialog
+    // open with the input intact, so the user can simply retry.
+    function saveFlow(\$btn, thenAssign) {
         var itemId = parseInt(\$modal.find('input[name=id]').val(), 10) || 0;
         if (itemId <= 0) { return; }
         \$modal.find('.sprint-be-error').hide().text('');
         if (tagsMissing()) { return; }
-        \$btn.prop('disabled', true);
+        \$modal.find('.sprint-be-save, .sprint-be-assign').prop('disabled', true);
+        var restore = function(){
+            \$modal.find('.sprint-be-save').prop('disabled', false);
+            updateDepsButton();
+        };
         saveItem().done(function(resp){
             if (resp && resp.success) {
-                if (resp.message && resp.message !== 'Item updated' && window.glpi_toast_info) {
-                    window.glpi_toast_info(resp.message);
-                }
-                refreshRow(itemId, function(){
-                    \$btn.prop('disabled', false);
+                var msg = savedMessage(resp);
+                refreshRow(itemId, function(\$row){
+                    restore();
                     bootstrap.Modal.getOrCreateInstance(\$modal[0]).hide();
+                    if (!thenAssign) { notify('success', msg); return; }
+                    var form = \$row && \$row.find('form.sprint-backlog-assign-form')[0];
+                    var \$req = \$row ? \$row.find('.sprint-backlog-request-btn') : jQuery();
+                    if (form && window.sprintBacklogAssign) {
+                        window.sprintBacklogAssign(form);
+                    } else if (\$req.length && !\$req.prop('disabled')) {
+                        \$req.trigger('click');
+                    } else {
+                        notify('info', "{$msgAlreadyReq}");
+                    }
                 });
             } else {
                 \$modal.find('.sprint-be-error')
                     .text((resp && resp.message) || '{$msgSaveFailed}').show();
-                \$btn.prop('disabled', false);
+                restore();
             }
         }).fail(function(){
-            \$modal.find('.sprint-be-error').text('Network error').show();
-            \$btn.prop('disabled', false);
+            \$modal.find('.sprint-be-error').text("{$msgNetwork}").show();
+            restore();
         });
-    });
+    }
+
+    jQuery(document).on('click', '.sprint-be-save', function(){ saveFlow(jQuery(this), false); });
+    jQuery(document).on('click', '.sprint-be-assign', function(){ saveFlow(jQuery(this), true); });
 
     // Add dependency: persist the item first (the endpoint only accepts
     // dependencies for a saved proposed sprint), then stack the deps modal on
@@ -1213,7 +1817,7 @@ HTML;
     jQuery(document).on('click', '.sprint-be-deps-open', function(){
         var \$btn     = jQuery(this);
         var itemId   = parseInt(\$modal.find('input[name=id]').val(), 10) || 0;
-        var sprintId = parseInt(\$modal.find("select[name='_backlog_modal_sprint_id']").val(), 10) || 0;
+        var sprintId = selectedSprint();
         if (itemId <= 0 || sprintId <= 0) { return; }
         \$modal.find('.sprint-be-error').hide().text('');
         if (tagsMissing()) { return; }
@@ -1233,7 +1837,7 @@ HTML;
                 window.sprintBacklogOpenDeps(itemId, name, ownerId, sprintId);
             }
         }).fail(function(){
-            \$modal.find('.sprint-be-error').text('Network error').show();
+            \$modal.find('.sprint-be-error').text("{$msgNetwork}").show();
             \$btn.prop('disabled', false);
         });
     });
@@ -1267,44 +1871,50 @@ HTML;
         $msgPickSprint = addslashes(__('Pre-select a sprint for this item first (edit the item and choose a sprint).', 'sprint'));
         $msgNoMembers  = addslashes(__('The selected sprint has no members yet.', 'sprint'));
         $msgSelectBoth = addslashes(__('Please select a sprint member and a capacity > 0', 'sprint'));
-        $hint          = __('Only members of the pre-selected sprint can be added.', 'sprint');
+        $hint          = __('Only members of the proposed sprint can be added.', 'sprint');
+        $lblClose      = __s('Close');
+        $lblRemoveDep  = addslashes(__('Remove dependency: %s', 'sprint'));
+        $lblAddAnyway  = addslashes(__('Add anyway', 'sprint'));
+        $msgFailed     = addslashes(__('Could not add the dependency.', 'sprint'));
+        $msgNetwork    = addslashes(__('Network error — nothing was saved, try again.', 'sprint'));
+        $msgSaved      = addslashes(__('Dependency added.', 'sprint'));
 
         // The helper's own billable share (a check, a review), charged to the
         // item's customer on top of the item's credits.
         $creditFields = '';
         if (SprintCustomer::canUseCredits()) {
             $creditFields = "<div class='row g-2'>"
-                . "<div class='col-md-8 mb-2'><label class='form-label fw-bold'><i class='fas fa-tags me-1'></i>"
+                . "<div class='col-md-8 mb-2'><label class='form-label fw-bold' for='sprint-deps-product'><i class='fas fa-tags me-1' aria-hidden='true'></i>"
                 . htmlescape(SprintCreditProduct::getTypeName(1)) . "</label>"
-                . SprintItem::productSelect('_deps_product', 0, '_deps_credits', 'sprint-deps-product')
+                . self::withId(SprintItem::productSelect('_deps_product', 0, '_deps_credits', 'sprint-deps-product'), 'sprint-deps-product')
                 . "</div>"
-                . "<div class='col-md-4 mb-2'><label class='form-label fw-bold'><i class='fas fa-coins me-1'></i>"
+                . "<div class='col-md-4 mb-2'><label class='form-label fw-bold' for='sprint-deps-credits'><i class='fas fa-coins me-1' aria-hidden='true'></i>"
                 . htmlescape(__('Credits', 'sprint')) . "</label>"
-                . SprintItem::creditsInput('_deps_credits', 0, 'w-100 sprint-deps-credits')
+                . self::withId(SprintItem::creditsInput('_deps_credits', 0, 'w-100 sprint-deps-credits'), 'sprint-deps-credits')
                 . "</div></div>";
             SprintItem::creditProductScript();
         }
 
         echo <<<HTML
-<div class="modal fade" id="sprint-backlog-deps-modal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
+<div class="modal fade" id="sprint-backlog-deps-modal" tabindex="-1" aria-hidden="true" aria-labelledby="sprint-backlog-deps-title">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-link me-1"></i> {$titleAdd}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title" id="sprint-backlog-deps-title"><i class="fas fa-link me-1" aria-hidden="true"></i> {$titleAdd}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{$lblClose}"></button>
       </div>
       <div class="modal-body">
         <p class="text-muted sprint-deps-item-name fw-bold mb-2"></p>
         <p class="text-muted sprint-small">{$hint}</p>
-        <div class="alert alert-warning py-1 sprint-small sprint-deps-status mb-2" style="display:none;"></div>
+        <div class="alert alert-warning py-1 sprint-small sprint-deps-status mb-2" role="status" style="display:none;"></div>
         <div class="sprint-deps-list sprint-small mb-2"></div>
         <div class="mb-2">
-          <label class="form-label fw-bold">{$lblMember}</label>
-          <select class="form-select sprint-deps-member"></select>
+          <label class="form-label fw-bold" for="sprint-deps-member">{$lblMember}</label>
+          <select class="form-select sprint-deps-member" id="sprint-deps-member"></select>
         </div>
         <div class="mb-2">
-          <label class="form-label fw-bold">{$lblCapacity} %</label>
-          <select class="form-select sprint-deps-capacity">{$capacityOptions}</select>
+          <label class="form-label fw-bold" for="sprint-deps-capacity">{$lblCapacity} %</label>
+          <select class="form-select sprint-deps-capacity" id="sprint-deps-capacity">{$capacityOptions}</select>
         </div>
         {$creditFields}
       </div>
@@ -1367,12 +1977,10 @@ HTML;
         return \$row.length ? (parseInt(\$row.attr('data-proposed-sprint-id'), 10) || 0) : 0;
     }
 
-    // Feedback that never fails silently: toast when GLPI provides one,
-    // alert() otherwise (older builds lack glpi_toast_warning).
+    // Feedback that never fails silently: the page-wide backlog notifier
+    // (toast, or the inline status region when GLPI has no toast function).
     function depsWarn(msg) {
-        if (window.glpi_toast_warning) { window.glpi_toast_warning(msg); }
-        else if (window.glpi_toast_info) { window.glpi_toast_info(msg); }
-        else { alert(msg); }
+        if (window.sprintBacklogNotify) { window.sprintBacklogNotify('warning', msg); }
     }
 
     function showDepsStatus(msg, ok) {
@@ -1381,6 +1989,18 @@ HTML;
             \$status.toggleClass('alert-warning', !ok).toggleClass('alert-success', !!ok)
                 .text(msg).show();
         } else { depsWarn(msg); }
+    }
+
+    // Overflow warning: ask inline, with the server's message, instead of confirm().
+    function askOverflow(msg, onYes) {
+        var \$status = \$modal.find('.sprint-deps-status');
+        \$status.removeClass('alert-success').addClass('alert-warning').empty()
+            .append(jQuery('<div class="mb-1"></div>').text(msg))
+            .append(jQuery('<button type="button" class="btn btn-sm btn-warning"></button>')
+                .text("{$lblAddAnyway}")
+                .on('click', function(){ \$status.hide(); onYes(); }))
+            .show();
+        \$status.find('button').trigger('focus');
     }
 
     // Current dependency list, so multiple helpers can be added in a row.
@@ -1402,8 +2022,10 @@ HTML;
                 }
                 \$line.append(\$name);
                 \$line.append(
-                    jQuery('<button type="button" class="btn btn-sm btn-outline-danger sprint-deps-remove ms-auto" style="padding:0 6px;"><i class="fas fa-times"></i></button>')
+                    jQuery('<button type="button" class="btn btn-sm btn-outline-danger sprint-deps-remove ms-auto" style="padding:0 6px;"><i class="fas fa-times" aria-hidden="true"></i></button>')
                         .attr('data-dep-id', d.id)
+                        .attr('aria-label', "{$lblRemoveDep}".replace('%s', d.name))
+                        .attr('title', "{$lblRemoveDep}".replace('%s', d.name))
                 );
                 \$list.append(\$line);
             });
@@ -1430,8 +2052,14 @@ HTML;
             });
         }).done(function(resp){
             if (resp && resp.success) { loadDepsList(itemId); }
-            else { \$btn.prop('disabled', false); }
-        }).fail(function(){ \$btn.prop('disabled', false); });
+            else {
+                \$btn.prop('disabled', false);
+                showDepsStatus((resp && resp.message) || "{$msgFailed}");
+            }
+        }).fail(function(){
+            \$btn.prop('disabled', false);
+            showDepsStatus("{$msgNetwork}");
+        });
     });
 
     function openDepsModal(itemId, name, ownerId, sprintId) {
@@ -1501,22 +2129,19 @@ HTML;
         }).done(function(resp){
             if (resp && resp.success) {
                 // Stay open so more helpers can be added in a row.
-                showDepsStatus(resp.message || 'Saved', true);
+                showDepsStatus(resp.message || "{$msgSaved}", true);
                 \$modal.find('.sprint-deps-member').val('0');
                 if (\$credits.length) { \$credits.val('0'); }
                 if (\$product.length) { \$product.val('0'); }
                 loadDepsList(itemId);
             } else if (resp && resp.needs_confirm) {
-                if (confirm(resp.message)) {
-                    doAdd(itemId, userId, capacity, true);
-                }
+                askOverflow(resp.message, function(){ doAdd(itemId, userId, capacity, true); });
             } else {
-                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
-                else { alert((resp && resp.message) || 'Failed'); }
+                // Error in the dialog itself; the selection stays for a retry.
+                showDepsStatus((resp && resp.message) || "{$msgFailed}");
             }
         }).fail(function(){
-            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
-            else { showDepsStatus('Network error'); }
+            showDepsStatus("{$msgNetwork}");
         });
     }
 
@@ -1538,68 +2163,100 @@ HTML;
 
     /**
      * Backlog list behaviors that live outside the edit modal: the bulk
-     * "assign all ready" flow (with per-sprint scoping), the non-Scrum-Master
-     * "request assignment" button and drag-to-reorder persistence.
+     * "assign all planned" flow (with per-sprint scoping and a preview of the
+     * items that move), the single-row assign with an inline "in sprint"
+     * outcome, the non-Scrum-Master "request assignment" button, filter
+     * chips / result count / empty states and drag- or keyboard-reorder
+     * persistence.
      *
      * @param array<int,int>    $readyBySprint sprintId => count of ready items
      *                          the current user may assign
      * @param array<int,string> $sprintNames   sprintId => sprint name
+     * @param list<array{id:int,name:string,sprint:int}> $readyItems the items behind $readyBySprint
      */
-    private static function renderInlineEditScript(array $readyBySprint = [], array $sprintNames = []): void
+    private static function renderInlineEditScript(array $readyBySprint = [], array $sprintNames = [], array $readyItems = []): void
     {
         $tokenUrl = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
         $bulkUrl  = Plugin::getWebDir('sprint') . '/ajax/bulkassign.php';
         $requestUrl  = Plugin::getWebDir('sprint') . '/ajax/requestcreate.php';
         $reorderUrl  = Plugin::getWebDir('sprint') . '/ajax/reorder.php';
+        $assignUrl   = Plugin::getWebDir('sprint') . '/ajax/assigntosprint.php';
         $savedOrderMsg = addslashes(__('Order saved', 'sprint'));
         $prefUrl      = Plugin::getWebDir('sprint') . '/ajax/userpref.php';
         $prefName     = UserPref::BACKLOG_SORT;
         $sortMode     = UserPref::backlogSort();
         $viewSavedMsg = addslashes(__('View saved as your default', 'sprint'));
+        $msgFailed    = addslashes(__('Save failed', 'sprint'));
+        $msgNetwork   = addslashes(__('Network error — nothing was changed, try again.', 'sprint'));
+        $msgAssignFailed = addslashes(__('Could not assign item to sprint', 'sprint'));
+        $msgInSprint  = addslashes(__('In sprint: %s', 'sprint'));
+        $msgLeft      = addslashes(__('"%1$s" is now in sprint %2$s and has left the backlog.', 'sprint'));
+        $lblOpenSprint = addslashes(__('Open sprint', 'sprint'));
+        $msgRequested = addslashes(__('Requested — waiting for Scrum Master', 'sprint'));
+        $msgMoved     = addslashes(__('Moved to position %d', 'sprint'));
+        $lblResult    = addslashes(__('%1$d of %2$d items', 'sprint'));
+        $lblResultAll = addslashes(__('%d items', 'sprint'));
+        $lblRemoveFilter = addslashes(__('Remove filter: %s', 'sprint'));
+        $lblSearch    = addslashes(__('Name'));
 
         // Sprint-scope modal: assign everything, or kick off one sprint while
-        // future sprints (already marked ready) stay queued.
-        $lblBulkTitle  = __s('Assign ready backlog items', 'sprint');
-        $lblBulkHint   = __s('Assign every ready item, or limit the kick-off to a single sprint — future sprints that are already marked ready stay on the backlog.', 'sprint');
+        // future sprints (already planned) stay queued. The items that would
+        // move are listed for the chosen scope before anything happens.
+        $lblBulkTitle  = __s('Assign planned backlog items', 'sprint');
+        $lblBulkHint   = __s('Assign every planned item, or limit the kick-off to a single sprint — future sprints that are already planned stay on the backlog.', 'sprint');
+        $lblBulkScope  = __s('Target sprint', 'sprint');
+        $lblBulkItems  = __s('These items leave the backlog and join their proposed sprint:', 'sprint');
         $lblBulkAll    = __s('All sprints', 'sprint');
         $lblCancel     = __s('Cancel');
-        $lblBulkGo     = __s('Assign', 'sprint');
+        $lblClose      = __s('Close');
+        $lblBulkGoN    = addslashes(__('Assign %d items', 'sprint'));
 
         $dor = Config::getDefinitionReady();
         $dorSection = '';
         if ($dor) {
-            $dorSection = "<hr class='my-3'><label class='form-label fw-bold'>"
-                . __s('Definition of Ready', 'sprint') . "</label>"
+            $dorSection = "<hr class='my-3'><fieldset><legend class='form-label fw-bold' style='font-size:inherit;'>"
+                . __s('Definition of Ready', 'sprint') . "</legend>"
                 . "<p class='text-muted sprint-small mb-2'>"
                 . __s('Confirm the checks that hold for the items you are assigning.', 'sprint') . "</p>";
             foreach ($dor as $check) {
                 $dorSection .= "<label class='form-check d-block'><input class='form-check-input sprint-dor-check' type='checkbox' value='"
                     . htmlescape($check) . "'><span class='form-check-label'>" . htmlescape($check) . "</span></label>";
             }
+            $dorSection .= "</fieldset>";
         }
 
         $totalReady = array_sum($readyBySprint);
-        echo "<div class='modal fade' id='sprint-backlog-bulk-modal' tabindex='-1' aria-hidden='true'>";
-        echo "<div class='modal-dialog modal-dialog-centered'>";
+        echo "<div class='modal fade' id='sprint-backlog-bulk-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-backlog-bulk-title'>";
+        echo "<div class='modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down'>";
         echo "<div class='modal-content'>";
-        echo "<div class='modal-header'><h5 class='modal-title'>"
-            . "<i class='fas fa-layer-group me-1'></i> {$lblBulkTitle}</h5>"
-            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button></div>";
+        echo "<div class='modal-header'><h5 class='modal-title' id='sprint-backlog-bulk-title'>"
+            . "<i class='fas fa-layer-group me-1' aria-hidden='true'></i> {$lblBulkTitle}</h5>"
+            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='{$lblClose}'></button></div>";
         echo "<div class='modal-body'>";
         echo "<p class='text-muted sprint-small'>{$lblBulkHint}</p>";
-        echo "<select class='form-select sprint-bulk-sprint-choice'>";
+        echo "<label class='form-label fw-bold' for='sprint-bulk-sprint-choice'>{$lblBulkScope}</label>";
+        echo "<select class='form-select sprint-bulk-sprint-choice' id='sprint-bulk-sprint-choice'>";
         echo "<option value='0'>{$lblBulkAll} (" . (int)$totalReady . ")</option>";
         foreach ($readyBySprint as $sid => $cnt) {
             $name = $sprintNames[$sid] ?? ('#' . $sid);
             echo "<option value='" . (int)$sid . "'>" . htmlescape($name) . " (" . (int)$cnt . ")</option>";
         }
         echo "</select>";
+        echo "<div class='mt-3 sprint-small'><div class='fw-bold mb-1' id='sprint-bulk-items-title'>{$lblBulkItems}</div>";
+        echo "<ul class='sprint-bulk-items mb-0' aria-labelledby='sprint-bulk-items-title'>";
+        foreach ($readyItems as $ri) {
+            $sid = (int)$ri['sprint'];
+            echo "<li data-sprint-id='{$sid}'>" . htmlescape($ri['name'])
+                . " <span class='text-muted'>→ " . htmlescape($sprintNames[$sid] ?? ('#' . $sid)) . "</span></li>";
+        }
+        echo "</ul></div>";
         echo $dorSection;
         echo "</div>";
         echo "<div class='modal-footer'>";
         echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$lblCancel}</button>";
         echo "<button type='button' class='btn btn-success sprint-backlog-bulk-go'" . ($dor ? ' disabled' : '') . ">"
-            . "<i class='fas fa-check me-1'></i>{$lblBulkGo}</button>";
+            . "<i class='fas fa-check me-1' aria-hidden='true'></i><span class='sprint-bulk-go-label'>"
+            . htmlescape(sprintf(__('Assign %d items', 'sprint'), (int)$totalReady)) . "</span></button>";
         echo "</div>";
         echo "</div></div></div>";
 
@@ -1608,10 +2265,11 @@ HTML;
             $lblDorTitle = __s('Definition of Ready', 'sprint');
             $lblDorHint  = __s('Confirm the checks that hold for this item.', 'sprint');
             $lblDorGo    = __s('Assign', 'sprint');
-            echo "<div class='modal fade' id='sprint-dor-modal' tabindex='-1' aria-hidden='true'>";
+            echo "<div class='modal fade' id='sprint-dor-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-dor-title'>";
             echo "<div class='modal-dialog modal-dialog-centered'><div class='modal-content'>";
-            echo "<div class='modal-header'><h5 class='modal-title'><i class='fas fa-clipboard-check me-1'></i> {$lblDorTitle}</h5>"
-                . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button></div>";
+            echo "<div class='modal-header'><h5 class='modal-title' id='sprint-dor-title'><i class='fas fa-clipboard-check me-1' aria-hidden='true'></i> {$lblDorTitle}"
+                . "<span class='sprint-dor-itemname'></span></h5>"
+                . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='{$lblClose}'></button></div>";
             echo "<div class='modal-body'><p class='text-muted sprint-small'>{$lblDorHint}</p>";
             foreach ($dor as $check) {
                 echo "<label class='form-check d-block'><input class='form-check-input sprint-dor-single-check' type='checkbox' value='"
@@ -1620,7 +2278,7 @@ HTML;
             echo "</div>";
             echo "<div class='modal-footer'>";
             echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$lblCancel}</button>";
-            echo "<button type='button' class='btn btn-success sprint-dor-go' disabled><i class='fas fa-check me-1'></i>{$lblDorGo}</button>";
+            echo "<button type='button' class='btn btn-success sprint-dor-go' disabled><i class='fas fa-check me-1' aria-hidden='true'></i>{$lblDorGo}</button>";
             echo "</div>";
             echo "</div></div></div>";
         }
@@ -1634,6 +2292,10 @@ HTML;
     if (typeof jQuery === 'undefined') { return; }
     var tokenUrl = "{$tokenUrl}";
 
+    function notify(type, msg) {
+        if (window.sprintBacklogNotify) { window.sprintBacklogNotify(type, msg); }
+    }
+
     var \$bulkModal, \$dorModal;
     jQuery(function(){
         \$bulkModal = jQuery('#sprint-backlog-bulk-modal');
@@ -1643,9 +2305,11 @@ HTML;
     });
 
     // DoR confirmation: all checks mandatory; resolves with the checked
-    // values, or null when no DoR is configured.
-    window.sprintDorConfirm = function(callback) {
+    // values, or null when no DoR is configured. The optional item name goes
+    // into the dialog title so it is clear what is being assigned.
+    window.sprintDorConfirm = function(callback, itemName) {
         if (!\$dorModal || !\$dorModal.length) { callback(null); return; }
+        \$dorModal.find('.sprint-dor-itemname').text(itemName ? ': ' + itemName : '');
         \$dorModal.find('.sprint-dor-single-check').prop('checked', false);
         \$dorModal.find('.sprint-dor-go').prop('disabled', true);
         \$dorModal.data('cb', callback);
@@ -1671,9 +2335,23 @@ HTML;
         if (typeof cb === 'function') { cb(checks); }
     });
 
+    // Bulk preview: list exactly the items the chosen scope would move.
+    function updateBulkPreview() {
+        var sprintId = parseInt(\$bulkModal.find('.sprint-bulk-sprint-choice').val(), 10) || 0;
+        var n = 0;
+        \$bulkModal.find('.sprint-bulk-items li').each(function(){
+            var show = sprintId === 0 || (parseInt(this.getAttribute('data-sprint-id'), 10) || 0) === sprintId;
+            this.hidden = !show;
+            if (show) { n++; }
+        });
+        \$bulkModal.find('.sprint-bulk-go-label').text("{$lblBulkGoN}".replace('%d', n));
+    }
+    jQuery(document).on('change', '.sprint-bulk-sprint-choice', updateBulkPreview);
+
     // Kick-off: open the scope modal (everything, or one specific sprint).
     jQuery(document).on('click', '.sprint-backlog-bulk-assign', function() {
         if (\$bulkModal && \$bulkModal.length) {
+            updateBulkPreview();
             bootstrap.Modal.getOrCreateInstance(\$bulkModal[0]).show();
         }
     });
@@ -1696,17 +2374,108 @@ HTML;
             });
         }).done(function(resp) {
             if (resp && resp.success) {
-                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message); }
-                window.location.reload();
+                // The message survives the reload (filters + scroll too).
+                if (window.sprintBacklogReload) { window.sprintBacklogReload(resp.message); }
+                else { window.location.reload(); }
             } else {
-                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
+                notify('error', (resp && resp.message) || "{$msgFailed}");
                 \$btn.prop('disabled', false);
             }
         }).fail(function() {
-            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+            notify('error', "{$msgNetwork}");
             \$btn.prop('disabled', false);
         });
     });
+
+    // Single-row assign. Handled here in the capture phase (before the
+    // generic js/sprint.js handler) so the row can show its new state —
+    // "In sprint: X" with a link — before it leaves the backlog, and so
+    // failures land in the page's feedback region instead of alert().
+    function rowAssign(form) {
+        var itemId   = parseInt(form.getAttribute('data-item-id'), 10) || 0;
+        var input    = form.querySelector('input[name="plugin_sprint_sprints_id"]');
+        var sprintId = input ? (parseInt(input.value, 10) || 0) : 0;
+        var row      = form.closest('tr.sprint-backlog-row');
+        var name     = row ? (row.getAttribute('data-item-name') || '') : '';
+        var btn      = form.querySelector('.sprint-backlog-assign-btn');
+        if (itemId <= 0 || sprintId <= 0) { return; }
+
+        var doAssign = function(readyChecks) {
+            if (btn) { btn.disabled = true; }
+            jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
+            .then(function(tok) {
+                var data = {
+                    id: itemId,
+                    plugin_sprint_sprints_id: sprintId,
+                    _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                };
+                if (readyChecks && readyChecks.length) { data.ready = readyChecks; }
+                return jQuery.ajax({ url: "{$assignUrl}", type: 'POST', dataType: 'json', data: data });
+            }).done(function(resp) {
+                if (!resp || !resp.success) {
+                    notify('error', (resp && resp.message) || "{$msgAssignFailed}");
+                    if (btn) { btn.disabled = false; }
+                    return;
+                }
+                var sprintName = resp.sprint_name || '';
+                var escH = function(v) {
+                    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) {
+                        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+                    });
+                };
+                notify('success', "{$msgLeft}".replace('%1\$s', escH(name)).replace('%2\$s', escH(sprintName)));
+                if (!row) { return; }
+                // Unmistakable outcome on the row itself, then it leaves the list.
+                row.classList.add('sprint-row-assigned');
+                var \$row = jQuery(row);
+                \$row.find('.sprint-backlog-sprint-cell').empty().append(
+                    jQuery('<span class="sprint-state-badge sprint-state-insprint"></span>')
+                        .append('<i class="fas fa-circle-check me-1" aria-hidden="true"></i>')
+                        .append(document.createTextNode("{$msgInSprint}".replace('%s', sprintName)))
+                );
+                \$row.find('.sprint-backlog-actions').empty().append(
+                    resp.sprint_url
+                        ? jQuery('<a class="btn btn-sm btn-outline-success"></a>').attr('href', resp.sprint_url)
+                            .append('<i class="fas fa-up-right-from-square me-1" aria-hidden="true"></i>')
+                            .append(document.createTextNode("{$lblOpenSprint}"))
+                        : jQuery()
+                );
+                setTimeout(function() {
+                    row.style.transition = 'opacity 0.4s';
+                    row.style.opacity = '0';
+                    setTimeout(function() {
+                        if (row.parentNode) { row.parentNode.removeChild(row); }
+                        if (window.sprintBacklogRefreshSections) { window.sprintBacklogRefreshSections(); }
+                        if (window.sprintBacklogReloadMatrix) { window.sprintBacklogReloadMatrix(); }
+                    }, 420);
+                }, 5000);
+            }).fail(function() {
+                notify('error', "{$msgNetwork}");
+                if (btn) { btn.disabled = false; }
+            });
+        };
+
+        var isFastlane = row && row.getAttribute('data-is-fastlane') === '1';
+        if (!isFastlane && typeof window.sprintDorConfirm === 'function') {
+            window.sprintDorConfirm(doAssign, name);
+        } else {
+            doAssign(null);
+        }
+    }
+    window.sprintBacklogAssign = rowAssign;
+    if (!window.__sprintBacklogAssignBound) {
+        window.__sprintBacklogAssignBound = true;
+        document.addEventListener('submit', function(e) {
+            var form = e.target;
+            if (!form || !form.classList || !form.classList.contains('sprint-backlog-assign-form')
+                || !form.closest('tr.sprint-backlog-row')) {
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            rowAssign(form);
+        }, true);
+    }
 
     // Non-Scrum-Master path: same button spot, but the click files an
     // assignment request that lands in the Scrum Master's approval panel.
@@ -1733,19 +2502,77 @@ HTML;
             });
         }).done(function(resp) {
             if (resp && resp.success) {
-                if (window.glpi_toast_info) { window.glpi_toast_info(resp.message || 'Requested'); }
-                \$btn.removeClass('btn-outline-primary').addClass('btn-outline-secondary')
-                    .prop('disabled', true)
-                    .find('i').attr('class', 'fas fa-hourglass-half');
+                notify('success', resp.message || "{$msgRequested}");
+                // The re-rendered row shows "Requested — waiting for Scrum
+                // Master" with Backlog → sprint, never as if already assigned.
+                if (window.sprintBacklogRefreshRow) {
+                    window.sprintBacklogRefreshRow(itemId);
+                } else {
+                    \$btn.removeClass('btn-outline-primary').addClass('btn-outline-secondary')
+                        .prop('disabled', true)
+                        .find('i').attr('class', 'fas fa-hourglass-half');
+                }
             } else {
-                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || 'Failed'); }
+                notify('error', (resp && resp.message) || "{$msgFailed}");
                 \$btn.prop('disabled', false);
             }
         }).fail(function() {
-            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+            notify('error', "{$msgNetwork}");
             \$btn.prop('disabled', false);
         });
     }
+
+    // Active filters as removable chips, plus "x of y items" and the
+    // matching empty state. One reset (the filter bar's) clears them all.
+    function backlogFilterSummary(filtering) {
+        var \$bar = jQuery('.sprint-backlog-filter').first();
+        var \$chips = jQuery('.sprint-backlog-chips').first();
+        if (!\$bar.length || !\$chips.length) { return; }
+        var \$list = \$chips.find('.sprint-backlog-chip-list').empty();
+        \$bar.find('.sf-text, .sf-type, .sf-owner, .sf-sprint, .sf-tag').each(function() {
+            var el = this;
+            var val = jQuery(el).val();
+            if (!val) { return; }
+            var label = el.classList.contains('sf-text')
+                ? "{$lblSearch}" + ': "' + val + '"'
+                : (el.getAttribute('aria-label') || '') + ': ' + jQuery(el).find('option:selected').text();
+            var \$chip = jQuery('<button type="button" class="sprint-filter-chip"></button>')
+                .attr('aria-label', "{$lblRemoveFilter}".replace('%s', label))
+                .append(document.createTextNode(label))
+                .append(' <i class="fas fa-times" aria-hidden="true"></i>')
+                .on('click', function() {
+                    jQuery(el).val('');
+                    el.dispatchEvent(new Event(el.classList.contains('sf-text') ? 'input' : 'change', { bubbles: true }));
+                    var \$next = jQuery('.sprint-backlog-chips .sprint-filter-chip').first();
+                    (\$next.length ? \$next : jQuery(el)).trigger('focus');
+                });
+            \$list.append(\$chip);
+        });
+        var \$all = jQuery('.sprint-backlog-page tr.sprint-backlog-row');
+        var total = \$all.length;
+        var shown = \$all.not('.sprint-row-hidden').length;
+        \$chips.find('.sprint-backlog-result').text(filtering
+            ? "{$lblResult}".replace('%1\$d', shown).replace('%2\$d', total)
+            : "{$lblResultAll}".replace('%d', total));
+        \$chips.toggleClass('sprint-filtering', filtering);
+        jQuery('.sprint-backlog-empty-filtered').prop('hidden', !(filtering && total > 0 && shown === 0));
+        // Blocked / non-active lists open up while filtering, so a match is never tucked away.
+        if (filtering) {
+            jQuery('.sprint-backlog-blocked, .sprint-backlog-parked').each(function() {
+                var \$wrap = jQuery(this);
+                var hits = \$wrap.find('tr.sprint-backlog-row').not('.sprint-row-hidden').length;
+                \$wrap.toggle(hits > 0);
+                if (hits > 0) { \$wrap.find('.sprint-backlog-blocked-body, .sprint-backlog-parked-body').show(); }
+            });
+        } else {
+            jQuery('.sprint-backlog-blocked, .sprint-backlog-parked').show();
+        }
+    }
+    jQuery(document).on('click', '.sprint-backlog-filter-reset', function() {
+        var reset = jQuery('.sprint-backlog-filter .sf-reset')[0];
+        if (reset) { reset.click(); }
+        jQuery('.sprint-backlog-filter .sf-text').first().trigger('focus');
+    });
 
     // Counts follow the visible rows; ranks stay tied to the full list.
     function backlogFilterActive() {
@@ -1767,8 +2594,10 @@ HTML;
     // Folding a parent takes its subcategory sections with it; unfolding hands
     // each of them back its own state.
     function backlogApplyCollapse(\$sec) {
-        var collapsed = localStorage.getItem(backlogCollapseKey(\$sec)) === '1';
+        var collapsed = false;
+        try { collapsed = localStorage.getItem(backlogCollapseKey(\$sec)) === '1'; } catch (e) {}
         \$sec.find('.sprint-backlog-cat-body').toggle(!collapsed);
+        \$sec.find('.sprint-backlog-cat-header').first().attr('aria-expanded', collapsed ? 'false' : 'true');
         \$sec.find('.sprint-backlog-cat-chevron').css('transform', collapsed ? 'rotate(-90deg)' : 'rotate(0deg)');
         backlogSubSections(\$sec).each(function() {
             var \$sub = jQuery(this);
@@ -1800,6 +2629,7 @@ HTML;
             if (filtering) {
                 \$sec.toggle(\$vis.length > 0);
                 \$sec.find('.sprint-backlog-cat-body').show();
+                \$sec.find('.sprint-backlog-cat-header').first().attr('aria-expanded', 'true');
                 \$sec.find('.sprint-backlog-cat-chevron').css('transform', 'rotate(0deg)');
             } else if ((\$sec.attr('data-parent-category-id') || '0') === '0') {
                 // Subsections follow their parent's cascade, not their own turn.
@@ -1818,6 +2648,7 @@ HTML;
         jQuery('.sprint-backlog-count').text(
             jQuery('.sprint-backlog-cat-section tr.sprint-backlog-row').not('.sprint-row-hidden').length
         );
+        backlogFilterSummary(filtering);
     };
 
     // Collapsible category sections (state per category in localStorage).
@@ -1831,8 +2662,9 @@ HTML;
         var \$body = \$sec.find('.sprint-backlog-cat-body');
         var collapsed = \$body.is(':visible');
         \$body.slideToggle(120);
+        jQuery(this).attr('aria-expanded', collapsed ? 'false' : 'true');
         \$sec.find('.sprint-backlog-cat-chevron').css('transform', collapsed ? 'rotate(-90deg)' : 'rotate(0deg)');
-        localStorage.setItem(backlogCollapseKey(\$sec), collapsed ? '1' : '0');
+        try { localStorage.setItem(backlogCollapseKey(\$sec), collapsed ? '1' : '0'); } catch (e) {}
         backlogSubSections(\$sec).each(function() {
             var \$sub = jQuery(this);
             if (collapsed) {
@@ -1842,6 +2674,30 @@ HTML;
                 backlogApplyCollapse(\$sub);
             }
         });
+    });
+
+    jQuery(document).on('keydown', '.sprint-backlog-cat-header', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jQuery(this).trigger('click'); }
+    });
+
+    // Keyboard alternative to drag: move a row one place up/down inside its
+    // category; the order is persisted like a drop and focus stays on the
+    // button so the move can be repeated.
+    jQuery(document).on('click', '.sprint-backlog-move', function(e) {
+        e.preventDefault();
+        var up  = this.getAttribute('data-dir') === 'up';
+        var row = this.closest('tr.sprint-backlog-row');
+        if (!row) { return; }
+        var sib = up ? row.previousElementSibling : row.nextElementSibling;
+        while (sib && !sib.classList.contains('sprint-backlog-row')) {
+            sib = up ? sib.previousElementSibling : sib.nextElementSibling;
+        }
+        if (!sib) { return; }
+        row.parentNode.insertBefore(row, up ? sib : sib.nextSibling);
+        if (window.sprintBacklogRefreshSections) { window.sprintBacklogRefreshSections(); }
+        this.focus();
+        var rank = jQuery(row).find('.sprint-backlog-rank').text();
+        persistBacklogOrder({}, "{$msgMoved}".replace('%d', rank));
     });
 
     // Multi-select: Ctrl/Cmd-click toggles a row, Shift-click extends from the
@@ -1954,7 +2810,7 @@ HTML;
 
     // Persist the current DOM order of the category tables as the ranks
     // (plus any category moves), shared by drag-and-drop and the sort button.
-    function persistBacklogOrder(catMap) {
+    function persistBacklogOrder(catMap, okMsg) {
         var ids = [];
         jQuery('.sprint-backlog-table .sprint-backlog-row').each(function() {
             var id = parseInt(this.getAttribute('data-item-id'), 10) || 0;
@@ -1973,11 +2829,13 @@ HTML;
             });
         }).done(function(resp) {
             if (resp && resp.success) {
-                if (window.glpi_toast_info) { window.glpi_toast_info('{$savedOrderMsg}'); }
+                notify('success', okMsg || '{$savedOrderMsg}');
                 if (window.sprintBacklogReloadMatrix) { window.sprintBacklogReloadMatrix(); }
-            } else if (window.glpi_toast_error) {
-                window.glpi_toast_error('Save failed');
+            } else {
+                notify('error', (resp && resp.message) || "{$msgFailed}");
             }
+        }).fail(function() {
+            notify('error', "{$msgNetwork}");
         });
     }
 
@@ -2016,7 +2874,7 @@ HTML;
             rows.forEach(function(r) { \$tbody.append(r); });
         });
         // No drag-to-rank inside a personal sort: the grip would rewrite the team order.
-        jQuery('.sprint-backlog-grip').css('visibility', backlogSortCurrent === 'project' ? 'hidden' : '');
+        jQuery('.sprint-backlog-grip, .sprint-backlog-move').css('visibility', backlogSortCurrent === 'project' ? 'hidden' : '');
         jQuery('.sprint-backlog-sort').val(backlogSortCurrent);
         jQuery('.sprint-row-selected').removeClass('sprint-row-selected');
         sprintLastSelected = null;
@@ -2034,12 +2892,12 @@ HTML;
             });
         }).done(function(resp) {
             if (resp && resp.success) {
-                if (window.glpi_toast_info) { window.glpi_toast_info('{$viewSavedMsg}'); }
-            } else if (window.glpi_toast_error) {
-                window.glpi_toast_error('Save failed');
+                notify('success', '{$viewSavedMsg}');
+            } else {
+                notify('error', "{$msgFailed}");
             }
         }).fail(function() {
-            if (window.glpi_toast_error) { window.glpi_toast_error('Network error'); }
+            notify('error', "{$msgNetwork}");
         });
     });
     jQuery(function() { applyBacklogSort(backlogSortCurrent); });
@@ -2048,8 +2906,12 @@ HTML;
 HTML;
     }
 
-    /** Prognosis dashboard: category × upcoming-sprints matrix + work-supply. */
-    private static function renderCategoryDashboard(): void
+    /**
+     * Prognosis dashboard: category × upcoming-sprints matrix + work-supply.
+     * $lazy (Work queue view) skips the server-side matrix; it is fetched
+     * the first time the Planning view is opened.
+     */
+    private static function renderCategoryDashboard(bool $lazy = false): void
     {
         $statsUrl = Plugin::getWebDir('sprint') . '/ajax/backlogcategorystats.php';
         $capUrl    = Plugin::getWebDir('sprint') . '/ajax/categorycap.php';
@@ -2097,10 +2959,14 @@ HTML;
         }
         echo "</select>";
         echo "</div>";
-        $fragment = $view === 'credits'
-            ? self::renderCreditMatrixFragment()
-            : ($view === 'members' ? self::renderMemberMatrixFragment() : self::renderCategoryMatrixFragment());
-        echo "<div class='sprint-backlog-dash-body' data-view='" . htmlescape($view) . "'>" . $fragment . "</div>";
+        $fragment = $lazy
+            ? "<div class='center text-muted sprint-small' style='padding:14px;'><i class='fas fa-spinner fa-spin me-1' aria-hidden='true'></i>"
+                . __s('Loading…', 'sprint') . "</div>"
+            : ($view === 'credits'
+                ? self::renderCreditMatrixFragment()
+                : ($view === 'members' ? self::renderMemberMatrixFragment() : self::renderCategoryMatrixFragment()));
+        echo "<div class='sprint-backlog-dash-body' data-view='" . htmlescape($view) . "'"
+            . ($lazy ? " data-stale='1'" : '') . ">" . $fragment . "</div>";
         echo "</div>";
 
         // Limits modal: one dual-range slider (min/max %) per category, saved
@@ -2111,12 +2977,12 @@ HTML;
         $lblMax    = __s('max', 'sprint');
         $lblCancel = __s('Cancel');
         $lblSave   = __s('Save');
-        echo "<div class='modal fade' id='sprint-limits-modal' tabindex='-1' aria-hidden='true'>";
-        echo "<div class='modal-dialog modal-dialog-centered'>";
+        echo "<div class='modal fade' id='sprint-limits-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-limits-title'>";
+        echo "<div class='modal-dialog modal-dialog-centered modal-dialog-scrollable'>";
         echo "<div class='modal-content'>";
         echo "<div class='modal-header'>";
-        echo "<h5 class='modal-title'><i class='fas fa-sliders me-1'></i> {$lblTitle}: <span class='sprint-limits-sprintname'></span></h5>";
-        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
+        echo "<h5 class='modal-title' id='sprint-limits-title'><i class='fas fa-sliders me-1' aria-hidden='true'></i> {$lblTitle}: <span class='sprint-limits-sprintname'></span></h5>";
+        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='" . __s('Close') . "'></button>";
         echo "</div>";
         echo "<div class='modal-body'>";
         echo "<div class='text-muted sprint-small mb-3'>{$lblHint}</div>";
@@ -2132,11 +2998,11 @@ HTML;
         if (SprintCustomer::canEditCredits()) {
             $lblCredTitle = __s('Credit agreement', 'sprint');
             $lblCredHint  = __s('What each customer is granted for this sprint. Leave a field empty to follow their standing agreement.', 'sprint');
-            echo "<div class='modal fade' id='sprint-credits-modal' tabindex='-1' aria-hidden='true'>";
-            echo "<div class='modal-dialog modal-dialog-centered'><div class='modal-content'>";
+            echo "<div class='modal fade' id='sprint-credits-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-credits-title'>";
+            echo "<div class='modal-dialog modal-dialog-centered modal-dialog-scrollable'><div class='modal-content'>";
             echo "<div class='modal-header'>";
-            echo "<h5 class='modal-title'><i class='fas fa-coins me-1'></i> {$lblCredTitle}: <span class='sprint-credits-sprintname'></span></h5>";
-            echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
+            echo "<h5 class='modal-title' id='sprint-credits-title'><i class='fas fa-coins me-1' aria-hidden='true'></i> {$lblCredTitle}: <span class='sprint-credits-sprintname'></span></h5>";
+            echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='" . __s('Close') . "'></button>";
             echo "</div>";
             echo "<div class='modal-body'>";
             echo "<div class='text-muted sprint-small mb-3'>{$lblCredHint}</div>";
@@ -2152,6 +3018,9 @@ HTML;
         $lblCredits    = __s('Credits', 'sprint');
         $lblCreditsMax = __s('Max', 'sprint');
         $lblAgreedFmt  = addslashes(__('standing agreement: %s', 'sprint'));
+        $msgDashFailed = addslashes(__('Save failed', 'sprint'));
+        $msgDashNet    = addslashes(__('Network error — nothing was changed, try again.', 'sprint'));
+        $msgDashSaved  = addslashes(__('Limits saved', 'sprint'));
 
         echo <<<HTML
 <script>
@@ -2194,7 +3063,15 @@ HTML;
         jQuery(reloadMatrix);
     }
 
+    // While the Planning zone is hidden (Work queue view) the matrix is only
+    // marked stale; opening the zone fetches it (sprintBacklogShowPlanning).
     function reloadMatrix() {
+        var \$body = jQuery('.sprint-backlog-dash-body');
+        if (\$body.closest('.sprint-backlog-zone-planning').is('[hidden]')) {
+            \$body.attr('data-stale', '1');
+            return;
+        }
+        \$body.removeAttr('data-stale');
         jQuery('.sprint-backlog-dash-body').css('opacity', 0.5);
         jQuery.ajax({ url: "{$statsUrl}", type: 'GET', dataType: 'json', cache: false,
             data: { horizon: currentHorizon(), view: currentView() } })
@@ -2403,10 +3280,13 @@ HTML;
         }).done(function(resp){
             if (resp && resp.success) {
                 bootstrap.Modal.getOrCreateInstance(\$modal[0]).hide();
+                if (window.sprintBacklogNotify) { window.sprintBacklogNotify('success', "{$msgDashSaved}"); }
                 reloadMatrix();
-            } else if (window.glpi_toast_error) {
-                window.glpi_toast_error((resp && resp.message) || 'Failed');
+            } else if (window.sprintBacklogNotify) {
+                window.sprintBacklogNotify('error', (resp && resp.message) || "{$msgDashFailed}");
             }
+        }).fail(function(){
+            if (window.sprintBacklogNotify) { window.sprintBacklogNotify('error', "{$msgDashNet}"); }
         });
     });
 
@@ -2436,10 +3316,13 @@ HTML;
         }).done(function(resp){
             if (resp && resp.success) {
                 bootstrap.Modal.getOrCreateInstance(\$modal[0]).hide();
+                if (window.sprintBacklogNotify) { window.sprintBacklogNotify('success', "{$msgDashSaved}"); }
                 reloadMatrix();
-            } else if (window.glpi_toast_error) {
-                window.glpi_toast_error((resp && resp.message) || 'Failed');
+            } else if (window.sprintBacklogNotify) {
+                window.sprintBacklogNotify('error', (resp && resp.message) || "{$msgDashFailed}");
             }
+        }).fail(function(){
+            if (window.sprintBacklogNotify) { window.sprintBacklogNotify('error', "{$msgDashNet}"); }
         });
     });
 })();
@@ -3173,7 +4056,7 @@ HTML;
             }
             if ($fastlaneAvg > 0.05) {
                 echo ' ' . sprintf(
-                    __('Those sprints spent an average of %s%% on fastlane work; that average is reserved up front on sprints without a fastlane limit of their own.', 'sprint'),
+                    __('Those sprints spent an average of %s%% on fastlane work. That average is reserved up front on sprints without a fastlane limit of their own.', 'sprint'),
                     SprintMember::formatCapacity($fastlaneAvg)
                 );
             }
@@ -3239,8 +4122,9 @@ HTML;
             }
         }
 
-        // cell[sid][uid][topCat] = capacity; prop[sid][uid] = the part that
-        // is still a backlog proposal. uid 0 collects proposals without owner.
+        // cell[sid][uid][topCat] = assigned + proposed capacity; prop[sid][uid][topCat]
+        // = the part that is still a backlog proposal. uid 0 collects
+        // proposals without owner.
         $cell = $prop = [];
         $add = function (int $sid, int $uid, int $cid, float $cap, bool $proposal = false) use (&$cell, &$prop, $topOf, $categories) {
             if ($cap <= 0) {
@@ -3249,14 +4133,17 @@ HTML;
             $top = ($cid > 0 && isset($categories[$cid])) ? ($topOf[$cid] ?? $cid) : 0;
             $cell[$sid][$uid][$top] = ($cell[$sid][$uid][$top] ?? 0) + $cap;
             if ($proposal) {
-                $prop[$sid][$uid] = ($prop[$sid][$uid] ?? 0) + $cap;
+                $prop[$sid][$uid][$top] = ($prop[$sid][$uid][$top] ?? 0) + $cap;
             }
         };
 
         if ($sprintIds) {
+            // Assigned work counts exactly like SprintMember::usedCapacityBySprint()
+            // (every item in the sprint, fastlane via its members, all help),
+            // so a cell reconciles with the sprint's team view.
             $slot = $fastIds = [];
             foreach ((new SprintItem())->find([
-                'plugin_sprint_sprints_id' => $sprintIds, 'is_parked' => 0,
+                'plugin_sprint_sprints_id' => $sprintIds,
             ]) as $row) {
                 $iid = (int)$row['id'];
                 $sid = (int)$row['plugin_sprint_sprints_id'];
@@ -3281,17 +4168,18 @@ HTML;
                 }
             }
         }
-        // Backlog proposals for the upcoming sprints, same as the category view.
+        // Backlog proposals for the upcoming sprints, on the same rule as the
+        // edit-dialog preview and the team cards (SprintMember::proposedBacklogCriteria()).
         if ($futureIds) {
             $pslot = [];
-            foreach ((new SprintItem())->find([
-                'plugin_sprint_sprints_id' => 0, 'is_blocked' => 0, 'is_parked' => 0,
-                'proposed_sprints_id'      => $futureIds,
-            ]) as $row) {
+            foreach ((new SprintItem())->find(SprintMember::proposedBacklogCriteria($futureIds)) as $row) {
                 $sid = (int)$row['proposed_sprints_id'];
                 $cid = (int)($row['plugin_sprint_sprintcategories_id'] ?? 0);
                 $pslot[(int)$row['id']] = [$sid, $cid];
-                $add($sid, (int)($row['users_id'] ?? 0), $cid, (float)($row['capacity'] ?? 0), true);
+                // A fastlane row spreads its load over members only once in a sprint.
+                if ((int)($row['is_fastlane'] ?? 0) === 0) {
+                    $add($sid, (int)($row['users_id'] ?? 0), $cid, (float)($row['capacity'] ?? 0), true);
+                }
             }
             if ($pslot && SprintItemDependency::isTableReady()) {
                 foreach ((new SprintItemDependency())->find([
@@ -3366,33 +4254,40 @@ HTML;
         $lblOver  = __s('Above the maximum share for this category', 'sprint');
         $lblUnder = __s('Below the minimum share for this category', 'sprint');
 
-        /** One member/team cell: figure, stacked bar, limit flags. */
-        $renderCell = function (int $sid, array $byCat, float $cap, float $proposal, bool $isTeam) use ($topCats, $catName, $catColor, $fmt, $shareLimit, $limits, $lblOver, $lblUnder, $firstFuture): string {
+        /**
+         * One member/team cell on the shared capacity model: assigned work
+         * (solid, per category) then backlog proposals (hatched, per
+         * category), against the available capacity in percentage points.
+         * Overload is an overlay past the capacity tick, never extra width.
+         */
+        $renderCell = function (int $sid, array $byCat, array $propByCat, float $cap, bool $isTeam, string $who) use ($topCats, $catName, $catColor, $fmt, $shareLimit, $limits, $lblOver, $lblUnder, $firstFuture, $sprints): string {
             $nowCls = $sid === $firstFuture ? ' sprint-member-now' : '';
             $sum = array_sum($byCat);
             if ($sum <= 0 && $cap <= 0) {
                 return "<td class='text-center sprint-matrix-cell{$nowCls}'><div class='text-muted'>–</div></td>";
             }
-            $loadPct = $cap > 0 ? 100 * $sum / $cap : 0.0;
-            $over    = $cap > 0 ? $sum > $cap + 0.05 : $sum > 0;
-            $tip     = [];
-            if ($cap > 0) {
-                $tip[] = sprintf(__('%1$s%% of %2$s%% capacity', 'sprint'), $fmt($sum), $fmt($cap));
-            } else {
-                $tip[] = sprintf(__('%s%% planned, no capacity in this sprint', 'sprint'), $fmt($sum));
-            }
+            $proposal = (float)array_sum($propByCat);
+            $assigned = max($sum - $proposal, 0.0);
+            $f     = SprintMember::capacityFigures($cap, $cap, $assigned, 0.0, 0.0, 0.0, $proposal);
+            $state = $f['state_after_proposals'];
+            $over  = $state === SprintCapacityMath::STATE_OVER;
+            $tip   = [];
+            $tip[] = $cap > 0
+                ? sprintf(__('Assigned %1$s, proposed %2$s of %3$s available', 'sprint'), $fmt($assigned) . '%', $fmt($proposal) . '%', $fmt($cap) . '%')
+                : sprintf(__('%s%% planned, no capacity in this sprint', 'sprint'), $fmt($sum));
             $order = array_keys($topCats);
             $order[] = 0;
             $flags = [];
             foreach ($order as $top) {
                 $top = (int)$top;
                 $v   = (float)($byCat[$top] ?? 0);
+                $pv  = (float)($propByCat[$top] ?? 0);
                 $maxS = $isTeam ? (float)($limits[$sid][$top]['max'] ?? 0) : $shareLimit($sid, $top, 'max');
                 $minS = $isTeam ? (float)($limits[$sid][$top]['min'] ?? 0) : $shareLimit($sid, $top, 'min');
                 $share = $isTeam ? $v : ($cap > 0 ? $v / $cap : 0.0);
                 if ($v > 0) {
                     $tip[] = $catName($top) . ': ' . $fmt($v) . '%'
-                        . ($cap > 0 ? ' (' . (int)round(100 * $v / $cap) . '%)' : '');
+                        . ($pv > 0 ? ' (' . sprintf(__('of which %s%% still a backlog proposal', 'sprint'), $fmt($pv)) . ')' : '');
                 }
                 if ($cap > 0 || $isTeam) {
                     if ($maxS > 0 && $share > $maxS + ($isTeam ? 0.05 : 0.005)) {
@@ -3404,32 +4299,58 @@ HTML;
                     }
                 }
             }
-            if ($proposal > 0.05) {
-                $tip[] = sprintf(__('of which %s%% still a backlog proposal', 'sprint'), $fmt($proposal));
+            if ($cap > 0) {
+                $tip[] = SprintMember::remainingText($f, $proposal > 0);
             }
+            $sprintName = (string)($sprints[$sid]['name'] ?? '');
+            $desc = ($sprintName !== ''
+                    ? sprintf(__('Capacity of %1$s in %2$s', 'sprint'), $who, $sprintName)
+                    : sprintf(__('Capacity of %s', 'sprint'), $who))
+                . ' — ' . implode(', ', $tip);
+
             $bg  = $over && $cap > 0 ? "background:color-mix(in srgb,#dc3545 12%,transparent);" : '';
             $out = "<td class='text-center sprint-matrix-cell{$nowCls}' style='{$bg}' title='" . htmlescape(implode("\n", $tip)) . "'>";
+            // Main figure: load against available, both in percentage points.
             $out .= "<div class='fw-bold" . ($over ? ' text-danger' : '') . "'>"
-                . ($cap > 0 ? (int)round($loadPct) . '%' : $fmt($sum) . '%') . "</div>";
+                . ($cap > 0 ? $fmt($sum) . ' / ' . $fmt($cap) . '%' : $fmt($sum) . '%') . "</div>";
             $scale = max($cap, $sum);
             if ($sum > 0 && $scale > 0) {
-                $out .= "<div class='sprint-matrix-bar sprint-member-bar' style='display:flex;'>";
-                foreach ($order as $top) {
-                    $v = (float)($byCat[(int)$top] ?? 0);
-                    if ($v <= 0) {
-                        continue;
+                $out .= "<div class='sprint-matrix-bar sprint-member-bar' role='img' aria-label='" . htmlescape($desc) . "' style='display:flex;'>";
+                foreach ([false, true] as $proposed) {
+                    foreach ($order as $top) {
+                        $v = $proposed
+                            ? (float)($propByCat[(int)$top] ?? 0)
+                            : (float)($byCat[(int)$top] ?? 0) - (float)($propByCat[(int)$top] ?? 0);
+                        if ($v <= 0.001) {
+                            continue;
+                        }
+                        $w = round(100 * $v / $scale, 1);
+                        $c = htmlescape($catColor((int)$top));
+                        $out .= $proposed
+                            ? "<div class='sprint-member-seg-proposed' style='width:{$w}%;background:repeating-linear-gradient(135deg,{$c} 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px {$c};'></div>"
+                            : "<div style='width:{$w}%;background:{$c};'></div>";
                     }
-                    $w = round(100 * $v / $scale, 1);
-                    $out .= "<div style='width:{$w}%;background:" . htmlescape($catColor((int)$top)) . ";'></div>";
                 }
                 if ($cap > 0 && $sum > $cap) {
                     $tick = round(100 * $cap / $scale, 1);
+                    $ow   = round(100 - $tick, 1);
+                    $out .= "<span class='sprint-member-seg-over' style='position:absolute;top:0;bottom:0;left:{$tick}%;width:{$ow}%;"
+                        . "background:repeating-linear-gradient(45deg,rgba(220,53,69,.85) 0 2px,transparent 2px 5px);'></span>";
                     $out .= "<span class='sprint-matrix-min-tick' style='left:{$tick}%;background:#dc3545;'></span>";
                 }
                 $out .= "</div>";
             }
+            if ($proposal > 0.05 && $cap > 0) {
+                $out .= "<div class='text-muted sprint-small'>"
+                    . htmlescape(sprintf(__('%1$s assigned + %2$s proposed', 'sprint'), $fmt($assigned) . '%', $fmt($proposal) . '%'))
+                    . "</div>";
+            }
             if ($cap > 0 && $sum > 0) {
-                $out .= "<div class='text-muted sprint-small'>" . $fmt($sum) . " / " . $fmt($cap) . "%</div>";
+                $out .= "<div class='sprint-small" . ($over ? ' sprint-cap-over' : ' text-muted') . "'>"
+                    . htmlescape(SprintMember::remainingText($f, $proposal > 0)) . "</div>";
+                if (in_array($state, [SprintCapacityMath::STATE_ALMOST_FULL, SprintCapacityMath::STATE_FULL], true)) {
+                    $out .= "<div>" . SprintMember::capacityStateBadge($state, $f) . "</div>";
+                }
             }
             if ($flags) {
                 $out .= "<div class='sprint-member-flags'>" . implode(' ', $flags) . "</div>";
@@ -3461,7 +4382,7 @@ HTML;
             $uid = (int)$uid;
             echo "<tr><td><i class='fas fa-user text-muted me-1' style='font-size:0.85em;'></i>" . htmlescape($name) . "</td>";
             foreach ($sprintIds as $sid) {
-                echo $renderCell($sid, $cell[$sid][$uid] ?? [], (float)($avail[$sid][$uid] ?? 0), (float)($prop[$sid][$uid] ?? 0), false);
+                echo $renderCell($sid, $cell[$sid][$uid] ?? [], $prop[$sid][$uid] ?? [], (float)($avail[$sid][$uid] ?? 0), false, $name);
             }
             $sig = [];
             foreach ($topCats as $top => $c) {
@@ -3489,7 +4410,7 @@ HTML;
         if ($hasUnowned) {
             echo "<tr><td class='text-muted'><i class='fas fa-user-slash me-1' style='font-size:0.85em;'></i>" . __('No owner yet', 'sprint') . "</td>";
             foreach ($sprintIds as $sid) {
-                echo $renderCell($sid, $cell[$sid][0] ?? [], 0.0, (float)($prop[$sid][0] ?? 0), false);
+                echo $renderCell($sid, $cell[$sid][0] ?? [], $prop[$sid][0] ?? [], 0.0, false, __('No owner yet', 'sprint'));
             }
             echo "<td></td></tr>";
         }
@@ -3504,7 +4425,12 @@ HTML;
                     $byCat[$top] = ($byCat[$top] ?? 0) + $v;
                 }
             }
-            echo $renderCell($sid, $byCat, (float)($team[$sid] ?? 0), (float)array_sum($prop[$sid] ?? []), true);
+            foreach (($prop[$sid] ?? []) as $uid => $cats) {
+                foreach ($cats as $top => $v) {
+                    $tprop[$top] = ($tprop[$top] ?? 0) + $v;
+                }
+            }
+            echo $renderCell($sid, $byCat, $tprop, (float)($team[$sid] ?? 0), true, __('Team', 'sprint'));
         }
         echo "<td></td></tr>";
         echo "</tbody></table>";
@@ -3517,9 +4443,16 @@ HTML;
         }
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:#6c757d;margin-right:5px;vertical-align:middle;'></span>"
             . __('No category', 'sprint') . "</span>";
+        echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:repeating-linear-gradient(135deg,#6c757d 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px #6c757d;margin-right:5px;vertical-align:middle;'></span>"
+            . __('Hatched: backlog proposal, not assigned yet', 'sprint') . "</span>";
+        echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:3px;background:repeating-linear-gradient(45deg,#dc3545 0 2px,transparent 2px 5px);margin-right:5px;vertical-align:middle;'></span>"
+            . __('Over capacity', 'sprint') . "</span>";
         echo "</div>";
         echo "<div class='text-muted sprint-small' style='padding:0 4px 6px;'>"
-            . __('Bar = share of the member\'s own capacity per category (subcategories rolled up). Percentages are the load against that capacity; the arrows compare the member\'s share with the sprint\'s category limits, read as a share of the team capacity. Backlog proposals that already have an owner are included.', 'sprint')
+            . htmlescape(sprintf(
+                __('Bar = assigned work per category (solid), then backlog proposals (hatched), against the member\'s available capacity. Figures are percentage points of a full sprint: assigned work matches the sprint\'s team capacity view, remaining is shown after proposals, almost full means less than %s%% remains. The arrows compare the member\'s share with the sprint\'s category limits, read as a share of the team capacity.', 'sprint'),
+                SprintMember::formatCapacity(SprintCapacityMath::ALMOST_FULL_PP)
+            ))
             . ' ' . sprintf(
                 __('Window: the next %d planned sprints. Realised work per member is on the sprint overview.', 'sprint'),
                 count($sprints)
@@ -3559,7 +4492,7 @@ HTML;
         echo "<span class='text-muted sprint-small'>"
             . __('New backlog work versus work assigned or resolved, per week.', 'sprint') . "</span>";
         echo "<span style='flex:1;'></span>";
-        echo "<select class='form-select form-select-sm sprint-backlog-flow-cat' style='max-width:220px;'>";
+        echo "<select class='form-select form-select-sm sprint-backlog-flow-cat' style='max-width:220px;' aria-label='" . __s('Category', 'sprint') . "'>";
         echo "<option value='0'>" . __('All categories', 'sprint') . "</option>";
         echo SprintCategory::dropdownOptions();
         echo "</select>";
@@ -3661,7 +4594,7 @@ HTML;
         $count = count($blockedItems);
 
         echo "<div class='sprint-backlog-blocked' style='margin:18px 0;border:1px solid #f5c2c7;border-radius:8px;overflow:hidden;'>";
-        echo "<div class='sprint-backlog-blocked-header' "
+        echo "<div class='sprint-backlog-blocked-header' role='button' tabindex='0' aria-expanded='true' aria-controls='sprint-backlog-blocked-body' "
             . "style='display:flex;align-items:center;gap:8px;padding:10px 14px;background:color-mix(in srgb,#dc3545 14%,var(--tblr-bg-surface,#fff));color:var(--tblr-danger,#b02a37);font-weight:700;cursor:pointer;user-select:none;'>";
         echo "<i class='fas fa-chevron-down sprint-backlog-blocked-chevron' style='transition:transform 0.15s;'></i>";
         echo "<i class='fas fa-ban'></i>";
@@ -3672,7 +4605,7 @@ HTML;
             . __('Review periodically and unblock when ready.', 'sprint') . "</span>";
         echo "</div>";
 
-        echo "<div class='sprint-backlog-blocked-body' style='padding:0;'>";
+        echo "<div class='sprint-backlog-blocked-body' id='sprint-backlog-blocked-body' style='padding:0;'>";
         if ($count === 0) {
             echo "<div class='center text-muted' style='padding:14px;'>"
                 . __('No blocked items.', 'sprint') . "</div>";
@@ -3694,15 +4627,22 @@ HTML;
                 if (!\$wrap.length) return;
                 var \$body = \$wrap.find('.sprint-backlog-blocked-body');
                 var \$chev = \$wrap.find('.sprint-backlog-blocked-chevron');
-                if (localStorage.getItem(key) === '1') {
+                var \$head = \$wrap.find('.sprint-backlog-blocked-header');
+                var stored = null;
+                try { stored = localStorage.getItem(key); } catch (e) {}
+                if (stored === '1') {
                     \$body.hide();
                     \$chev.css('transform', 'rotate(-90deg)');
+                    \$head.attr('aria-expanded', 'false');
                 }
-                \$wrap.find('.sprint-backlog-blocked-header').on('click', function() {
+                \$head.on('click', function() {
                     var collapsed = \$body.is(':visible');
                     \$body.slideToggle(120);
                     \$chev.css('transform', collapsed ? 'rotate(-90deg)' : 'rotate(0deg)');
-                    localStorage.setItem(key, collapsed ? '1' : '0');
+                    \$head.attr('aria-expanded', collapsed ? 'false' : 'true');
+                    try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
+                }).on('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); \$head.trigger('click'); }
                 });
             });
         })();
@@ -3799,6 +4739,18 @@ HTML;
         $estCapacity  = (float)($row['capacity'] ?? 0);
         $proposedId   = (int)($row['proposed_sprints_id'] ?? 0);
         $proposedName = $proposedId > 0 ? (string)($sprintNames[$proposedId] ?? ('#' . $proposedId)) : '';
+        // An open assignment request may target another sprint than the proposal.
+        $pendingSid   = $flags['pending_assign'] ? ($flags['pending_sprint_id'] ?: $proposedId) : 0;
+        $pendingName  = '';
+        if ($pendingSid > 0) {
+            if (isset($sprintNames[$pendingSid])) {
+                $pendingName = (string)$sprintNames[$pendingSid];
+            } else {
+                $ps = new Sprint();
+                $pendingName = $ps->getFromDB($pendingSid) ? (string)$ps->fields['name'] : ('#' . $pendingSid);
+            }
+        }
+        $rowName = (string)$row['name'];
 
         echo "<tr class='tab_bg_1 sprint-filterable-row sprint-backlog-row' "
             . "data-item-id='" . (int)$row['id'] . "' "
@@ -3815,6 +4767,9 @@ HTML;
                 : '')
             . "data-proposed-sprint-id='" . $proposedId . "' "
             . "data-proposed-sprint-name='" . htmlescape($proposedName) . "' "
+            . "data-pending-assign='" . ($flags['pending_assign'] ? 1 : 0) . "' "
+            . "data-pending-sprint-name='" . htmlescape($pendingName) . "' "
+            . "data-can-assign='" . ($flags['can_assign'] ? 1 : 0) . "' "
             . "data-is-fastlane='" . ($isFastlane ? 1 : 0) . "' "
             . "data-is-blocked='" . ($isBlocked ? 1 : 0) . "' "
             . "data-is-adhoc='" . ($isAdhoc ? 1 : 0) . "' "
@@ -3825,24 +4780,38 @@ HTML;
             . "data-item-tags='" . htmlescape(SprintItem::tagsToBlob($rowTags)) . "'>";
         if ($reorderable && $canedit) {
             echo "<td class='sprint-backlog-grip' style='cursor:grab;text-align:center;color:#adb5bd;' "
-                . "title='" . __('Drag to reorder — Ctrl/Cmd-click rows to select more and drag them together', 'sprint') . "'><i class='fas fa-grip-vertical'></i></td>";
+                . "title='" . __s('Drag to reorder — Ctrl/Cmd-click rows to select more and drag them together', 'sprint') . "'><i class='fas fa-grip-vertical' aria-hidden='true'></i></td>";
         }
         if ($reorderable) {
-            echo "<td class='center'><span class='sprint-backlog-rank text-muted sprint-small fw-bold'>"
-                . ($rank > 0 ? $rank : '') . "</span></td>";
+            echo "<td class='center sprint-backlog-rank-cell'>";
+            // Up/down: the keyboard (and touch) alternative to dragging.
+            if ($canedit) {
+                echo "<button type='button' class='btn btn-link btn-sm p-0 sprint-backlog-move' data-dir='up' "
+                    . "aria-label='" . htmlescape(sprintf(__('Move "%s" up', 'sprint'), $rowName)) . "' title='" . __s('Move up', 'sprint') . "'>"
+                    . "<i class='fas fa-chevron-up' aria-hidden='true'></i></button>";
+            }
+            echo "<span class='sprint-backlog-rank text-muted sprint-small fw-bold'>"
+                . ($rank > 0 ? $rank : '') . "</span>";
+            if ($canedit) {
+                echo "<button type='button' class='btn btn-link btn-sm p-0 sprint-backlog-move' data-dir='down' "
+                    . "aria-label='" . htmlescape(sprintf(__('Move "%s" down', 'sprint'), $rowName)) . "' title='" . __s('Move down', 'sprint') . "'>"
+                    . "<i class='fas fa-chevron-down' aria-hidden='true'></i></button>";
+            }
+            echo "</td>";
         }
-
-        $isReady = $proposedId > 0 && $ownerId > 0 && $estCapacity > 0;
 
         // Name cell carries the compact indicators: type icon, fastlane bolt,
-        // blocked ban, tags and the ready badge.
+        // blocked ban, tags and the planning badge.
         echo "<td>";
-        echo "<i class='{$typeIcon[0]}' style='color:{$typeIcon[1]};margin-right:6px;opacity:0.85;' title='" . htmlescape($typeLabel) . "'></i>";
+        echo "<i class='{$typeIcon[0]}' style='color:{$typeIcon[1]};margin-right:6px;opacity:0.85;' title='" . htmlescape($typeLabel) . "' aria-hidden='true'></i>"
+            . "<span class='visually-hidden'>" . htmlescape($typeLabel) . ": </span>";
         if ($isFastlane) {
-            echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;' title='" . __s('Fastlane', 'sprint') . "'></i>";
+            echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;' title='" . __s('Fastlane', 'sprint') . "' aria-hidden='true'></i>"
+                . "<span class='visually-hidden'>" . __s('Fastlane', 'sprint') . ", </span>";
         }
         if ($isBlocked) {
-            echo "<i class='fas fa-ban' style='color:#dc3545;margin-right:4px;' title='" . __s('Blocked', 'sprint') . "'></i>";
+            echo "<i class='fas fa-ban' style='color:#dc3545;margin-right:4px;' title='" . __s('Blocked', 'sprint') . "' aria-hidden='true'></i>"
+                . "<span class='visually-hidden'>" . __s('Blocked', 'sprint') . ", </span>";
         }
         echo "<a href='" . SprintItem::getFormURLWithID($row['id']) . "'>"
             . htmlescape($row['name']) . "</a>"
@@ -3850,10 +4819,7 @@ HTML;
             . SprintItem::renderAdhocBadge($isAdhoc)
             . ($showCategoryPill ? SprintCategory::renderPill($categoryId) : '')
             . SprintItem::renderTagPills($rowTags);
-        if ($isReady) {
-            echo " <span class='sprint-ready-badge' title='" . __('Owner, capacity and sprint set — ready for the Scrum Master to assign', 'sprint') . "'>"
-                . "<i class='fas fa-check'></i> " . __('Ready', 'sprint') . "</span>";
-        }
+        echo self::renderPlanningBadge($row);
         // Aging: unplanned active items that sit too long get a nudge.
         $agingDays = Config::getBacklogAgingDays();
         if ($reorderable && $agingDays > 0 && $proposedId <= 0 && !empty($row['date_creation'])) {
@@ -3874,9 +4840,17 @@ HTML;
             : "<span class='text-muted'>" . __('Unassigned', 'sprint') . "</span>";
         echo "</td>";
 
-        echo "<td class='center'>";
-        if ($proposedId > 0) {
-            echo htmlescape($proposedName);
+        echo "<td class='center sprint-backlog-sprint-cell'>";
+        if ($pendingSid > 0) {
+            // A request is never shown as if it were already applied.
+            echo "<span class='sprint-state-badge sprint-state-requested' title='"
+                . htmlescape(sprintf(__('Assignment requested: Backlog → %s. The item stays on the backlog until the Scrum Master accepts.', 'sprint'), $pendingName)) . "'>"
+                . "<i class='fas fa-hourglass-half me-1' aria-hidden='true'></i>" . __s('Requested — waiting for Scrum Master', 'sprint') . "</span>"
+                . "<div class='sprint-small text-muted'>" . __s('Backlog', 'sprint') . " → " . htmlescape($pendingName) . "</div>";
+        } elseif ($proposedId > 0) {
+            echo "<span class='sprint-state-badge sprint-state-proposed' title='"
+                . __s('Proposed sprint: the item stays on the backlog until it is assigned.', 'sprint') . "'>" . __s('Proposed', 'sprint') . "</span> "
+                . htmlescape($proposedName);
             // Capacity chip: what remains for this owner in that sprint once
             // everything pending (incl. this row) is assigned.
             $capInfo = SprintMember::backlogCapacityPreview($proposedId, $ownerId, (int)$row['id']);
@@ -3886,19 +4860,28 @@ HTML;
                         . __s('Owner is not a member of the selected sprint', 'sprint') . "'>"
                         . "<i class='fas fa-user-slash'></i></span>";
                 } else {
-                    $freeAfter = $capInfo['total'] - $capInfo['used'] - $capInfo['pending_other'] - $estCapacity;
-                    $chipClass = $freeAfter < 0 ? 'sprint-cap-chip-over' : ($freeAfter < 10 ? 'sprint-cap-chip-warn' : 'sprint-cap-chip-ok');
-                    $tooltip = sprintf(
-                        __('Capacity %1$s: total %2$s%%, used in sprint %3$s%%, pending from backlog %4$s%%, this item %5$s%% → %6$s%% free after assigning', 'sprint'),
-                        $proposedName,
-                        SprintMember::formatCapacity($capInfo['total']),
-                        SprintMember::formatCapacity($capInfo['used']),
-                        SprintMember::formatCapacity($capInfo['pending_other']),
-                        SprintMember::formatCapacity($estCapacity),
-                        SprintMember::formatCapacity($freeAfter)
+                    // Shared model and threshold: assigned work, then everything
+                    // proposed (other rows + this one) on top of it.
+                    $f = SprintMember::capacityFigures(
+                        $capInfo['figures']['set'],
+                        $capInfo['figures']['available'],
+                        $capInfo['figures']['regular'],
+                        $capInfo['figures']['fastlane'],
+                        $capInfo['figures']['helping'],
+                        $capInfo['figures']['helping_open'],
+                        $capInfo['pending_other'] + $estCapacity
                     );
+                    $chipClass = [
+                        SprintCapacityMath::STATE_OVER        => 'sprint-cap-chip-over',
+                        SprintCapacityMath::STATE_FULL        => 'sprint-cap-chip-warn',
+                        SprintCapacityMath::STATE_ALMOST_FULL => 'sprint-cap-chip-warn',
+                    ][$f['state_after_proposals']] ?? 'sprint-cap-chip-neutral';
+                    $tooltip = SprintMember::capacityDescription($f, SprintCache::userName($ownerId), $proposedName);
+                    $chipText = $f['over_after_proposals'] > SprintCapacityMath::EPSILON
+                        ? sprintf(__('%s%% over capacity', 'sprint'), SprintMember::formatCapacity($f['over_after_proposals']))
+                        : SprintMember::formatCapacity($f['remaining_after_proposals']) . '% ' . __('free', 'sprint');
                     echo " <span class='sprint-cap-chip {$chipClass}' title='" . htmlescape($tooltip) . "'>"
-                        . SprintMember::formatCapacity($freeAfter) . "% " . __('free', 'sprint') . "</span>";
+                        . htmlescape($chipText) . "</span>";
                 }
             }
         } else {
@@ -3918,11 +4901,12 @@ HTML;
         }
 
         if ($canedit) {
-            echo "<td class='center' style='white-space:nowrap;'>";
+            echo "<td class='center sprint-backlog-actions' style='white-space:nowrap;'>";
             echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-backlog-edit-btn me-1' "
                 . "data-item-id='" . (int)$row['id'] . "' "
+                . "aria-label='" . htmlescape(sprintf(__('Edit "%s"', 'sprint'), $rowName)) . "' "
                 . "title='" . __s('Edit', 'sprint') . "'>"
-                . "<i class='fas fa-pen'></i></button>";
+                . "<i class='fas fa-pen' aria-hidden='true'></i></button>";
             if ($flags['can_assign'] || $proposedId <= 0) {
                 // Assign posts the pre-selected sprint; server-side permission
                 // check stays in backlog.form.php / assigntosprint.php. The
@@ -3933,15 +4917,16 @@ HTML;
                 echo Html::hidden('id', ['value' => $row['id']]);
                 echo Html::hidden('plugin_sprint_sprints_id', ['value' => $proposedId]);
                 $assignTitle = $proposedId <= 0
-                    ? __('Pre-select a sprint first (edit the item)', 'sprint')
+                    ? __('Propose a sprint first (edit the item)', 'sprint')
                     : ($isFastlane
                         ? __('Fastlane item — anyone can assign it to a sprint', 'sprint')
-                        : __('Assign to the selected sprint', 'sprint'));
+                        : sprintf(__('Assign to sprint %s', 'sprint'), $proposedName));
                 echo "<button type='submit' name='assign_to_sprint' value='1' "
                     . "class='btn btn-sm btn-primary sprint-backlog-assign-btn' "
                     . ($proposedId <= 0 ? "disabled " : "")
+                    . "aria-label='" . htmlescape($rowName . ': ' . $assignTitle) . "' "
                     . "title='" . htmlescape($assignTitle) . "'>"
-                    . "<i class='fas fa-arrow-right'></i></button>";
+                    . "<i class='fas fa-arrow-right' aria-hidden='true'></i><span class='sprint-btn-text'> " . __s('Assign', 'sprint') . "</span></button>";
                 Html::closeForm();
             } else {
                 // Same spot, same intent: non-Scrum-Masters ask the Scrum
@@ -3952,10 +4937,14 @@ HTML;
                     . "class='btn btn-sm " . ($hasPending ? "btn-outline-secondary" : "btn-outline-primary") . " sprint-backlog-request-btn' "
                     . "data-item-id='" . (int)$row['id'] . "' "
                     . ($hasPending ? "disabled " : "")
+                    . "aria-label='" . htmlescape($rowName . ': ' . ($hasPending
+                        ? __('Assignment already requested — waiting for the Scrum Master', 'sprint')
+                        : __('Ask the Scrum Master to assign this item to the selected sprint', 'sprint'))) . "' "
                     . "title='" . ($hasPending
                         ? __s('Assignment already requested — waiting for the Scrum Master', 'sprint')
                         : __s('Ask the Scrum Master to assign this item to the selected sprint', 'sprint')) . "'>"
-                    . "<i class='fas fa-" . ($hasPending ? "hourglass-half" : "paper-plane") . "'></i></button>";
+                    . "<i class='fas fa-" . ($hasPending ? "hourglass-half" : "paper-plane") . "' aria-hidden='true'></i>"
+                    . "<span class='sprint-btn-text'> " . ($hasPending ? __s('Requested', 'sprint') : __s('Request', 'sprint')) . "</span></button>";
             }
             echo "</td>";
         }
@@ -3964,17 +4953,17 @@ HTML;
 
     private static function renderFilterBar(array $typeLabels, array $owners = [], array $sprintNames = [], bool $canedit = false): void
     {
-        echo "<div class='sprint-filter-bar sprint-backlog-filter' "
+        echo "<div class='sprint-filter-bar sprint-backlog-filter' role='search' aria-label='" . __s('Filter backlog items', 'sprint') . "' "
             . "style='display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;"
             . "padding:10px;margin-bottom:12px;background:var(--tblr-bg-surface-secondary,#f8fafc);border:1px solid var(--tblr-border-color,#e2e8f0);border-radius:8px;'>";
 
         echo "<div class='d-flex align-items-center gap-1 text-muted sprint-small'>"
-            . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
+            . "<i class='fas fa-filter' aria-hidden='true'></i><span>" . __('Filter', 'sprint') . "</span></div>";
 
         echo "<input type='search' class='form-control form-control-sm sf-text' "
-            . "style='max-width:240px;' placeholder='" . __('Search by name', 'sprint') . "'>";
+            . "style='max-width:240px;' placeholder='" . __s('Search by name', 'sprint') . "' aria-label='" . __s('Search by name', 'sprint') . "'>";
 
-        echo "<select class='form-select form-select-sm sf-type' style='max-width:200px;'>";
+        echo "<select class='form-select form-select-sm sf-type' style='max-width:200px;' aria-label='" . __s('Type', 'sprint') . "'>";
         echo "<option value=''>" . __('All') . " — " . __('Type', 'sprint') . "</option>";
         echo "<option value='Ticket'>" . htmlescape($typeLabels['Ticket']) . "</option>";
         echo "<option value='Change'>" . htmlescape($typeLabels['Change']) . "</option>";
@@ -3986,7 +4975,7 @@ HTML;
         // Owner filter, handled by the shared filter JS (.sf-owner +
         // data-users-id / data-owner-name), as inside a sprint.
         if (!empty($owners)) {
-            echo "<select class='form-select form-select-sm sf-owner' style='max-width:220px;'>";
+            echo "<select class='form-select form-select-sm sf-owner' style='max-width:220px;' aria-label='" . __s('Owner', 'sprint') . "'>";
             echo "<option value=''>" . __('All owners', 'sprint') . "</option>";
             echo "<option value='__unassigned__'>" . __('Unassigned only', 'sprint') . "</option>";
             foreach ($owners as $uidOpt => $name) {
@@ -3999,9 +4988,9 @@ HTML;
         }
 
         if (!empty($sprintNames)) {
-            echo "<select class='form-select form-select-sm sf-sprint' style='max-width:220px;'>";
+            echo "<select class='form-select form-select-sm sf-sprint' style='max-width:220px;' aria-label='" . __s('Proposed sprint', 'sprint') . "'>";
             echo "<option value=''>" . __('All sprints', 'sprint') . "</option>";
-            echo "<option value='__none__'>" . __('Not yet planned', 'sprint') . "</option>";
+            echo "<option value='__none__'>" . __('No sprint proposed', 'sprint') . "</option>";
             foreach ($sprintNames as $sidOpt => $name) {
                 echo "<option value='" . (int)$sidOpt . "'>" . htmlescape((string)$name) . "</option>";
             }
@@ -4010,7 +4999,7 @@ HTML;
 
         $definedTags = Config::getDefinedTags();
         if (!empty($definedTags)) {
-            echo "<select class='form-select form-select-sm sf-tag' style='max-width:180px;'>";
+            echo "<select class='form-select form-select-sm sf-tag' style='max-width:180px;' aria-label='" . __s('Tag', 'sprint') . "'>";
             echo "<option value=''>" . __('All tags', 'sprint') . "</option>";
             foreach ($definedTags as $tag) {
                 echo "<option value='" . htmlescape(mb_strtolower($tag)) . "'>" . htmlescape($tag) . "</option>";
@@ -4019,7 +5008,7 @@ HTML;
         }
 
         echo "<button type='button' class='btn btn-sm btn-outline-secondary sf-reset' data-sprint-action='filter-reset'>"
-            . "<i class='fas fa-times me-1'></i>" . __('Reset', 'sprint') . "</button>";
+            . "<i class='fas fa-times me-1' aria-hidden='true'></i>" . __('Reset filters', 'sprint') . "</button>";
 
         // Personal view: how THIS user sees the backlog. "Project, then name"
         // re-orders every category client-side (natural order, so "Task 2"
@@ -4029,14 +5018,19 @@ HTML;
         $sortMode = UserPref::backlogSort();
         echo "<span class='vr d-none d-md-inline-block' style='height:22px;opacity:0.25;'></span>";
         echo "<div class='d-flex align-items-center gap-1 text-muted sprint-small'>"
-            . "<i class='fas fa-eye'></i><span>" . __('View', 'sprint') . "</span></div>";
-        echo "<select class='form-select form-select-sm sprint-backlog-sort' style='max-width:200px;' title='"
+            . "<i class='fas fa-eye' aria-hidden='true'></i><span>" . __('Order', 'sprint') . "</span></div>";
+        echo "<select class='form-select form-select-sm sprint-backlog-sort' style='max-width:200px;' aria-label='" . __s('Order', 'sprint') . "' title='"
             . __s('Personal view, saved as your default: the order only changes for you — the team ranking stays as it is', 'sprint') . "'>";
         echo "<option value='team'" . ($sortMode === 'team' ? ' selected' : '') . ">" . __('Team ranking', 'sprint') . "</option>";
         echo "<option value='project'" . ($sortMode === 'project' ? ' selected' : '') . ">" . __('Project, then name', 'sprint') . "</option>";
         echo "</select>";
 
         echo "</div>";
+
+        // Active filters as removable chips + "x of y items" (filled by JS).
+        echo "<div class='sprint-backlog-chips' aria-live='polite'>"
+            . "<span class='sprint-backlog-result text-muted sprint-small'></span>"
+            . "<span class='sprint-backlog-chip-list'></span></div>";
     }
 
     /** item_update hook tail: purge backlog rows whose linked item just got solved. */

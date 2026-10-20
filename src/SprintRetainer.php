@@ -162,9 +162,9 @@ class SprintRetainer extends CommonDBTM
         echo "<tr class='tab_bg_2'><th colspan='4'><i class='" . self::getIcon() . " me-1'></i>"
             . __('Retainer', 'sprint') . "</th></tr>";
         echo "<tr class='tab_bg_1'><td colspan='4' class='text-muted' style='font-size:0.85em;'>"
-            . __('A retainer grants the customer a fixed number of credits every sprint. Unused credits lapse when that sprint completes; work beyond the grant is drawn from the credits bought through the ledger.', 'sprint')
+            . __('A retainer grants the customer a fixed number of credits every sprint. Unused credits lapse when that sprint completes. Work beyond the grant is drawn from the credits bought through the ledger.', 'sprint')
             . ' '
-            . __('A rule applies from its start date until the next rule starts, so a newer rule always ends the one before it. A rule with 0 credits ends the retainer; a rule without a date applies from the beginning.', 'sprint')
+            . __('A rule applies from its start date until the next rule starts, so a newer rule always ends the one before it. A rule with 0 credits ends the retainer. A rule without a date applies from the beginning.', 'sprint')
             . "</td></tr>";
 
         if ($customerId <= 0) {
@@ -208,17 +208,18 @@ class SprintRetainer extends CommonDBTM
                 echo $rule['date_start'] !== '' ? htmlescape(Html::convDate($rule['date_start'])) : "<span class='text-muted'>" . __('from the beginning', 'sprint') . "</span>";
             }
             echo "</td>";
-            echo "<td><input type='number' class='form-control form-control-sm' name='retainer[{$id}][credits]' min='0' step='0.25' value='"
+            echo "<td><input type='number' class='form-control form-control-sm' name='retainer[{$id}][credits]' aria-label='" . __s('Credits per sprint', 'sprint') . "' min='0' step='0.25' value='"
                 . htmlescape(SprintCustomer::formatCredits($rule['credits'])) . "'" . ($canedit ? '' : ' readonly') . "></td>";
-            echo "<td><input type='number' class='form-control form-control-sm' name='retainer[{$id}][cap]' min='0' step='0.25' value='"
+            echo "<td><input type='number' class='form-control form-control-sm' name='retainer[{$id}][cap]' aria-label='" . __s('Cap per sprint', 'sprint') . "' min='0' step='0.25' value='"
                 . htmlescape(SprintCustomer::formatCredits($rule['cap'])) . "'" . ($canedit ? '' : ' readonly') . "></td>";
-            echo "<td><input type='text' class='form-control form-control-sm' name='retainer[{$id}][comment]' value='"
+            echo "<td><input type='text' class='form-control form-control-sm' name='retainer[{$id}][comment]' aria-label='" . __s('Comments') . "' value='"
                 . htmlescape($rule['comment']) . "'" . ($canedit ? '' : ' readonly') . "></td>";
             echo "<td class='text-nowrap'>" . $status;
             if ($canedit) {
                 echo " <button type='submit' name='delete_retainer' value='{$id}' class='btn btn-sm btn-outline-danger' formnovalidate "
-                    . "title='" . __s('Remove this rule', 'sprint') . "' onclick=\"return confirm('" . __s('Remove this rule?', 'sprint') . "');\">"
-                    . "<i class='fas fa-trash'></i></button>";
+                    . "title='" . __s('Remove this rule', 'sprint') . "' aria-label='" . __s('Remove this rule', 'sprint') . "' "
+                    . "data-sprint-arm='" . __s('Click again to remove', 'sprint') . "'>"
+                    . "<i class='fas fa-trash' aria-hidden='true'></i></button>";
             }
             echo "</td></tr>";
         }
@@ -228,16 +229,17 @@ class SprintRetainer extends CommonDBTM
             echo "<td>";
             Html::showDateField('retainer_new[date_start]', ['value' => '', 'rand' => 699999]);
             echo "</td>";
-            echo "<td><input type='number' class='form-control form-control-sm' name='retainer_new[credits]' min='0' step='0.25' value='' placeholder='"
+            echo "<td><input type='number' class='form-control form-control-sm' name='retainer_new[credits]' aria-label='" . __s('Credits per sprint', 'sprint') . "' min='0' step='0.25' value='' placeholder='"
                 . __s('Credits', 'sprint') . "'></td>";
-            echo "<td><input type='number' class='form-control form-control-sm' name='retainer_new[cap]' min='0' step='0.25' value='' placeholder='"
+            echo "<td><input type='number' class='form-control form-control-sm' name='retainer_new[cap]' aria-label='" . __s('Cap per sprint', 'sprint') . "' min='0' step='0.25' value='' placeholder='"
                 . __s('Cap', 'sprint') . "'></td>";
-            echo "<td><input type='text' class='form-control form-control-sm' name='retainer_new[comment]' value='' placeholder='"
+            echo "<td><input type='text' class='form-control form-control-sm' name='retainer_new[comment]' aria-label='" . __s('Comments') . "' value='' placeholder='"
                 . __s('New rule: fill in the credits and save', 'sprint') . "'></td>";
             echo "<td class='text-muted sprint-small'>" . __('New rule', 'sprint') . "</td>";
             echo "</tr>";
         }
         echo "</tbody></table>";
+        echo SprintCredit::armScript();
         echo "</td></tr>";
     }
 

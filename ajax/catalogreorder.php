@@ -24,7 +24,7 @@ if (!SprintCreditProduct::canUpdate()) {
 $decoded = json_decode((string)($_POST['order'] ?? '[]'), true);
 $ids     = is_array($decoded) ? array_values(array_unique(array_filter(array_map('intval', $decoded)))) : [];
 if (empty($ids)) {
-    echo json_encode(['success' => false, 'message' => 'No order received']);
+    echo json_encode(['success' => false, 'message' => __('No order received', 'sprint')]);
     return;
 }
 
@@ -32,7 +32,7 @@ $all    = SprintCreditProduct::getAll(false);
 $parent = null;
 foreach ($ids as $id) {
     if (!isset($all[$id])) {
-        echo json_encode(['success' => false, 'message' => 'Unknown catalogue entry']);
+        echo json_encode(['success' => false, 'message' => __('Unknown catalogue entry', 'sprint')]);
         return;
     }
     $pid = (int)($all[$id]['sprintcreditproducts_id'] ?? 0);
@@ -40,7 +40,7 @@ foreach ($ids as $id) {
         $pid = 0;
     }
     if ($parent !== null && $pid !== $parent) {
-        echo json_encode(['success' => false, 'message' => 'Entries must share one folder']);
+        echo json_encode(['success' => false, 'message' => __('Entries must share one folder', 'sprint')]);
         return;
     }
     $parent = $pid;

@@ -22,8 +22,8 @@ header('Content-Type: application/json');
 
 Session::checkCSRF($_POST);
 
-$fail = function (string $msg = 'Request failed'): void {
-    echo json_encode(['success' => false, 'message' => $msg]);
+$fail = function (string $msg = ''): void {
+    echo json_encode(['success' => false, 'message' => $msg !== '' ? $msg : __('Request failed', 'sprint')]);
 };
 
 $itemtype = (string)($_POST['itemtype'] ?? '');
@@ -31,19 +31,19 @@ $id       = (int)($_POST['id'] ?? 0);
 
 $allowed = ['Ticket', 'Change', 'Problem', 'ProjectTask'];
 if (!in_array($itemtype, $allowed, true) || $id <= 0 || !class_exists($itemtype)) {
-    $fail('Invalid itemtype');
+    $fail(__('Invalid item type', 'sprint'));
     return;
 }
 
 /** @var CommonDBTM $item */
 $item = new $itemtype();
 if (!$item->getFromDB($id)) {
-    $fail('Item not found');
+    $fail(__('Item not found'));
     return;
 }
 
 if (!$item->canUpdateItem()) {
-    $fail('Not allowed');
+    $fail(__('You are not allowed to change this item.', 'sprint'));
     return;
 }
 
@@ -51,7 +51,7 @@ $update = ['id' => $id];
 
 if ($itemtype === 'Ticket' || $itemtype === 'Change' || $itemtype === 'Problem') {
     if (!isset($_POST['status'])) {
-        $fail('Missing status');
+        $fail(__('Please choose a status.', 'sprint'));
         return;
     }
     $update['status'] = (int)$_POST['status'];
@@ -86,7 +86,7 @@ if (isset($_SESSION['MESSAGE_AFTER_REDIRECT']) && is_array($_SESSION['MESSAGE_AF
 if (!$ok) {
     echo json_encode([
         'success' => false,
-        'message' => $messages ? implode("\n", $messages) : 'Update failed',
+        'message' => $messages ? implode("\n", $messages) : __('Could not save the changes.', 'sprint'),
     ]);
     return;
 }
@@ -98,7 +98,7 @@ GlpiPlugin\Sprint\SprintCache::forget($itemtype, $id);
 
 $response = [
     'success'  => true,
-    'message'  => $messages ? implode("\n", $messages) : 'Updated',
+    'message'  => $messages ? implode("\n", $messages) : '',
     'itemtype' => $itemtype,
     'id'       => $id,
 ];

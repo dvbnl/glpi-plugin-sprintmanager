@@ -1,9 +1,15 @@
 <?php
 
 /**
- * AJAX handler for quick sprint item edits from the meeting view.
+ * AJAX handler for the shared quick-edit dialog (board, dashboard, items tab,
+ * fastlane and meeting view: SprintItem::renderQuickEditUI()).
  * Accepts the full editable fieldset; sanitization and capacity validation
  * are handled inside SprintItem::prepareInputForUpdate().
+ *
+ * Guarded changes (capacity, category, adhoc, carry-over) by someone other
+ * than the Scrum Master become approval requests; the response lists them in
+ * 'requests' (current → requested value) so the dialog never presents them
+ * as applied.
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -15,7 +21,7 @@ header('Content-Type: application/json');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);
 
-$response = ['success' => false, 'message' => 'Request failed'];
+$response = ['success' => false, 'message' => __('Request failed', 'sprint')];
 
 if (!isset($_POST['id'])) {
     echo json_encode($response);
@@ -104,6 +110,11 @@ if (array_key_exists('category_reason', $_POST)) {
     $update['_category_request_reason'] = (string)$_POST['category_reason'];
 }
 
+// And for a guarded adhoc flip.
+if (array_key_exists('adhoc_reason', $_POST)) {
+    $update['_adhoc_request_reason'] = (string)$_POST['adhoc_reason'];
+}
+
 // Meeting-view edits send the active meeting id; tag the resulting log rows
 // as meeting-sourced (activity chart skips them, audit shows a "via Meeting" badge).
 $meetingId = (int)($_POST['meeting_id'] ?? 0);
@@ -165,13 +176,19 @@ if ($meetingId > 0) {
 }
 
 // Drain messages queued via addMessageAfterRedirect so we relay them to the
-// client instead of stacking them up for the next page load.
+// client instead of stacking them up for the next page load. INFO messages
+// are kept apart: those are the "sent to the Scrum Master" notices, which the
+// dialog reports from 'requests' instead.
 $messages = [];
+$notices  = [];
 if (isset($_SESSION['MESSAGE_AFTER_REDIRECT']) && is_array($_SESSION['MESSAGE_AFTER_REDIRECT'])) {
     foreach ($_SESSION['MESSAGE_AFTER_REDIRECT'] as $level => $msgs) {
         if (is_array($msgs)) {
             foreach ($msgs as $m) {
                 $messages[] = strip_tags((string)$m);
+                if ((int)$level !== INFO) {
+                    $notices[] = strip_tags((string)$m);
+                }
             }
         }
     }
@@ -181,7 +198,9 @@ if (isset($_SESSION['MESSAGE_AFTER_REDIRECT']) && is_array($_SESSION['MESSAGE_AF
 if (!$result) {
     echo json_encode([
         'success' => false,
-        'message' => $messages ? implode("\n", $messages) : 'Update failed',
+        'message' => $messages ? implode("\n", $messages) : __('Could not save the changes.', 'sprint'),
+        // A pending request locks the item: let the dialog say why.
+        'pending' => GlpiPlugin\Sprint\SprintRequest::describePendingForItem((int)$_POST['id']),
     ]);
     return;
 }
@@ -191,41 +210,46 @@ $item->getFromDB((int)$_POST['id']);
 $carryOverId       = 0;
 $carryOverSprintId = (int)($_POST['carry_over_to_sprint_id'] ?? 0);
 $carryOverMessage  = '';
+$carryRequested    = false;
 if ($carryOverSprintId > 0) {
     $sourceSprintId = (int)($item->fields['plugin_sprint_sprints_id'] ?? 0);
     if ($carryOverSprintId === $sourceSprintId) {
         $carryOverSprintId = 0;
     } else {
-        $sprint = new GlpiPlugin\Sprint\Sprint();
-        if ($sprint->getFromDB($carryOverSprintId)
-            && Session::haveAccessToEntity($sprint->fields['entities_id'] ?? 0)) {
-            // Optional split from the carry-over dialog: the share that
-            // moves on; absent means an unowned copy at 0, as before.
-            $carryCapacity = isset($_POST['carry_capacity']) && $_POST['carry_capacity'] !== '' ? (float)$_POST['carry_capacity'] : null;
-            $carryCredits  = isset($_POST['carry_credits']) && $_POST['carry_credits'] !== '' ? (float)$_POST['carry_credits'] : null;
-            // Moving credits takes the same right as editing them.
-            if (!GlpiPlugin\Sprint\SprintCustomer::canUseCredits()) {
-                $carryCredits = $carryCapacity !== null ? 0.0 : null;
-            }
-            $carryOverId = GlpiPlugin\Sprint\SprintItem::carryOverTo(
-                (int)$_POST['id'],
-                $carryOverSprintId,
-                $carryCapacity,
-                $carryCredits
-            );
-            // The split came off the source row; answer with what is left.
-            $item->getFromDB((int)$_POST['id']);
-            if ($carryOverId > 0) {
-                $carryOverMessage = sprintf(
-                    __('Carried over to %s', 'sprint'),
-                    (string)$sprint->fields['name']
-                );
-            }
+        // Optional split from the carry-over dialog: the share that
+        // moves on; absent means an unowned copy at 0, as before.
+        $carryCapacity = isset($_POST['carry_capacity']) && $_POST['carry_capacity'] !== '' ? (float)$_POST['carry_capacity'] : null;
+        $carryCredits  = isset($_POST['carry_credits']) && $_POST['carry_credits'] !== '' ? (float)$_POST['carry_credits'] : null;
+        // Moving credits takes the same right as editing them.
+        if (!GlpiPlugin\Sprint\SprintCustomer::canUseCredits()) {
+            $carryCredits = $carryCapacity !== null ? 0.0 : null;
         }
+        // The target sprint's Scrum Master carries over; anyone else asks.
+        $carry = GlpiPlugin\Sprint\SprintItem::carryOverOrRequest(
+            (int)$_POST['id'],
+            $carryOverSprintId,
+            $carryCapacity,
+            $carryCredits,
+            trim((string)($_POST['carry_reason'] ?? ''))
+        );
+        $carryOverId      = $carry['new_id'];
+        $carryOverMessage = $carry['message'];
+        $carryRequested   = $carry['requested'];
+        // The split came off the source row; answer with what is left.
+        $item->getFromDB((int)$_POST['id']);
     }
 }
 
 $updatedTags = GlpiPlugin\Sprint\SprintItem::getTagsForItem((int)$_POST['id']);
+
+// What this save left waiting for the Scrum Master (current → requested).
+$pending  = GlpiPlugin\Sprint\SprintRequest::describePendingForItem((int)$_POST['id']);
+$requests = $pending['requests'];
+$ownRequests = array_values(array_filter($requests, static fn($r) => $r['own']));
+// Without a request to report, INFO messages are real news: relay them.
+if (!$ownRequests) {
+    $notices = $messages;
+}
 
 // Credit figures only travel to clients allowed to see them.
 $creditFields = [];
@@ -272,4 +296,7 @@ echo json_encode($creditFields + [
     'carried_over_id'      => $carryOverId,
     'carried_over_sprint'  => $carryOverSprintId,
     'carry_over_message'   => $carryOverMessage,
+    'carry_over_requested' => $carryRequested,
+    'requests'             => $requests,
+    'notice'               => implode("\n", $notices),
 ]);

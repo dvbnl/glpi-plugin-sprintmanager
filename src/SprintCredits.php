@@ -46,18 +46,435 @@ class SprintCredits extends CommonGLPI
                 . htmlescape(__("You don't have permission to perform this action.")) . "</div>";
             return;
         }
-        $balances = SprintCustomer::balances(false);
-        $funding  = SprintCustomer::sprintFunding();
-        $window   = array_slice(SprintCustomer::fundingSprints(), -self::CHART_SPRINTS);
+        // balances() and sprintFunding() only carry the customers the session
+        // may see (SprintCustomer::getAll() is entity-scoped), so the filter
+        // can never select a customer outside that set.
+        $allBalances = SprintCustomer::balances(false);
+        $allFunding  = SprintCustomer::sprintFunding();
+        $filter      = self::filters($allBalances);
+        $window      = self::windowFor($filter['period']);
+
+        $cid      = $filter['customer'];
+        $balances = $cid > 0 ? [$cid => $allBalances[$cid]] : $allBalances;
+        $funding  = $cid > 0 ? array_intersect_key($allFunding, [$cid => true]) : $allFunding;
 
         self::renderHeader();
-        self::renderPortfolio($balances, SprintCustomer::unassignedUsage());
+        self::renderFilterBar($filter, $allBalances, count($window));
+
+        // Today: the three questions first, then the full balance sheet.
+        self::sectionTitle('fas fa-scale-balanced', __('Current balance', 'sprint'),
+            __('Where every customer stands today.', 'sprint'));
+        self::renderQuestions($balances, $funding, $cid);
+        self::renderPortfolio($balances, $cid > 0 ? ['consumed' => 0.0, 'reserved' => 0.0, 'pipeline' => 0.0] : SprintCustomer::unassignedUsage());
         self::renderCustomerTable($balances, $funding);
+
+        // History: what the sprints in the chosen period did.
+        self::sectionTitle('fas fa-clock-rotate-left', __('History', 'sprint'),
+            __('What the sprints in the chosen period claimed, what lapsed and what was booked. The totals in the balance table above are cumulative since the first sprint. These sections follow the period filter.', 'sprint'));
         self::renderSprintCharts($window, $funding, $balances);
-        SprintCreditFlow::render($window, $balances);
+        SprintCreditFlow::render($window, $balances, $cid);
         self::renderExpiry($window, $funding, $balances);
+        self::renderLedger($cid, self::periodStart($filter['period']));
+
+        // Forecast: the planned and running sprints.
+        self::sectionTitle('fas fa-binoculars', __('Forecast', 'sprint'),
+            __('Planned and running sprints against the agreed volume. Nothing here is final until the sprint completes.', 'sprint'));
         self::renderForecast($funding, $balances);
-        self::renderLedger();
+    }
+
+    // =========================================================================
+    // Filters
+    // =========================================================================
+
+    /** Period choices; '' keeps the historic default of the last sprints. */
+    private static function periods(): array
+    {
+        return [
+            ''    => sprintf(_n('Last %d sprint', 'Last %d sprints', self::CHART_SPRINTS, 'sprint'), self::CHART_SPRINTS),
+            '3m'  => __('Last 3 months', 'sprint'),
+            '6m'  => __('Last 6 months', 'sprint'),
+            '12m' => __('Last 12 months', 'sprint'),
+            'all' => __('All sprints', 'sprint'),
+        ];
+    }
+
+    /** The validated filter from the query string. */
+    private static function filters(array $balances): array
+    {
+        $cid = (int)($_GET['customer'] ?? 0);
+        if ($cid > 0 && !isset($balances[$cid])) {
+            $cid = 0;
+        }
+        $period = (string)($_GET['period'] ?? '');
+        if (!array_key_exists($period, self::periods())) {
+            $period = '';
+        }
+        return ['customer' => $cid, 'period' => $period];
+    }
+
+    /** First day of a month-based period, '' when it is not date-bound. */
+    private static function periodStart(string $period): string
+    {
+        $months = ['3m' => 3, '6m' => 6, '12m' => 12][$period] ?? 0;
+        return $months > 0 ? date('Y-m-d', strtotime("-{$months} months")) : '';
+    }
+
+    /** The sprints the history sections run over, oldest first. */
+    private static function windowFor(string $period): array
+    {
+        $all = SprintCustomer::fundingSprints();
+        if ($period === '') {
+            return array_slice($all, -self::CHART_SPRINTS);
+        }
+        $from = self::periodStart($period);
+        if ($from === '') {
+            return $all;
+        }
+        // A sprint counts when it ended (or, undated, started) inside the
+        // period; one without any date is still ahead, so it stays in.
+        return array_values(array_filter($all, static function (array $s) use ($from): bool {
+            $on = SprintCustomer::dateValue($s['date_end'] ?? null)
+                ?: SprintCustomer::dateValue($s['date_start'] ?? null)
+                ?: '9999-12-31';
+            return $on >= $from;
+        }));
+    }
+
+    /** URL of this page with the filter changed; null drops a key. */
+    private static function filterURL(array $filter, array $change = []): string
+    {
+        $query = array_filter(
+            array_merge(['customer' => $filter['customer'] ?: null, 'period' => $filter['period'] ?: null], $change),
+            static fn($v) => $v !== null && $v !== '' && $v !== 0
+        );
+        return self::getSearchURL() . ($query ? '?' . http_build_query($query) : '');
+    }
+
+    /**
+     * One customer + period filter for every section that can follow it,
+     * with the active choices as removable chips and a single reset.
+     */
+    private static function renderFilterBar(array $filter, array $balances, int $sprints): void
+    {
+        $periods = self::periods();
+        echo "<form method='get' action='" . htmlescape(self::getSearchURL()) . "' "
+            . "class='sprint-credit-filter d-flex flex-wrap align-items-end gap-2 p-2 mb-3' role='search' "
+            . "aria-label='" . __s('Filter the credits page', 'sprint') . "'>";
+        echo "<div><label class='form-label sprint-small mb-1' for='sprint-credit-filter-customer'>"
+            . htmlescape(SprintCustomer::getTypeName(1)) . "</label>";
+        echo "<select class='form-select form-select-sm' id='sprint-credit-filter-customer' name='customer' style='min-width:220px;'>";
+        echo "<option value='0'>" . htmlescape(__('All customers', 'sprint')) . "</option>";
+        foreach ($balances as $id => $b) {
+            echo "<option value='" . (int)$id . "'" . ((int)$id === $filter['customer'] ? ' selected' : '') . ">"
+                . htmlescape((string)$b['name'])
+                . ((int)$b['is_active'] === 0 ? ' (' . htmlescape(__('inactive', 'sprint')) . ')' : '')
+                . "</option>";
+        }
+        echo "</select></div>";
+        echo "<div><label class='form-label sprint-small mb-1' for='sprint-credit-filter-period'>"
+            . htmlescape(__('Period', 'sprint')) . "</label>";
+        echo "<select class='form-select form-select-sm' id='sprint-credit-filter-period' name='period'>";
+        foreach ($periods as $key => $label) {
+            echo "<option value='" . htmlescape($key) . "'" . ($key === $filter['period'] ? ' selected' : '') . ">"
+                . htmlescape($label) . "</option>";
+        }
+        echo "</select></div>";
+        echo "<button type='submit' class='btn btn-sm btn-primary'><i class='fas fa-filter me-1'></i>"
+            . htmlescape(__('Apply', 'sprint')) . "</button>";
+
+        // Active filters as chips; each one removes only itself.
+        $chips = [];
+        if ($filter['customer'] > 0) {
+            $chips[] = [
+                SprintCustomer::getTypeName(1) . ': ' . (string)$balances[$filter['customer']]['name'],
+                self::filterURL($filter, ['customer' => null]),
+            ];
+        }
+        if ($filter['period'] !== '') {
+            $chips[] = [__('Period', 'sprint') . ': ' . $periods[$filter['period']], self::filterURL($filter, ['period' => null])];
+        }
+        echo "<div class='d-flex flex-wrap align-items-center gap-1 ms-md-2' aria-live='polite'>";
+        foreach ($chips as [$label, $url]) {
+            echo "<a class='sprint-filter-chip' href='" . htmlescape($url) . "' "
+                . "aria-label='" . htmlescape(sprintf(__('Remove filter %s', 'sprint'), $label)) . "'>"
+                . htmlescape($label) . " <i class='fas fa-xmark' aria-hidden='true'></i></a>";
+        }
+        if ($chips) {
+            echo "<a class='btn btn-sm btn-link' href='" . htmlescape(self::getSearchURL()) . "'>"
+                . htmlescape(__('Reset filters', 'sprint')) . "</a>";
+        }
+        echo "</div>";
+        echo "<span class='ms-auto text-muted sprint-small'>"
+            . htmlescape(sprintf(
+                __('%1$s of %2$s customers · %3$s sprints in the period', 'sprint'),
+                $filter['customer'] > 0 ? 1 : count($balances),
+                count($balances),
+                $sprints
+            )) . "</span>";
+        echo "</form>";
+        // Picking a value applies it straight away; the button stays for
+        // keyboard users who move through the selects first.
+        echo "<script>(function(){var f=document.querySelectorAll('form.sprint-credit-filter');"
+            . "var form=f[f.length-1];if(!form){return;}"
+            . "form.querySelectorAll('select').forEach(function(s){s.addEventListener('change',function(){form.submit();});});})();</script>";
+    }
+
+    private static function sectionTitle(string $icon, string $title, string $subtitle): void
+    {
+        echo "<div class='sprint-credit-section-title mt-4 mb-2'>";
+        echo "<h3 class='mb-0'><i class='" . htmlescape($icon) . " me-2' aria-hidden='true'></i>" . htmlescape($title) . "</h3>";
+        echo "<div class='text-muted sprint-small'>" . htmlescape($subtitle) . "</div>";
+        echo "</div>";
+    }
+
+    // =========================================================================
+    // The three questions
+    // =========================================================================
+
+    /**
+     * "What is freely available?", "What is reserved?" and "Which customer
+     * needs attention?", each answered in one card, plus a worked example
+     * of how a balance is built up.
+     */
+    private static function renderQuestions(array $balances, array $funding, int $selected): void
+    {
+        if (!$balances) {
+            return;
+        }
+        $sprintsById = [];
+        foreach (SprintCustomer::fundingSprints() as $s) {
+            $sprintsById[(int)$s['id']] = $s;
+        }
+
+        $freeWallet = $freeGrant = $grantReserved = $walletReserved = $pipeline = 0.0;
+        $short      = 0;
+        $attention  = [];
+        foreach ($balances as $id => $b) {
+            $grantReserved  += (float)$b['grant_reserved'];
+            $walletReserved += (float)$b['wallet_reserved'];
+            $pipeline       += (float)$b['pipeline'];
+            // One customer's surplus never covers another's shortfall.
+            if ((float)$b['available'] > 0) {
+                $freeWallet += (float)$b['available'];
+            } elseif ((float)$b['available'] < 0) {
+                $short++;
+            }
+
+            $upcoming = $overCap = $lapsing = $drawing = [];
+            foreach ($funding[$id] ?? [] as $sid => $cell) {
+                if (!$cell['completed']) {
+                    $upcoming[] = $cell;
+                    if (!empty($cell['over_cap'])) {
+                        $overCap[] = (int)$sid;
+                    }
+                    if ((float)$cell['grant'] > (float)$cell['claimed']) {
+                        $lapsing[] = (int)$sid;
+                    }
+                }
+                if ((float)$cell['wallet_consumed'] > 0 || (float)$cell['wallet_reserved'] > 0) {
+                    $drawing[] = (int)$sid;
+                }
+            }
+            $f = SprintCreditMath::forecast($upcoming);
+            if ((int)$b['is_active'] === 1) {
+                $freeGrant += $f['unused'];
+            }
+            $signal = (int)$b['is_active'] === 1 ? SprintCreditMath::attention($b, $overCap !== [], $f['unused']) : '';
+            if ($signal !== '') {
+                $sprintIds = $signal === 'over_cap' ? $overCap : ($signal === 'lapse' ? $lapsing : array_reverse($drawing));
+                $attention[(int)$id] = [
+                    'signal'  => $signal,
+                    'b'       => $b,
+                    'unused'  => $f['unused'],
+                    'sprints' => array_slice(array_values(array_filter(
+                        $sprintIds,
+                        static fn($sid) => isset($sprintsById[$sid])
+                    )), 0, 3),
+                ];
+            }
+        }
+        $rank = ['overdrawn' => 0, 'short' => 1, 'low' => 2, 'over_cap' => 3, 'lapse' => 4];
+        uasort($attention, static fn($a, $b) => $rank[$a['signal']] <=> $rank[$b['signal']]);
+
+        echo "<div class='sprint-credit-questions mb-3'>";
+
+        // 1. Free
+        echo "<section class='card sprint-credit-question' aria-labelledby='sprint-credit-q-free'><div class='card-body'>";
+        echo "<h4 class='sprint-credit-question-title' id='sprint-credit-q-free'><i class='fas fa-unlock me-1' aria-hidden='true'></i>"
+            . htmlescape(__('What is freely available?', 'sprint')) . "</h4>";
+        echo "<div class='sprint-credit-question-value' style='color:#198754;'>" . htmlescape(SprintCustomer::formatCredits($freeWallet)) . "</div>";
+        echo "<div class='sprint-small'>" . htmlescape(__('Bought credits not yet claimed by delivered or open work: free to plan new work in.', 'sprint')) . "</div>";
+        if ($freeGrant > 0) {
+            echo "<div class='sprint-small text-muted mt-1'>" . htmlescape(sprintf(
+                __('Plus %s of retainer volume still unbooked in the planned and running sprints. It lapses if those sprints do not use it.', 'sprint'),
+                SprintCustomer::formatCredits($freeGrant)
+            )) . "</div>";
+        }
+        if ($short > 0) {
+            echo "<div class='sprint-small mt-1' style='color:#dc3545;'>" . htmlescape(sprintf(
+                _n('%d customer has open work beyond its wallet. That shortfall is not subtracted here.',
+                    '%d customers have open work beyond their wallet. That shortfall is not subtracted here.', $short, 'sprint'),
+                $short
+            )) . "</div>";
+        }
+        echo "</div></section>";
+
+        // 2. Reserved
+        echo "<section class='card sprint-credit-question' aria-labelledby='sprint-credit-q-reserved'><div class='card-body'>";
+        echo "<h4 class='sprint-credit-question-title' id='sprint-credit-q-reserved'><i class='fas fa-bookmark me-1' aria-hidden='true'></i>"
+            . htmlescape(__('What is reserved?', 'sprint')) . "</h4>";
+        echo "<div class='sprint-credit-question-value' style='color:#fd7e14;'>"
+            . htmlescape(SprintCustomer::formatCredits($grantReserved + $walletReserved)) . "</div>";
+        echo "<div class='sprint-small'>" . htmlescape(__('Open work in planned and running sprints. It is charged once the work is done.', 'sprint')) . "</div>";
+        echo "<ul class='sprint-credit-question-list sprint-small'>";
+        echo "<li>" . htmlescape(sprintf(__('%s on the retainer of those sprints', 'sprint'), SprintCustomer::formatCredits($grantReserved))) . "</li>";
+        echo "<li>" . htmlescape(sprintf(__('%s on the bought wallet', 'sprint'), SprintCustomer::formatCredits($walletReserved))) . "</li>";
+        echo "<li class='text-muted'>" . htmlescape(sprintf(__('%s waits in the backlog and is not reserved yet', 'sprint'), SprintCustomer::formatCredits($pipeline))) . "</li>";
+        echo "</ul>";
+        echo "</div></section>";
+
+        // 3. Attention
+        echo "<section class='card sprint-credit-question' aria-labelledby='sprint-credit-q-attention'><div class='card-body'>";
+        echo "<h4 class='sprint-credit-question-title' id='sprint-credit-q-attention'><i class='fas fa-bell me-1' aria-hidden='true'></i>"
+            . htmlescape(__('Which customer needs attention?', 'sprint')) . "</h4>";
+        if (!$attention) {
+            echo "<div class='sprint-small text-muted'><i class='fas fa-check me-1' aria-hidden='true'></i>"
+                . htmlescape(__('No customer needs attention: every wallet covers its open work and no agreed volume is about to lapse.', 'sprint'))
+                . "</div>";
+        } else {
+            echo "<ul class='sprint-credit-attention'>";
+            foreach (array_slice($attention, 0, 6, true) as $id => $a) {
+                self::renderAttentionItem((int)$id, $a, $sprintsById);
+            }
+            echo "</ul>";
+            if (count($attention) > 6) {
+                echo "<div class='sprint-small text-muted'>" . htmlescape(sprintf(
+                    __('%d more in the balance table below.', 'sprint'),
+                    count($attention) - 6
+                )) . "</div>";
+            }
+        }
+        echo "</div></section>";
+
+        echo "</div>";
+
+        // Worked example: the selected customer, else the most urgent one
+        // with a wallet, else any customer that bought credits.
+        $example = $selected > 0 ? $selected : 0;
+        if ($example === 0) {
+            foreach (array_unique(array_merge(array_keys($attention), array_keys($balances))) as $id) {
+                if ((float)$balances[$id]['purchased'] > 0) {
+                    $example = (int)$id;
+                    break;
+                }
+            }
+        }
+        self::renderBreakdown($example > 0 ? $balances[$example] : null);
+    }
+
+    /** One warning with links to the customer, the sprints behind it and the bookings. */
+    private static function renderAttentionItem(int $id, array $a, array $sprintsById): void
+    {
+        $b = $a['b'];
+        [$label, $color, $text] = match ($a['signal']) {
+            'overdrawn' => [__('overdrawn', 'sprint'), '#dc3545', sprintf(
+                __('The wallet is %s below zero.', 'sprint'),
+                SprintCustomer::formatCredits(abs((float)$b['wallet_balance']))
+            )],
+            'short'     => [__('short', 'sprint'), '#dc3545', sprintf(
+                __('Open work needs %s more than the wallet holds.', 'sprint'),
+                SprintCustomer::formatCredits(abs((float)$b['available']))
+            )],
+            'low'       => [__('low balance', 'sprint'), '#b35c00', sprintf(
+                __('%1$s free, below the alert level of %2$s.', 'sprint'),
+                SprintCustomer::formatCredits($b['available']),
+                SprintCustomer::formatCredits($b['alert'])
+            )],
+            'over_cap'  => [__('over cap', 'sprint'), '#dc3545', __('An upcoming sprint claims more than the agreed cap.', 'sprint')],
+            default     => [__('will lapse', 'sprint'), '#b35c00', sprintf(
+                __('%s of the agreed volume is still unbooked.', 'sprint'),
+                SprintCustomer::formatCredits($a['unused'])
+            )],
+        };
+
+        echo "<li>";
+        echo "<span class='badge' style='background:{$color};color:#fff;'>" . htmlescape($label) . "</span> ";
+        echo "<a class='fw-bold' href='" . htmlescape(SprintCustomer::getFormURLWithID($id)) . "'>"
+            . "<span class='sprint-matrix-dot' style='background:" . htmlescape((string)$b['color']) . ";'></span>"
+            . htmlescape((string)$b['name']) . "</a>";
+        echo "<div class='sprint-small'>" . htmlescape($text) . "</div>";
+        echo "<div class='sprint-small sprint-credit-attention-links'>";
+        foreach ($a['sprints'] as $sid) {
+            echo "<a href='" . htmlescape(Sprint::getFormURLWithID($sid)) . "'><i class='fas fa-person-running me-1' aria-hidden='true'></i>"
+                . htmlescape((string)$sprintsById[$sid]['name']) . "</a>";
+        }
+        echo "<a href='" . htmlescape(self::bookingsURL($id)) . "'><i class='fas fa-receipt me-1' aria-hidden='true'></i>"
+            . htmlescape(__('Bookings', 'sprint')) . "</a>";
+        echo "<a href='#sprint-credit-customer-{$id}'><i class='fas fa-table me-1' aria-hidden='true'></i>"
+            . htmlescape(__('Balance row', 'sprint')) . "</a>";
+        echo "</div>";
+        echo "</li>";
+    }
+
+    /** The customer's credits tab, optionally scrolled to one booking. */
+    public static function bookingsURL(int $customerId, int $bookingId = 0): string
+    {
+        return SprintCustomer::getFormURLWithID($customerId)
+            . '&forcetab=' . rawurlencode(SprintCredit::class . '$1')
+            . ($bookingId > 0 ? '#sprint-credit-booking-' . $bookingId : '');
+    }
+
+    /**
+     * Expandable explanation of a balance with one worked example taken from
+     * a real customer, so the arithmetic can be checked against the table.
+     */
+    private static function renderBreakdown(?array $b): void
+    {
+        echo "<details class='card sprint-credit-explain mb-3'>";
+        echo "<summary class='card-body py-2'><i class='fas fa-calculator me-1' aria-hidden='true'></i>"
+            . htmlescape(__('How is a balance built up?', 'sprint')) . "</summary>";
+        echo "<div class='card-body pt-0 sprint-small'>";
+        echo "<p>" . htmlescape(__('A customer has two separate pots. The retainer grants a fixed volume every sprint. What that sprint does not deliver lapses when it completes and never moves to the wallet. The wallet holds the credits bought through bookings. Delivered work beyond the sprint\'s grant is drawn from it, and open work beyond the grant reserves part of it.', 'sprint')) . "</p>";
+
+        if ($b === null) {
+            echo "<p class='text-muted mb-0'>" . htmlescape(__('No customer has bought credits yet, so there is no example to show.', 'sprint')) . "</p>";
+            echo "</div></details>";
+            return;
+        }
+
+        $w      = SprintCreditMath::walletSteps($b);
+        $labels = [
+            'bought'      => __('Bought (bookings up to today)', 'sprint'),
+            'corrections' => __('Corrections and write-offs', 'sprint'),
+            'drawn'       => __('Drawn by delivered work beyond the grant', 'sprint'),
+            'lapsed'      => __('Bought credits that expired unused', 'sprint'),
+        ];
+        echo "<p class='mb-1 fw-bold'>" . htmlescape(sprintf(__('Example: %s', 'sprint'), (string)$b['name'])) . "</p>";
+        echo "<table class='table table-sm sprint-credit-explain-table mb-2' style='max-width:520px;'><tbody>";
+        foreach ($w['steps'] as $step) {
+            echo "<tr><td>" . htmlescape($labels[$step['key']]) . "</td><td class='text-end text-nowrap'>"
+                . ($step['sign'] === '-' ? '− ' : '') . htmlescape(SprintCustomer::formatCredits($step['value'])) . "</td></tr>";
+        }
+        echo "<tr class='fw-bold'><td>= " . htmlescape(__('Left in the wallet today', 'sprint')) . "</td><td class='text-end text-nowrap'>"
+            . htmlescape(SprintCustomer::formatCredits($w['left'])) . "</td></tr>";
+        echo "<tr><td>" . htmlescape(__('Reserved by open work beyond the grants', 'sprint')) . "</td><td class='text-end text-nowrap'>− "
+            . htmlescape(SprintCustomer::formatCredits($w['reserved'])) . "</td></tr>";
+        echo "<tr class='fw-bold'><td>= " . htmlescape(__('Free to plan', 'sprint')) . "</td><td class='text-end text-nowrap'>"
+            . htmlescape(SprintCustomer::formatCredits($w['free'])) . "</td></tr>";
+        echo "</tbody></table>";
+        if (!$w['consistent']) {
+            echo "<p class='text-muted'>" . htmlescape(__('Some delivered work could not be covered by a valid purchase on its date. That uncovered part is subtracted from the balance as well.', 'sprint')) . "</p>";
+        }
+        if ((float)$b['granted'] > 0) {
+            echo "<p class='mb-0'>" . htmlescape(sprintf(
+                __('Retainer, separately: %1$s granted over all sprints, %2$s delivered against it, %3$s reserved by open work and %4$s lapsed.', 'sprint'),
+                SprintCustomer::formatCredits($b['granted']),
+                SprintCustomer::formatCredits($b['grant_used']),
+                SprintCustomer::formatCredits($b['grant_reserved']),
+                SprintCustomer::formatCredits($b['expired'])
+            )) . "</p>";
+        }
+        echo "</div></details>";
     }
 
     private static function renderHeader(): void
@@ -115,32 +532,45 @@ class SprintCredits extends CommonGLPI
         echo "<div class='card mb-3'><div class='card-body'>";
         echo "<h3 class='card-title'><i class='fas fa-building me-2'></i>" . __('Balance per customer', 'sprint') . "</h3>";
         echo "<div class='text-muted sprint-small mb-2'>"
-            . htmlescape(__('Delivered work spends the sprint\'s grant first; work beyond it is drawn from the bought wallet. Open work only reserves. A grant that a completed sprint did not use lapses.', 'sprint'))
+            . htmlescape(__('Delivered work spends the sprint\'s grant first. Work beyond it is drawn from the bought wallet. Open work only reserves. A grant that a completed sprint did not use lapses.', 'sprint'))
             . "</div>";
 
         if (!$balances) {
-            echo "<div class='text-muted'>" . __('No customers yet.', 'sprint') . "</div>";
+            echo "<div class='text-muted'>" . __('No customers yet.', 'sprint');
+            if (SprintCustomer::canEditCredits()) {
+                echo " <a href='" . SprintCustomer::getFormURL() . "'>" . __('Create the first customer', 'sprint') . "</a>";
+            }
+            echo "</div>";
             echo "</div></div>";
             return;
         }
 
         echo "<div class='table-responsive'><table class='table table-sm align-middle sprint-credit-table'>";
-        echo "<thead><tr>";
-        echo "<th style='min-width:190px;'>" . SprintCustomer::getTypeName(1) . "</th>";
-        echo "<th class='text-center' title='" . __s('The retainer: credits granted every sprint in the agreed window', 'sprint') . "'>"
+        echo "<caption class='visually-hidden'>" . __s('Balance per customer', 'sprint') . "</caption>";
+        // Group the columns by what they measure: the agreement, the history
+        // since the first sprint, and the position today.
+        echo "<thead><tr class='sprint-credit-colgroups'>"
+            . "<th></th>"
+            . "<th class='text-center' scope='colgroup'>" . __s('Agreement', 'sprint') . "</th>"
+            . "<th class='text-center' colspan='5' scope='colgroup'>" . __s('Cumulative history', 'sprint') . "</th>"
+            . "<th class='text-center' colspan='2' scope='colgroup'>" . __s('Today', 'sprint') . "</th>"
+            . "<th class='text-center' scope='colgroup'>" . __s('Forecast', 'sprint') . "</th>"
+            . "</tr><tr>";
+        echo "<th scope='col' style='min-width:190px;'>" . SprintCustomer::getTypeName(1) . "</th>";
+        echo "<th scope='col' class='text-center' title='" . __s('The retainer: credits granted every sprint in the agreed window', 'sprint') . "'>"
             . __('Per sprint', 'sprint') . "</th>";
-        echo "<th class='text-center'>" . __('Granted', 'sprint') . "</th>";
-        echo "<th class='text-center' title='" . __s('Delivered against the grants; below it what open work still reserves of them', 'sprint') . "'>"
+        echo "<th scope='col' class='text-center'>" . __('Granted', 'sprint') . "</th>";
+        echo "<th scope='col' class='text-center' title='" . __s('Delivered against the grants — below it what open work still reserves of them', 'sprint') . "'>"
             . __('Used', 'sprint') . "</th>";
-        echo "<th class='text-center'>" . __('Lapsed', 'sprint') . "</th>";
-        echo "<th class='text-center'>" . __('In backlog', 'sprint') . "</th>";
-        echo "<th class='text-center' title='" . __s('Purchases up to today; a lot that lapsed unused and corrections are shown below it', 'sprint') . "'>"
+        echo "<th scope='col' class='text-center'>" . __('Lapsed', 'sprint') . "</th>";
+        echo "<th scope='col' class='text-center' title='" . __s('Purchases up to today — a lot that lapsed unused and corrections are shown below it', 'sprint') . "'>"
             . __('Bought', 'sprint') . "</th>";
-        echo "<th class='text-center' title='" . __s('Credits drawn from the wallet because delivered work went past its sprint\'s grant', 'sprint') . "'>"
+        echo "<th scope='col' class='text-center' title='" . __s('Credits drawn from the wallet because delivered work went past its sprint\'s grant', 'sprint') . "'>"
             . __('From wallet', 'sprint') . "</th>";
-        echo "<th class='text-center' title='" . __s('The wallet today; below it what open work still needs beyond the grants', 'sprint') . "'>"
+        echo "<th scope='col' class='text-center'>" . __('In backlog', 'sprint') . "</th>";
+        echo "<th scope='col' class='text-center' title='" . __s('The wallet today — below it what open work still needs beyond the grants', 'sprint') . "'>"
             . __('Left', 'sprint') . "</th>";
-        echo "<th class='text-center' title='" . __s('Sprints the wallet lasts at the average draw of the last completed sprints', 'sprint') . "'>"
+        echo "<th scope='col' class='text-center' title='" . __s('Sprints the wallet lasts at the average draw of the last completed sprints', 'sprint') . "'>"
             . __('Runway', 'sprint') . "</th>";
         echo "</tr></thead><tbody>";
 
@@ -151,7 +581,7 @@ class SprintCredits extends CommonGLPI
             $low     = $free < 0 || ($alert > 0 && $free < $alert);
             $leftCol = $left < 0 ? '#dc3545' : ($low ? '#fd7e14' : '#198754');
 
-            echo "<tr" . ((int)$b['is_active'] === 0 ? " style='opacity:0.55;'" : '') . ">";
+            echo "<tr id='sprint-credit-customer-" . (int)$id . "'" . ((int)$b['is_active'] === 0 ? " style='opacity:0.55;'" : '') . ">";
             echo "<td><a href='" . SprintCustomer::getFormURLWithID((int)$id) . "'>"
                 . "<span class='sprint-matrix-dot' style='background:" . htmlescape((string)$b['color']) . ";'></span>"
                 . htmlescape((string)$b['name']) . "</a>";
@@ -192,7 +622,6 @@ class SprintCredits extends CommonGLPI
             $expired = (float)$b['expired'];
             echo "<td class='text-center'" . ($expired > 0 ? " style='color:#dc3545;font-weight:600;'" : '') . ">"
                 . htmlescape(SprintCustomer::formatCredits($expired)) . "</td>";
-            echo "<td class='text-center'>" . htmlescape(SprintCustomer::formatCredits($b['pipeline'])) . "</td>";
             echo "<td class='text-center'>" . htmlescape(SprintCustomer::formatCredits($b['purchased']));
             if ((float)$b['purchase_lapsed'] > 0) {
                 echo "<div class='sprint-small' style='color:#dc3545;' title='"
@@ -204,11 +633,12 @@ class SprintCredits extends CommonGLPI
                     . htmlescape(SprintCustomer::formatCredits($b['corrections'])) . ' ' . htmlescape(__('corrected', 'sprint')) . "</div>";
             }
             if ((float)$b['future'] > 0) {
-                echo "<div class='sprint-small text-muted' title='" . __s('Purchases with a booking date after today; not counted yet', 'sprint') . "'>+"
+                echo "<div class='sprint-small text-muted' title='" . __s('Purchases with a booking date after today, not counted yet', 'sprint') . "'>+"
                     . htmlescape(SprintCustomer::formatCredits($b['future'])) . ' ' . htmlescape(__('dated ahead', 'sprint')) . "</div>";
             }
             echo "</td>";
             echo "<td class='text-center'>" . htmlescape(SprintCustomer::formatCredits($b['overflow'])) . "</td>";
+            echo "<td class='text-center'>" . htmlescape(SprintCustomer::formatCredits($b['pipeline'])) . "</td>";
             echo "<td class='text-center fw-bold' style='color:{$leftCol};'>"
                 . htmlescape(SprintCustomer::formatCredits($left));
             if ((float)$b['wallet_reserved'] > 0) {
@@ -306,7 +736,7 @@ class SprintCredits extends CommonGLPI
         echo "<h3 class='card-title mb-0'><i class='fas fa-chart-line me-2'></i>"
             . __('Credits per sprint', 'sprint') . "</h3>";
         echo "<span style='flex:1;'></span>";
-        echo "<div class='btn-group btn-group-sm sprint-credit-viewpick' role='group'>";
+        echo "<div class='btn-group btn-group-sm sprint-credit-viewpick' role='group' aria-label='" . __s('Chart view', 'sprint') . "'>";
         echo "<input type='radio' class='btn-check' name='sprint-credit-view' id='sprint-credit-view-trend' value='trend' checked>"
             . "<label class='btn btn-outline-secondary' for='sprint-credit-view-trend'>"
             . "<i class='fas fa-chart-line me-1'></i>" . __('Trend', 'sprint') . "</label>";
@@ -391,7 +821,8 @@ class SprintCredits extends CommonGLPI
         $num  = static fn(float $v) => number_format($v, 2, '.', '');
 
         echo "<div class='sprint-credit-chartbox'>";
-        echo "<svg viewBox='0 0 {$w} {$h}' class='sprint-credit-svg' preserveAspectRatio='xMidYMid meet' role='img'>";
+        echo "<svg viewBox='0 0 {$w} {$h}' class='sprint-credit-svg' preserveAspectRatio='xMidYMid meet' role='img' aria-label='"
+            . __s('Credits claimed per sprint, one line per customer', 'sprint') . "'>";
 
         for ($g = 0; $g <= 4; $g++) {
             $value = $max * $g / 4;
@@ -517,7 +948,7 @@ class SprintCredits extends CommonGLPI
     {
         echo "<div class='sprint-credit-legend'>";
         foreach ($customerIds as $cid) {
-            echo "<button type='button' class='sprint-credit-legend-item' data-series='" . (int)$cid . "'>"
+            echo "<button type='button' class='sprint-credit-legend-item' aria-pressed='false' data-series='" . (int)$cid . "'>"
                 . "<span class='sprint-matrix-dot' style='background:"
                 . htmlescape($cid > 0 ? SprintCustomer::getColorFor($cid) : '#6c757d') . ";'></span>"
                 . htmlescape(self::customerLabel($cid, $balances)) . "</button>";
@@ -548,10 +979,10 @@ class SprintCredits extends CommonGLPI
     jQuery(document).on('click', '.sprint-credit-legend-item[data-series]', function(){
         var id = jQuery(this).attr('data-series');
         var on = !jQuery(this).hasClass('is-active');
-        jQuery('.sprint-credit-legend-item').removeClass('is-active');
+        jQuery('.sprint-credit-legend-item').removeClass('is-active').filter('[data-series]').attr('aria-pressed', 'false');
         jQuery('.sprint-credit-series').removeClass('is-muted is-isolated');
         if (on) {
-            jQuery(this).addClass('is-active');
+            jQuery(this).addClass('is-active').attr('aria-pressed', 'true');
             jQuery('.sprint-credit-series').each(function(){
                 var mine = this.getAttribute('data-series') === id;
                 jQuery(this).addClass(mine ? 'is-isolated' : 'is-muted');
@@ -709,7 +1140,7 @@ HTML;
                 }
                 $cells[] = $cell;
                 if (!empty($cell['over_cap'])) {
-                    $over[] = (string)$sprint['name'];
+                    $over[(int)$sprint['id']] = (string)$sprint['name'];
                 }
             }
             $f = SprintCreditMath::forecast($cells);
@@ -740,7 +1171,7 @@ HTML;
         echo "<div class='card mb-3'><div class='card-body'>";
         echo "<h3 class='card-title'><i class='fas fa-binoculars me-2'></i>" . __('Forecast', 'sprint') . "</h3>";
         echo "<div class='text-muted sprint-small mb-2'>"
-            . htmlescape(__('The planned and running sprints against the agreed volume, sprint by sprint. What a sprint fills below its agreement will lapse; what it fills above it is drawn from the bought wallet — one never offsets the other.', 'sprint'))
+            . htmlescape(__('The planned and running sprints against the agreed volume, sprint by sprint. What a sprint fills below its agreement will lapse. What it fills above it is drawn from the bought wallet — one never offsets the other.', 'sprint'))
             . "</div>";
 
         echo "<div class='table-responsive'><table class='table table-sm align-middle sprint-credit-table'>";
@@ -791,7 +1222,11 @@ HTML;
             return "<span style='color:#dc3545;'><i class='fas fa-circle-exclamation me-1'></i>"
                 . sprintf(
                     htmlescape(__('Over the agreed cap in %s.', 'sprint')),
-                    htmlescape(implode(', ', $r['over_cap']))
+                    implode(', ', array_map(
+                        static fn($sid, $name) => "<a href='" . htmlescape(Sprint::getFormURLWithID((int)$sid)) . "'>" . htmlescape($name) . "</a>",
+                        array_keys($r['over_cap']),
+                        $r['over_cap']
+                    ))
                 ) . "</span>";
         }
         if ($r['balance'] < 0) {
@@ -842,24 +1277,33 @@ HTML;
     // Ledger
     // =========================================================================
 
-    /** The last credit bookings across every customer. */
-    private static function renderLedger(int $limit = 12): void
+    /**
+     * The last credit bookings, for one customer or every visible one, and
+     * from the start of the chosen period when it is date-bound.
+     */
+    private static function renderLedger(int $customerId = 0, string $from = '', int $limit = 12): void
     {
-        $customers = SprintCustomer::visibleIds();
-        $rows      = $customers
-            ? (new SprintCredit())->find(
-                ['plugin_sprint_sprintcustomers_id' => $customers],
-                ['date DESC', 'id DESC'],
-                $limit
-            )
-            : [];
+        $customers = $customerId > 0 ? [$customerId] : SprintCustomer::visibleIds();
+        $where     = ['plugin_sprint_sprintcustomers_id' => $customers];
+        if ($from !== '') {
+            $where['date'] = ['>=', $from];
+            $limit = 50;
+        }
+        $rows = $customers ? (new SprintCredit())->find($where, ['date DESC', 'id DESC'], $limit) : [];
 
         echo "<div class='card mb-3'><div class='card-body'>";
-        echo "<h3 class='card-title'><i class='fas fa-receipt me-2'></i>" . __('Recent bookings', 'sprint') . "</h3>";
+        echo "<div class='d-flex flex-wrap align-items-center gap-2 mb-2'>";
+        echo "<h3 class='card-title mb-0'><i class='fas fa-receipt me-2'></i>" . __('Recent bookings', 'sprint') . "</h3>";
+        if ($customerId > 0) {
+            echo "<a class='ms-auto sprint-small' href='" . htmlescape(self::bookingsURL($customerId)) . "'>"
+                . __('All bookings of this customer', 'sprint') . "</a>";
+        }
+        echo "</div>";
 
         if (count($rows) === 0) {
-            echo "<div class='text-muted'>"
-                . __('No credits booked yet. Open a customer to book their first purchase.', 'sprint') . "</div>";
+            echo "<div class='text-muted'>" . ($from !== ''
+                ? __('No bookings in this period.', 'sprint')
+                : __('No credits booked yet. Open a customer to book their first purchase.', 'sprint')) . "</div>";
             echo "</div></div>";
             return;
         }
@@ -884,7 +1328,11 @@ HTML;
                     . "<span class='sprint-matrix-dot' style='background:" . htmlescape(SprintCustomer::getColorFor($cid)) . ";'></span>"
                     . htmlescape($name) . "</a>"
                 : "<span class='text-muted'>#" . $cid . "</span>") . "</td>";
-            echo "<td>" . htmlescape((string)($row['name'] ?? '')) . "</td>";
+            $label = (string)($row['name'] ?? '');
+            echo "<td>" . ($name !== ''
+                ? "<a href='" . htmlescape(self::bookingsURL($cid, (int)$row['id'])) . "'>"
+                    . htmlescape($label !== '' ? $label : __('(no description)', 'sprint')) . "</a>"
+                : htmlescape($label)) . "</td>";
             echo "<td class='text-muted sprint-small'>" . htmlescape((string)($row['reference'] ?? '')) . "</td>";
             echo "<td class='text-center fw-bold' style='color:" . ($credits < 0 ? '#dc3545' : '#198754') . ";'>"
                 . ($credits > 0 ? '+' : '') . htmlescape(SprintCustomer::formatCredits($credits)) . "</td>";

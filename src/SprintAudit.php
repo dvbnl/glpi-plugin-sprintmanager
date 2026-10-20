@@ -42,8 +42,17 @@ class SprintAudit extends CommonGLPI
         return false;
     }
 
+    /** Rows per page in the audit table. */
+    const PAGE_SIZE = 50;
+
+    /** Log rows read per sprint; the newest win when a sprint has more. */
+    const MAX_ENTRIES = 2000;
+
     /**
-     * Render the audit log for a single sprint.
+     * Render the audit log for a single sprint: search, area and period
+     * filters, a result count, pages of PAGE_SIZE rows and long changes
+     * folded into an expandable detail. Filtering runs in the browser over
+     * the rows read, so it stays instant on a long history.
      */
     public static function showForSprint(Sprint $sprint): void
     {
@@ -57,53 +66,75 @@ class SprintAudit extends CommonGLPI
         self::pruneOldLogs();
 
         $entries = self::collectEntries($sprintId);
+        $areas   = self::getAreaLabels();
+        $rand    = mt_rand();
 
-        echo "<div class='center'>";
+        echo "<div class='sprint-audit' id='sprint-audit-{$rand}' style='max-width:1200px;margin:0 auto;'>";
 
-        $barId = 'sprint-audit-filter-' . mt_rand();
-        echo "<div id='{$barId}' class='sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2' "
-            . "style='background:var(--tblr-bg-surface-secondary,#f1f3f5);border-radius:6px;max-width:1200px;margin-left:auto;margin-right:auto;'>";
-        echo "<div class='d-flex align-items-center gap-1 text-muted sprint-small'>"
-            . "<i class='fas fa-filter'></i><span>" . __('Filter', 'sprint') . "</span></div>";
-        echo "<input type='search' class='form-control form-control-sm sf-text' "
-            . "style='max-width:240px;' placeholder='" . __('Search action or user...', 'sprint') . "'>";
-        echo "<select class='form-select form-select-sm sf-status' style='max-width:180px;'>";
+        echo "<div class='sprint-audit-bar d-flex flex-wrap align-items-end gap-2 p-2 mb-2' role='search' "
+            . "aria-label='" . __s('Filter the history', 'sprint') . "' "
+            . "style='background:var(--tblr-bg-surface-secondary,#f1f3f5);border-radius:6px;'>";
+        echo "<div><label class='form-label sprint-small mb-1' for='sa-text-{$rand}'>" . __s('Search', 'sprint') . "</label>"
+            . "<input type='search' id='sa-text-{$rand}' class='form-control form-control-sm sa-text' style='width:220px;' "
+            . "placeholder='" . __s('Search action or user...', 'sprint') . "'></div>";
+        echo "<div><label class='form-label sprint-small mb-1' for='sa-area-{$rand}'>" . __s('Area', 'sprint') . "</label>"
+            . "<select id='sa-area-{$rand}' class='form-select form-select-sm sa-area' style='width:170px;'>";
         echo "<option value=''>" . __('All areas', 'sprint') . "</option>";
-        $areas = self::getAreaLabels();
         foreach ($areas as $key => $label) {
             echo "<option value='" . htmlescape($key) . "'>" . htmlescape($label) . "</option>";
         }
-        echo "</select>";
-        echo "<button type='button' class='btn btn-sm btn-outline-secondary sf-reset' "
-            . "data-sprint-action='filter-reset'>"
-            . "<i class='fas fa-times me-1'></i>" . __('Reset', 'sprint') . "</button>";
-        echo "<span class='ms-auto text-muted sprint-small'>" . count($entries) . " " . __('entries', 'sprint') . "</span>";
+        echo "</select></div>";
+        echo "<div><label class='form-label sprint-small mb-1' for='sa-period-{$rand}'>" . __s('Period', 'sprint') . "</label>"
+            . "<select id='sa-period-{$rand}' class='form-select form-select-sm sa-period' style='width:150px;'>"
+            . "<option value=''>" . __s('Whole sprint', 'sprint') . "</option>"
+            . "<option value='1'>" . __s('Last 24 hours', 'sprint') . "</option>"
+            . "<option value='7'>" . __s('Last 7 days', 'sprint') . "</option>"
+            . "<option value='30'>" . __s('Last 30 days', 'sprint') . "</option>"
+            . "<option value='custom'>" . __s('Between dates…', 'sprint') . "</option>"
+            . "</select></div>";
+        echo "<div class='sa-custom' hidden><label class='form-label sprint-small mb-1' for='sa-from-{$rand}'>" . __s('From', 'sprint') . "</label>"
+            . "<input type='date' id='sa-from-{$rand}' class='form-control form-control-sm sa-from'></div>";
+        echo "<div class='sa-custom' hidden><label class='form-label sprint-small mb-1' for='sa-to-{$rand}'>" . __s('To', 'sprint') . "</label>"
+            . "<input type='date' id='sa-to-{$rand}' class='form-control form-control-sm sa-to'></div>";
+        echo "<button type='button' class='btn btn-sm btn-outline-secondary sa-reset'>"
+            . "<i class='fas fa-times me-1' aria-hidden='true'></i>" . __('Reset', 'sprint') . "</button>";
+        echo "<span class='ms-auto text-muted sprint-small sa-count' role='status' aria-live='polite'>"
+            . htmlescape(sprintf(_n('%d entry', '%d entries', count($entries), 'sprint'), count($entries))) . "</span>";
         echo "</div>";
 
-        echo "<table class='tab_cadre_fixe sprint-themed sprint-audit-table'>";
-        echo "<tr class='tab_bg_2'>";
-        echo "<th style='width:160px;'>" . __('When', 'sprint') . "</th>";
-        echo "<th style='width:120px;'>" . __('Area', 'sprint') . "</th>";
-        echo "<th>" . __('Item') . "</th>";
-        echo "<th>" . __('Action', 'sprint') . "</th>";
-        echo "<th>" . __('Change', 'sprint') . "</th>";
-        echo "<th style='width:160px;'>" . __('User') . "</th>";
-        echo "</tr>";
+        if (count($entries) >= self::MAX_ENTRIES) {
+            echo "<div class='alert alert-info py-2 sprint-small'>" . htmlescape(sprintf(
+                __('This sprint has a long history: only the newest %d changes are shown.', 'sprint'),
+                self::MAX_ENTRIES
+            )) . "</div>";
+        }
+
+        echo "<table class='tab_cadre_fixe sprint-themed sprint-audit-table' style='width:100%;'>";
+        echo "<caption class='visually-hidden'>" . __s('Sprint history', 'sprint') . "</caption>";
+        echo "<thead><tr class='tab_bg_2'>";
+        echo "<th scope='col' style='width:160px;'>" . __('When', 'sprint') . "</th>";
+        echo "<th scope='col' style='width:120px;'>" . __('Area', 'sprint') . "</th>";
+        echo "<th scope='col'>" . __('Item') . "</th>";
+        echo "<th scope='col'>" . __('Action', 'sprint') . "</th>";
+        echo "<th scope='col'>" . __('Change', 'sprint') . "</th>";
+        echo "<th scope='col' style='width:160px;'>" . __('User') . "</th>";
+        echo "</tr></thead><tbody>";
 
         if (count($entries) === 0) {
-            echo "<tr class='tab_bg_1'><td colspan='6' class='center' style='padding:32px;color:#6c757d;'>"
-                . "<i class='fas fa-inbox' style='font-size:2em;display:block;margin-bottom:8px;opacity:0.5;'></i>"
+            echo "<tr class='tab_bg_1'><td colspan='6' class='center' style='padding:32px;color:var(--tblr-secondary,#6c757d);'>"
+                . "<i class='fas fa-inbox' aria-hidden='true' style='font-size:2em;display:block;margin-bottom:8px;opacity:0.5;'></i>"
                 . __('No audit entries yet', 'sprint') . "</td></tr>";
         }
 
         foreach ($entries as $e) {
             $areaLabel = $areas[$e['area']] ?? $e['area'];
             $areaColor = self::areaColor($e['area']);
-            echo "<tr class='tab_bg_1 sprint-filterable-row' "
-                . "data-item-name='" . htmlescape(mb_strtolower($e['search'])) . "' "
-                . "data-item-status='" . htmlescape($e['area']) . "'>";
-            echo "<td style='white-space:nowrap;color:#495057;'><i class='far fa-clock text-muted me-1'></i>"
-                . htmlescape($e['when']) . "</td>";
+            echo "<tr class='tab_bg_1 sprint-audit-entry' "
+                . "data-search='" . htmlescape(mb_strtolower($e['search'])) . "' "
+                . "data-area='" . htmlescape($e['area']) . "' "
+                . "data-ts='" . (int)$e['ts'] . "'>";
+            echo "<td style='white-space:nowrap;'><i class='far fa-clock text-muted me-1' aria-hidden='true'></i>"
+                . "<time datetime='" . htmlescape($e['ts'] ? date('c', $e['ts']) : '') . "'>" . htmlescape($e['when']) . "</time></td>";
             echo "<td><span style='display:inline-block;padding:3px 10px;border-radius:10px;"
                 . "background:{$areaColor}22;color:{$areaColor};font-weight:600;font-size:0.78em;'>"
                 . htmlescape($areaLabel) . "</span></td>";
@@ -112,14 +143,120 @@ class SprintAudit extends CommonGLPI
             echo "<td>" . $e['change_html'] . "</td>";
             echo "<td style='white-space:nowrap;'>"
                 . ($e['user_name'] !== ''
-                    ? "<i class='fas fa-user text-muted me-1'></i>" . htmlescape($e['user_name'])
+                    ? "<i class='fas fa-user text-muted me-1' aria-hidden='true'></i>" . htmlescape($e['user_name'])
                     : '<span class="text-muted fst-italic">' . __('System', 'sprint') . '</span>')
                 . "</td>";
             echo "</tr>";
         }
+        echo "</tbody></table>";
 
-        echo "</table>";
+        if (count($entries) > 0) {
+            echo "<div class='sa-empty text-muted text-center p-4' hidden>"
+                . htmlescape(__('No entries match these filters.', 'sprint'))
+                . " <button type='button' class='btn btn-sm btn-link sa-reset'>" . __s('Reset filters', 'sprint') . "</button></div>";
+            echo "<nav class='sa-pager d-flex align-items-center justify-content-center gap-2 mt-2' aria-label='" . __s('History pages', 'sprint') . "'>"
+                . "<button type='button' class='btn btn-sm btn-outline-secondary sa-prev'>"
+                . "<i class='fas fa-chevron-left me-1' aria-hidden='true'></i>" . __s('Newer', 'sprint') . "</button>"
+                . "<span class='sprint-small text-muted sa-page'></span>"
+                . "<button type='button' class='btn btn-sm btn-outline-secondary sa-next'>" . __s('Older', 'sprint')
+                . "<i class='fas fa-chevron-right ms-1' aria-hidden='true'></i></button>"
+                . "</nav>";
+        }
         echo "</div>";
+
+        self::renderAuditScript();
+    }
+
+    /** Client-side filter + pager for the audit table; one delegated binding. */
+    private static function renderAuditScript(): void
+    {
+        $i18n = json_encode([
+            'count' => __('%1$s of %2$s entries', 'sprint'),
+            'page'  => __('Page %1$s of %2$s', 'sprint'),
+            'size'  => self::PAGE_SIZE,
+        ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+        echo <<<HTML
+<script>
+(function(){
+    var T = {$i18n};
+    function fmt(s, a, b) { return s.replace('%1\$s', a).replace('%2\$s', b); }
+    function dayStart(v) { var d = new Date(v + 'T00:00:00'); return isNaN(d) ? null : d.getTime() / 1000; }
+
+    function apply(root, keepPage) {
+        var q      = (root.querySelector('.sa-text').value || '').toLowerCase().trim();
+        var area   = root.querySelector('.sa-area').value || '';
+        var period = root.querySelector('.sa-period').value || '';
+        var from = null, to = null, now = Date.now() / 1000;
+        root.querySelectorAll('.sa-custom').forEach(function(el){ el.hidden = period !== 'custom'; });
+        if (period === 'custom') {
+            from = dayStart(root.querySelector('.sa-from').value || '');
+            var t = dayStart(root.querySelector('.sa-to').value || '');
+            to = t === null ? null : t + 86400;
+        } else if (period !== '') {
+            from = now - parseInt(period, 10) * 86400;
+        }
+        var rows = Array.prototype.slice.call(root.querySelectorAll('tr.sprint-audit-entry'));
+        var match = rows.filter(function(r){
+            if (q && (r.getAttribute('data-search') || '').indexOf(q) === -1) { return false; }
+            if (area && r.getAttribute('data-area') !== area) { return false; }
+            var ts = parseInt(r.getAttribute('data-ts'), 10) || 0;
+            if (from !== null && ts < from) { return false; }
+            if (to !== null && ts >= to) { return false; }
+            return true;
+        });
+        var pages = Math.max(1, Math.ceil(match.length / T.size));
+        var page  = keepPage ? Math.min(parseInt(root.getAttribute('data-page'), 10) || 1, pages) : 1;
+        root.setAttribute('data-page', page);
+        rows.forEach(function(r){ r.hidden = true; });
+        match.slice((page - 1) * T.size, page * T.size).forEach(function(r){ r.hidden = false; });
+
+        var count = root.querySelector('.sa-count');
+        if (count) { count.textContent = fmt(T.count, String(match.length), String(rows.length)); }
+        var empty = root.querySelector('.sa-empty');
+        if (empty) { empty.hidden = match.length > 0; }
+        var pager = root.querySelector('.sa-pager');
+        if (pager) {
+            pager.hidden = pages <= 1;
+            pager.querySelector('.sa-page').textContent = fmt(T.page, String(page), String(pages));
+            pager.querySelector('.sa-prev').disabled = page <= 1;
+            pager.querySelector('.sa-next').disabled = page >= pages;
+        }
+    }
+
+    if (!window.__sprintAuditBound) {
+        window.__sprintAuditBound = true;
+        var onChange = function(e){
+            var root = e.target && e.target.closest ? e.target.closest('.sprint-audit') : null;
+            if (root && e.target.matches('.sa-text, .sa-area, .sa-period, .sa-from, .sa-to')) { apply(root, false); }
+        };
+        document.addEventListener('input', onChange);
+        document.addEventListener('change', onChange);
+        document.addEventListener('click', function(e){
+            var t = e.target && e.target.closest ? e.target : null;
+            var root = t ? t.closest('.sprint-audit') : null;
+            if (!root) { return; }
+            if (t.closest('.sa-reset')) {
+                root.querySelector('.sa-text').value = '';
+                root.querySelector('.sa-area').value = '';
+                root.querySelector('.sa-period').value = '';
+                root.querySelector('.sa-from').value = '';
+                root.querySelector('.sa-to').value = '';
+                apply(root, false);
+                root.querySelector('.sa-text').focus();
+            } else if (t.closest('.sa-prev') || t.closest('.sa-next')) {
+                var page = parseInt(root.getAttribute('data-page'), 10) || 1;
+                root.setAttribute('data-page', page + (t.closest('.sa-next') ? 1 : -1));
+                apply(root, true);
+                var table = root.querySelector('.sprint-audit-table');
+                if (table) { table.scrollIntoView({ block: 'start' }); }
+            }
+        });
+    }
+    // Every copy GLPI rendered (ajax tabs can render twice) gets its first page.
+    document.querySelectorAll('.sprint-audit').forEach(function(root){ apply(root, false); });
+})();
+</script>
+HTML;
     }
 
     /**
@@ -169,7 +306,7 @@ class SprintAudit extends CommonGLPI
             'FROM'   => 'glpi_logs',
             'WHERE'  => $where,
             'ORDER'  => ['date_mod DESC'],
-            'LIMIT'  => 500,
+            'LIMIT'  => self::MAX_ENTRIES,
         ];
 
         $entries = [];
@@ -452,27 +589,38 @@ class SprintAudit extends CommonGLPI
     }
 
     /**
-     * Render the old→new diff, truncating long values for readability.
+     * Render the old→new diff. A long value is cut for the table and the
+     * full text sits in an expandable detail right under it.
      */
     private static function formatChange(int $action, string $oldValue, string $newValue): string
     {
-        $short = function (string $s): string {
-            $s = trim(strip_tags($s));
-            if (mb_strlen($s) > 80) {
-                $s = mb_substr($s, 0, 77) . '…';
-            }
-            return htmlescape($s);
-        };
-
         // Purely informational actions don't carry a diff.
         if (in_array($action, [20, 21, 22, 23], true)) {
             return '<span class="text-muted fst-italic">-</span>';
         }
 
-        $oldHtml = $oldValue !== '' ? $short($oldValue) : '<span class="text-muted">∅</span>';
-        $newHtml = $newValue !== '' ? $short($newValue) : '<span class="text-muted">∅</span>';
+        $old  = trim(strip_tags($oldValue));
+        $new  = trim(strip_tags($newValue));
+        $long = mb_strlen($old) > 80 || mb_strlen($new) > 80;
+        $short = static function (string $s): string {
+            if ($s === '') {
+                return '<span class="text-muted">∅</span>';
+            }
+            return htmlescape(mb_strlen($s) > 80 ? mb_substr($s, 0, 77) . '…' : $s);
+        };
+        $arrow = ' <i class="fas fa-long-arrow-alt-right text-muted mx-1" aria-hidden="true"></i>'
+            . '<span class="visually-hidden">' . htmlescape(__('changed to', 'sprint')) . '</span> ';
 
-        return $oldHtml . ' <i class="fas fa-long-arrow-alt-right text-muted mx-1"></i> ' . $newHtml;
+        $html = $short($old) . $arrow . $short($new);
+        if (!$long) {
+            return $html;
+        }
+        return $html . '<details class="sprint-audit-full sprint-small mt-1"><summary>'
+            . htmlescape(__('Show full change', 'sprint')) . '</summary>'
+            . '<div class="sprint-audit-full-body"><div><strong>' . htmlescape(__('Before', 'sprint')) . ':</strong> '
+            . ($old !== '' ? nl2br(htmlescape($old)) : '∅') . '</div>'
+            . '<div><strong>' . htmlescape(__('After', 'sprint')) . ':</strong> '
+            . ($new !== '' ? nl2br(htmlescape($new)) : '∅') . '</div></div></details>';
     }
 
     /**

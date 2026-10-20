@@ -21,6 +21,9 @@ class SprintMeeting extends CommonDBTM
     const TYPE_REVIEW        = 'review';
     const TYPE_RETROSPECTIVE = 'retrospective';
 
+    /** Reserved phase_notes key: previous sprint picked by the facilitator for the retro follow-up. */
+    const PREV_SPRINT_NOTE_KEY = '_prev_sprint_id';
+
     public function prepareInputForAdd($input)
     {
         $input = self::sanitizeMeetingInput($input);
@@ -383,8 +386,8 @@ class SprintMeeting extends CommonDBTM
                 [
                     'key'         => 'prev_actions',
                     'minutes'     => 5,
-                    'title'       => __('Previous retro actions', 'sprint'),
-                    'description' => __("Walk through the previous retro's actions: what was done, what stalled and why.", 'sprint'),
+                    'title'       => __('Follow-up of earlier actions', 'sprint'),
+                    'description' => __('Go through the actions agreed in the previous retrospective and those still open from earlier ones: what was tried, what is stuck, what is the next concrete step — and did completed changes help?', 'sprint'),
                     'blocks'      => ['prev_actions'],
                     'has_notes'   => true,
                 ],
@@ -518,10 +521,30 @@ class SprintMeeting extends CommonDBTM
         }
 
         if ($meetingType === self::TYPE_RETROSPECTIVE) {
-            // Previous completed sprint's velocity, for the comparison card.
+            // Follow-up of earlier actions: predecessor in the sprint series,
+            // its agreed actions and older still-open ones (one identity each).
+            $followUp = SprintAgility::getRetroFollowUp($this->fields);
+            $isMember    = SprintAgility::isCurrentUserMember($sprintId);
+            $canFollowUp = $isScrumMaster || ($isFacilitator && $isMember);
+            foreach (['previous', 'older'] as $group) {
+                foreach ($followUp[$group] as &$fuRow) {
+                    $fuRow['can_edit'] = $canFollowUp || ($isMember && $uid > 0 && (int)$fuRow['users_id'] === $uid);
+                }
+                unset($fuRow);
+            }
+            $predecessor = $followUp['predecessor'];
+            unset($followUp['predecessor']);
+            $followUp['predecessor_name'] = $predecessor ? (string)$predecessor['name'] : '';
+            $followUp['predecessor_url']  = $predecessor ? Sprint::getFormURLWithID((int)$predecessor['id']) : '';
+            $followUp['chosen_id']        = ($predecessor && $followUp['manual']) ? (int)$predecessor['id'] : 0;
+            $guided['followup']        = $followUp;
+            $guided['followup_helped'] = SprintAgility::helpedOptions();
+
+            // Previous sprint's velocity, for the comparison card: the series
+            // predecessor when known, else the last completed sprint of the entity.
             $prevVelocity = null;
-            $prevSprint   = null;
-            if ($sprintLoaded) {
+            $prevSprint   = $predecessor;
+            if ($sprintLoaded && $prevSprint === null) {
                 foreach ($DB->request([
                     'FROM'  => Sprint::getTable(),
                     'WHERE' => [
@@ -534,18 +557,18 @@ class SprintMeeting extends CommonDBTM
                 ]) as $row) {
                     $prevSprint = $row;
                 }
-                if ($prevSprint !== null) {
-                    $prevVelocity = 0;
-                    foreach ($DB->request([
-                        'SELECT' => ['story_points'],
-                        'FROM'   => SprintItem::getTable(),
-                        'WHERE'  => [
-                            'plugin_sprint_sprints_id' => (int)$prevSprint['id'],
-                            'status'                   => SprintItem::STATUS_DONE,
-                        ],
-                    ]) as $itemRow) {
-                        $prevVelocity += max(0, (int)$itemRow['story_points']);
-                    }
+            }
+            if ($prevSprint !== null) {
+                $prevVelocity = 0;
+                foreach ($DB->request([
+                    'SELECT' => ['story_points'],
+                    'FROM'   => SprintItem::getTable(),
+                    'WHERE'  => [
+                        'plugin_sprint_sprints_id' => (int)$prevSprint['id'],
+                        'status'                   => SprintItem::STATUS_DONE,
+                    ],
+                ]) as $itemRow) {
+                    $prevVelocity += max(0, (int)$itemRow['story_points']);
                 }
             }
             if ($prevVelocity !== null) {
@@ -558,22 +581,8 @@ class SprintMeeting extends CommonDBTM
             }
             $guided['stat_cards'] = $statCards;
 
-            $improvements = SprintAgility::getImprovementsForSprint($sprintId);
-            $guided['improvements']           = $improvements;
+            $guided['improvements']           = SprintAgility::getImprovementsForSprint($sprintId);
             $guided['improvement_categories'] = SprintAgility::improvementCategories();
-
-            // Open actions that predate the meeting start (= carried in from the
-            // previous sprint); actions created during this retro are excluded.
-            $startedAt = (string)($this->fields['started_at'] ?? '');
-            $guided['prev_actions'] = array_values(array_filter($improvements, function ($row) use ($startedAt) {
-                if (($row['category'] ?? '') !== 'action') {
-                    return false;
-                }
-                if ($startedAt !== '' && (string)($row['date_creation'] ?? '') > $startedAt) {
-                    return false;
-                }
-                return true;
-            }));
         }
 
         return $guided;
@@ -582,6 +591,7 @@ class SprintMeeting extends CommonDBTM
     public function showForm($ID, array $options = []): bool
     {
         $this->initForm($ID, $options);
+        SprintI18n::render();
 
         $sprintId = (int)($this->fields['plugin_sprint_sprints_id'] ?? 0);
 
@@ -721,6 +731,10 @@ class SprintMeeting extends CommonDBTM
                     'category_id'          => (int)($row['plugin_sprint_sprintcategories_id'] ?? 0),
                     'category_name'        => SprintCategory::getFullNameFor((int)($row['plugin_sprint_sprintcategories_id'] ?? 0)),
                     'category_pill_html'   => SprintCategory::renderPill((int)($row['plugin_sprint_sprintcategories_id'] ?? 0)),
+                    // Same shape as SprintItem::buildRowDataAttrs(): the shared
+                    // quick-edit dialog shows the DoD checks and the epic.
+                    'done_checks'          => implode('|', SprintAgility::checklist((string)($row['done_checks'] ?? ''))),
+                    'epic_id'              => (int)($row['plugin_sprint_sprintepics_id'] ?? 0),
                     'deps_open'            => $rowDeps,
                     'deps_open_count'      => count($rowDeps),
                     'newly_blocked'        => $newlyBlocked,
@@ -787,9 +801,16 @@ class SprintMeeting extends CommonDBTM
                 'categories'        => SprintCategory::getAll(),
                 'category_locked'   => $sprintId > 0 && !SprintItem::currentUserIsScrumMasterOf($sprintId),
                 'defined_tags'      => \GlpiPlugin\Sprint\Config::getDefinedTags(),
+                'tag_required'      => \GlpiPlugin\Sprint\Config::isTagRequired(),
                 'guided'            => $guided,
             ]
         );
+        // Shared item dialogs (same as board/dashboard); the quick-edit one
+        // also renders the carry-over split dialog.
+        if ($isExisting && $sprintId > 0) {
+            SprintItem::renderQuickEditUI($sprintId, (int)$ID);
+            SprintItem::renderBackToBacklogUI();
+        }
         SprintItem::renderLinkedQuickEditUI();
         SprintItem::renderCarrySplitModalUI();
 

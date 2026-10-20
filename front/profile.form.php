@@ -11,12 +11,6 @@ if (!defined('GLPI_ROOT')) {
 Session::checkRight('profile', UPDATE);
 
 if (isset($_POST['update_sprint_rights'])) {
-    // GLPI 11's kernel already validates (and spends) the CSRF token for legacy
-    // front/ POSTs, so checkCSRF() here would fail (HTTP 403). GLPI 10 has no
-    // such check for this handler, so keep it there.
-    if ((int) explode('.', GLPI_VERSION)[0] < 11) {
-        Session::checkCSRF($_POST);
-    }
 
     global $DB;
 

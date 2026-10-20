@@ -223,13 +223,17 @@ class SprintCreditProduct extends CommonDBTM
         $html   = '';
         $active = self::getAll(true);
         $indent = static fn(int $level) => str_repeat('&nbsp;&nbsp;&nbsp;', $level);
+        // Read by js/sprint.js to show, under a locked credits input, how to
+        // switch to a hand-entered amount.
+        $hint   = " data-fixed-hint='" . __s('Fixed by the product.', 'sprint') . "'"
+            . " data-manual-label='" . __s('Switch to manual credits', 'sprint') . "'";
         foreach ($active as $id => $row) {
             $level = (int)($row['level'] ?? 0);
             if ((int)($row['is_folder'] ?? 0) === 1) {
                 $html .= "<option value='' disabled>" . $indent($level) . '📁 ' . htmlescape((string)$row['name']) . "</option>";
                 continue;
             }
-            $html .= "<option value='" . (int)$id . "' data-credits='" . htmlescape(SprintCustomer::formatCredits($row['credits'])) . "'"
+            $html .= "<option value='" . (int)$id . "' data-credits='" . htmlescape(SprintCustomer::formatCredits($row['credits'])) . "'" . $hint
                 . ((int)$id === $selected ? ' selected' : '') . ">" . $indent($level)
                 . htmlescape((string)$row['name'])
                 . ((float)$row['credits'] > 0 ? ' (' . htmlescape(SprintCustomer::formatCredits($row['credits'])) . ')' : '')
@@ -238,7 +242,7 @@ class SprintCreditProduct extends CommonDBTM
         if ($selected > 0 && !isset($active[$selected])) {
             $name = self::getFullNameFor($selected);
             if ($name !== '') {
-                $html .= "<option value='" . $selected . "' data-credits='" . htmlescape(SprintCustomer::formatCredits(self::creditsFor($selected))) . "' selected>"
+                $html .= "<option value='" . $selected . "' data-credits='" . htmlescape(SprintCustomer::formatCredits(self::creditsFor($selected))) . "'" . $hint . " selected>"
                     . htmlescape($name) . ' (' . __('inactive', 'sprint') . ")</option>";
             }
         }
@@ -285,23 +289,28 @@ class SprintCreditProduct extends CommonDBTM
     // Catalogue page
     // =========================================================================
 
-    /** The catalogue as a tree with its own add / edit / delete controls. */
+    /**
+     * The catalogue as a tree with its own add / edit / delete controls, a
+     * search box, an active-only filter and folders that fold away. Rows
+     * keep their tree order; filtering only hides them, so drag and the
+     * up/down buttons always work on the real sibling order.
+     */
     public static function showCatalogue(): void
     {
         $canedit = self::canCreate();
         $all     = self::getAll(false);
 
         echo "<div class='d-flex flex-wrap align-items-center gap-2 mb-3'>";
-        echo "<h2 class='mb-0'><i class='" . self::getIcon() . " me-2'></i>" . __('Credit catalogue', 'sprint') . "</h2>";
+        echo "<h2 class='mb-0'><i class='" . self::getIcon() . " me-2' aria-hidden='true'></i>" . __('Credit catalogue', 'sprint') . "</h2>";
         echo "<span class='text-muted sprint-small'>"
-            . htmlescape(__('Products and tasks with a fixed number of credits. Pick one on a sprint item to set its credits; a different amount needs "Manual credits". Folders only group.', 'sprint'))
+            . htmlescape(__('Products and tasks with a fixed number of credits. Pick one on a sprint item to set its credits. A different amount needs "Manual credits". Folders only group.', 'sprint'))
             . "</span>";
         echo "<span style='flex:1;'></span>";
         if ($canedit) {
             echo "<a class='btn btn-sm btn-outline-secondary' href='" . self::getFormURL() . "?is_folder=1'>"
-                . "<i class='fas fa-folder-plus me-1'></i>" . __('New folder', 'sprint') . "</a>";
+                . "<i class='fas fa-folder-plus me-1' aria-hidden='true'></i>" . __('New folder', 'sprint') . "</a>";
             echo "<a class='btn btn-sm btn-primary' href='" . self::getFormURL() . "'>"
-                . "<i class='fas fa-plus me-1'></i>" . __('New product', 'sprint') . "</a>";
+                . "<i class='fas fa-plus me-1' aria-hidden='true'></i>" . __('New product', 'sprint') . "</a>";
         }
         echo "</div>";
 
@@ -312,19 +321,41 @@ class SprintCreditProduct extends CommonDBTM
             return;
         }
 
+        $hasChildren = [];
+        foreach ($all as $row) {
+            $hasChildren[(int)($row['sprintcreditproducts_id'] ?? 0)] = true;
+        }
+
+        // Toolbar: search, active only, fold all / unfold all, result count.
+        echo "<div class='sprint-catalogue-toolbar d-flex flex-wrap align-items-center gap-2 p-2' role='search'>";
+        echo "<label class='visually-hidden' for='sprint-catalogue-search'>" . __s('Search the catalogue', 'sprint') . "</label>";
+        echo "<input type='search' id='sprint-catalogue-search' class='form-control form-control-sm sprint-catalogue-search' style='max-width:280px;' "
+            . "placeholder='" . __s('Search name, code or description…', 'sprint') . "'>";
+        echo "<label class='form-check form-switch mb-0 sprint-small'>"
+            . "<input class='form-check-input sprint-catalogue-active' type='checkbox' role='switch' checked>"
+            . "<span class='form-check-label'>" . __s('Active only', 'sprint') . "</span></label>";
+        echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-catalogue-fold' data-fold='1'>"
+            . "<i class='fas fa-folder me-1' aria-hidden='true'></i>" . __s('Collapse all', 'sprint') . "</button>";
+        echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-catalogue-fold' data-fold='0'>"
+            . "<i class='fas fa-folder-open me-1' aria-hidden='true'></i>" . __s('Expand all', 'sprint') . "</button>";
+        echo "<span class='ms-auto text-muted sprint-small sprint-catalogue-count' role='status' aria-live='polite'></span>";
+        echo "</div>";
+        echo "<div class='sprint-catalogue-feedback px-2' role='status' aria-live='polite'></div>";
+
         $candrag = $canedit && self::canUpdate();
         echo "<div class='table-responsive'><table class='table table-sm align-middle mb-0 sprint-credit-catalogue'"
             . ($candrag ? " data-reorder-url='" . htmlescape(Plugin::getWebDir('sprint') . '/ajax/catalogreorder.php') . "'"
                 . " data-token-url='" . htmlescape(Plugin::getWebDir('sprint') . '/ajax/csrftoken.php') . "'" : '')
             . ">";
+        echo "<caption class='visually-hidden'>" . __s('Credit catalogue', 'sprint') . "</caption>";
         echo "<thead><tr>"
-            . ($candrag ? "<th style='width:26px;' title='" . __s('Drag to reorder', 'sprint') . "'></th>" : '')
-            . "<th>" . __('Name') . "</th>"
-            . "<th style='width:120px;'>" . __('Reference code', 'sprint') . "</th>"
-            . "<th class='text-center' style='width:130px;'>" . __('Default credits', 'sprint') . "</th>"
-            . "<th>" . __('Description') . "</th>"
-            . "<th style='width:90px;'></th>"
-            . "<th style='width:120px;'></th>"
+            . ($candrag ? "<th scope='col' style='width:26px;'><span class='visually-hidden'>" . __s('Order', 'sprint') . "</span></th>" : '')
+            . "<th scope='col'>" . __('Name') . "</th>"
+            . "<th scope='col' style='width:120px;'>" . __('Reference code', 'sprint') . "</th>"
+            . "<th scope='col' class='text-center' style='width:130px;'>" . __('Default credits', 'sprint') . "</th>"
+            . "<th scope='col'>" . __('Description') . "</th>"
+            . "<th scope='col' style='width:90px;'><span class='visually-hidden'>" . __s('Add', 'sprint') . "</span></th>"
+            . "<th scope='col' style='width:" . ($candrag ? 190 : 120) . "px;'><span class='visually-hidden'>" . __s('Actions') . "</span></th>"
             . "</tr></thead><tbody>";
         foreach ($all as $id => $row) {
             $id       = (int)$id;
@@ -335,60 +366,235 @@ class SprintCreditProduct extends CommonDBTM
             if ($parentId > 0 && !isset($all[$parentId])) {
                 $parentId = 0;
             }
-            echo "<tr class='sprint-catalogue-row" . ($isFolder ? ' fw-bold' : '') . "'"
+            $name   = (string)$row['name'];
+            $search = mb_strtolower($name . ' ' . (string)($row['code'] ?? '') . ' ' . (string)($row['description'] ?? ''));
+            echo "<tr class='sprint-catalogue-row" . ($isFolder ? ' fw-bold sprint-catalogue-folder' : '') . "'"
                 . ($inactive ? " style='opacity:0.55;'" : '')
-                . " data-id='{$id}' data-parent='{$parentId}' data-level='" . (int)($row['level'] ?? 0) . "'>";
+                . " data-id='{$id}' data-parent='{$parentId}' data-level='" . (int)($row['level'] ?? 0) . "'"
+                . " data-active='" . ($inactive ? 0 : 1) . "' data-folder='" . ($isFolder ? 1 : 0) . "'"
+                . " data-search='" . htmlescape($search) . "'>";
             if ($candrag) {
                 echo "<td class='sprint-catalogue-grip text-muted' title='" . __s('Drag to reorder', 'sprint') . "'>"
-                    . "<i class='fas fa-grip-vertical'></i></td>";
+                    . "<i class='fas fa-grip-vertical' aria-hidden='true'></i></td>";
             }
-            echo "<td style='padding-left:{$pad}px;'>"
-                . "<i class='" . ($isFolder ? 'fas fa-folder' : 'fas fa-tag') . " me-2' style='color:" . ($isFolder ? '#f59f00' : '#6c757d') . ";'></i>"
-                . "<a href='" . self::getFormURLWithID($id) . "'>" . htmlescape((string)$row['name']) . "</a>";
+            echo "<td style='padding-left:{$pad}px;'>";
+            if ($isFolder && isset($hasChildren[$id])) {
+                echo "<button type='button' class='btn btn-sm btn-link p-0 me-1 sprint-catalogue-toggle' aria-expanded='true' "
+                    . "aria-label='" . htmlescape(sprintf(__('Fold or unfold %s', 'sprint'), $name)) . "'>"
+                    . "<i class='fas fa-chevron-down' aria-hidden='true'></i></button>";
+            }
+            echo "<i class='" . ($isFolder ? 'fas fa-folder' : 'fas fa-tag') . " me-2' aria-hidden='true' style='color:" . ($isFolder ? '#f59f00' : '#6c757d') . ";'></i>"
+                . "<a href='" . self::getFormURLWithID($id) . "'>" . htmlescape($name) . "</a>";
             if ($inactive) {
                 echo " <span class='badge bg-secondary'>" . __('inactive', 'sprint') . "</span>";
             }
             echo "</td>";
             echo "<td class='text-muted'>" . htmlescape((string)($row['code'] ?? '')) . "</td>";
-            echo "<td class='text-center'>" . ($isFolder ? '' : "<span class='sprint-credit-chip'><i class='fas fa-coins'></i> "
+            echo "<td class='text-center'>" . ($isFolder ? '' : "<span class='sprint-credit-chip'><i class='fas fa-coins' aria-hidden='true'></i> "
                 . htmlescape(SprintCustomer::formatCredits($row['credits'])) . "</span>") . "</td>";
             echo "<td class='text-muted sprint-small'>" . htmlescape(mb_strimwidth((string)($row['description'] ?? ''), 0, 120, '…')) . "</td>";
             echo "<td class='text-nowrap'>";
             if ($canedit && $isFolder) {
-                echo "<a class='btn btn-sm btn-outline-secondary' title='" . __s('New product in this folder', 'sprint') . "' href='"
-                    . self::getFormURL() . "?parent={$id}'><i class='fas fa-plus'></i></a>";
+                $label = sprintf(__('New product in %s', 'sprint'), $name);
+                echo "<a class='btn btn-sm btn-outline-secondary' title='" . htmlescape($label) . "' aria-label='" . htmlescape($label) . "' href='"
+                    . self::getFormURL() . "?parent={$id}'><i class='fas fa-plus' aria-hidden='true'></i></a>";
             }
             echo "</td>";
             echo "<td class='text-nowrap text-end'>";
+            if ($candrag) {
+                echo "<button type='button' class='btn btn-sm btn-outline-secondary me-1 sprint-catalogue-move' data-dir='-1' "
+                    . "title='" . __s('Move up', 'sprint') . "' aria-label='" . htmlescape(sprintf(__('Move %s up', 'sprint'), $name)) . "'>"
+                    . "<i class='fas fa-arrow-up' aria-hidden='true'></i></button>";
+                echo "<button type='button' class='btn btn-sm btn-outline-secondary me-1 sprint-catalogue-move' data-dir='1' "
+                    . "title='" . __s('Move down', 'sprint') . "' aria-label='" . htmlescape(sprintf(__('Move %s down', 'sprint'), $name)) . "'>"
+                    . "<i class='fas fa-arrow-down' aria-hidden='true'></i></button>";
+            }
             if ($canedit) {
-                echo "<a class='btn btn-sm btn-outline-primary me-1' title='" . __s('Edit') . "' href='" . self::getFormURLWithID($id) . "'><i class='fas fa-pen'></i></a>";
-                echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;' onsubmit=\"return confirm('" . __s('Confirm deletion?') . "');\">";
+                echo "<a class='btn btn-sm btn-outline-primary me-1' title='" . __s('Edit') . "' aria-label='"
+                    . htmlescape(sprintf(__('Edit %s', 'sprint'), $name)) . "' href='" . self::getFormURLWithID($id) . "'>"
+                    . "<i class='fas fa-pen' aria-hidden='true'></i></a>";
+                echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
                 echo Html::hidden('id', ['value' => $id]);
-                echo "<button type='submit' name='purge' value='1' class='btn btn-sm btn-outline-danger' title='" . __s('Delete permanently') . "'><i class='fas fa-trash'></i></button>";
+                echo "<button type='submit' name='purge' value='1' class='btn btn-sm btn-outline-danger' title='" . __s('Delete permanently') . "' "
+                    . "aria-label='" . htmlescape(sprintf(__('Delete %s permanently', 'sprint'), $name)) . "' "
+                    . "data-sprint-arm='" . htmlescape($isFolder && isset($hasChildren[$id])
+                        ? __('Click again: the folder and everything in it are deleted', 'sprint')
+                        : __('Click again to delete', 'sprint')) . "'>"
+                    . "<i class='fas fa-trash' aria-hidden='true'></i></button>";
                 Html::closeForm();
             }
             echo "</td></tr>";
         }
         echo "</tbody></table></div>";
+        echo "<div class='sprint-catalogue-empty p-3 text-muted' hidden>"
+            . "<span class='sprint-catalogue-empty-text'></span> "
+            . "<button type='button' class='btn btn-sm btn-link sprint-catalogue-reset'>" . __s('Reset filters', 'sprint') . "</button></div>";
         echo "</div></div>";
+        echo SprintCredit::armScript();
+        self::renderFilterScript();
         if ($candrag) {
             self::renderReorderScript();
         }
     }
 
-    /**
-     * Drag a row (a folder takes its subtree along) to another spot among
-     * its siblings; the new order is saved straight away. Dropping onto a
-     * row with another parent is refused: moving between folders stays an
-     * explicit edit on the form.
-     */
-    private static function renderReorderScript(): void
+    /** Search, active-only and folding for the catalogue table. */
+    private static function renderFilterScript(): void
     {
-        $msgSaved  = addslashes(__('Order saved', 'sprint'));
-        $msgFailed = addslashes(__('Could not save the order', 'sprint'));
+        $i18n = json_encode([
+            'count'      => __('%1$s of %2$s products', 'sprint'),
+            'noMatch'    => __('No product matches "%s".', 'sprint'),
+            'noActive'   => __('No active products. Switch off "Active only" to see the inactive ones.', 'sprint'),
+        ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
         echo <<<HTML
 <script>
 (function(){
+    var T = {$i18n};
+    if (window.__sprintCatalogueFilterBound) { window.sprintCatalogueRefresh && window.sprintCatalogueRefresh(); return; }
+    window.__sprintCatalogueFilterBound = true;
+    var KEY = 'sprint.catalogue.collapsed';
+    function loadCollapsed() {
+        try { return JSON.parse(window.localStorage.getItem(KEY) || '[]') || []; } catch (e) { return []; }
+    }
+    function saveCollapsed(list) {
+        try { window.localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) { /* private mode */ }
+    }
+    var collapsed = loadCollapsed().map(String);
+
+    function card() {
+        var all = document.querySelectorAll('.sprint-credit-catalogue');
+        var table = all[all.length - 1];
+        return table ? table.closest('.card') : null;
+    }
+    function fmt(s) {
+        var args = Array.prototype.slice.call(arguments, 1);
+        return s.replace(/%(\d)\\\$s/g, function(_, n){ return args[n - 1]; }).replace('%s', args[0]);
+    }
+
+    function refresh() {
+        var root = card();
+        if (!root) { return; }
+        var rows = Array.prototype.slice.call(root.querySelectorAll('tr.sprint-catalogue-row'));
+        var q = (root.querySelector('.sprint-catalogue-search') || {}).value || '';
+        q = q.toLowerCase().trim();
+        var activeOnly = !!(root.querySelector('.sprint-catalogue-active') || {}).checked;
+        var byId = {};
+        rows.forEach(function(r){ byId[r.getAttribute('data-id')] = r; });
+        function ancestors(r) {
+            var out = [], p = r.getAttribute('data-parent'), guard = 0;
+            while (p && p !== '0' && byId[p] && guard++ < 50) { out.push(byId[p]); p = byId[p].getAttribute('data-parent'); }
+            return out;
+        }
+        var activeOk = function(r){ return !activeOnly || r.getAttribute('data-active') === '1'; };
+        var show = new Set();
+        rows.forEach(function(r){
+            var anc = ancestors(r);
+            if (!activeOk(r) || !anc.every(activeOk)) { return; }
+            if (q && (r.getAttribute('data-search') || '').indexOf(q) === -1) { return; }
+            show.add(r);
+            // A match keeps the folders above it in view.
+            if (q) { anc.forEach(function(a){ show.add(a); }); }
+        });
+        var products = 0, shown = 0;
+        rows.forEach(function(r){
+            var visible = show.has(r);
+            // Folding only applies while not searching: a search shows every match.
+            if (visible && !q) {
+                visible = !ancestors(r).some(function(a){ return collapsed.indexOf(a.getAttribute('data-id')) !== -1; });
+            }
+            r.hidden = !visible;
+            var isFolder = r.getAttribute('data-folder') === '1';
+            if (!isFolder) { products++; if (show.has(r)) { shown++; } }
+            var toggle = r.querySelector('.sprint-catalogue-toggle');
+            if (toggle) {
+                var open = !!q || collapsed.indexOf(r.getAttribute('data-id')) === -1;
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                var icon = toggle.querySelector('i');
+                if (icon) { icon.className = open ? 'fas fa-chevron-down' : 'fas fa-chevron-right'; }
+            }
+        });
+        var count = root.querySelector('.sprint-catalogue-count');
+        if (count) { count.textContent = fmt(T.count, String(shown), String(products)); }
+        var empty = root.querySelector('.sprint-catalogue-empty');
+        if (empty) {
+            var none = show.size === 0;
+            empty.hidden = !none;
+            var text = empty.querySelector('.sprint-catalogue-empty-text');
+            if (text) { text.textContent = q ? fmt(T.noMatch, q) : T.noActive; }
+        }
+    }
+    window.sprintCatalogueRefresh = refresh;
+
+    document.addEventListener('input', function(e){
+        if (e.target && e.target.classList && e.target.classList.contains('sprint-catalogue-search')) { refresh(); }
+    });
+    document.addEventListener('change', function(e){
+        if (e.target && e.target.classList && e.target.classList.contains('sprint-catalogue-active')) { refresh(); }
+    });
+    document.addEventListener('click', function(e){
+        var t = e.target && e.target.closest ? e.target : null;
+        if (!t) { return; }
+        var toggle = t.closest('.sprint-catalogue-toggle');
+        if (toggle) {
+            var id = toggle.closest('tr').getAttribute('data-id');
+            var at = collapsed.indexOf(id);
+            if (at === -1) { collapsed.push(id); } else { collapsed.splice(at, 1); }
+            saveCollapsed(collapsed);
+            refresh();
+            return;
+        }
+        var fold = t.closest('.sprint-catalogue-fold');
+        if (fold) {
+            var root = card();
+            collapsed = [];
+            if (fold.getAttribute('data-fold') === '1' && root) {
+                root.querySelectorAll('.sprint-catalogue-toggle').forEach(function(b){
+                    collapsed.push(b.closest('tr').getAttribute('data-id'));
+                });
+            }
+            saveCollapsed(collapsed);
+            refresh();
+            return;
+        }
+        if (t.closest('.sprint-catalogue-reset')) {
+            var r = card();
+            if (r) {
+                var s = r.querySelector('.sprint-catalogue-search');
+                if (s) { s.value = ''; s.focus(); }
+                var a = r.querySelector('.sprint-catalogue-active');
+                if (a) { a.checked = false; }
+            }
+            refresh();
+        }
+    });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', refresh);
+    } else {
+        refresh();
+    }
+})();
+</script>
+HTML;
+    }
+
+    /**
+     * Drag a row (a folder takes its subtree along) to another spot among
+     * its siblings, or move it one place with the up/down buttons; the new
+     * order is saved straight away. Dropping onto a row with another parent
+     * is refused: moving between folders stays an explicit edit on the form.
+     */
+    private static function renderReorderScript(): void
+    {
+        $i18n = json_encode([
+            'saving' => __('Saving the order…', 'sprint'),
+            'saved'  => __('Order saved', 'sprint'),
+            'failed' => __('Could not save the order', 'sprint'),
+            'retry'  => __('Try again', 'sprint'),
+            'edge'   => __('Already at the edge of its folder', 'sprint'),
+        ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+        echo <<<HTML
+<script>
+(function(){
+    var T = {$i18n};
     if (typeof jQuery === 'undefined' || window.__sprintCatalogueReorderBound) { return; }
     window.__sprintCatalogueReorderBound = true;
     var dragging = null;   // the block of rows being moved (row + subtree)
@@ -404,6 +610,77 @@ class SprintCreditProduct extends CommonDBTM
         }
         return rows;
     }
+
+    // One feedback line above the table: saving, saved, or failed with a retry.
+    function feedback(table, kind, text, retry) {
+        var box = table.closest('.card') ? table.closest('.card').querySelector('.sprint-catalogue-feedback') : null;
+        if (!box) { return; }
+        box.innerHTML = '';
+        if (!text) { return; }
+        var line = document.createElement('div');
+        line.className = 'sprint-small py-1 ' + (kind === 'error' ? 'text-danger' : 'text-muted');
+        line.textContent = text;
+        if (retry) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-sm btn-link py-0';
+            btn.textContent = T.retry;
+            btn.addEventListener('click', retry);
+            line.appendChild(btn);
+        }
+        box.appendChild(line);
+    }
+
+    function saveOrder(tbody, parent) {
+        var order = [];
+        jQuery(tbody).find('.sprint-catalogue-row[data-parent="' + parent + '"]').each(function(){
+            order.push(parseInt(this.getAttribute('data-id'), 10));
+        });
+        var table = jQuery(tbody).closest('table');
+        var retry = function(){ saveOrder(tbody, parent); };
+        feedback(table[0], 'info', T.saving);
+        jQuery.ajax({
+            url: table.attr('data-token-url'), type: 'GET', dataType: 'json', cache: false
+        }).then(function(tok){
+            return jQuery.ajax({
+                url: table.attr('data-reorder-url'), type: 'POST', dataType: 'json',
+                data: { order: JSON.stringify(order), _glpi_csrf_token: tok && tok.token ? tok.token : '' }
+            });
+        }).done(function(resp){
+            if (resp && resp.success) {
+                feedback(table[0], 'info', T.saved);
+                if (window.glpi_toast_info) { window.glpi_toast_info(T.saved); }
+            } else {
+                feedback(table[0], 'error', (resp && resp.message) || T.failed, retry);
+            }
+        }).fail(function(){
+            feedback(table[0], 'error', T.failed, retry);
+        });
+    }
+
+    // Keyboard route: one place up or down among the siblings.
+    jQuery(document).on('click', '.sprint-catalogue-move', function(){
+        var row = this.closest('tr');
+        var dir = parseInt(this.getAttribute('data-dir'), 10);
+        var parent = row.getAttribute('data-parent');
+        var tbody = row.parentNode;
+        var siblings = Array.prototype.filter.call(tbody.querySelectorAll('.sprint-catalogue-row'), function(r){
+            return r.getAttribute('data-parent') === parent;
+        });
+        var at = siblings.indexOf(row);
+        var other = siblings[at + dir];
+        var table = row.closest('table');
+        if (!other) { feedback(table, 'info', T.edge); return; }
+        var block = blockOf(row);
+        if (dir < 0) {
+            block.forEach(function(r){ tbody.insertBefore(r, other); });
+        } else {
+            var anchor = blockOf(other).slice(-1)[0];
+            block.forEach(function(r){ tbody.insertBefore(r, anchor.nextSibling); anchor = r; });
+        }
+        this.focus();
+        saveOrder(tbody, parent);
+    });
 
     jQuery(document).on('mousedown', '.sprint-catalogue-grip', function(){
         var row = this.closest('tr');
@@ -447,29 +724,7 @@ class SprintCreditProduct extends CommonDBTM
             if (below) { tbody.insertBefore(r, anchor.nextSibling); anchor = r; }
             else { tbody.insertBefore(r, anchor); }
         });
-        var parent = dragging[0].getAttribute('data-parent');
-        var order  = [];
-        jQuery(tbody).find('.sprint-catalogue-row[data-parent="' + parent + '"]').each(function(){
-            order.push(parseInt(this.getAttribute('data-id'), 10));
-        });
-        var table = jQuery(target).closest('table');
-        jQuery.ajax({
-            url: table.attr('data-token-url'), type: 'GET', dataType: 'json', cache: false
-        }).then(function(tok){
-            return jQuery.ajax({
-                url: table.attr('data-reorder-url'), type: 'POST', dataType: 'json',
-                data: { order: JSON.stringify(order), _glpi_csrf_token: tok && tok.token ? tok.token : '' }
-            });
-        }).done(function(resp){
-            if (resp && resp.success) {
-                if (window.glpi_toast_info) { window.glpi_toast_info("{$msgSaved}"); }
-            } else {
-                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || "{$msgFailed}"); }
-                else { alert((resp && resp.message) || "{$msgFailed}"); }
-            }
-        }).fail(function(){
-            if (window.glpi_toast_error) { window.glpi_toast_error("{$msgFailed}"); }
-        });
+        saveOrder(tbody, dragging[0].getAttribute('data-parent'));
     });
     jQuery(document).on('dragend', '.sprint-catalogue-row', function(){
         jQuery('.sprint-catalogue-row').removeClass('sprint-catalogue-dragging sprint-catalogue-over-top sprint-catalogue-over-bottom')
@@ -498,8 +753,8 @@ HTML;
         $this->showFormHeader($options);
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Name') . "</td><td>";
-        echo Html::input('name', ['value' => $this->fields['name'] ?? '', 'size' => 40]);
+        echo "<td><label for='sprint-product-name'>" . __('Name') . "</label></td><td>";
+        echo Html::input('name', ['id' => 'sprint-product-name', 'value' => $this->fields['name'] ?? '', 'size' => 40]);
         echo "</td>";
         echo "<td>" . __('Type', 'sprint') . "</td><td>";
         \Dropdown::showFromArray('is_folder', [
@@ -509,19 +764,19 @@ HTML;
         echo "</td></tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Folder', 'sprint') . "</td><td>";
-        echo "<select class='form-select' name='sprintcreditproducts_id' style='max-width:320px;'>"
+        echo "<td><label for='sprint-product-folder'>" . __('Folder', 'sprint') . "</label></td><td>";
+        echo "<select class='form-select' id='sprint-product-folder' name='sprintcreditproducts_id' style='max-width:320px;'>"
             . self::folderOptions($parent, (int)$ID) . "</select>";
         echo "</td>";
-        echo "<td>" . __('Reference code', 'sprint') . "</td><td>";
-        echo Html::input('code', ['value' => $this->fields['code'] ?? '', 'size' => 20]);
+        echo "<td><label for='sprint-product-code'>" . __('Reference code', 'sprint') . "</label></td><td>";
+        echo Html::input('code', ['id' => 'sprint-product-code', 'value' => $this->fields['code'] ?? '', 'size' => 20]);
         echo "</td></tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Default credits', 'sprint') . "<br>";
-        echo "<span class='text-muted sprint-small'>"
-            . __('Set on an item when this product is picked; a different amount needs "Manual credits". Not used for a folder.', 'sprint') . "</span></td><td>";
-        echo "<input type='number' class='form-control' name='credits' min='0' step='0.25' style='max-width:140px;' value='"
+        echo "<td><label for='sprint-product-credits'>" . __('Default credits', 'sprint') . "</label><br>";
+        echo "<span class='text-muted sprint-small' id='sprint-product-credits-help'>"
+            . __('Set on an item when this product is picked. A different amount needs "Manual credits". Not used for a folder.', 'sprint') . "</span></td><td>";
+        echo "<input type='number' class='form-control' id='sprint-product-credits' aria-describedby='sprint-product-credits-help' name='credits' min='0' step='0.25' style='max-width:140px;' value='"
             . SprintCustomer::formatCredits($this->fields['credits'] ?? 0) . "'>";
         echo "</td>";
         echo "<td>" . __('Active') . "</td><td>";
@@ -529,8 +784,8 @@ HTML;
         echo "</td></tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Description') . "</td><td colspan='3'>";
-        echo "<textarea class='form-control' name='description' rows='3'>"
+        echo "<td><label for='sprint-product-description'>" . __('Description') . "</label></td><td colspan='3'>";
+        echo "<textarea class='form-control' id='sprint-product-description' name='description' rows='3'>"
             . htmlescape((string)($this->fields['description'] ?? '')) . "</textarea>";
         echo "</td></tr>";
 

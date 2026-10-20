@@ -30,16 +30,40 @@
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_SPRINT_VERSION', '1.3.0');
+define('PLUGIN_SPRINT_VERSION', '1.3.1');
 define('PLUGIN_SPRINT_MIN_GLPI', '10.0.0');
 define('PLUGIN_SPRINT_MAX_GLPI', '11.99.99');
 
-// Polyfill htmlescape() (added mid-GLPI-10) for older GLPI 10 installs.
+// Polyfill htmlescape() (native from GLPI 11) for GLPI 10. GLPI 10 stores
+// input HTML-encoded (`R&#38;D`), so decode one level first: escaping the
+// stored value as-is would show the entities instead of the text.
 if (!function_exists('htmlescape')) {
     function htmlescape(?string $string): string
     {
-        return htmlspecialchars($string ?? '', ENT_QUOTES, 'UTF-8');
+        return htmlspecialchars(html_entity_decode($string ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES, 'UTF-8');
     }
+}
+
+/**
+ * A stored name (sprint, item, category) made safe for an HTML message
+ * (Session::addMessageAfterRedirect(), the `message` of a JSON answer that
+ * ends up in a GLPI toast). GLPI 10 stores input HTML-encoded already,
+ * GLPI 11 stores it raw, so only GLPI 11 escapes here.
+ */
+function plugin_sprint_html(?string $name): string
+{
+    return (int)explode('.', GLPI_VERSION)[0] >= 11 ? htmlescape($name) : (string)$name;
+}
+
+/**
+ * A stored name as plain text for a JSON field the browser inserts as text
+ * (or escapes itself): decodes GLPI 10's stored entities, GLPI 11 is raw.
+ */
+function plugin_sprint_text(?string $name): string
+{
+    return (int)explode('.', GLPI_VERSION)[0] >= 11
+        ? (string)$name
+        : html_entity_decode((string)$name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 }
 
 /**
@@ -68,61 +92,14 @@ function plugin_version_sprint(): array
 /**
  * @return void
  */
-/**
- * Columns that arrived after 1.3.0 shipped, without a version bump: an
- * install that already ran the 1.3.0 migration never passes through the
- * upgrade path again, so the missing ones are added on first use. Cheap:
- * fieldExists() reads GLPI's per-request column cache and the ALTER runs
- * once per column, ever.
- */
-function plugin_sprint_ensure_schema(): void
-{
-    global $DB;
-
-    static $done = false;
-    if ($done || !($DB instanceof DBmysql) || empty($DB->connected)) {
-        return;
-    }
-    $done = true;
-
-    $wanted = [
-        'glpi_plugin_sprint_sprintitemdependencies' => [
-            'credits' => "ADD COLUMN `credits` DECIMAL(10,2) NOT NULL DEFAULT 0 "
-                . "COMMENT 'Credits the helper charges to the parent item customer' AFTER `capacity`",
-            'plugin_sprint_sprintcreditproducts_id' => "ADD COLUMN `plugin_sprint_sprintcreditproducts_id` INT NOT NULL DEFAULT 0 "
-                . "COMMENT 'Catalogue entry the credits were taken from, 0 = by hand' AFTER `credits`, "
-                . "ADD KEY `plugin_sprint_sprintcreditproducts_id` (`plugin_sprint_sprintcreditproducts_id`)",
-        ],
-        'glpi_plugin_sprint_sprintcreditproducts' => [
-            'sort_order' => "ADD COLUMN `sort_order` INT NOT NULL DEFAULT 0 "
-                . "COMMENT 'Drag order among siblings, 0 = by name' AFTER `is_folder`",
-        ],
-    ];
-    foreach ($wanted as $table => $columns) {
-        if (!$DB->tableExists($table)) {
-            continue;
-        }
-        foreach ($columns as $column => $ddl) {
-            if (!$DB->fieldExists($table, $column, false)) {
-                $DB->doQuery("ALTER TABLE `{$table}` {$ddl}");
-            }
-        }
-    }
-}
-
 function plugin_init_sprint(): void
 {
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS['csrf_compliant']['sprint'] = true;
 
-    if (Plugin::isPluginActive('sprint')) {
-        plugin_sprint_ensure_schema();
-    }
-
     // "Configure" wrench icon in the Plugins list → opens the settings page.
     $PLUGIN_HOOKS['config_page']['sprint'] = 'front/config.php';
-    $PLUGIN_HOOKS['display_central']['sprint'] = 'plugin_sprint_display_central';
 
     // Assets: public/ on GLPI 11, css/js/ on GLPI 10. Use __DIR__ (not a
     // hardcoded plugins/ path) so it also resolves under marketplace/.

@@ -171,8 +171,9 @@ final class SprintCreditFlow
      *
      * @param array<int,array<string,mixed>> $window   sprints, oldest first
      * @param array<int,array<string,mixed>> $balances SprintCustomer::balances(false)
+     * @param int                            $selected the customer the page filter is set to, 0 for all
      */
-    public static function render(array $window, array $balances): void
+    public static function render(array $window, array $balances, int $selected = 0): void
     {
         echo "<div class='card mb-3'><div class='card-body'>";
         echo "<div class='d-flex flex-wrap align-items-center gap-2 mb-1'>";
@@ -181,6 +182,13 @@ final class SprintCreditFlow
         echo "<span style='flex:1;'></span>";
 
         $flow = self::collect(array_map(static fn($s) => (int)$s['id'], $window));
+        // Only customers the session may see (0 = no customer), and only the
+        // filtered one when the page filter is set.
+        $flow = array_filter(
+            $flow,
+            static fn($cid) => $selected > 0 ? (int)$cid === $selected : SprintCustomer::isVisible((int)$cid),
+            ARRAY_FILTER_USE_KEY
+        );
         if (!$window || !$flow) {
             echo "</div>";
             echo "<div class='text-muted sprint-small mb-2'>"
@@ -192,7 +200,8 @@ final class SprintCreditFlow
         }
 
         $customerIds = array_keys($flow);
-        echo "<select class='form-select form-select-sm sprint-creditflow-pick' style='max-width:260px;'>";
+        echo "<select class='form-select form-select-sm sprint-creditflow-pick' style='max-width:260px;' aria-label='"
+            . __s('Customer shown in the credit flow', 'sprint') . "'" . (count($customerIds) === 1 ? ' hidden' : '') . ">";
         foreach ($customerIds as $i => $cid) {
             echo "<option value='" . (int)$cid . "'" . ($i === 0 ? ' selected' : '') . ">"
                 . htmlescape(self::customerLabel((int)$cid, $balances)) . "</option>";
@@ -200,7 +209,7 @@ final class SprintCreditFlow
         echo "</select>";
         echo "</div>";
         echo "<div class='text-muted sprint-small mb-3'>"
-            . htmlescape(__('Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint. Open and delivered work in the sprint counts; a dependency\'s credits follow the parent item.', 'sprint'))
+            . htmlescape(__('Per customer: which catalogue folders their credits went to, and per tag which categories that tag picked up, sprint by sprint. Open and delivered work in the sprint counts. A dependency\'s credits follow the parent item.', 'sprint'))
             . "</div>";
 
         foreach ($customerIds as $i => $cid) {

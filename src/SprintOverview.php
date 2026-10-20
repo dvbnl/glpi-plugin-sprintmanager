@@ -104,18 +104,34 @@ class SprintOverview extends CommonGLPI
         return $items;
     }
 
-    /** Two-column layout: navigation left, page content right. Close with {@see navEnd()}. */
+    /**
+     * Two-column layout: navigation left, page content right. Close with {@see navEnd()}.
+     * Below the md breakpoint the menu collapses behind one toggle row so it
+     * no longer pushes the content down; deeplinks stay the same.
+     */
     public static function navStart(string $active): void
     {
+        $items  = self::navItems();
+        $panel  = 'sprint-side-nav-' . mt_rand();
+        $activeLabel = $items[$active]['label'] ?? 'SprintManager';
+
         echo "<div class='row g-3 sprint-nav-layout'>";
         echo "<div class='col-12 col-md-3 col-xl-2'>";
-        echo "<div class='card'><div class='list-group list-group-flush'>";
-        foreach (self::navItems() as $key => $item) {
-            $class = 'list-group-item list-group-item-action' . ($key === $active ? ' active' : '');
-            echo "<a href='" . htmlescape($item['url']) . "' class='" . $class . "'>"
-                . "<i class='" . htmlescape($item['icon']) . " me-2'></i>" . htmlescape($item['label']) . "</a>";
+        echo "<nav class='card sprint-side-nav' aria-label='" . __s('SprintManager navigation', 'sprint') . "'>";
+        echo "<button type='button' class='btn sprint-nav-toggle d-md-none' data-bs-toggle='collapse' "
+            . "data-bs-target='#{$panel}' aria-expanded='false' aria-controls='{$panel}'>"
+            . "<i class='fas fa-bars me-2' aria-hidden='true'></i>"
+            . "<span>" . htmlescape($activeLabel) . "</span>"
+            . "<i class='fas fa-chevron-down ms-auto' aria-hidden='true'></i></button>";
+        echo "<div id='{$panel}' class='collapse d-md-block sprint-nav-panel'>";
+        echo "<div class='list-group list-group-flush'>";
+        foreach ($items as $key => $item) {
+            $isActive = $key === $active;
+            $class = 'list-group-item list-group-item-action' . ($isActive ? ' active' : '');
+            echo "<a href='" . htmlescape($item['url']) . "' class='" . $class . "'" . ($isActive ? " aria-current='page'" : '') . ">"
+                . "<i class='" . htmlescape($item['icon']) . " me-2' aria-hidden='true'></i>" . htmlescape($item['label']) . "</a>";
         }
-        echo "</div></div></div>";
+        echo "</div></div></nav></div>";
         echo "<div class='col-12 col-md-9 col-xl-10 sprint-nav-content'>";
     }
 
@@ -147,27 +163,46 @@ class SprintOverview extends CommonGLPI
 
     private static function renderStatistics(string $period): void
     {
+        echo "<div class='sprint-overview-page'>";
+        self::renderStatisticsBody($period);
+        echo "</div>";
+    }
+
+    /**
+     * Daily work first (live sprints), then about four key figures with the
+     * rest on demand, then the analysis zone with the trend charts.
+     */
+    private static function renderStatisticsBody(string $period): void
+    {
         $filters  = self::filtersFromRequest();
         $data     = self::collect($period, false, $filters);
         $previous = $period === self::PERIOD_ALL ? ['sprint_count' => 0] : self::collect($period, true, $filters);
+        $inWindow = self::countCompletedInWindow($period, $filters);
 
-        echo "<h2 class='mb-1'><i class='" . self::getIcon() . " me-2'></i>"
+        echo "<h2 class='mb-1'><i class='" . self::getIcon() . " me-2' aria-hidden='true'></i>"
             . __('Sprint overview', 'sprint') . "</h2>";
         echo "<div class='text-muted mb-3'>"
             . __('Trends across completed sprints, filtered on their end date.', 'sprint') . "</div>";
 
         self::renderPeriodSelector($period, $filters);
-        self::renderFilterBar($filters);
+        self::renderFilterBar($filters, $period, (int)$data['sprint_count'], $inWindow);
         self::renderLiveSprints($filters);
-        self::renderTiles($data, $previous, $period);
 
         if ($data['sprint_count'] === 0) {
-            echo "<div class='alert alert-info'><i class='fas fa-info-circle me-2'></i>"
-                . __('No completed sprints in this period.', 'sprint') . "</div>";
+            self::renderEmptyState($period, $filters, $inWindow);
             self::renderComparison($data, $period, $filters);
             self::renderOverviewBehaviour();
             return;
         }
+
+        self::renderTiles($data, $previous, $period);
+
+        echo "<div class='sprint-overview-analysis-head'>";
+        echo "<h3 class='m-0'><i class='fas fa-chart-pie me-2' aria-hidden='true'></i>" . __s('Analysis', 'sprint') . "</h3>";
+        echo "<div class='btn-group btn-group-sm'>"
+            . "<button type='button' class='btn btn-outline-secondary' data-overview-all='expand'>" . __s('Expand all', 'sprint') . "</button>"
+            . "<button type='button' class='btn btn-outline-secondary' data-overview-all='collapse'>" . __s('Collapse all', 'sprint') . "</button>"
+            . "</div></div>";
 
         $chart = self::trimToChartWindow($data);
         if ($chart['dropped'] > 0) {
@@ -179,7 +214,7 @@ class SprintOverview extends CommonGLPI
                 ) . "</div>";
         }
 
-        self::renderCard(
+        self::renderCard('velocity',
             __('Velocity trend', 'sprint'),
             'fas fa-chart-column',
             __('Completed story points per sprint, with predictability % (line).', 'sprint'),
@@ -204,7 +239,7 @@ class SprintOverview extends CommonGLPI
             }
         );
 
-        self::renderCard(
+        self::renderCard('planned-delivered',
             __('Planned vs. delivered', 'sprint'),
             'fas fa-bullseye',
             __('Story points taken into the sprint against the points actually completed.', 'sprint'),
@@ -221,7 +256,7 @@ class SprintOverview extends CommonGLPI
         self::renderMemberDelivery($data);
         self::renderCategoryTrend($data);
 
-        self::renderCard(
+        self::renderCard('fastlane-adhoc',
             __('Fastlane & adhoc', 'sprint'),
             'fas fa-bolt',
             __('Interrupt work per sprint: completed fastlane items, adhoc items and the allocated fastlane capacity % (line).', 'sprint'),
@@ -246,7 +281,7 @@ class SprintOverview extends CommonGLPI
         );
 
         echo "<div class='row g-3 mb-3'>";
-        self::renderCard(
+        self::renderCard('points-member',
             __('Completed points per member', 'sprint'),
             'fas fa-users',
             '',
@@ -255,7 +290,7 @@ class SprintOverview extends CommonGLPI
             },
             'col-12 col-lg-6'
         );
-        self::renderCard(
+        self::renderCard('items-type',
             __('Completed items per type', 'sprint'),
             'fas fa-shapes',
             '',
@@ -289,7 +324,7 @@ class SprintOverview extends CommonGLPI
             return;
         }
 
-        self::renderCard(
+        self::renderCard('category-delivery',
             __('Delivered per category', 'sprint'),
             'fas fa-folder-tree',
             __('Planned versus completed story points per backlog category across the completed sprints in this period. A parent category row includes its subcategories.', 'sprint'),
@@ -405,10 +440,10 @@ class SprintOverview extends CommonGLPI
         if (!$per) {
             return;
         }
-        self::renderCard(
+        self::renderCard('member-delivery',
             __('Delivered per member', 'sprint'),
             'fas fa-user-clock',
-            __('Where each member\'s capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories; fastlane and dependency work counts on every member allocated to it.', 'sprint'),
+            __('Where each member\'s capacity went per backlog category across the completed sprints in this period. A parent category includes its subcategories. Fastlane and dependency work counts on every member allocated to it.', 'sprint'),
             function () use ($per) {
                 $cats  = SprintCategory::getAll(false);
                 $topOf = [];
@@ -552,7 +587,7 @@ class SprintOverview extends CommonGLPI
     private static function renderWorkloadTrend(array $data): void
     {
         $trend = $data['workload_trend'] ?? [];
-        self::renderCard(
+        self::renderCard('workload-trend',
             __('Workload trend', 'sprint'),
             'fas fa-chart-line',
             __('Average allocated load across the members of each sprint. The dashed line is 100% capacity — above it the team is booked beyond availability.', 'sprint'),
@@ -732,7 +767,7 @@ class SprintOverview extends CommonGLPI
     /** Allocated capacity per member, with the overflow highlighted. */
     private static function renderWorkload(array $data): void
     {
-        self::renderCard(
+        self::renderCard('workload',
             __('Workload per member', 'sprint'),
             'fas fa-gauge',
             __('Allocated capacity (regular, fastlane and dependencies) against availability, averaged over the sprints each member took part in.', 'sprint'),
@@ -817,14 +852,14 @@ class SprintOverview extends CommonGLPI
         $self = Plugin::getWebDir('sprint') . '/front/sprint.php';
         echo "<div class='d-flex flex-wrap align-items-center gap-2 mb-3'>";
         echo "<span class='text-muted'>" . __('Period', 'sprint') . ":</span>";
-        echo "<div class='btn-group'>";
+        echo "<div class='btn-group' role='group' aria-label='" . __s('Period', 'sprint') . "'>";
         foreach (self::getPeriods() as $key => $label) {
             $class = 'btn btn-sm ' . ($key === $period ? 'btn-primary' : 'btn-outline-secondary');
             $url   = $self . '?' . http_build_query(array_merge(
                 ['section' => self::SECTION_OVERVIEW, 'period' => $key],
                 array_filter($filters, static fn($value) => $value !== '' && $value !== 0)
             ));
-            echo "<a class='" . $class . "' href='" . htmlescape($url) . "'>" . htmlescape($label) . "</a>";
+            echo "<a class='" . $class . "' href='" . htmlescape($url) . "'" . ($key === $period ? " aria-current='true'" : '') . ">" . htmlescape($label) . "</a>";
         }
         echo "</div></div>";
     }
@@ -854,7 +889,110 @@ class SprintOverview extends CommonGLPI
         ];
     }
 
-    private static function renderFilterBar(array $filters): void
+    /** Filter keys that narrow the set of completed sprints (dates, view and comparison excluded). */
+    private static function narrowingFilterKeys(array $filters): array
+    {
+        $keys = [];
+        foreach ($filters as $key => $value) {
+            if (in_array($key, ['from', 'to', 'view', 'compare_period', 'compare_scrum_master'], true)) {
+                continue;
+            }
+            if ($value !== '' && $value !== 0) {
+                $keys[] = $key;
+            }
+        }
+        return $keys;
+    }
+
+    /** Overview URL for the given period and filters (empty values dropped). */
+    private static function overviewUrl(string $period, array $filters): string
+    {
+        return Plugin::getWebDir('sprint') . '/front/sprint.php?' . http_build_query(array_merge(
+            ['section' => self::SECTION_OVERVIEW, 'period' => $period],
+            array_filter($filters, static fn($value) => $value !== '' && $value !== 0 && $value !== 'expanded')
+        ));
+    }
+
+    /** Completed sprints in the date window (period, or the from/to dates) the user can see, before any other filter. */
+    private static function countCompletedInWindow(string $period, array $filters): int
+    {
+        [$from, $to] = self::periodRange($period, false);
+        if (!empty($filters['from']) || !empty($filters['to'])) {
+            $from = $filters['from'] ?: null;
+            $to   = $filters['to'] ?: null;
+        }
+        $criteria = ['status' => Sprint::STATUS_COMPLETED];
+        if ($from !== null) {
+            $criteria[] = ['date_end' => ['>=', $from]];
+        }
+        if ($to !== null) {
+            $criteria[] = ['date_end' => ['<=', $to]];
+        }
+        $criteria = array_merge($criteria, getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true));
+        return countElementsInTable(Sprint::getTable(), $criteria);
+    }
+
+    /**
+     * Distinct empty states: no access, nothing completed yet, nothing in
+     * this period, or everything hidden by the filters — each with the
+     * matching next step.
+     */
+    private static function renderEmptyState(string $period, array $filters, int $inWindow): void
+    {
+        $icon = static fn(string $i) => "<i class='" . $i . " me-2' aria-hidden='true'></i>";
+        if (!Sprint::canView()) {
+            echo "<div class='alert alert-warning sprint-overview-empty'>" . $icon('fas fa-lock')
+                . __s('You do not have access to sprint statistics.', 'sprint') . "</div>";
+            return;
+        }
+        $narrowing = self::narrowingFilterKeys($filters);
+        if ($inWindow > 0 && $narrowing) {
+            echo "<div class='alert alert-info sprint-overview-empty'>" . $icon('fas fa-filter')
+                . htmlescape(sprintf(
+                    _n(
+                        'The %d completed sprint in this period does not match the filters.',
+                        'None of the %d completed sprints in this period match the filters.',
+                        $inWindow,
+                        'sprint'
+                    ),
+                    $inWindow
+                ))
+                . " <a class='alert-link sprint-overview-reset' href='" . htmlescape(self::overviewUrl($period, [])) . "'>" . __s('Reset view', 'sprint') . "</a></div>";
+            return;
+        }
+        $everCompleted = countElementsInTable(Sprint::getTable(), array_merge(
+            ['status' => Sprint::STATUS_COMPLETED],
+            getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true)
+        ));
+        if ($everCompleted === 0) {
+            echo "<div class='alert alert-info sprint-overview-empty'>" . $icon('fas fa-seedling')
+                . __s('No sprint has been completed yet. The statistics appear here once the first sprint is completed.', 'sprint');
+            $anySprint = countElementsInTable(Sprint::getTable(), getEntitiesRestrictCriteria(Sprint::getTable(), '', '', true)) > 0;
+            if (!$anySprint && Sprint::canCreate()) {
+                echo " <a class='alert-link' href='" . htmlescape(Sprint::getFormURL()) . "'>" . __s('Create a sprint', 'sprint') . "</a>";
+            } else {
+                echo " <a class='alert-link' href='" . htmlescape(Plugin::getWebDir('sprint') . '/front/sprint.php?section=' . self::SECTION_LIST) . "'>" . __s('Open the sprint list', 'sprint') . "</a>";
+            }
+            echo "</div>";
+            return;
+        }
+        echo "<div class='alert alert-info sprint-overview-empty'>" . $icon('fas fa-calendar-xmark')
+            . __s('No completed sprints in this period.', 'sprint');
+        if ($period !== self::PERIOD_ALL || !empty($filters['from']) || !empty($filters['to'])) {
+            $wider = $filters;
+            $wider['from'] = '';
+            $wider['to']   = '';
+            echo " <a class='alert-link' href='" . htmlescape(self::overviewUrl(self::PERIOD_ALL, $wider)) . "'>" . __s('Show all time', 'sprint') . "</a>";
+        }
+        echo "</div>";
+    }
+
+    /**
+     * Filter form (collapsed unless filters are active), plus an always
+     * visible row with removable filter chips, the "12 of 48" result label
+     * and the single reset.
+     */
+    private static function renderFilterBar(array $filters, string $period, int $shown, int $inWindow): void
     {
         global $DB;
         $self = Plugin::getWebDir('sprint') . '/front/sprint.php';
@@ -895,43 +1033,100 @@ class SprintOverview extends CommonGLPI
         }
 
         $select = static function (string $name, array $options, $selected, string $empty): string {
-            $html = "<select class='form-select form-select-sm' name='" . htmlescape($name) . "'><option value=''>" . htmlescape($empty) . '</option>';
+            $html = "<select class='form-select form-select-sm' id='sprint-ovf-" . htmlescape($name) . "' name='" . htmlescape($name) . "'><option value=''>" . htmlescape($empty) . '</option>';
             foreach ($options as $value => $label) $html .= "<option value='" . htmlescape((string)$value) . "'" . ((string)$selected === (string)$value ? ' selected' : '') . '>' . htmlescape((string)$label) . '</option>';
             return $html . '</select>';
         };
 
-        echo "<details class='card mb-3 sprint-overview-filters'" . (array_filter($filters, static fn($v, $k) => !in_array($k, ['view'], true) && $v !== '' && $v !== 0, ARRAY_FILTER_USE_BOTH) ? ' open' : '') . "><summary class='card-header cursor-pointer'><strong><i class='fas fa-filter me-2'></i>" . __('Filters and comparison', 'sprint') . "</strong></summary><div class='card-body'>";
+        $narrowing = self::narrowingFilterKeys($filters);
+        $open = array_filter($filters, static fn($v, $k) => $k !== 'view' && $v !== '' && $v !== 0, ARRAY_FILTER_USE_BOTH);
+        echo "<details class='card mb-2 sprint-overview-filters'" . ($open ? ' open' : '') . "><summary class='card-header cursor-pointer'><strong><i class='fas fa-filter me-2' aria-hidden='true'></i>" . __('Filters and comparison', 'sprint') . "</strong>"
+            . ($narrowing ? " <span class='sprint-chip sprint-chip-info ms-2'>" . count($narrowing) . "</span>" : '') . "</summary><div class='card-body'>";
         echo "<form method='get' action='" . htmlescape($self) . "' class='row g-2'>" . Html::hidden('section', ['value' => self::SECTION_OVERVIEW]) . Html::hidden('period', ['value' => (string)($_GET['period'] ?? self::PERIOD_YEAR)]);
-        echo "<div class='col-md-2'><label class='form-label'>" . __('From') . "</label><input class='form-control form-control-sm' type='date' name='from' value='" . htmlescape($filters['from']) . "'></div>";
-        echo "<div class='col-md-2'><label class='form-label'>" . __('To') . "</label><input class='form-control form-control-sm' type='date' name='to' value='" . htmlescape($filters['to']) . "'></div>";
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Entity') . "</label>" . $select('entities_id', $entities, $filters['entities_id'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Scrum Master', 'sprint') . "</label>" . $select('scrum_master', $masters, $filters['scrum_master'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Team member', 'sprint') . "</label>" . $select('member_id', $members, $filters['member_id'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Project') . "</label>" . $select('projects_id', $projects, $filters['projects_id'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Template', 'sprint') . "</label>" . $select('template_id', $templates, $filters['template_id'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Epic or theme', 'sprint') . "</label>" . $select('epic_id', $epics, $filters['epic_id'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Category', 'sprint') . "</label>" . $select('category_id', $categories, $filters['category_id'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Linked type', 'sprint') . "</label>" . $select('itemtype', array_combine(['Ticket', 'Change', 'Problem', 'ProjectTask'], ['Ticket', 'Change', 'Problem', 'Project task']), $filters['itemtype'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Tag', 'sprint') . "</label>" . $select('tag', array_combine($tags, $tags), $filters['tag'], __('All')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Compare period', 'sprint') . "</label>" . $select('compare_period', self::getPeriods(), $filters['compare_period'], __('None', 'sprint')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Compare Scrum Master', 'sprint') . "</label>" . $select('compare_scrum_master', $masters, $filters['compare_scrum_master'], __('None', 'sprint')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('View', 'sprint') . "</label>" . $select('view', ['expanded' => __('Expanded', 'sprint'), 'compact' => __('Compact', 'sprint')], $filters['view'], __('Expanded', 'sprint')) . '</div>';
-        echo "<div class='col-md-2'><label class='form-label'>" . __('Predictability below', 'sprint') . "</label><div class='input-group input-group-sm'><input class='form-control' type='number' min='0' max='100' name='predictability_below' value='" . ($filters['predictability_below'] ?: '') . "'><span class='input-group-text'>%</span></div></div>";
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-from'>" . __('From') . "</label><input class='form-control form-control-sm' type='date' id='sprint-ovf-from' name='from' value='" . htmlescape($filters['from']) . "'></div>";
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-to'>" . __('To') . "</label><input class='form-control form-control-sm' type='date' id='sprint-ovf-to' name='to' value='" . htmlescape($filters['to']) . "'></div>";
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-entities_id'>" . __('Entity') . "</label>" . $select('entities_id', $entities, $filters['entities_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-scrum_master'>" . __('Scrum Master', 'sprint') . "</label>" . $select('scrum_master', $masters, $filters['scrum_master'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-member_id'>" . __('Team member', 'sprint') . "</label>" . $select('member_id', $members, $filters['member_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-projects_id'>" . __('Project') . "</label>" . $select('projects_id', $projects, $filters['projects_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-template_id'>" . __('Template', 'sprint') . "</label>" . $select('template_id', $templates, $filters['template_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-epic_id'>" . __('Epic or theme', 'sprint') . "</label>" . $select('epic_id', $epics, $filters['epic_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-category_id'>" . __('Category', 'sprint') . "</label>" . $select('category_id', $categories, $filters['category_id'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-itemtype'>" . __('Linked type', 'sprint') . "</label>" . $select('itemtype', array_combine(['Ticket', 'Change', 'Problem', 'ProjectTask'], ['Ticket', 'Change', 'Problem', 'Project task']), $filters['itemtype'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-tag'>" . __('Tag', 'sprint') . "</label>" . $select('tag', array_combine($tags, $tags), $filters['tag'], __('All')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-compare_period'>" . __('Compare period', 'sprint') . "</label>" . $select('compare_period', self::getPeriods(), $filters['compare_period'], __('None', 'sprint')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-compare_scrum_master'>" . __('Compare Scrum Master', 'sprint') . "</label>" . $select('compare_scrum_master', $masters, $filters['compare_scrum_master'], __('None', 'sprint')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-view'>" . __('View', 'sprint') . "</label>" . $select('view', ['expanded' => __('Expanded', 'sprint'), 'compact' => __('Compact', 'sprint')], $filters['view'], __('Expanded', 'sprint')) . '</div>';
+        echo "<div class='col-md-2'><label class='form-label' for='sprint-ovf-predictability_below'>" . __('Predictability below', 'sprint') . "</label><div class='input-group input-group-sm'><input class='form-control' id='sprint-ovf-predictability_below' type='number' min='0' max='100' name='predictability_below' value='" . ($filters['predictability_below'] ?: '') . "'><span class='input-group-text'>%</span></div></div>";
         echo "<div class='col-12 d-flex flex-wrap gap-3 mt-3'><label class='form-check'><input class='form-check-input' type='checkbox' name='blocked_only' value='1'" . ($filters['blocked_only'] ? ' checked' : '') . "><span class='form-check-label'>" . __('Only sprints with blocked work', 'sprint') . "</span></label><label class='form-check'><input class='form-check-input' type='checkbox' name='over_only' value='1'" . ($filters['over_only'] ? ' checked' : '') . "><span class='form-check-label'>" . __('Only sprints over capacity', 'sprint') . "</span></label></div>";
-        echo "<div class='col-12 mt-3 d-flex flex-wrap gap-2'><button class='btn btn-primary btn-sm'><i class='fas fa-check me-1'></i>" . __('Apply filters', 'sprint') . "</button><a class='btn btn-outline-secondary btn-sm' href='" . htmlescape($self . '?section=' . self::SECTION_OVERVIEW) . "'>" . __('Reset', 'sprint') . "</a><button type='button' class='btn btn-outline-primary btn-sm' id='sprint-save-filter'><i class='fas fa-bookmark me-1'></i>" . __('Save filter', 'sprint') . "</button><select id='sprint-saved-filters' class='form-select form-select-sm' style='width:auto'><option value=''>" . __('Saved filters', 'sprint') . '</option></select></div>';
+        echo "<div class='col-12 mt-3 d-flex flex-wrap gap-2 align-items-center'><button class='btn btn-primary btn-sm'><i class='fas fa-check me-1' aria-hidden='true'></i>" . __('Apply filters', 'sprint') . "</button>"
+            . "<button type='button' class='btn btn-outline-primary btn-sm' id='sprint-save-filter'><i class='fas fa-bookmark me-1' aria-hidden='true'></i>" . __('Save filter', 'sprint') . "</button>"
+            . "<select id='sprint-saved-filters' class='form-select form-select-sm' style='width:auto' aria-label='" . __s('Saved filters', 'sprint') . "'><option value=''>" . __('Saved filters', 'sprint') . "</option></select>"
+            . "<button type='button' class='btn btn-outline-secondary btn-sm' id='sprint-rename-filter' hidden><i class='fas fa-pen me-1' aria-hidden='true'></i>" . __('Rename', 'sprint') . "</button>"
+            . "<button type='button' class='btn btn-outline-danger btn-sm' id='sprint-delete-filter' hidden><i class='fas fa-trash me-1' aria-hidden='true'></i>" . __('Delete') . "</button></div>";
         Html::closeForm();
-        $active = [];
-        $labels = [
+        echo '</div></details>';
+
+        // --- Active filters as removable chips + result label + reset -------
+        $periods = self::getPeriods();
+        $display = [
+            'from'                 => static fn($v) => Html::convDate((string)$v),
+            'to'                   => static fn($v) => Html::convDate((string)$v),
+            'entities_id'          => static fn($v) => $entities[(int)$v] ?? (string)$v,
+            'scrum_master'         => static fn($v) => $masters[(int)$v] ?? (string)$v,
+            'member_id'            => static fn($v) => $members[(int)$v] ?? (string)$v,
+            'projects_id'          => static fn($v) => $projects[(int)$v] ?? (string)$v,
+            'template_id'          => static fn($v) => $templates[(int)$v] ?? (string)$v,
+            'epic_id'              => static fn($v) => $epics[(int)$v] ?? (string)$v,
+            'category_id'          => static fn($v) => (string)preg_replace('/^— /u', '', $categories[(int)$v] ?? (string)$v),
+            'itemtype'             => static fn($v) => ['Ticket' => __('Ticket'), 'Change' => __('Change'), 'Problem' => __('Problem'), 'ProjectTask' => __('Project task')][$v] ?? (string)$v,
+            'tag'                  => static fn($v) => (string)$v,
+            'blocked_only'         => null,
+            'over_only'            => null,
+            'predictability_below' => static fn($v) => (int)$v . '%',
+            'compare_period'       => static fn($v) => $periods[$v] ?? (string)$v,
+            'compare_scrum_master' => static fn($v) => $masters[(int)$v] ?? (string)$v,
+            'view'                 => null,
+        ];
+        $chipLabels = [
             'from' => __('From'), 'to' => __('To'), 'entities_id' => __('Entity'), 'scrum_master' => __('Scrum Master', 'sprint'),
             'member_id' => __('Team member', 'sprint'), 'projects_id' => __('Project'), 'template_id' => __('Template', 'sprint'),
             'epic_id' => __('Epic or theme', 'sprint'), 'category_id' => __('Category', 'sprint'),
             'itemtype' => __('Linked type', 'sprint'), 'tag' => __('Tag', 'sprint'),
-            'blocked_only' => __('Blocked work', 'sprint'), 'over_only' => __('Over capacity', 'sprint'),
+            'blocked_only' => __('Only sprints with blocked work', 'sprint'), 'over_only' => __('Only sprints over capacity', 'sprint'),
             'predictability_below' => __('Predictability below', 'sprint'),
+            'compare_period' => __('Compare period', 'sprint'), 'compare_scrum_master' => __('Compare Scrum Master', 'sprint'),
+            'view' => __('Compact view', 'sprint'),
         ];
-        foreach ($labels as $key => $label) if (($filters[$key] ?? '') !== '' && ($filters[$key] ?? 0) !== 0) $active[] = "<span class='badge bg-blue-lt'>" . htmlescape($label) . ': ' . htmlescape((string)$filters[$key]) . '</span>';
-        if ($active) echo "<div class='d-flex flex-wrap gap-1 mt-3'>" . implode('', $active) . '</div>';
-        echo '</div></details>';
+        $chips = [];
+        foreach ($chipLabels as $key => $label) {
+            $value = $filters[$key] ?? '';
+            if ($value === '' || $value === 0 || ($key === 'view' && $value !== 'compact')) {
+                continue;
+            }
+            $text = $display[$key] !== null ? $label . ': ' . ($display[$key])($value) : $label;
+            $without = $filters;
+            $without[$key] = is_int($value) ? 0 : '';
+            $chips[] = "<a class='sprint-chip sprint-chip-info sprint-filter-chip' href='" . htmlescape(self::overviewUrl($period, $without)) . "' "
+                . "aria-label='" . htmlescape(sprintf(__('Remove filter: %s', 'sprint'), $text)) . "'>"
+                . htmlescape($text) . " <i class='fas fa-xmark ms-1' aria-hidden='true'></i></a>";
+        }
+
+        echo "<div class='sprint-overview-resultbar mb-3' aria-live='polite'>";
+        echo "<span class='sprint-overview-result'>";
+        if ($narrowing) {
+            echo htmlescape(sprintf(__('%1$d of %2$d completed sprints', 'sprint'), $shown, $inWindow));
+        } else {
+            echo htmlescape(sprintf(_n('%d completed sprint', '%d completed sprints', $inWindow, 'sprint'), $inWindow));
+        }
+        echo " <span class='text-muted'>· " . htmlescape($periods[$period] ?? '') . "</span></span>";
+        if ($chips) {
+            echo "<span class='sprint-filter-chips'>" . implode('', $chips) . "</span>";
+        }
+        echo "<a class='btn btn-sm btn-outline-secondary ms-auto sprint-overview-reset' href='" . htmlescape(self::overviewUrl(self::PERIOD_YEAR, [])) . "' "
+            . "title='" . __s('Clears all filters and shows every section expanded again', 'sprint') . "'>"
+            . "<i class='fas fa-rotate-left me-1' aria-hidden='true'></i>" . __s('Reset view', 'sprint') . "</a>";
+        echo "</div>";
     }
 
     private static function renderLiveSprints(array $filters): void
@@ -950,7 +1145,12 @@ class SprintOverview extends CommonGLPI
             $criteria['id'] = $ids ?: [-1];
         }
         $sprints = array_values((new Sprint())->find($criteria, ['date_end ASC']));
-        if (!$sprints) return;
+        if (!$sprints) {
+            echo "<div class='text-muted sprint-small mb-3'><i class='fas fa-heart-pulse me-1' aria-hidden='true'></i>"
+                . __s('No active sprint right now.', 'sprint')
+                . " <a href='" . htmlescape(Plugin::getWebDir('sprint') . '/front/sprint.php?section=' . self::SECTION_LIST) . "'>" . __s('Open the sprint list', 'sprint') . "</a></div>";
+            return;
+        }
         // Items, members and the next meeting for every live sprint in one query each.
         $sprintIds     = array_map(static fn($s) => (int)$s['id'], $sprints);
         $itemsBySprint = [];
@@ -994,7 +1194,7 @@ class SprintOverview extends CommonGLPI
         $labels = SprintItem::getAllStatuses();
         $count  = array_fill_keys(array_keys($colors), 0);
         $weight = array_fill_keys(array_keys($colors), 0.0);
-        $total = $totalPoints = $donePoints = $blocked = $dependency = $adhoc = 0;
+        $total = $totalPoints = $donePoints = $blocked = $dependency = $adhoc = $unpointed = 0;
         foreach ($items as $item) {
             $status = (string)$item['status'];
             if (!isset($count[$status])) $status = SprintItem::STATUS_TODO;
@@ -1005,6 +1205,7 @@ class SprintOverview extends CommonGLPI
             $weight[$status] += max((float)($item['capacity'] ?? 0), 1.0);
             $points = max(0, (int)$item['story_points']);
             $totalPoints += $points;
+            if ($points === 0) $unpointed++;
             if ($status === SprintItem::STATUS_DONE) $donePoints += $points;
             if ($status === SprintItem::STATUS_BLOCKED || (int)$item['is_blocked'] === 1) $blocked++;
             if ($status === SprintItem::STATUS_DEPENDENCY) $dependency++;
@@ -1074,21 +1275,34 @@ class SprintOverview extends CommonGLPI
             echo "<span class='text-danger'>" . htmlescape(sprintf(_n('%d day overdue', '%d days overdue', -$daysLeft, 'sprint'), -$daysLeft)) . '</span>';
         }
         echo "</div>";
-        echo "<div class='sprint-live-hero'><span class='sprint-live-hero-value'>{$progress}%</span><span class='sprint-live-hero-label'>" . __('Progress', 'sprint') . "</span></div>";
-        echo "<div class='sprint-live-pace'><i class='" . $pace['icon'] . " me-1'></i>" . htmlescape($pace['label']) . "</div>";
-        echo "<div class='sprint-small text-muted'>" . htmlescape(sprintf(__('%1$d of %2$d points done', 'sprint'), $donePoints, $totalPoints));
+        // Name the unit: story points when the sprint has them, else items.
+        $progressLabel = $totalPoints > 0 ? __('Story points delivered', 'sprint') : __('Items done', 'sprint');
+        echo "<div class='sprint-live-hero'><span class='sprint-live-hero-value'>{$progress}%</span><span class='sprint-live-hero-label'>" . htmlescape($progressLabel) . "</span></div>";
+        echo "<div class='sprint-live-pace'><i class='" . $pace['icon'] . " me-1' aria-hidden='true'></i>" . htmlescape($pace['label']) . "</div>";
+        echo "<div class='sprint-small text-muted'>" . htmlescape($totalPoints > 0
+            ? sprintf(__('%1$d of %2$d points done', 'sprint'), $donePoints, $totalPoints)
+            : sprintf(__('%1$d of %2$d items done', 'sprint'), $count[SprintItem::STATUS_DONE], $total));
         if ($totalPoints > 0) {
             echo ' · ' . htmlescape(sprintf(__('expected by now %d', 'sprint'), $expectedNow));
             if ($forecast !== null) echo ' · ' . htmlescape(sprintf(__('forecast %d', 'sprint'), $forecast));
         }
-        echo "</div></div>";
+        if ($totalPoints > 0 && $unpointed > 0) {
+            echo "<br>" . htmlescape(sprintf(_n('%d item without story points is not counted.', '%d items without story points are not counted.', $unpointed, 'sprint'), $unpointed));
+        }
+        echo "</div>";
+        if ($totalPoints > 0) {
+            echo "<details class='sprint-live-forecast-help sprint-small'><summary>" . __s('How is the forecast made?', 'sprint') . "</summary>"
+                . htmlescape(__('The forecast extrapolates this sprint\'s own pace: story points done so far divided by the share of the sprint time that has passed, capped at the planned points. It appears once 10% of the sprint has passed. It uses no history from earlier sprints and ignores blocked work, scope changes and days off.', 'sprint'))
+                . "</details>";
+        }
+        echo "</div>";
 
         // --- Meters ---------------------------------------------------------
         echo "<div class='sprint-live-meters'>";
-        echo "<div class='sprint-live-meter'><div class='sprint-live-meter-head'><span>" . __('Progress', 'sprint') . "</span><span class='text-muted'>" . htmlescape(sprintf(__('time elapsed %d%%', 'sprint'), $elapsed)) . "</span></div>";
+        echo "<div class='sprint-live-meter'><div class='sprint-live-meter-head'><span>" . htmlescape($progressLabel) . "</span><span class='text-muted'>" . htmlescape(sprintf(__('time elapsed %d%%', 'sprint'), $elapsed)) . "</span></div>";
         echo "<div class='sprint-live-track' title='" . htmlescape(sprintf(__('Progress %1$d%% · time elapsed %2$d%%', 'sprint'), $progress, $elapsed)) . "'><span class='sprint-live-fill' style='width:" . min(100, $progress) . "%;'></span><i class='sprint-live-tick' style='left:{$elapsed}%;'></i></div></div>";
 
-        echo "<div class='sprint-live-meter'><div class='sprint-live-meter-head'><span>" . __('Status mix', 'sprint') . "</span><span class='text-muted'>" . htmlescape(sprintf(_n('%d item', '%d items', $total, 'sprint'), $total)) . ($adhoc > 0 ? ' · ' . htmlescape(sprintf(__('%d adhoc', 'sprint'), $adhoc)) : '') . "</span></div>";
+        echo "<div class='sprint-live-meter'><div class='sprint-live-meter-head'><span>" . __('Status mix', 'sprint') . " <span class='text-muted'>(" . __s('weighted by capacity', 'sprint') . ")</span></span><span class='text-muted'>" . htmlescape(sprintf(_n('%d item', '%d items', $total, 'sprint'), $total)) . ($adhoc > 0 ? ' · ' . htmlescape(sprintf(__('%d adhoc', 'sprint'), $adhoc)) : '') . "</span></div>";
         $weightSum = max(array_sum($weight), 1.0);
         echo "<div class='sprint-live-track sprint-live-stack'>";
         foreach ($colors as $status => $color) {
@@ -1239,7 +1453,7 @@ class SprintOverview extends CommonGLPI
                 'icon'  => 'fas fa-star',
                 'color' => 'green',
                 'value' => (string)$data['pts_done'],
-                'label' => __('Completed points', 'sprint'),
+                'label' => __('Story points delivered', 'sprint'),
                 'delta' => $showDelta ? self::delta($data['pts_done'], $previous['pts_done']) : '',
             ],
             [
@@ -1253,14 +1467,14 @@ class SprintOverview extends CommonGLPI
                 'icon'  => 'fas fa-bullseye',
                 'color' => 'teal',
                 'value' => $data['predictability'] . '%',
-                'label' => __('Predictability', 'sprint'),
+                'label' => __('Predictability (story points delivered / planned)', 'sprint'),
                 'delta' => $showDelta ? self::delta($data['predictability'], $previous['predictability']) : '',
             ],
             [
                 'icon'  => 'fas fa-list-check',
                 'color' => 'cyan',
                 'value' => $data['items_done'] . '/' . $data['items_total'],
-                'label' => __('Items completed', 'sprint'),
+                'label' => __('Items done', 'sprint'),
                 'delta' => '',
             ],
             [
@@ -1336,18 +1550,36 @@ class SprintOverview extends CommonGLPI
             ],
         ];
 
-        echo "<div class='row g-2 mb-3'>";
-        foreach ($tiles as $tile) {
-            echo "<div class='col-12 col-sm-6 col-xl-3'>";
-            echo "<div class='card card-sm h-100'><div class='card-body d-flex align-items-center sprint-overview-tile'>";
-            echo "<span class='avatar bg-" . $tile['color'] . "-lt me-3'><i class='" . $tile['icon'] . "'></i></span>";
-            echo "<div class='sprint-overview-tile-content'>";
-            echo "<div class='h3 m-0 text-nowrap'>" . htmlescape($tile['value']) . "</div>";
-            echo "<div class='text-muted sprint-small'>" . htmlescape($tile['label']) . "</div>";
-            echo $tile['delta'];
-            echo "</div></div></div></div>";
+        // Four key figures up front (sprints, points, predictability, items);
+        // the order of $tiles above puts velocity third, so pick explicitly.
+        $keyIdx = [0, 1, 3, 4];
+        $key = $more = [];
+        foreach ($tiles as $i => $tile) {
+            if (in_array($i, $keyIdx, true)) {
+                $key[] = $tile;
+            } else {
+                $more[] = $tile;
+            }
         }
-        echo "</div>";
+        $renderRow = static function (array $set): void {
+            echo "<div class='row g-2 mb-3'>";
+            foreach ($set as $tile) {
+                echo "<div class='col-12 col-sm-6 col-xl-3'>";
+                echo "<div class='card card-sm h-100'><div class='card-body d-flex align-items-center sprint-overview-tile'>";
+                echo "<span class='avatar bg-" . $tile['color'] . "-lt me-3' aria-hidden='true'><i class='" . $tile['icon'] . "'></i></span>";
+                echo "<div class='sprint-overview-tile-content'>";
+                echo "<div class='h3 m-0 text-nowrap'>" . htmlescape($tile['value']) . "</div>";
+                echo "<div class='text-muted sprint-small'>" . htmlescape($tile['label']) . "</div>";
+                echo $tile['delta'];
+                echo "</div></div></div></div>";
+            }
+            echo "</div>";
+        };
+        $renderRow($key);
+        echo "<details class='sprint-overview-more-tiles mb-3'><summary>"
+            . htmlescape(sprintf(__('Show all figures (%d more)', 'sprint'), count($more))) . "</summary>";
+        $renderRow($more);
+        echo "</details>";
     }
 
     /** Signed change vs. the previous period; `$lowerIsBetter` flips the colour. */
@@ -1370,7 +1602,7 @@ class SprintOverview extends CommonGLPI
 
     private static function renderSprintTable(array $data): void
     {
-        self::renderCard(
+        self::renderCard('sprint-details',
             __('Sprint details', 'sprint'),
             'fas fa-table',
             '',
@@ -2000,7 +2232,7 @@ class SprintOverview extends CommonGLPI
         if (!$rows || count($trend['labels'] ?? []) === 0) {
             return;
         }
-        self::renderCard(
+        self::renderCard('category-trend',
             __('Category trend', 'sprint'),
             'fas fa-chart-line',
             __('Per backlog category across the completed sprints in this period: allocated capacity % per sprint, or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category.', 'sprint'),
@@ -2604,7 +2836,7 @@ class SprintOverview extends CommonGLPI
 
     private static function renderScopeStability(array $chart): void
     {
-        self::renderCard(__('Scope stability', 'sprint'), 'fas fa-arrows-left-right', __('Shows baseline scope, work added after kick-off, completed work and carry-over per sprint.', 'sprint'), function () use ($chart) {
+        self::renderCard('scope', __('Scope stability', 'sprint'), 'fas fa-arrows-left-right', __('Shows baseline scope, work added after kick-off, completed work and carry-over per sprint.', 'sprint'), function () use ($chart) {
             self::renderGroupedBars($chart['labels'], [
                 ['label' => __('Baseline items', 'sprint'), 'color' => '#6c757d', 'values' => $chart['series']['initial_scope']],
                 ['label' => __('Added after kick-off', 'sprint'), 'color' => '#d63384', 'values' => $chart['series']['adhoc']],
@@ -2617,7 +2849,7 @@ class SprintOverview extends CommonGLPI
 
     private static function renderFlowHealth(array $data): void
     {
-        self::renderCard(__('Flow health', 'sprint'), 'fas fa-water', __('Compares cycle time, blocked time and rework across completed sprints.', 'sprint'), function () use ($data) {
+        self::renderCard('flow', __('Flow health', 'sprint'), 'fas fa-water', __('Compares cycle time, blocked time and rework across completed sprints.', 'sprint'), function () use ($data) {
             $chart = self::trimToChartWindow($data);
             self::renderGroupedBars($chart['labels'], [
                 ['label' => __('Cycle time (days)', 'sprint'), 'color' => '#0d6efd', 'values' => $chart['series']['cycle_days']],
@@ -2628,7 +2860,7 @@ class SprintOverview extends CommonGLPI
 
     private static function renderCapacityDelivery(array $data): void
     {
-        self::renderCard(__('Capacity versus delivery', 'sprint'), 'fas fa-circle-nodes', __('Each bubble is a sprint. Position compares team load with predictability. Colour shows blocked work and size shows adhoc work.', 'sprint'), function () use ($data) {
+        self::renderCard('capacity-delivery', __('Capacity versus delivery', 'sprint'), 'fas fa-circle-nodes', __('Each bubble is a sprint. Position compares team load with predictability. Colour shows blocked work and size shows adhoc work.', 'sprint'), function () use ($data) {
             $loads = $data['workload_trend']['team'] ?? [];
             if (!$loads) { echo "<div class='text-muted py-3'>" . __('No data for this period.', 'sprint') . '</div>'; return; }
             $w = 900; $h = 320; $l = 52; $r = 24; $t = 16; $b = 56; $pw = $w - $l - $r; $ph = $h - $t - $b;
@@ -2690,7 +2922,7 @@ class SprintOverview extends CommonGLPI
     private static function renderDependencyHealth(array $data): void
     {
         $dep = $data['dependencies'];
-        self::renderCard(__('Dependency health', 'sprint'), 'fas fa-link', __('Tracks open and resolved dependencies, waiting time and linked work that spans several sprints.', 'sprint'), function () use ($dep) {
+        self::renderCard('dependencies', __('Dependency health', 'sprint'), 'fas fa-link', __('Tracks open and resolved dependencies, waiting time and linked work that spans several sprints.', 'sprint'), function () use ($dep) {
             echo "<div class='row g-2'>";
             foreach ([
                 [__('Open dependencies', 'sprint'), $dep['open'], 'red'],
@@ -2716,7 +2948,7 @@ class SprintOverview extends CommonGLPI
         $compareFilters['compare_period'] = '';
         $compareFilters['compare_scrum_master'] = 0;
         $other = self::collect($comparePeriod, false, $compareFilters);
-        self::renderCard(__('Comparison', 'sprint'), 'fas fa-code-compare', __('Compare the current selection with another period or Scrum Master.', 'sprint'), function () use ($current, $other) {
+        self::renderCard('comparison', __('Comparison', 'sprint'), 'fas fa-code-compare', __('Compare the current selection with another period or Scrum Master.', 'sprint'), function () use ($current, $other) {
             echo "<div class='table-responsive'><table class='table table-sm'><thead><tr><th>" . __('Metric', 'sprint') . "</th><th>" . __('Current selection', 'sprint') . "</th><th>" . __('Comparison', 'sprint') . "</th><th>" . __('Difference', 'sprint') . "</th></tr></thead><tbody>";
             foreach ([
                 __('Completed sprints', 'sprint') => ['sprint_count', ''],
@@ -2730,26 +2962,100 @@ class SprintOverview extends CommonGLPI
         });
     }
 
-    private static function renderOverviewBehaviour(): void
+    /** Collapsed overview sections for this request: every section in compact view, else the user's stored list. */
+    private static function collapsedSections(): array
     {
-        echo "<script>(function(){var root=document.querySelector('.sprint-overview-shell')||document;var compact=new URLSearchParams(location.search).get('view')==='compact';root.querySelectorAll('.card.mb-3').forEach(function(card,i){card.classList.add('sprint-overview-collapsible');var body=card.querySelector('.card-body');var title=card.querySelector('.card-title');if(!body||!title)return;var key='sprint-overview-card-'+i;title.style.cursor='pointer';title.setAttribute('title','" . addslashes(__('Click to collapse or expand', 'sprint')) . "');var hidden=compact||localStorage.getItem(key)==='1';if(hidden)body.classList.add('sprint-overview-collapsed');title.addEventListener('click',function(){body.classList.toggle('sprint-overview-collapsed');localStorage.setItem(key,body.classList.contains('sprint-overview-collapsed')?'1':'0');});});var storeKey='sprint-overview-saved-filters',select=document.getElementById('sprint-saved-filters'),save=document.getElementById('sprint-save-filter');function read(){try{return JSON.parse(localStorage.getItem(storeKey)||'{}')}catch(e){return {}}}function fill(){if(!select)return;var all=read();Object.keys(all).sort().forEach(function(name){var o=document.createElement('option');o.value=all[name];o.textContent=name;select.appendChild(o);});}if(save)save.addEventListener('click',function(){var name=window.prompt('" . addslashes(__('Name this filter', 'sprint')) . "');if(!name)return;var all=read();all[name]=location.href;localStorage.setItem(storeKey,JSON.stringify(all));location.reload();});if(select)select.addEventListener('change',function(){if(this.value)location.href=this.value;});fill();})();</script>";
+        static $ids = null;
+        if ($ids === null) {
+            $ids = self::isCompactView() ? ['*'] : UserPref::overviewCollapsed();
+        }
+        return $ids;
     }
 
-    private static function renderCard(string $title, string $icon, string $subtitle, callable $body, string $wrapper = ''): void
+    private static function isCompactView(): bool
     {
+        return ($_GET['view'] ?? '') === 'compact';
+    }
+
+    /**
+     * Page behaviour: collapsible sections (state stored per user under a
+     * stable section id, so adding a card never shifts another card's state),
+     * expand/collapse all, saved filters scoped to the logged-in user, and the
+     * single reset that restores filters and section layout.
+     */
+    private static function renderOverviewBehaviour(): void
+    {
+        $base = Plugin::getWebDir('sprint') . '/ajax/';
+        $cfg = [
+            'tokenUrl'   => $base . 'csrftoken.php',
+            'prefUrl'    => $base . 'userpref.php',
+            'prefName'   => UserPref::OVERVIEW_COLLAPSED,
+            'compact'    => self::isCompactView(),
+            'filtersKey' => 'sprint-overview-saved-filters-u' . (int)Session::getLoginUserID(),
+            'i18n'       => [
+                'name'          => __('Name this filter', 'sprint'),
+                'rename'        => __('New name for this filter', 'sprint'),
+                'confirmDelete' => __('Delete this saved filter?', 'sprint'),
+            ],
+        ];
+        echo "<script>(function(){"
+            . "var cfg=" . json_encode($cfg, JSON_HEX_TAG | JSON_HEX_AMP) . ";"
+            . "var root=document.querySelector('.sprint-overview-page');if(!root||root.getAttribute('data-wired'))return;root.setAttribute('data-wired','1');"
+            . "function post(value,done){var finish=function(){if(done)done();};"
+            . "\$.ajax({url:cfg.tokenUrl,type:'GET',dataType:'json'}).done(function(t){"
+            . "\$.ajax({url:cfg.prefUrl,type:'POST',dataType:'json',data:{name:cfg.prefName,value:value,_glpi_csrf_token:t&&t.token}}).always(finish);"
+            . "}).fail(finish);}"
+            . "function collapsedIds(){var out=[];root.querySelectorAll('.sprint-overview-collapsible.is-collapsed').forEach(function(c){out.push(c.getAttribute('data-section-id'));});return out.join(',');}"
+            . "var timer=null;function persist(){if(cfg.compact)return;clearTimeout(timer);timer=setTimeout(function(){post(collapsedIds());},400);}"
+            . "function setCollapsed(card,collapsed){var btn=card.querySelector('.sprint-overview-toggle');var body=btn?document.getElementById(btn.getAttribute('aria-controls')):null;card.classList.toggle('is-collapsed',collapsed);if(body)body.hidden=collapsed;if(btn)btn.setAttribute('aria-expanded',collapsed?'false':'true');}"
+            . "root.addEventListener('click',function(e){"
+            . "var btn=e.target.closest('.sprint-overview-toggle');"
+            . "if(btn){var card=btn.closest('.sprint-overview-collapsible');if(card){setCollapsed(card,!card.classList.contains('is-collapsed'));persist();}return;}"
+            . "var all=e.target.closest('[data-overview-all]');"
+            . "if(all){var collapse=all.getAttribute('data-overview-all')==='collapse';root.querySelectorAll('.sprint-overview-collapsible').forEach(function(c){setCollapsed(c,collapse);});persist();return;}"
+            . "var reset=e.target.closest('.sprint-overview-reset');"
+            . "if(reset){e.preventDefault();var href=reset.getAttribute('href');post('',function(){location.href=href;});}"
+            . "});"
+            // Saved filters: per user so a shared browser never shows someone else's selection.
+            . "var select=document.getElementById('sprint-saved-filters'),save=document.getElementById('sprint-save-filter'),ren=document.getElementById('sprint-rename-filter'),del=document.getElementById('sprint-delete-filter');"
+            . "function read(){try{return JSON.parse(localStorage.getItem(cfg.filtersKey)||'{}')||{};}catch(e){return {};}}"
+            . "function write(all){try{localStorage.setItem(cfg.filtersKey,JSON.stringify(all));}catch(e){}}"
+            . "function current(){if(!select)return '';var o=select.options[select.selectedIndex];return o&&o.value?o.getAttribute('data-name'):'';}"
+            . "function fill(){if(!select)return;var all=read();while(select.options.length>1)select.remove(1);Object.keys(all).sort().forEach(function(name){var o=document.createElement('option');o.value=all[name];o.textContent=name;o.setAttribute('data-name',name);if(all[name]===location.href)o.selected=true;select.appendChild(o);});var has=!!current();if(ren)ren.hidden=!has;if(del)del.hidden=!has;}"
+            . "if(save)save.addEventListener('click',function(){var name=window.prompt(cfg.i18n.name);if(!name)return;var all=read();all[name]=location.href;write(all);fill();});"
+            . "if(ren)ren.addEventListener('click',function(){var old=current();if(!old)return;var name=window.prompt(cfg.i18n.rename,old);if(!name||name===old)return;var all=read();all[name]=all[old];delete all[old];write(all);fill();});"
+            . "if(del)del.addEventListener('click',function(){var old=current();if(!old||!window.confirm(cfg.i18n.confirmDelete))return;var all=read();delete all[old];write(all);fill();});"
+            . "if(select)select.addEventListener('change',function(){if(this.value&&this.value!==location.href)location.href=this.value;});"
+            . "fill();"
+            . "})();</script>";
+    }
+
+    /**
+     * One overview section. `$id` is a stable section id: it keys the
+     * per-user collapse state and the anchor (#sprint-overview-<id>).
+     */
+    private static function renderCard(string $id, string $title, string $icon, string $subtitle, callable $body, string $wrapper = ''): void
+    {
+        $collapsedIds = self::collapsedSections();
+        $collapsed    = in_array('*', $collapsedIds, true) || in_array($id, $collapsedIds, true);
+        $bodyId       = 'sprint-overview-' . $id . '-body';
+
         if ($wrapper !== '') {
             echo "<div class='" . htmlescape($wrapper) . "'>";
         }
         // h-100 only for cards sharing a row: on a full-width card the
         // percentage resolves against the whole stretched content column.
-        $classes = $wrapper !== '' ? 'card h-100' : 'card mb-3';
-        echo "<div class='" . $classes . "'><div class='card-body'>";
-        echo "<h3 class='card-title'><i class='" . htmlescape($icon) . " me-2'></i>" . htmlescape($title) . "</h3>";
+        $classes = ($wrapper !== '' ? 'card h-100' : 'card mb-3') . ' sprint-overview-collapsible' . ($collapsed ? ' is-collapsed' : '');
+        echo "<section class='" . $classes . "' id='sprint-overview-" . htmlescape($id) . "' data-section-id='" . htmlescape($id) . "'><div class='card-body'>";
+        echo "<h3 class='card-title'><button type='button' class='sprint-overview-toggle' aria-expanded='" . ($collapsed ? 'false' : 'true') . "' aria-controls='" . htmlescape($bodyId) . "'>"
+            . "<i class='fas fa-chevron-down sprint-overview-chevron' aria-hidden='true'></i>"
+            . "<i class='" . htmlescape($icon) . " me-2' aria-hidden='true'></i>" . htmlescape($title) . "</button></h3>";
+        echo "<div class='sprint-overview-section-body' id='" . htmlescape($bodyId) . "'" . ($collapsed ? ' hidden' : '') . ">";
         if ($subtitle !== '') {
             echo "<div class='text-muted sprint-small mb-2'>" . htmlescape($subtitle) . "</div>";
         }
         $body();
-        echo "</div></div>";
+        echo "</div></div></section>";
         if ($wrapper !== '') {
             echo "</div>";
         }

@@ -25,7 +25,7 @@ if (!$hasFullUpdate && !$hasOwnOnly) {
 $decoded = json_decode((string)($_POST['order'] ?? '[]'), true);
 $ids     = is_array($decoded) ? array_values(array_filter(array_map('intval', $decoded))) : [];
 if (empty($ids)) {
-    echo json_encode(['success' => false, 'message' => 'No order received']);
+    echo json_encode(['success' => false, 'message' => __('No order received', 'sprint')]);
     return;
 }
 

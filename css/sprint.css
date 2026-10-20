@@ -24,6 +24,55 @@
     --sprint-transition: 0.2s ease;
     --sprint-muted: #6c757d;
     --sprint-border: var(--tblr-border-color, #e2e8f0);
+
+    /* Design-system scale (see "Shared components" below). */
+    --sprint-space-1: 4px;
+    --sprint-space-2: 8px;
+    --sprint-space-3: 12px;
+    --sprint-space-4: 16px;
+    --sprint-space-5: 24px;
+    --sprint-radius-lg: 10px;
+    --sprint-touch: 40px;
+
+    /* Solid status fills that carry WHITE text. Each one is >= 4.5:1
+       against #fff (the light brand hues such as #20c997 are 2.1:1, so
+       they get a darker "strong" variant for text-bearing fills). */
+    --sprint-dependency-strong: #0f7d63;   /* 5.08:1 */
+    --sprint-orange-strong: #b85000;       /* 5.02:1 (fastlane #fd7e14) */
+    --sprint-amber-strong: #b35900;        /* 4.83:1 (meeting #e67e22) */
+    --sprint-cyan-strong: #087990;         /* 5.06:1 (#0dcaf0) */
+    --sprint-on-yellow: #3b2a00;           /* text on #ffc107 / #f0ad4e: >= 7:1 */
+
+    /* Text colours for tinted pills and coloured inline text. Light values
+       are >= 4.5:1 on their own tint over #fff/#f8f9fa/#f1f3f5; the dark
+       overrides below are >= 4.5:1 on Tabler/GLPI dark surfaces. */
+    --sprint-fg-muted: #5f6873;
+    --sprint-fg-info: #0a58ca;
+    --sprint-fg-success: #146c43;
+    --sprint-fg-warning: #8a5300;
+    --sprint-fg-orange: #a64600;
+    --sprint-fg-danger: #a52834;
+    --sprint-fg-dependency: #0b6e55;
+    --sprint-fg-credit: #7a5600;
+    --sprint-fg-adhoc: #a3285f;
+    --sprint-focus: #0a58ca;
+}
+/* GLPI marks dark palettes on <html data-glpi-theme-dark="1">; Tabler's
+   own switch is data-bs-theme="dark". */
+:root[data-glpi-theme-dark="1"],
+[data-bs-theme="dark"] {
+    --sprint-fg-muted: #a3adb8;
+    --sprint-fg-info: #8ab8ff;
+    --sprint-fg-success: #6fdc9f;
+    --sprint-fg-warning: #ffc65c;
+    --sprint-fg-orange: #ffa463;
+    --sprint-fg-danger: #ff8f99;
+    --sprint-fg-dependency: #4fe0b8;
+    --sprint-fg-credit: #ffd65c;
+    --sprint-fg-adhoc: #f28dbb;
+    --sprint-focus: #8ab8ff;
+    --sprint-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    --sprint-shadow-hover: 0 4px 12px rgba(0,0,0,0.45);
 }
 
 /* === Dashboard stat cards ================================================
@@ -43,15 +92,14 @@
     gap: 10px;
     padding: 8px 16px 8px 10px;
     background: var(--tblr-bg-surface, #fff);
-    border: 1px solid var(--tblr-border-color, var(--sprint-border));
-    border-left: 3px solid var(--stat-accent, var(--sprint-muted));
+    /* Minimal: one hairline all round in a faint tint of the card's accent. */
+    border: 1px solid color-mix(in srgb, var(--stat-accent, var(--sprint-muted)) 30%, var(--tblr-border-color, var(--sprint-border)));
     border-radius: var(--sprint-radius);
-    box-shadow: var(--sprint-shadow);
-    transition: box-shadow var(--sprint-transition), transform var(--sprint-transition);
+    box-shadow: none;
+    transition: border-color var(--sprint-transition);
 }
 .sprint-stat-card:hover {
-    box-shadow: var(--sprint-shadow-hover);
-    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--stat-accent, var(--sprint-muted)) 60%, var(--tblr-border-color, var(--sprint-border)));
 }
 .sprint-stat-icon {
     width: 32px;
@@ -73,14 +121,13 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
+/* Readable label: sentence case, no forced caps/tracking (spec 12). */
 .sprint-stat-label {
-    font-size: 0.68em;
+    font-size: 0.8em;
     font-weight: 600;
-    color: var(--sprint-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    color: var(--sprint-fg-muted);
     margin-top: 1px;
-    white-space: nowrap;
+    line-height: 1.25;
 }
 
 /* === Newly-blocked highlight (meeting review) === */
@@ -174,7 +221,18 @@ tr.sprint-adhoc > td {
 .sprint-status-todo        { background-color: #6c757d !important; background-color: var(--sprint-todo) !important; }
 .sprint-status-in-progress { background-color: #0d6efd !important; background-color: var(--sprint-progress) !important; }
 .sprint-status-review      { background-color: #6f42c1 !important; background-color: var(--sprint-review) !important; }
-.sprint-status-dependency  { background-color: #20c997 !important; background-color: var(--sprint-dependency) !important; }
+.sprint-status-dependency  { background-color: #0f7d63 !important; background-color: var(--sprint-dependency-strong) !important; }
+
+/* Text-bearing fills painted inline from PHP/Twig colour maps (#20c997,
+   #fd7e14, ...). The white text is forced above, so remap the light hues
+   to their >= 4.5:1 "strong" variant, and give yellow fills dark text. */
+:is(.sprint-badge, .sprint-atrisk-chip, .sprint-header-status)[style*="#20c997"] { background: var(--sprint-dependency-strong) !important; }
+:is(.sprint-badge, .sprint-atrisk-chip, .sprint-header-status)[style*="#fd7e14"] { background: var(--sprint-orange-strong) !important; }
+:is(.sprint-badge, .sprint-atrisk-chip, .sprint-header-status)[style*="#e67e22"] { background: var(--sprint-amber-strong) !important; }
+:is(.sprint-badge, .sprint-atrisk-chip, .sprint-header-status)[style*="#0dcaf0"] { background: var(--sprint-cyan-strong) !important; }
+:is(.sprint-badge, .sprint-atrisk-chip, .sprint-header-status):is([style*="#ffc107"], [style*="#f0ad4e"], [style*="#f59f00"]) { color: var(--sprint-on-yellow) !important; }
+/* Kanban: the column accent also fills the white-text item counter. */
+.sprint-kanban-col[style*="#20c997"] { --sk-accent: var(--sprint-dependency-strong) !important; }
 .sprint-status-done        { background-color: #198754 !important; background-color: var(--sprint-done) !important; }
 .sprint-status-blocked     { background-color: #dc3545 !important; background-color: var(--sprint-blocked) !important; }
 
@@ -191,7 +249,6 @@ tr.sprint-adhoc > td {
     height: auto;
 }
 
-.sprint-overview-collapsed { display: none; }
 .sprint-overview-filters summary { cursor: pointer; list-style: none; }
 .sprint-overview-filters summary::-webkit-details-marker { display: none; }
 .sprint-overview-filters select,
@@ -215,7 +272,7 @@ tr.sprint-adhoc > td {
     padding: 1px 8px;
     border-radius: 10px;
     background: color-mix(in srgb, #0d6efd 14%, var(--tblr-bg-surface, #fff));
-    color: var(--tblr-primary, #1c5ec3);
+    color: var(--sprint-fg-info);
     font-size: 0.72em;
     font-weight: 600;
     line-height: 1.5;
@@ -235,7 +292,7 @@ tr.sprint-adhoc > td {
 .sprint-matrix-toggle {
     border: none;
     background: transparent;
-    color: var(--tblr-secondary, #6c757d);
+    color: var(--sprint-fg-muted);
     padding: 0 5px 0 0;
     font-size: 0.8em;
     line-height: 1;
@@ -286,7 +343,7 @@ tr.sprint-adhoc > td {
     gap: 4px;
     margin: 0;
     font-size: 0.8em;
-    color: var(--tblr-secondary, #64748b);
+    color: var(--sprint-fg-muted);
 }
 .sprint-limits-vals input {
     width: 72px;
@@ -365,7 +422,7 @@ tr.sprint-adhoc > td {
     border: 1px dashed var(--tblr-border-color, #cbd5e1);
     border-radius: 10px;
     background: transparent;
-    color: var(--tblr-secondary, #6c757d);
+    color: var(--sprint-fg-muted);
     font-size: 0.72em;
     font-weight: 600;
     line-height: 1.7;
@@ -390,12 +447,12 @@ tr.sprint-adhoc > td {
 }
 .sprint-aging-warn {
     background: color-mix(in srgb, #f59f00 16%, var(--tblr-bg-surface, #fff));
-    color: #b06d00;
+    color: var(--sprint-fg-warning);
     border: 1px solid #f59f00;
 }
 .sprint-aging-late {
     background: color-mix(in srgb, #dc3545 14%, var(--tblr-bg-surface, #fff));
-    color: #b02a37;
+    color: var(--sprint-fg-danger);
     border: 1px solid #dc3545;
 }
 .sprint-category-pill {
@@ -415,7 +472,7 @@ tr.sprint-adhoc > td {
     margin-left: 4px;
     border-radius: 10px;
     background: color-mix(in srgb, #20c997 16%, var(--tblr-bg-surface, #fff));
-    color: #20c997;
+    color: var(--sprint-fg-dependency);
     font-size: 0.72em;
     font-weight: 600;
     line-height: 1.5;
@@ -427,7 +484,9 @@ tr.sprint-adhoc > td {
 }
 
 /* === Tables polish === */
-.tab_cadre_fixe th {
+/* Scoped to plugin tables only: GLPI core tables keep their own wrapping. */
+:is(#sprint_view_global, #sprint_view_personal, .sprint-collapsible-body, .sprint-themed, .sprint-table-scroll) .tab_cadre_fixe th,
+table.tab_cadre_fixe.sprint-themed th {
     white-space: nowrap;
 }
 
@@ -756,7 +815,7 @@ table.tab_cadre_fixe.sprint-themed {
     justify-content: space-between;
     gap: 6px;
     align-items: center;
-    color: var(--tblr-secondary, #6c757d);
+    color: var(--sprint-fg-muted);
     font-size: 0.92em;
     margin-top: 2px;
 }
@@ -781,20 +840,19 @@ table.tab_cadre_fixe.sprint-themed {
 .sprint-header-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .sprint-header-status {
     color: #fff;
-    font-size: 0.72em;
+    font-size: 0.78em;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.01em;
     padding: 2px 10px;
     border-radius: var(--sprint-radius-pill, 20px);
 }
 .sprint-header-name { font-weight: 700; font-size: 1.05em; color: var(--tblr-body-color, inherit); }
-.sprint-header-dates, .sprint-header-days { font-size: 0.85em; color: var(--tblr-secondary, #6c757d); }
+.sprint-header-dates, .sprint-header-days { font-size: 0.85em; color: var(--sprint-fg-muted); }
 .sprint-header-days { font-weight: 600; }
 .sprint-header-goal {
     flex-basis: 100%;
     font-style: italic;
-    color: var(--tblr-secondary, #6c757d);
+    color: var(--sprint-fg-muted);
     font-size: 0.9em;
 }
 .sprint-header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -808,7 +866,7 @@ table.tab_cadre_fixe.sprint-themed {
     overflow: hidden;
 }
 .sprint-header-progress-bar span { display: block; height: 100%; background: var(--sprint-done, #198754); transition: width 0.4s ease; }
-.sprint-header-progress-label { font-size: 0.82em; color: var(--tblr-secondary, #6c757d); white-space: nowrap; }
+.sprint-header-progress-label { font-size: 0.82em; color: var(--sprint-fg-muted); white-space: nowrap; }
 @media (max-width: 700px) {
     .sprint-header-right { margin-left: 0; flex-basis: 100%; }
 }
@@ -829,7 +887,7 @@ table.tab_cadre_fixe.sprint-themed {
 }
 .sprint-atrisk-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sprint-atrisk-name { font-weight: 600; color: var(--tblr-body-color, inherit); }
-.sprint-atrisk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.78em; color: var(--tblr-secondary, #6c757d); }
+.sprint-atrisk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.78em; color: var(--sprint-fg-muted); }
 .sprint-atrisk-meta i { font-size: 0.9em; margin-right: 3px; opacity: 0.75; }
 .sprint-atrisk-owner { font-weight: 600; }
 .sprint-atrisk-chips { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -854,8 +912,22 @@ table.tab_cadre_fixe.sprint-themed {
 
 /* Kanban card quick-edit button + soft WIP warning */
 .sprint-kanban-card { position: relative; }
-.sk-card-edit { position: absolute; top: 6px; right: 6px; color: var(--tblr-secondary, #6c757d); line-height: 1; }
-.sprint-kanban-card .sk-card-title { padding-right: 18px; }
+.sk-card-edit {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    min-height: 26px;
+    border-radius: var(--sprint-radius-sm);
+    color: var(--sprint-fg-muted);
+    line-height: 1;
+}
+.sk-card-edit:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+/* Reserve the edit button's corner so long titles never run under it. */
+.sprint-kanban-card .sk-card-title { padding-right: 28px; overflow-wrap: anywhere; }
 .sprint-kanban-col.sk-over-wip { border-top-color: #fd7e14; }
 
 /* Backlog "ready to assign" badge */
@@ -865,7 +937,7 @@ table.tab_cadre_fixe.sprint-themed {
     padding: 1px 8px;
     border-radius: var(--sprint-radius-pill, 20px);
     background: color-mix(in srgb, #198754 16%, var(--tblr-bg-surface, #fff));
-    color: var(--tblr-success, #0f5132);
+    color: var(--sprint-fg-success);
     font-size: 0.72em;
     font-weight: 700;
     white-space: nowrap;
@@ -884,17 +956,13 @@ table.tab_cadre_fixe.sprint-themed {
     white-space: nowrap;
     cursor: help;
 }
-.sprint-cap-chip-ok {
-    background: color-mix(in srgb, #198754 16%, var(--tblr-bg-surface, #fff));
-    color: var(--tblr-success, #0f5132);
-}
 .sprint-cap-chip-warn {
     background: color-mix(in srgb, #fd7e14 18%, var(--tblr-bg-surface, #fff));
-    color: #fd7e14;
+    color: var(--sprint-fg-orange);
 }
 .sprint-cap-chip-over {
     background: color-mix(in srgb, #dc3545 16%, var(--tblr-bg-surface, #fff));
-    color: var(--tblr-danger, #b02a37);
+    color: var(--sprint-fg-danger);
 }
 
 /* Backlog drag-to-reorder */
@@ -948,7 +1016,7 @@ table.tab_cadre_fixe.sprint-themed {
     gap: 16px;
     margin-top: 8px;
     font-size: 0.85em;
-    color: var(--sprint-muted);
+    color: var(--sprint-fg-muted);
 }
 .sprint-overview-legend-swatch {
     display: inline-block;
@@ -1134,8 +1202,9 @@ table.tab_cadre_fixe.sprint-themed {
     border-radius: 10px;
     background: color-mix(in srgb, #ffc107 18%, var(--tblr-bg-surface, #fff));
     border: 1px solid #ffc107;
-    /* An explicit colour: .text-dark flips to white in the dark theme. */
-    color: #8a6100;
+    /* An explicit token: .text-dark flips to white in the dark theme, and a
+       fixed dark brown is unreadable there (1.9:1), so the token flips too. */
+    color: var(--sprint-fg-credit);
     font-size: 0.72em;
     font-weight: 600;
     line-height: 1.5;
@@ -1182,10 +1251,9 @@ table.tab_cadre_fixe.sprint-themed {
     color: var(--sprint-tile-color, #0d6efd);
 }
 .sprint-credit-tile-label {
-    font-size: 0.76rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--tblr-secondary, #6c757d);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--sprint-fg-muted);
 }
 .sprint-wallet-bar,
 .sprint-credit-chart-track {
@@ -1235,10 +1303,8 @@ table.tab_cadre_fixe.sprint-themed {
     white-space: nowrap;
 }
 .sprint-credit-table th {
-    font-size: 0.76rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--tblr-secondary, #6c757d);
+    font-size: 0.82rem;
+    color: var(--sprint-fg-muted);
     font-weight: 600;
 }
 
@@ -1264,7 +1330,7 @@ table.tab_cadre_fixe.sprint-themed {
     align-items: center;
     gap: 6px;
     font-size: 0.82em;
-    color: var(--tblr-secondary, #6c757d);
+    color: var(--sprint-fg-muted);
 }
 .sprint-credits-inputs input { max-width: 110px; }
 
@@ -1284,7 +1350,7 @@ table.tab_cadre_fixe.sprint-themed {
     stroke-width: 1;
 }
 .sprint-credit-axis {
-    fill: var(--tblr-secondary, #6c757d);
+    fill: var(--sprint-fg-muted);
     font-size: 10px;
 }
 .sprint-credit-series {
@@ -1315,7 +1381,7 @@ button.sprint-credit-legend-item {
     cursor: pointer;
 }
 button.sprint-credit-legend-item.is-active { font-weight: 700; }
-.sprint-credit-legend-static { color: var(--tblr-secondary, #6c757d); }
+.sprint-credit-legend-static { color: var(--sprint-fg-muted); }
 
 /* Credit flow per customer per sprint */
 .sprint-creditflow-block {
@@ -1373,10 +1439,9 @@ button.sprint-credit-legend-item.is-active { font-weight: 700; }
     letter-spacing: -0.02em;
 }
 .sprint-live-hero-label {
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--tblr-secondary, #6c757d);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--sprint-fg-muted);
 }
 .sprint-live-pace {
     display: inline-flex;
@@ -1440,7 +1505,7 @@ button.sprint-credit-legend-item.is-active { font-weight: 700; }
     gap: 3px 12px;
     margin-top: 6px;
     font-size: 0.76em;
-    color: var(--tblr-secondary, #6c757d);
+    color: var(--sprint-fg-muted);
 }
 .sprint-live-legend-item { white-space: nowrap; }
 .sprint-live-legend-item.is-zero { opacity: 0.5; }
@@ -1493,9 +1558,9 @@ button.sprint-credit-legend-item.is-active { font-weight: 700; }
     text-overflow: ellipsis;
 }
 .sprint-live-fact-label {
-    font-size: 0.7em;
+    font-size: 0.78em;
     line-height: 1.15;
-    color: var(--tblr-secondary, #6c757d);
+    color: var(--sprint-fg-muted);
     overflow-wrap: anywhere;
 }
 .sprint-live-fact.is-bad { --sprint-fact: #dc3545; }
@@ -1503,8 +1568,8 @@ button.sprint-credit-legend-item.is-active { font-weight: 700; }
 .sprint-live-fact.is-note { --sprint-fact: #20c997; }
 .sprint-live-fact.is-date { --sprint-fact: #6f42c1; }
 .sprint-live-fact.is-date .sprint-live-fact-value { font-size: 0.84em; white-space: normal; }
-.sprint-live-fact.is-bad .sprint-live-fact-value,
-.sprint-live-fact.is-warn .sprint-live-fact-value { color: var(--sprint-fact); }
+.sprint-live-fact.is-bad .sprint-live-fact-value { color: var(--sprint-fg-danger); }
+.sprint-live-fact.is-warn .sprint-live-fact-value { color: var(--sprint-fg-orange); }
 
 /* Credit flow: stacked column charts + category split of one sprint */
 .sprint-cf-svg { min-width: 560px; }
@@ -1547,3 +1612,1010 @@ input.sprint-credits-locked:focus {
     cursor: not-allowed;
     box-shadow: none;
 }
+
+/* === design-system: shared components, contrast, focus, motion, mobile ===
+   Everything below is scoped to plugin markup: either a `sprint-*` class on
+   the element itself or a plugin container ancestor. GLPI screens without
+   plugin content are never matched. */
+
+/* --- Dark-theme safety net for fixed inline colours ----------------------
+   PHP/Twig still paint some text with fixed inline hex colours. Remap the
+   ones that fail 4.5:1 to the theme-aware tokens. `;color:` / leading
+   `color:` only, so `background-color:` is never matched. */
+:is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#20c997"], [style*=";color:#20c997"], [style*="; color:#20c997"], [style*=" color: #20c997"]),
+[class*="sprint-"]:is([style^="color:#20c997"], [style*=";color:#20c997"]) { color: var(--sprint-fg-dependency) !important; }
+:is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#fd7e14"], [style*=";color:#fd7e14"], [style^="color:#e67e22"], [style*=";color:#e67e22"]),
+[class*="sprint-"]:is([style^="color:#fd7e14"], [style*=";color:#fd7e14"]) { color: var(--sprint-fg-orange) !important; }
+:is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#d97706"], [style*=";color:#d97706"], [style^="color:#f59f00"], [style*=";color:#f59f00"], [style^="color:#ffc107"], [style*=";color:#ffc107"]),
+[class*="sprint-"]:is([style^="color:#d97706"], [style*=";color:#d97706"]) { color: var(--sprint-fg-warning) !important; }
+:is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#0dcaf0"], [style*=";color:#0dcaf0"]) { color: var(--sprint-fg-info) !important; }
+/* In dark palettes the mid-tone brand colours and the light-theme greys
+   (#495057 audit dates, #6c757d hints) drop below 4.5:1 too. */
+:is(:root[data-glpi-theme-dark="1"], [data-bs-theme="dark"]) :is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#495057"], [style*=";color:#495057"], [style^="color:#6c757d"], [style*=";color:#6c757d"], [style^="color:#343a40"], [style*=";color:#343a40"], [style^="color:#212529"], [style*=";color:#212529"]) { color: var(--sprint-fg-muted) !important; }
+:is(:root[data-glpi-theme-dark="1"], [data-bs-theme="dark"]) :is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#dc3545"], [style*=";color:#dc3545"]),
+:is(:root[data-glpi-theme-dark="1"], [data-bs-theme="dark"]) [class*="sprint-"]:is([style^="color:#dc3545"], [style*=";color:#dc3545"]) { color: var(--sprint-fg-danger) !important; }
+:is(:root[data-glpi-theme-dark="1"], [data-bs-theme="dark"]) :is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#198754"], [style*=";color:#198754"]) { color: var(--sprint-fg-success) !important; }
+:is(:root[data-glpi-theme-dark="1"], [data-bs-theme="dark"]) :is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#0d6efd"], [style*=";color:#0d6efd"]) { color: var(--sprint-fg-info) !important; }
+:is(:root[data-glpi-theme-dark="1"], [data-bs-theme="dark"]) :is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#6f42c1"], [style*=";color:#6f42c1"]) { color: #c5a8ff !important; }
+:is(:root[data-glpi-theme-dark="1"], [data-bs-theme="dark"]) :is([class*="sprint-"], [id^="sprint"]) :is([style^="color:#d63384"], [style*=";color:#d63384"]) { color: var(--sprint-fg-adhoc) !important; }
+
+/* --- Page header: title + short context left, the one main action right. */
+.sprint-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sprint-space-2) var(--sprint-space-4);
+    margin: 0 0 var(--sprint-space-4);
+}
+.sprint-page-header-main { min-width: 0; flex: 1 1 260px; }
+.sprint-page-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--tblr-body-color, inherit);
+    overflow-wrap: anywhere;
+}
+.sprint-page-context {
+    margin: 2px 0 0;
+    font-size: 0.875rem;
+    color: var(--sprint-fg-muted);
+}
+.sprint-page-actions,
+.sprint-action-zone {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sprint-space-2);
+}
+/* One primary action per zone: any further .btn-primary is shown as an
+   outline button so the zone keeps a single visual lead. */
+:is(.sprint-page-actions, .sprint-action-zone) .btn-primary ~ .btn-primary {
+    background: transparent;
+    color: var(--tblr-primary, #0d6efd);
+    border-color: currentColor;
+}
+
+/* --- Filter bar: filters, result count and reset together. Layout class;
+   combine with the existing .sprint-filter-bar for its surface. */
+.sprint-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sprint-space-2);
+    padding: var(--sprint-space-2) var(--sprint-space-3);
+    margin-bottom: var(--sprint-space-3);
+    background: var(--tblr-bg-surface-secondary, #f1f3f5);
+    border: 1px solid var(--sprint-border);
+    border-radius: var(--sprint-radius);
+}
+.sprint-filters > :is(input, select, .form-control, .form-select) { flex: 0 1 220px; min-width: 0; }
+.sprint-filters-count { margin-left: auto; font-size: 0.875em; color: var(--sprint-fg-muted); white-space: nowrap; }
+.sprint-filters-reset { white-space: nowrap; }
+
+/* --- Key figure / stat card. .sprint-stat-card stays the dashboard chip;
+   .sprint-kpi is the same component for new screens. */
+.sprint-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--sprint-space-3);
+    margin-bottom: var(--sprint-space-4);
+}
+.sprint-kpi {
+    padding: var(--sprint-space-3) var(--sprint-space-4);
+    background: var(--tblr-bg-surface, #fff);
+    border: 1px solid color-mix(in srgb, var(--kpi-accent, var(--sprint-muted)) 30%, var(--sprint-border));
+    border-radius: var(--sprint-radius);
+    box-shadow: var(--sprint-shadow);
+    min-width: 0;
+}
+.sprint-kpi-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    color: var(--tblr-body-color, inherit);
+}
+.sprint-kpi-unit { font-size: 0.6em; font-weight: 600; margin-left: 2px; color: var(--sprint-fg-muted); }
+.sprint-kpi-label { font-size: 0.82rem; font-weight: 600; color: var(--sprint-fg-muted); line-height: 1.3; }
+
+/* --- Section: card with a header (title + optional actions) and a body. */
+.sprint-section {
+    margin: var(--sprint-space-4) 0;
+    background: var(--tblr-bg-surface, transparent);
+    border: 1px solid var(--sprint-border);
+    border-radius: var(--sprint-radius);
+    box-shadow: var(--sprint-shadow);
+}
+.sprint-section-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sprint-space-2);
+    padding: var(--sprint-space-2) var(--sprint-space-4);
+    border-bottom: 1px solid var(--sprint-border);
+    background: var(--tblr-bg-surface-secondary, #f8f9fa);
+    border-radius: var(--sprint-radius) var(--sprint-radius) 0 0;
+}
+.sprint-section-title { margin: 0; font-size: 1rem; font-weight: 600; flex: 1 1 auto; min-width: 0; }
+.sprint-section-body { padding: var(--sprint-space-3) var(--sprint-space-4); }
+
+/* --- Badge / chip sizes and tones. .sprint-badge (solid status fill) keeps
+   its look; -sm / -lg only change size. .sprint-chip is the tinted pill used
+   for metadata (tags, categories, credits, capacity...). */
+.sprint-badge.sprint-badge-sm { padding: 1px 8px !important; font-size: 0.72em; gap: 3px; }
+.sprint-badge.sprint-badge-lg { padding: 6px 14px !important; font-size: 0.9em; }
+.sprint-chip {
+    --chip-accent: #6c757d;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 8px;
+    border-radius: var(--sprint-radius-pill);
+    background: color-mix(in srgb, var(--chip-accent) 14%, var(--tblr-bg-surface, #fff));
+    /* Neutral chip: body text (muted grey on a grey tint is only ~4.3:1). */
+    color: var(--tblr-body-color, #1e293b);
+    font-size: 0.75em;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.sprint-chip-lg { padding: 3px 10px; font-size: 0.85em; }
+.sprint-chip-info       { --chip-accent: #0d6efd; color: var(--sprint-fg-info); }
+.sprint-chip-success    { --chip-accent: #198754; color: var(--sprint-fg-success); }
+.sprint-chip-warning    { --chip-accent: #f59f00; color: var(--sprint-fg-warning); }
+.sprint-chip-orange     { --chip-accent: #fd7e14; color: var(--sprint-fg-orange); }
+.sprint-chip-danger     { --chip-accent: #dc3545; color: var(--sprint-fg-danger); }
+.sprint-chip-dependency { --chip-accent: #20c997; color: var(--sprint-fg-dependency); }
+.sprint-chip-credit     { --chip-accent: #ffc107; color: var(--sprint-fg-credit); }
+.sprint-chip-adhoc      { --chip-accent: #d63384; color: var(--sprint-fg-adhoc); }
+
+/* "+3" overflow for long tag lists (js/sprint.js: collapseTagPills). */
+.sprint-tag-pills:not(.is-expanded) > .sprint-tag-overflow { display: none; }
+.sprint-tag-more {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border: 1px dashed var(--sprint-border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--sprint-fg-muted);
+    font-size: 0.72em;
+    font-weight: 700;
+    line-height: 1.5;
+    cursor: pointer;
+}
+.sprint-tag-more:hover { color: var(--sprint-fg-info); border-color: currentColor; }
+
+/* Quieter metadata next to a primary item title. */
+.sprint-meta { font-size: 0.85em; color: var(--sprint-fg-muted); }
+.sprint-item-title { font-weight: 600; color: var(--tblr-body-color, inherit); overflow-wrap: anywhere; }
+
+/* --- Table actions: icon buttons with a real hit area. Give each one an
+   aria-label / visually hidden text; the title alone is not enough. */
+.sprint-table-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sprint-space-1); }
+.sprint-table-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 30px;
+    min-height: 30px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: var(--sprint-radius-sm);
+    background: transparent;
+    color: var(--sprint-fg-muted);
+    line-height: 1;
+    cursor: pointer;
+    text-decoration: none;
+}
+.sprint-table-action:hover { color: var(--sprint-fg-info); background: color-mix(in srgb, currentColor 10%, transparent); }
+.sprint-table-action.is-danger:hover { color: var(--sprint-fg-danger); }
+td.sprint-cell-actions { white-space: nowrap; text-align: right; }
+
+/* --- Form group: label, control, help under the field, error close by. */
+.sprint-form-group { display: flex; flex-direction: column; gap: var(--sprint-space-1); margin-bottom: var(--sprint-space-3); min-width: 0; }
+.sprint-form-label { font-weight: 600; font-size: 0.9em; margin: 0; }
+.sprint-form-help  { font-size: 0.82em; color: var(--sprint-fg-muted); margin: 0; }
+.sprint-form-error { font-size: 0.82em; color: var(--sprint-fg-danger); margin: 0; }
+.sprint-form-row { display: flex; flex-wrap: wrap; gap: var(--sprint-space-3); }
+.sprint-form-row > .sprint-form-group { flex: 1 1 200px; }
+/* A row of switches/checkboxes must wrap instead of overflowing (spec 11). */
+.sprint-switch-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sprint-space-2) var(--sprint-space-4); }
+.sprint-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--sprint-space-2);
+    padding-top: var(--sprint-space-3);
+    border-top: 1px solid var(--sprint-border);
+}
+
+/* --- Visible keyboard focus for plugin controls (spec 03). -------------- */
+:is([class*="sprint-"], [id^="sprint"]) :is(a, button, input, select, textarea, summary, [tabindex], [role="button"], [role="tab"]):focus-visible,
+:is(a, button, input, select, textarea, summary, [tabindex], [role="button"])[class*="sprint-"]:focus-visible,
+.sprint-collapsible-header:focus-visible,
+.sprint-phase-card-header:focus-visible,
+.sprint-kanban-card:focus-visible,
+.sk-card-edit:focus-visible {
+    outline: 2px solid var(--sprint-focus) !important;
+    outline-offset: 2px;
+}
+.sprint-cf-col[role="button"]:focus-visible { outline: 2px solid var(--sprint-focus); }
+.sprint-limits-slider input[type='range']:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--sprint-focus); }
+.sprint-limits-slider input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--sprint-focus); }
+
+/* --- Reduced motion ("Beweging"): no pulsing, no slides/fades. ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .sprint-newly-blocked-badge { animation: none; }
+    :is([class*="sprint-"], [class*="sk-"]),
+    :is([class*="sprint-"], [class*="sk-"])::before,
+    :is([class*="sprint-"], [class*="sk-"])::after,
+    [class*="sprint-"] * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    .sprint-stat-card:hover { transform: none; }
+}
+
+/* --- Small screens (spec 11): 360-390px phones and 200% zoom. ----------- */
+/* Never let a fixed child force page-wide horizontal scroll. */
+:is(.sprint-themed, .sprint-dashboard, .sprint-meeting-rail, [id^="sprint_view_"]) :is(img, svg, canvas, video) { max-width: 100%; }
+
+/* Touch targets: >= 40px on phones and any coarse pointer. */
+@media (max-width: 576px), (pointer: coarse) {
+    :is([class*="sprint-"], [id^="sprint"]) :is(.btn, .sprint-table-action, .sprint-tag-more, .sprint-cap-edit, .sprint-matrix-toggle),
+    :is(.sprint-table-action, .sk-card-edit, .sprint-tag-more, .sprint-cap-edit, .sprint-collapsible-header) {
+        min-height: var(--sprint-touch);
+        min-width: var(--sprint-touch);
+    }
+    :is([class*="sprint-"], [id^="sprint"]) :is(.btn, .sprint-table-action) { display: inline-flex; align-items: center; justify-content: center; }
+    .sprint-kanban-card .sk-card-title { padding-right: calc(var(--sprint-touch) + 4px); }
+    :is([class*="sprint-"], [id^="sprint"]) .form-check { min-height: var(--sprint-touch); display: flex; align-items: center; gap: 6px; }
+    :is([class*="sprint-"], [id^="sprint"]) .form-switch .form-check-input { width: 2.6em; height: 1.4em; }
+    :is([class*="sprint-"], [id^="sprint"]) :is(select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"])) { min-height: var(--sprint-touch); }
+}
+
+@media (max-width: 576px) {
+    /* Switches and button groups wrap instead of overflowing. */
+    :is([class*="sprint-"], [id^="sprint"]) :is(.d-flex, .btn-toolbar, .modal-footer):has(> .form-check, > .btn, > form > .btn) { flex-wrap: wrap; }
+    .sprint-page-actions, .sprint-action-zone, .sprint-form-actions { width: 100%; }
+    .sprint-form-actions > .btn { flex: 1 1 auto; }
+    .sprint-filters > :is(input, select, .form-control, .form-select, div) { flex: 1 1 100%; max-width: none !important; }
+    .sprint-filters-count { margin-left: 0; }
+    .sprint-stat-label { font-size: 0.82em; }
+
+    /* Daily lists: title stays in view while the table scrolls; optional
+       columns drop out so title, status, owner and one action come first. */
+    .sprint-table-scroll .tab_cadre_fixe td.sprint-cell-name,
+    .sprint-table-scroll .tab_cadre_fixe th.sprint-cell-name {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        min-width: 160px;
+        max-width: 60vw;
+        overflow-wrap: anywhere;
+        /* Opaque so scrolled cells pass underneath; row washes (adhoc,
+           blocked) use !important and still win. */
+        background: var(--tblr-bg-surface, #fff);
+        box-shadow: inset -1px 0 0 var(--sprint-border);
+    }
+    .sprint-table-scroll .tab_cadre_fixe td.sprint-cell-actions,
+    .sprint-table-scroll .tab_cadre_fixe th.sprint-cell-actions {
+        position: sticky;
+        right: 0;
+        z-index: 1;
+        background: var(--tblr-bg-surface, #fff);
+        box-shadow: inset 1px 0 0 var(--sprint-border);
+    }
+    :is(.sprint-themed, .sprint-table-scroll) :is(td, th).sprint-col-optional,
+    .sprint-hide-sm { display: none !important; }
+
+    /* Opt-in card layout for daily lists: <table class="... sprint-list-cards">,
+       cells carry data-label="..." for their (translated) column name. */
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards,
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards > tbody,
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards tr,
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards td { display: block !important; width: 100% !important; }
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards tr:first-child:has(> th) { display: none !important; }
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards tr {
+        margin-bottom: var(--sprint-space-2);
+        border: 1px solid var(--sprint-border);
+        border-radius: var(--sprint-radius);
+        overflow: hidden;
+    }
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards td { border: 0 !important; padding: 4px 10px !important; }
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 0.78em;
+        font-weight: 600;
+        color: var(--sprint-fg-muted);
+    }
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards td.sprint-cell-name { font-weight: 600; padding-top: 8px !important; }
+    .sprint-table-scroll > table.tab_cadre_fixe.sprint-list-cards td.sprint-cell-actions { text-align: left; padding-bottom: 8px !important; }
+
+    /* Charts keep their scroll box but start at the viewport width. */
+    .sprint-credit-chart-row,
+    .sprint-cf-mix-row { grid-template-columns: minmax(70px, 38%) 1fr 52px; gap: 6px; }
+    .sprint-credits-inputs { flex-wrap: wrap; }
+    .sprint-limits-row-head { flex-wrap: wrap; }
+    .sprint-limits-vals { margin-left: 0; flex-wrap: wrap; }
+    .sprint-live-facts { grid-template-columns: 1fr; }
+    .sprint-live-name { white-space: normal; overflow-wrap: anywhere; }
+    .sprint-header-bar { padding: 8px 10px; }
+    .sprint-header-progress { min-width: 0; flex: 1 1 100%; }
+    .sprint-kanban-col { flex-basis: 86vw; max-width: 86vw; }
+}
+/* === end design-system === */
+
+/* === board-capacity: board counters, WIP, status menu, mobile column view, capacity summary === */
+/* Column header: "8 items" / "3 of 8 visible" is text now, so the pill
+   becomes a quiet outline; the accent stays on the column's top border. */
+.sprint-kanban-count {
+    background: transparent;
+    color: var(--tblr-secondary, #6c757d);
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    white-space: nowrap;
+    font-weight: 600;
+}
+.sprint-kanban-col .sk-col-wip {
+    padding: 0 10px 4px;
+    font-size: 0.8em;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-kanban-col .sk-col-wip i { margin-right: 3px; opacity: 0.75; }
+.sprint-kanban-col .sk-col-warning {
+    margin: 0 8px 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    /* Mixed towards the body colour: readable on light and dark surfaces. */
+    color: color-mix(in srgb, #fd7e14 45%, var(--tblr-body-color, #212529));
+    background: color-mix(in srgb, #fd7e14 14%, var(--tblr-bg-surface, #fff));
+}
+.sprint-kanban-col .sk-col-warning[hidden] { display: none; }
+.sprint-kanban-col .sk-col-warning i { color: #fd7e14; margin-right: 2px; }
+
+/* Card: explicit "Change status" menu + saving state */
+.sprint-kanban-card .sk-card-move { margin-left: auto; }
+.sprint-kanban-card .sk-card-move-btn { padding: 1px 6px; line-height: 1.2; }
+.sprint-kanban-card .sk-card-move-btn[aria-disabled="true"] { opacity: 0.5; }
+.sprint-kanban-card.sk-saving { opacity: 0.7; border-style: dashed; }
+.sprint-kanban-card .sk-saving-indicator {
+    flex-basis: 100%;
+    font-size: 0.92em;
+    color: var(--tblr-secondary, #6c757d);
+}
+
+/* Narrow screens: pick one column instead of scrolling sideways. */
+.sk-view-tools .sk-column-picker { display: none; }
+@media (max-width: 700px) {
+    .sk-view-tools .sk-column-picker { display: inline-block; }
+    .sk-view-tools .sk-visible-summary { flex-basis: 100%; margin-left: 0 !important; }
+    .sprint-kanban.sk-single .sprint-kanban-col:not(.sk-col-active) { display: none; }
+    .sprint-kanban.sk-single .sprint-kanban-col.sk-col-active { flex-basis: 100%; max-width: 100%; }
+}
+/* Touch: the design-system block sizes .btn / .sk-card-edit; the menu
+   entries are not .btn, so give them room here. */
+@media (max-width: 576px), (pointer: coarse) {
+    .sprint-kanban-card .sk-move-to { padding-top: 10px; padding-bottom: 10px; }
+}
+
+/* Capacity summary (team dashboard): Available · Planned · Remaining */
+.sprint-cap-summary .sprint-cap-caption {
+    font-size: 0.78em;
+    color: var(--tblr-secondary, #6c757d);
+    margin-bottom: 2px;
+}
+.sprint-cap-summary .sprint-cap-figures {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    font-size: 0.85em;
+    margin-bottom: 4px;
+}
+.sprint-cap-summary .sprint-cap-over {
+    font-weight: 700;
+    color: color-mix(in srgb, #dc3545 70%, var(--tblr-body-color, #212529));
+}
+.sprint-cap-summary .sprint-cap-over i { color: #dc3545; }
+.sprint-cap-summary .sprint-cap-breakdown {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    font-size: 0.78em;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-cap-key {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: 3px;
+    vertical-align: baseline;
+}
+.sprint-cap-key-regular  { background: #0d6efd; }
+.sprint-cap-key-fastlane { background: #fd7e14; }
+.sprint-cap-key-helping  { background: #20c997; }
+.sprint-cap-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.78em;
+    font-weight: 700;
+    margin-right: 4px;
+}
+.sprint-cap-chip-fastlane {
+    background: color-mix(in srgb, #fd7e14 16%, var(--tblr-bg-surface, #fff));
+    color: color-mix(in srgb, #fd7e14 50%, var(--tblr-body-color, #212529));
+}
+.sprint-cap-chip-helping {
+    background: color-mix(in srgb, #20c997 16%, var(--tblr-bg-surface, #fff));
+    color: color-mix(in srgb, #20c997 45%, var(--tblr-body-color, #212529));
+}
+/* Member settings: configured share, deliberately neutral. */
+.sprint-cap-setbar {
+    width: 80px;
+    height: 10px;
+    background: var(--tblr-border-color, #e9ecef);
+    border-radius: 5px;
+    overflow: hidden;
+}
+.sprint-cap-setbar > div { height: 100%; background: var(--tblr-secondary, #6c757d); }
+/* === end board-capacity === */
+
+/* === backlog: view switch, states, filter chips, touch targets === */
+.sprint-backlog-titlebar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 16px;
+    margin-bottom: 4px;
+}
+.sprint-backlog-itemsbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+.sprint-backlog-live:empty { display: none; }
+.sprint-backlog-live { text-align: left; }
+/* Row/item state: backlog, proposed, waiting for approval, in sprint. */
+.sprint-state-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: var(--sprint-radius-pill, 20px);
+    font-size: 0.72em;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+.sprint-state-backlog,
+.sprint-state-proposed {
+    background: var(--tblr-bg-surface-secondary, #f1f5f9);
+    color: var(--tblr-body-color, #212529);
+    border-color: var(--tblr-border-color, #dee2e6);
+}
+.sprint-state-requested {
+    background: color-mix(in srgb, #f1c40f 22%, var(--tblr-bg-surface, #fff));
+    color: color-mix(in srgb, #8a6d00 60%, var(--tblr-body-color, #212529));
+    border-color: color-mix(in srgb, #f1c40f 55%, transparent);
+    white-space: normal;
+}
+.sprint-state-insprint {
+    background: color-mix(in srgb, #198754 16%, var(--tblr-bg-surface, #fff));
+    color: color-mix(in srgb, #198754 55%, var(--tblr-body-color, #212529));
+    border-color: color-mix(in srgb, #198754 45%, transparent);
+}
+.sprint-be-state .sprint-state-badge { font-size: 0.9em; white-space: normal; }
+.sprint-plan-missing-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: var(--sprint-radius-pill, 20px);
+    background: color-mix(in srgb, #fd7e14 14%, var(--tblr-bg-surface, #fff));
+    color: color-mix(in srgb, #fd7e14 45%, var(--tblr-body-color, #212529));
+    font-size: 0.72em;
+    font-weight: 700;
+}
+.sprint-be-completeness .sprint-ready-badge,
+.sprint-be-completeness .sprint-plan-missing-badge { font-size: 0.85em; white-space: normal; }
+.sprint-backlog-row.sprint-row-flash > td {
+    background: color-mix(in srgb, var(--tblr-primary, #0d6efd) 10%, transparent);
+    transition: background 0.6s;
+}
+.sprint-backlog-row.sprint-row-assigned > td {
+    background: color-mix(in srgb, #198754 10%, transparent);
+}
+/* Filter chips + result count */
+.sprint-backlog-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: -4px 0 10px;
+    text-align: left;
+}
+.sprint-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 2px 10px;
+    border-radius: var(--sprint-radius-pill, 20px);
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    background: var(--tblr-bg-surface, #fff);
+    color: var(--tblr-body-color, #212529);
+    font-size: 0.8em;
+    cursor: pointer;
+}
+.sprint-filter-chip:hover { border-color: var(--tblr-primary, #0d6efd); }
+.sprint-backlog-empty-state {
+    margin: 18px 0;
+    padding: 24px 16px;
+    border: 1px dashed var(--tblr-border-color, #dee2e6);
+    border-radius: 8px;
+    text-align: center;
+}
+/* Keyboard reorder + collapsible headers */
+.sprint-backlog-rank-cell { white-space: nowrap; }
+.sprint-backlog-move {
+    color: var(--tblr-secondary, #6c757d);
+    line-height: 1;
+    min-width: 20px;
+}
+.sprint-backlog-move:hover,
+.sprint-backlog-move:focus-visible { color: var(--tblr-primary, #0d6efd); }
+.sprint-backlog-cat-header:focus-visible,
+.sprint-backlog-blocked-header:focus-visible,
+.sprint-backlog-parked-header:focus-visible,
+.sprint-filter-chip:focus-visible,
+.sprint-backlog-move:focus-visible {
+    outline: 2px solid var(--tblr-primary, #0d6efd);
+    outline-offset: 2px;
+}
+/* Edit dialog: switches wrap, tags wrap */
+.sprint-be-switches { row-gap: 8px; }
+.sprint-be-switches .form-check { margin-bottom: 0; }
+.sprint-bulk-items { max-height: 220px; overflow-y: auto; padding-left: 1.2rem; }
+/* Row button labels only where there is room. */
+@media (max-width: 1399.98px) {
+    .sprint-backlog-actions .sprint-btn-text { display: none; }
+}
+/* Touch: bigger targets for the row actions, reorder arrows and switches. */
+@media (pointer: coarse) {
+    .sprint-backlog-actions .btn,
+    .sprint-backlog-move {
+        min-width: 40px;
+        min-height: 40px;
+    }
+    .sprint-be-switches .form-check { min-height: 40px; display: flex; align-items: center; gap: 6px; }
+    .sprint-be-tag-label { min-height: 40px; }
+    .sprint-filter-chip { min-height: 36px; }
+}
+@media (max-width: 575.98px) {
+    .sprint-backlog-titlebar { justify-content: flex-start; }
+    .sprint-backlog-filter .form-control,
+    .sprint-backlog-filter .form-select { max-width: none !important; flex: 1 1 140px; }
+}
+/* === end backlog === */
+
+/* === credits-admin: credits page, catalogue, settings, history, export === */
+.sprint-credit-filter {
+    background: var(--tblr-bg-surface-secondary, #f1f3f5);
+    border-radius: 6px;
+}
+.sprint-credit-filter .sprint-filter-chip,
+.sprint-credit-filter .sprint-filter-chip:hover {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    background: var(--tblr-bg-surface, #fff);
+    color: var(--tblr-body-color, #212529);
+    font-size: 0.8rem;
+    text-decoration: none;
+}
+.sprint-credit-section-title h3 { font-size: 1.05rem; }
+.sprint-credit-questions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+.sprint-credit-question { margin: 0; }
+.sprint-credit-question-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--tblr-secondary, #6c757d);
+    margin-bottom: 4px;
+}
+.sprint-credit-question-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; margin-bottom: 4px; }
+.sprint-credit-question-list { margin: 6px 0 0; padding-left: 18px; }
+.sprint-credit-attention { list-style: none; margin: 0; padding: 0; }
+.sprint-credit-attention > li { padding: 6px 0; border-top: 1px solid var(--tblr-border-color, #e9ecef); }
+.sprint-credit-attention > li:first-child { border-top: 0; padding-top: 0; }
+.sprint-credit-attention-links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; }
+.sprint-credit-explain > summary { cursor: pointer; font-weight: 600; list-style-position: inside; }
+.sprint-credit-explain-table td { padding: 2px 6px; }
+.sprint-credit-colgroups th {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--tblr-secondary, #6c757d);
+    border-bottom-width: 0;
+}
+tr.sprint-credit-booking-target > td { background: color-mix(in srgb, var(--tblr-primary, #0d6efd) 14%, transparent) !important; }
+[data-sprint-arm].sprint-armed { background: var(--tblr-danger, #dc3545); color: #fff; border-color: var(--tblr-danger, #dc3545); }
+.sprint-catalogue-toolbar { border-bottom: 1px solid var(--tblr-border-color, #e9ecef); }
+.sprint-catalogue-toggle { color: inherit; text-decoration: none; width: 18px; }
+.sprint-credit-fixed-hint { margin-top: 2px; }
+.sprint-settings-nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.sprint-settings-section { scroll-margin-top: 80px; }
+.sprint-settings-section .card-title { font-size: 1rem; }
+.sprint-audit-full > summary { cursor: pointer; color: var(--tblr-primary, #0d6efd); }
+.sprint-audit-full-body {
+    margin-top: 4px;
+    padding: 6px 8px;
+    border-left: 3px solid var(--tblr-border-color, #dee2e6);
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.sprint-csv-preset.active { color: #fff; }
+.sprint-catalogue-toggle:focus-visible,
+.sprint-credit-explain > summary:focus-visible,
+.sprint-audit-full > summary:focus-visible,
+.sprint-credit-filter .sprint-filter-chip:focus-visible {
+    outline: 2px solid var(--tblr-primary, #0d6efd);
+    outline-offset: 2px;
+}
+@media print {
+    .sprint-credit-filter, .sprint-catalogue-toolbar { display: none !important; }
+}
+/* === end credits-admin === */
+
+/* === dashboard-nav: collapsible buttons, key figures, overview, side nav, sprint setup === */
+/* Collapsible headers are real <button>s now: reset the button chrome. */
+/* Full-width section header rows, not boxed buttons: undo UA/GLPI button
+   chrome; background + padding come from .sprint-collapsible-header. */
+.sprint-collapsible > button.sprint-collapsible-header {
+    -webkit-appearance: none;
+    appearance: none;
+    display: flex;
+    width: 100%;
+    margin: 0;
+    border: 0 !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    outline: none;
+    text-align: left;
+    justify-content: flex-start;
+    font: inherit;
+    font-weight: 600;
+    line-height: inherit;
+    color: var(--tblr-body-color, inherit);
+    min-width: 0;
+}
+.sprint-collapsible > button.sprint-collapsible-header > span { min-width: 0; }
+.sprint-collapsible-header:focus-visible,
+.sprint-overview-toggle:focus-visible,
+.sprint-sortable[tabindex]:focus-visible,
+.sprint-nav-toggle:focus-visible {
+    outline: 2px solid var(--sprint-focus, var(--tblr-primary, #0d6efd));
+    outline-offset: 2px;
+}
+.sprint-analysis-zone > .sprint-collapsible-body { padding: 4px 12px 8px; }
+
+/* Dashboard key figures + on-demand details */
+.sprint-live-forecast-help { margin: 0 0 10px; }
+/* On-demand details styled as light section rows with a chevron. */
+.sprint-stat-more,
+.sprint-measure-help,
+.sprint-overview-more-tiles,
+.sprint-form-advanced {
+    margin: 0 0 12px;
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    background: var(--tblr-bg-surface, transparent);
+}
+.sprint-measure-help { margin-top: 10px; color: var(--tblr-secondary, #6c757d); }
+.sprint-stat-more > summary,
+.sprint-measure-help > summary,
+.sprint-overview-more-tiles > summary,
+.sprint-form-advanced > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    list-style: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--tblr-body-color, inherit);
+    background: var(--tblr-bg-surface-secondary, #f8f9fa);
+    border-radius: 6px;
+    user-select: none;
+}
+.sprint-live-forecast-help > summary { cursor: pointer; color: var(--tblr-primary, #0d6efd); }
+:is(.sprint-stat-more, .sprint-measure-help, .sprint-overview-more-tiles, .sprint-form-advanced) > summary::-webkit-details-marker { display: none; }
+:is(.sprint-stat-more, .sprint-measure-help, .sprint-overview-more-tiles, .sprint-form-advanced) > summary::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.2s ease;
+    opacity: 0.7;
+}
+:is(.sprint-stat-more, .sprint-measure-help, .sprint-overview-more-tiles, .sprint-form-advanced)[open] > summary::before { transform: rotate(45deg); }
+:is(.sprint-stat-more, .sprint-measure-help, .sprint-overview-more-tiles, .sprint-form-advanced)[open] > summary {
+    border-radius: 6px 6px 0 0;
+    border-bottom: 1px solid var(--tblr-border-color, #dee2e6);
+}
+.sprint-stat-more > .sprint-stat-cards { padding: 10px 12px; }
+.sprint-overview-more-tiles > .row { padding: 10px 12px; margin: 0; }
+.sprint-form-advanced > .row { padding: 0 12px 4px; }
+.sprint-measure-help ul { padding: 8px 14px 8px 32px; margin: 0; }
+.sprint-estimate-notes { text-align: center; margin: 0 0 10px; }
+.sprint-progress-title { font-weight: 600; text-align: center; margin-bottom: 4px; }
+
+/* Next steps + My work strips */
+.sprint-my-work {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    margin: 10px 0;
+    padding: 10px 14px;
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    background: var(--tblr-bg-surface, transparent);
+}
+.sprint-next-steps { border-left: 3px solid var(--tblr-primary, #0d6efd); }
+.sprint-next-steps-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.sprint-next-steps-list a.sprint-chip { text-decoration: none; }
+.sprint-my-work-title { white-space: nowrap; }
+.sprint-my-work-facts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* Plugin side navigation: one toggle row below md instead of a full menu */
+.sprint-side-nav { overflow: hidden; }
+.sprint-nav-toggle {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    justify-content: flex-start;
+    font-weight: 600;
+}
+
+/* Overview: result bar, chips, analysis heading, collapsible sections */
+.sprint-overview-resultbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+}
+.sprint-overview-result { font-weight: 600; }
+.sprint-filter-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.sprint-filter-chip { text-decoration: none; }
+.sprint-filter-chip:hover { text-decoration: line-through; }
+.sprint-overview-resultbar > * { min-width: 0; }
+.sprint-overview-analysis-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 8px 0 12px;
+}
+.sprint-overview-toggle {
+    -webkit-appearance: none;
+    appearance: none;
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 2px;
+    margin: -4px -8px;
+    padding: 4px 8px;
+    border: 0 !important;
+    border-radius: 6px;
+    box-shadow: none !important;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.sprint-overview-toggle:hover {
+    background: color-mix(in srgb, var(--tblr-primary, #0d6efd) 7%, transparent);
+}
+.sprint-overview-chevron {
+    width: 14px;
+    margin-right: 6px;
+    transition: transform 0.2s ease;
+}
+.sprint-overview-collapsible.is-collapsed .sprint-overview-chevron { transform: rotate(-90deg); }
+.sprint-overview-collapsible.is-collapsed > .card-body > .card-title { margin-bottom: 0; }
+
+/* Sprint + template setup */
+.sprint-template-summary-box {
+    padding: 8px 12px;
+    border: 1px dashed var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    background: var(--tblr-bg-surface-secondary, transparent);
+}
+.sprint-template-summary-box ul { padding-left: 18px; margin: 4px 0; }
+.sprint-from-template { box-shadow: inset 3px 0 0 var(--tblr-primary, #0d6efd); }
+.sprint-form-advanced { margin-bottom: 8px; }
+.sprint-meeting-preview td { vertical-align: top; }
+/* === end dashboard-nav === */
+
+/* === quickedit: shared quick-edit dialog, filter chips === */
+/* Collapsible groups inside the quick-edit dialog (native <details>). */
+.sprint-qe-section {
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    background: var(--tblr-bg-surface, #fff);
+}
+.sprint-qe-section > .sprint-qe-section-summary {
+    cursor: pointer;
+    padding: 8px 12px;
+    list-style: none;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    border-radius: 6px;
+}
+.sprint-qe-section > .sprint-qe-section-summary::-webkit-details-marker { display: none; }
+.sprint-qe-section > .sprint-qe-section-summary::before {
+    content: "\25B8";
+    display: inline-block;
+    width: 1em;
+    transition: transform .15s ease;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-qe-section[open] > .sprint-qe-section-summary::before { transform: rotate(90deg); }
+.sprint-qe-section[open] > .sprint-qe-section-summary {
+    border-bottom: 1px solid var(--tblr-border-color, #dee2e6);
+    border-radius: 6px 6px 0 0;
+}
+.sprint-qe-section > .sprint-qe-section-summary:hover { background: var(--tblr-bg-surface-secondary, #f8f9fa); }
+.sprint-qe-section-body { padding: 12px 12px 4px; }
+.sprint-qe-section .sprint-qe-sum { font-weight: 400; }
+.sprint-qe-tags-block.sprint-qe-invalid {
+    border-left: 3px solid var(--tblr-danger, #dc3545);
+    padding-left: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .sprint-qe-section > .sprint-qe-section-summary::before { transition: none; }
+}
+
+/* Active-filter chips + filtered-empty state (filter bars). */
+.sprint-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: 12px;
+    border: 1px solid var(--tblr-border-color, #ced4da);
+    background: var(--tblr-bg-surface, #fff);
+    color: var(--tblr-body-color, #212529);
+    font-size: .8rem;
+    line-height: 1.5;
+}
+.sprint-filter-chip:hover { border-color: var(--tblr-danger, #dc3545); }
+.sprint-filter-chip .fa-times { opacity: .7; }
+.sprint-filter-empty {
+    border: 1px dashed var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    margin: 6px 0;
+}
+/* === end quickedit === */
+
+/* === capacity-unify: one capacity model, bar, legend and warning states === */
+.sprint-cap-key-proposed {
+    background: repeating-linear-gradient(135deg, rgba(13,110,253,.55) 0 2px, rgba(13,110,253,.18) 2px 4px);
+    box-shadow: inset 0 0 0 1px rgba(13,110,253,.6);
+}
+.sprint-cap-key-unavailable { background: #6c757d; }
+.sprint-cap-key-over {
+    background: repeating-linear-gradient(45deg, #dc3545 0 2px, transparent 2px 4px);
+    box-shadow: inset 0 0 0 1px #dc3545;
+}
+.sprint-cap-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    margin-top: 8px;
+    font-size: 0.78em;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-cap-note {
+    font-size: 0.76em;
+    color: var(--tblr-secondary, #6c757d);
+    margin-top: 2px;
+}
+.sprint-cap-over {
+    font-weight: 700;
+    color: var(--sprint-fg-danger, #a52834);
+}
+.sprint-cap-over i { color: #dc3545; }
+.sprint-cap-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 7px;
+    border-radius: var(--sprint-radius-pill, 20px);
+    font-size: 0.78em;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+/* Almost full: amber. Full: neutral, outlined (no warning colour, it fits). Over: red. */
+.sprint-cap-state-almost_full {
+    background: color-mix(in srgb, #fd7e14 16%, var(--tblr-bg-surface, #fff));
+    color: var(--sprint-fg-orange, #a64600);
+}
+.sprint-cap-state-full {
+    background: transparent;
+    border-color: var(--tblr-border-color, #dee2e6);
+    color: var(--tblr-body-color, #212529);
+}
+.sprint-cap-state-over {
+    background: color-mix(in srgb, #dc3545 16%, var(--tblr-bg-surface, #fff));
+    color: var(--sprint-fg-danger, #a52834);
+}
+.sprint-cap-state-none {
+    background: transparent;
+    color: var(--tblr-secondary, #6c757d);
+}
+.sprint-cap-chip-neutral {
+    background: color-mix(in srgb, var(--tblr-secondary, #6c757d) 14%, var(--tblr-bg-surface, #fff));
+    color: var(--tblr-body-color, #212529);
+}
+/* Member settings: "Set capacity" is a setting, not progress: outlined, no fill colour. */
+.sprint-cap-setbar {
+    background: transparent;
+    border: 1px solid var(--tblr-border-color, #ced4da);
+    box-sizing: border-box;
+}
+.sprint-cap-setbar > div {
+    background: repeating-linear-gradient(90deg, var(--tblr-secondary, #6c757d) 0 6px, transparent 6px 7px);
+    opacity: .7;
+}
+.sprint-cap-input { max-width: 9em; }
+@media print {
+    .sprint-capacity-bar, .sprint-cap-key, .sprint-cap-state, .sprint-member-bar {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+/* === end capacity-unify === */

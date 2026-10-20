@@ -190,10 +190,13 @@ class SprintFastlaneMember extends CommonDBRelation
                 // Inline capacity update form
                 echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline-flex;gap:4px;align-items:center;margin-right:6px;'>";
                 echo Html::hidden('id', ['value' => $row['id']]);
+                $capAria = sprintf(__('Capacity (%%) for %s', 'sprint'), SprintCache::userName($uid));
                 Dropdown::showFromArray('capacity', SprintMember::getCapacityChoices(), [
-                    'value' => SprintMember::capacityKey($cap),
+                    'value'      => SprintMember::capacityKey($cap),
+                    'aria_label' => $capAria,
                 ]);
-                echo "<button type='submit' name='update' value='1' class='btn btn-sm btn-outline-primary' title='" . __('Update') . "'><i class='fas fa-save'></i></button>";
+                echo "<button type='submit' name='update' value='1' class='btn btn-sm btn-outline-primary' title='" . __s('Update') . "' "
+                    . "aria-label='" . htmlescape(__('Update') . ': ' . $capAria) . "'><i class='fas fa-save' aria-hidden='true'></i></button>";
                 Html::closeForm();
                 // Delete
                 echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline;'>";

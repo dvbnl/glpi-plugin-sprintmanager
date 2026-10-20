@@ -2,7 +2,9 @@
 
 /**
  * AJAX handler for the quick-edit modal's inline dependency manager:
- *   - action=list   : return all dependencies (open + resolved) for an item
+ *   - action=list   : return all dependencies (open + resolved) for an item,
+ *                     plus the item's pending approval requests (the quick-edit
+ *                     dialog loads both when it opens)
  *   - action=update : change a dependency's capacity %
  *   - action=remove : delete a dependency (and auto-unblock the parent)
  *
@@ -20,7 +22,7 @@ Session::checkRight('plugin_sprint_item', READ);
 $action = (string)($_REQUEST['action'] ?? 'list');
 $itemId = (int)($_REQUEST['plugin_sprint_sprintitems_id'] ?? 0);
 
-$fail = ['success' => false, 'message' => 'Request failed'];
+$fail = ['success' => false, 'message' => __('Request failed', 'sprint')];
 
 $item = new GlpiPlugin\Sprint\SprintItem();
 if ($itemId <= 0 || !$item->getFromDB($itemId) || !$item->hasEntityAccess()) {
@@ -56,7 +58,11 @@ if ($action === 'list') {
             'is_resolved' => (int)$r['is_resolved'],
         ];
     }
-    echo json_encode(['success' => true, 'deps' => $deps]);
+    echo json_encode([
+        'success' => true,
+        'deps'    => $deps,
+        'pending' => GlpiPlugin\Sprint\SprintRequest::describePendingForItem($itemId),
+    ]);
     return;
 }
 

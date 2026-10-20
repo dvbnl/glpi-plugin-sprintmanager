@@ -14,7 +14,7 @@ header('Content-Type: application/json');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);
 
-$response = ['success' => false, 'message' => 'Request failed'];
+$response = ['success' => false, 'message' => __('Request failed', 'sprint')];
 
 if (!isset($_POST['id']) || !isset($_POST['status'])) {
     echo json_encode($response);
@@ -154,7 +154,7 @@ if ($result) {
 echo json_encode([
     'success'                => (bool)$result,
     'message'                => $result
-        ? ($overrideNotice !== '' ? $overrideNotice : 'Status updated')
+        ? ($overrideNotice !== '' ? $overrideNotice : __('Status updated', 'sprint'))
         : ($messages ? implode("\n", $messages) : 'Update failed'),
     'dod_overridden'         => $result && $overrideNotice !== '',
     'linked_open_badge_html' => $badgeHtml,

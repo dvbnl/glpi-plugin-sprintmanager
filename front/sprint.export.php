@@ -20,6 +20,8 @@ $sprint = new GlpiPlugin\Sprint\Sprint();
 if (!$sprint->getFromDB($sprintId)) {
     Html::displayErrorAndDie(__('Sprint not found', 'sprint'));
 }
+// Entity + item-level read rule, not just the profile right.
+$sprint->check($sprintId, READ);
 
 // CSV download — must run before any HTML chrome is emitted. The section /
 // column / category selection comes from the export dialog as query params;

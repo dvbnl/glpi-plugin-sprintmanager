@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-10-19
+
+### Added
+- **Carry over from the item itself.** A *Carry over to sprint* card under the sprint item form, and a *Sprint planning* line with a *Quick edit* on the Sprints tab of a linked Ticket / Change / Problem / Project task, so an item from an older sprint — typically a ticket reopened after its sprint was completed — is picked up in a new sprint without opening an old meeting. The tab shows the item's latest sprint (and says so when that sprint is closed), its status, owner, adhoc flag and tags.
+- **Carry-over needs the Scrum Master's approval.** On every path (item form, linked-item quick edit, sprint quick edit, meeting) the Scrum Master of the *target* sprint carries over at once. Anyone else files a *Carry over* request with a reason, which lands in that sprint's Requests tab.
+- **Adhoc and tags from the quick edits.** Everyone who may edit an item in a sprint can now tick *Adhoc* in the quick-edit dialogs and on the item form. For anyone but the Scrum Master the change becomes an *Adhoc* approval request. The meeting quick-edit dialog gains the tag picker, and the linked-item quick edit offers both.
+- **Cancel your own request.** The requester of a pending approval request can withdraw it from the sprint's Requests tab, from the lock notice on the item form and from the carry-over card.
+- **Adhoc and tags on the backlog planning quick edit** of a linked Ticket / Change / Problem / Project task. On the backlog anyone who may edit the item pre-flags adhoc, the flag travels into the sprint.
+- **Retrospective follow-up of earlier actions.** Every retrospective opens with the actions agreed in the previous retrospective of the same sprint series (same entity and template, shared team member or Scrum Master), done ones included, plus actions still open from older retrospectives. An action keeps one identity across sprints instead of being copied, shows where it was agreed, its owner, due date, status and last update, and gets a progress note, an evaluation and *did it help?* per retrospective (new table `glpi_plugin_sprint_sprintimprovementfollowups`). Existing copies are linked to their original only when entity, owner, due date and text match unambiguously. The facilitator can pick another previous sprint when several ran in parallel.
+- **Meeting notes save visibly**: *Not saved / Saving… / Saved / Save failed — Retry* per note, one save at a time, stale answers ignored, pending notes flushed on phase navigation, a warning before leaving with unsaved text and recovery of unsaved text after a reload.
+- **One capacity model everywhere** (team cards, dashboard team and personal tables, backlog member matrix and edit dialog, sprint report and CSV): *Set*, *Not available*, *Available*, *Planned* (regular + fastlane + helping), *Remaining* in percentage points and *Proposed* backlog work shown apart. One warning policy: neutral, *Almost full* below 10 points, *Full*, *N% over capacity*. A low availability alone is never a warning. Capacity can be typed in 0.5 % steps with the presets as suggestions.
+- **Board**: column headers say *N items* and *WIP: max N per person* separately, *3 of 8 visible* with filters, warnings name the person and are recalculated after every move, revert or filter. Cards show a saving state and offer a *Change status* menu next to drag and drop. On narrow screens one column at a time.
+- **Dashboard**: four key figures with their unit (*Progress weighted by capacity*, *Items done*, *Story points delivered*, *Blocked*), the rest under *More figures*, an explanation of the measures and of missing estimates, *Analysis and trends* on top in the Team view, a *My work* strip and a *Next steps* checklist for a sprint that is not set up yet.
+- **Backlog**: *Work queue / Planning* views (remembered per user), *Proposed sprint* instead of *Assign to sprint*, *Planning complete* or *Missing: owner, estimate, proposed sprint* instead of *Ready*, a visible state (backlog, proposed, requested, in sprint), *Save and assign*, a bulk dialog that lists the items and target sprint first, filter chips with *x of y items*, separate empty states, up/down buttons as keyboard alternative to dragging and inline feedback instead of browser pop-ups.
+- **One quick-edit dialog** on board, dashboard, items, fastlane and meetings: status, owner, capacity and note first, the rest under *Planning*, *Customer & credits* and *Dependencies*, the context (manual or linked item) on top, a scrollable body with a fixed footer and a warning before discarding changes.
+- **Credits page** starts from three questions (*What is freely available?*, *What is reserved?*, *Which customer needs attention?*) with links to the customer, sprint and booking, a customer and period filter for every section, a worked example of how a balance is built up and separate *Current balance*, *History* and *Forecast* sections. The catalogue gets search, an *Active only* switch and collapsible folders.
+- **Settings** in groups (Planning & rights, Quality, Backlog, Tags & categories, Credits, Sprint report), each with its own save button and message. **History tab** with a period filter, a result count, pages of 50 and expandable long changes. **Export presets** *Management summary* and *Full sprint report*, and a print layout that repeats table headers and no longer cuts rows.
+- **Sprint and template setup** grouped in Basics / Planning / Advanced, a summary of what a template adds, a clear rule for end date versus duration and a preview of the meeting dates a template generates.
+- **Overview**: four key tiles first, the rest on demand, filter chips with a result count, distinct empty states, collapse state stored per user and a navigation that folds into one row on small screens.
+- **Accessibility and design**: real buttons with `aria-expanded` for every collapsible section, labelled fields and dialogs, focus that returns to the trigger, visible focus rings, readable contrast for every status colour in light and dark themes, sentence-case labels, larger touch targets on phones, respect for *reduce motion*, calmer key-figure tiles and plugin CSS scoped to plugin markup only.
+- **Translations**: every runtime message, aria label and confirmation is translatable, one term per concept (*Team / Mijn werk*, *Bord*, *Geparkeerd*, *Wacht op collega*, *Doorschuiven*), and all five languages are complete.
+
+### Removed
+- The *My Sprint actions* card on the GLPI home page. Signals stay visible in the sprint's Agility tab.
+- Dead code left behind by the rework (unused capacity renderers, the old audit filter and confirm handlers, unused CSS rules and translations).
+
+### Fixed
+- **Saving settings, profile rights and Agility actions works again on GLPI 10.** Those handlers re-checked the CSRF token that GLPI 10's `inc/includes.php` had already validated and spent, so every save failed. GLPI validates it on both versions, so the second check is gone.
+- The plugin settings (`glpi_configs`, context `plugin:sprint`) are removed on uninstall.
+- The last three columns added after 1.3.0 shipped (dependency credits and product, catalogue sort order) are created by the upgrade to 1.3.1 instead of an `ALTER TABLE` on the first request of every install.
+- Marketplace descriptor: download links point to the release assets that actually exist (six returned 404), the never-released 1.1.3 is gone and 1.2.1 / 1.0.3 are listed.
+- **Names with `&` or `<` display correctly on GLPI 10.** The `htmlescape()` fallback encoded the names GLPI 10 had already stored encoded a second time.
+- Saving one settings group no longer resets the switches of another group.
+- Collapsing a card on the overview no longer hides its own title.
+
+### Security
+- **GLPI's search engine and report export are entity-scoped for plugin tables without their own entity** (sprint items, members, meetings, dependencies, requests, credits ledger, retainers, template children…): a `plugin_sprint_addDefaultWhere` hook limits them to rows whose parent sprint, item, template or customer the session can see. Before, `ajax/search.php` and `front/report.dynamic.php` listed sprint items (names, notes, owners, customers, credits) and credit bookings of every entity.
+- The sprint report and CSV export (`front/sprint.export.php`) check read access to the sprint itself, not only the profile right.
+- `ajax/getsprintmembers.php` refuses a sprint outside the session's entities.
+- The carry-over sprint picker only lists sprints of the session's entities.
+- **Stored XSS through names in messages** (GLPI 11): sprint, item and category names that end up in a toast or a message after redirect (carry-over, requests, backlog purge, assignment) are escaped, and request details travel as plain text.
+- The sprint switcher in the sprint header and the velocity window (dashboard, report) only list sprints of the session's entities.
+- `ajax/backlogcapacity.php` refuses a sprint outside the session's entities.
+- **CSV formula injection**: text cells starting with `=`, `+`, `-`, `@`, tab or CR are prefixed with a quote in every section of the CSV export, so a ticket title such as `=HYPERLINK(…)` is shown as text in Excel/LibreOffice.
+- Upgrade note: instances upgraded from ≤ 1.2.2 keep the READ grants older versions wrote for every profile. Review the Self-Service profile.
+
 ## [1.3.0] - 2026-09-01
 
 ### Added

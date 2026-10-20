@@ -17,6 +17,9 @@ class UserPref
     /** Personal backlog order: 'team' (shared ranking) or 'project' (project, then name). */
     public const BACKLOG_SORT = 'backlog_sort';
 
+    /** Collapsed sections on the sprint overview: comma-separated stable section ids. */
+    public const OVERVIEW_COLLAPSED = 'overview_collapsed';
+
     /**
      * Create the table on the fly for installations that predate it, so a
      * running instance does not need a forced reinstall (same pattern as
@@ -112,5 +115,35 @@ class UserPref
     public static function backlogSort(): string
     {
         return self::get(self::BACKLOG_SORT, 'team') === 'project' ? 'project' : 'team';
+    }
+
+    /**
+     * Normalize a comma-separated list of overview section ids: lowercase
+     * slugs only, de-duplicated, within the column size. Returns null when
+     * the input contains anything else (rejected by ajax/userpref.php).
+     */
+    public static function normalizeSectionList(string $value): ?string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+        $ids = [];
+        foreach (explode(',', $value) as $id) {
+            $id = trim($id);
+            if (!preg_match('/^[a-z0-9-]{1,40}$/', $id)) {
+                return null;
+            }
+            $ids[$id] = true;
+        }
+        $joined = implode(',', array_keys($ids));
+        return strlen($joined) <= 255 ? $joined : null;
+    }
+
+    /** Overview section ids the current user collapsed. */
+    public static function overviewCollapsed(): array
+    {
+        $value = self::normalizeSectionList(self::get(self::OVERVIEW_COLLAPSED, ''));
+        return ($value === null || $value === '') ? [] : explode(',', $value);
     }
 }

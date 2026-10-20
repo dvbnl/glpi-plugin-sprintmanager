@@ -113,6 +113,7 @@ class SprintTemplateMeeting extends CommonDBTM
             Dropdown::showNumber('interval_days', [
                 'value' => 2, 'min' => 1, 'max' => 14,
             ]);
+            echo "<div class='sprint-small text-muted' id='interval_hint_{$randSchedule}' aria-live='polite'></div>";
             echo "</span>";
             echo "</td>";
             echo "<td>" . __('Duration (min)', 'sprint') . "</td>";
@@ -166,6 +167,19 @@ class SprintTemplateMeeting extends CommonDBTM
                 }
                 schedSel.on('change', toggleFields);
                 toggleFields();
+
+                // Rough occurrence count for the template's sprint length;
+                // the exact dates show in the preview below the list.
+                var intSel  = intField.find('select').first();
+                var intHint = \$('#interval_hint_{$randSchedule}');
+                var weeks   = " . max(1, (int)($template->fields['duration_weeks'] ?? 2)) . ";
+                var hintTpl = " . json_encode(__('About %1$d occurrences in a %2$d-week sprint, before weekends and ceremony days are skipped.', 'sprint')) . ";
+                function updateHint() {
+                    var n = parseInt(intSel.val(), 10) || 1;
+                    intHint.text(hintTpl.replace('%1\$d', Math.floor(weeks * 7 / n)).replace('%2\$d', weeks));
+                }
+                intSel.on('change', updateHint);
+                updateHint();
 
                 // Auto-fill name from ceremony type
                 var typeSel = $('select[id^=\"dropdown_meeting_type\"]').last();
@@ -257,6 +271,8 @@ class SprintTemplateMeeting extends CommonDBTM
         }
 
         echo "</table></div>";
+
+        self::renderPreview($template, $items);
     }
 
     /**
@@ -287,51 +303,7 @@ class SprintTemplateMeeting extends CommonDBTM
             ['sort_order ASC']
         );
 
-        // Two-pass: collect fixed-ceremony days first so recurring standups
-        // can skip days already hosting a kickoff/review/retro.
-        $reservedDays = [];
-        $planned      = []; // [['row' => ..., 'dates' => [...]], ...]
-
-        foreach ($meetings as $row) {
-            if ($row['schedule_type'] === self::SCHEDULE_INTERVAL) {
-                continue;
-            }
-            $skipWeekends = (bool)($row['skip_weekends'] ?? false);
-            $dates = self::calculateMeetingDates(
-                $row['schedule_type'],
-                (int)$row['interval_days'],
-                $start,
-                $end,
-                $skipWeekends
-            );
-            foreach ($dates as $d) {
-                $reservedDays[$d->format('Y-m-d')] = true;
-            }
-            $planned[] = ['row' => $row, 'dates' => $dates];
-        }
-
-        // Second pass: interval meetings, dropping any occurrence whose
-        // date collides with a fixed ceremony day.
-        foreach ($meetings as $row) {
-            if ($row['schedule_type'] !== self::SCHEDULE_INTERVAL) {
-                continue;
-            }
-            $skipWeekends = (bool)($row['skip_weekends'] ?? false);
-            $dates = self::calculateMeetingDates(
-                $row['schedule_type'],
-                (int)$row['interval_days'],
-                $start,
-                $end,
-                $skipWeekends
-            );
-            $filtered = [];
-            foreach ($dates as $d) {
-                if (!isset($reservedDays[$d->format('Y-m-d')])) {
-                    $filtered[] = $d;
-                }
-            }
-            $planned[] = ['row' => $row, 'dates' => $filtered];
-        }
+        $planned = self::planMeetingDates($meetings, $start, $end);
 
         foreach ($planned as $entry) {
             $row = $entry['row'];
@@ -347,6 +319,113 @@ class SprintTemplateMeeting extends CommonDBTM
                 ]);
             }
         }
+    }
+
+    /**
+     * Plan the dates for a template's meeting rows within [start, end].
+     * Two passes: fixed ceremonies first, then recurring meetings, dropping any
+     * occurrence that collides with a fixed ceremony day. Shared by
+     * {@see applyToSprint()} and the preview on the template's Meetings tab.
+     *
+     * @param array<int,array> $meetings template meeting rows (sort_order ASC)
+     * @return array<int,array{row:array,dates:\DateTime[]}>
+     */
+    public static function planMeetingDates(array $meetings, \DateTime $start, ?\DateTime $end): array
+    {
+        $reservedDays = [];
+        $planned      = [];
+
+        foreach ($meetings as $row) {
+            if ($row['schedule_type'] === self::SCHEDULE_INTERVAL) {
+                continue;
+            }
+            $dates = self::calculateMeetingDates(
+                $row['schedule_type'],
+                (int)$row['interval_days'],
+                $start,
+                $end,
+                (bool)($row['skip_weekends'] ?? false)
+            );
+            foreach ($dates as $d) {
+                $reservedDays[$d->format('Y-m-d')] = true;
+            }
+            $planned[] = ['row' => $row, 'dates' => $dates];
+        }
+
+        foreach ($meetings as $row) {
+            if ($row['schedule_type'] !== self::SCHEDULE_INTERVAL) {
+                continue;
+            }
+            $dates = self::calculateMeetingDates(
+                $row['schedule_type'],
+                (int)$row['interval_days'],
+                $start,
+                $end,
+                (bool)($row['skip_weekends'] ?? false)
+            );
+            $filtered = [];
+            foreach ($dates as $d) {
+                if (!isset($reservedDays[$d->format('Y-m-d')])) {
+                    $filtered[] = $d;
+                }
+            }
+            $planned[] = ['row' => $row, 'dates' => $filtered];
+        }
+
+        return $planned;
+    }
+
+    /**
+     * Preview of the meetings a sprint created from this template would get,
+     * for an example sprint starting next Monday with the template duration.
+     */
+    private static function renderPreview(SprintTemplate $template, array $meetings): void
+    {
+        if (!$meetings) {
+            return;
+        }
+        $weeks = max(1, (int)($template->fields['duration_weeks'] ?? 2));
+        $start = new \DateTime('next monday 09:00');
+        $end   = (clone $start)->modify("+{$weeks} weeks");
+        $planned = self::planMeetingDates($meetings, $start, $end);
+
+        $byDay = [];
+        foreach ($planned as $entry) {
+            foreach ($entry['dates'] as $d) {
+                $byDay[$d->format('Y-m-d')][] = (string)$entry['row']['name'];
+            }
+        }
+        ksort($byDay);
+        $total = array_sum(array_map('count', $byDay));
+
+        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed sprint-meeting-preview'>";
+        echo "<tr class='tab_bg_2'><th colspan='2'><i class='fas fa-calendar-week me-1' aria-hidden='true'></i>"
+            . htmlescape(sprintf(
+                _n(
+                    'Preview: %1$d meeting for an example sprint of %2$d weeks (%3$s – %4$s)',
+                    'Preview: %1$d meetings for an example sprint of %2$d weeks (%3$s – %4$s)',
+                    $total,
+                    'sprint'
+                ),
+                $total,
+                $weeks,
+                Html::convDate($start->format('Y-m-d')),
+                Html::convDate($end->format('Y-m-d'))
+            )) . "</th></tr>";
+        if ($total === 0) {
+            echo "<tr class='tab_bg_1'><td colspan='2' class='center text-muted'>"
+                . __s('No meeting falls inside the example sprint with these settings.', 'sprint') . "</td></tr>";
+        }
+        foreach ($byDay as $day => $names) {
+            $ts = strtotime($day);
+            echo "<tr class='tab_bg_1'><td style='white-space:nowrap;width:1%;'>"
+                . htmlescape(\Html::convDate($day) . ' (' . mb_substr(__(date('l', $ts)), 0, 3) . ')') . "</td>"
+                . "<td>" . htmlescape(implode(', ', $names)) . "</td></tr>";
+        }
+        echo "<tr class='tab_bg_1'><td colspan='2' class='sprint-small text-muted'>"
+            . __s('Recurring meetings skip days that already host a fixed ceremony. With "Skip weekends" a weekend date moves to the nearest weekday inside the sprint. The real dates follow the start and end date of each sprint.', 'sprint')
+            . "</td></tr>";
+        echo "</table></div>";
     }
 
     /**

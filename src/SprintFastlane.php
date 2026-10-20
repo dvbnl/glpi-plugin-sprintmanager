@@ -145,11 +145,13 @@ class SprintFastlane extends CommonGLPI
             if ($canedit) {
                 echo "<td class='center' style='white-space:nowrap;'>";
                 echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-quick-edit-btn me-1' "
-                    . "title='" . __('Quick edit', 'sprint') . "' data-item-id='{$itemId}'>"
-                    . "<i class='fas fa-pen'></i></button>";
+                    . "title='" . __s('Quick edit', 'sprint') . "' data-item-id='{$itemId}' "
+                    . "aria-label='" . htmlescape(sprintf(__('Quick edit: %s', 'sprint'), (string)$row['name'])) . "'>"
+                    . "<i class='fas fa-pen' aria-hidden='true'></i></button>";
                 echo "<a href='" . SprintItem::getFormURLWithID($itemId) .
-                    "' class='btn btn-sm btn-outline-primary' title='" . __('Open') . "'>" .
-                    "<i class='fas fa-edit'></i></a>";
+                    "' class='btn btn-sm btn-outline-primary' title='" . __s('Open') . "' "
+                    . "aria-label='" . htmlescape(sprintf(__('Open %s', 'sprint'), (string)$row['name'])) . "'>" .
+                    "<i class='fas fa-edit' aria-hidden='true'></i></a>";
                 echo "</td>";
             }
             echo "</tr>";

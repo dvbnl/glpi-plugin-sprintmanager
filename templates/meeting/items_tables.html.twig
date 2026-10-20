@@ -23,20 +23,32 @@
     </div>
     <div class="sprint-collapsible-body">
     <div id="sprint-filter-fastlane" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
-         data-target="sprint-review-fastlane">
-        <div class="d-flex align-items-center gap-1 text-muted sprint-small">
+         data-target="sprint-review-fastlane"
+         role="search" aria-label="{{ __('Filter items', 'sprint') }}"
+         data-sf-all-one="{{ _n('%s item', '%s items', 1, 'sprint') }}"
+         data-sf-all-many="{{ _n('%s item', '%s items', 2, 'sprint') }}"
+         data-sf-of-one="{{ _n('%1$s of %2$s item', '%1$s of %2$s items', 1, 'sprint') }}"
+         data-sf-of-many="{{ _n('%1$s of %2$s item', '%1$s of %2$s items', 2, 'sprint') }}"
+         data-sf-empty="{{ __('No items match these filters.', 'sprint') }}"
+         data-sf-empty-hint="{{ __('The list has items, but the active filters hide all of them.', 'sprint') }}"
+         data-sf-reset-label="{{ __('Reset filters', 'sprint') }}"
+         data-sf-remove="{{ __('Remove filter: %s', 'sprint') }}">
+        <div class="d-flex align-items-center gap-1 text-muted sprint-small" aria-hidden="true">
             <i class="fas fa-filter"></i><span>{{ __('Filter', 'sprint') }}</span>
         </div>
         <input type="search" class="form-control form-control-sm sf-text" style="max-width:220px;"
-               placeholder="{{ __('Search name...', 'sprint') }}">
-        <select class="form-select form-select-sm sf-status" style="max-width:180px;">
+               placeholder="{{ __('Search name...', 'sprint') }}"
+               aria-label="{{ __('Search name', 'sprint') }}" data-sf-label="{{ __('Search', 'sprint') }}">
+        <select class="form-select form-select-sm sf-status" style="max-width:180px;"
+                aria-label="{{ __('Status') }}" data-sf-label="{{ __('Status') }}">
             <option value="">{{ __('All statuses', 'sprint') }}</option>
             <option value="__not_done__">{{ __('Not done', 'sprint') }}</option>
             {% for key, label in item_statuses %}
             <option value="{{ key }}">{{ label }}</option>
             {% endfor %}
         </select>
-        <select class="form-select form-select-sm sf-owner" style="max-width:220px;">
+        <select class="form-select form-select-sm sf-owner" style="max-width:220px;"
+                aria-label="{{ __('Owner', 'sprint') }}" data-sf-label="{{ __('Owner', 'sprint') }}">
             <option value="">{{ __('All owners', 'sprint') }}</option>
             <option value="__unassigned__">{{ __('Unassigned only', 'sprint') }}</option>
             {% for uid, uname in member_options %}
@@ -46,16 +58,19 @@
             {% endfor %}
         </select>
         {% if defined_tags|default([])|length > 0 %}
-        <select class="form-select form-select-sm sf-tag" style="max-width:180px;">
+        <select class="form-select form-select-sm sf-tag" style="max-width:180px;"
+                aria-label="{{ __('Tag', 'sprint') }}" data-sf-label="{{ __('Tag', 'sprint') }}">
             <option value="">{{ __('All tags', 'sprint') }}</option>
             {% for t in defined_tags %}
             <option value="{{ t|lower }}">{{ t }}</option>
             {% endfor %}
         </select>
         {% endif %}
+        <span class="sf-summary text-muted sprint-small ms-auto" aria-live="polite"></span>
         <button type="button" class="btn btn-sm btn-outline-secondary sf-reset" data-sprint-action="filter-reset">
-            <i class="fas fa-times me-1"></i>{{ __('Reset', 'sprint') }}
+            <i class="fas fa-times me-1" aria-hidden="true"></i>{{ __('Reset filters', 'sprint') }}
         </button>
+        <div class="sf-chips d-flex flex-wrap gap-1 w-100" style="display:none !important;" aria-label="{{ __('Active filters', 'sprint') }}"></div>
     </div>
     <div>
         <table class="table table-striped table-hover mb-0 sprint-review-table sprint-review-fastlane">
@@ -97,6 +112,8 @@
                     data-item-tags="{{ si.tags_blob|default('|') }}"
                     data-category-id="{{ si.category_id|default(0) }}"
                     data-category-name="{{ si.category_name|default('') }}"
+                    data-done-checks="{{ si.done_checks|default('') }}"
+                    data-epic-id="{{ si.epic_id|default(0) }}"
                     data-linked-itemtype="{{ si.itemtype }}"
                     data-fastlane-url="{{ si.fastlane_url }}"
                     data-fastlane-allocations="{{ si.fastlane_allocations|default([])|json_encode|e('html_attr') }}">
@@ -153,8 +170,8 @@
                             </div>
                         {% else %}
                             <span class="text-muted fst-italic">{{ __('No allocations', 'sprint') }}</span>
-                            <a href="{{ si.fastlane_url }}" class="ms-1" title="{{ __('Manage fastlane members', 'sprint') }}">
-                                <i class="fas fa-cog text-muted"></i>
+                            <a href="{{ si.fastlane_url }}" class="ms-1" title="{{ __('Manage fastlane members', 'sprint') }}" aria-label="{{ __('Manage fastlane members', 'sprint') }}">
+                                <i class="fas fa-cog text-muted" aria-hidden="true"></i>
                             </a>
                         {% endif %}
                     </td>
@@ -176,13 +193,16 @@
                         <button type="button"
                                 class="btn btn-sm btn-outline-primary sprint-quick-edit-btn me-1"
                                 title="{{ __('Quick edit', 'sprint') }}"
+                                aria-label="{{ __('Quick edit', 'sprint') }}: {{ si.name }}"
+                                aria-haspopup="dialog"
                                 data-item-id="{{ si.id }}">
-                            <i class="fas fa-pen"></i>
+                            <i class="fas fa-pen" aria-hidden="true"></i>
                         </button>
                         <a href="{{ si.fastlane_url }}"
                            class="btn btn-sm btn-outline-warning me-1"
-                           title="{{ __('Manage fastlane members', 'sprint') }}">
-                            <i class="fas fa-users"></i>
+                           title="{{ __('Manage fastlane members', 'sprint') }}"
+                           aria-label="{{ __('Manage fastlane members', 'sprint') }}: {{ si.name }}">
+                            <i class="fas fa-users" aria-hidden="true"></i>
                         </a>
                         {% if move_target_sprints is defined and move_target_sprints|length > 0 %}
                         <div class="dropdown d-inline-block me-1">
@@ -190,8 +210,9 @@
                                     class="btn btn-sm btn-outline-success dropdown-toggle"
                                     data-bs-toggle="dropdown"
                                     aria-expanded="false"
-                                    title="{{ __('Carry over to another sprint', 'sprint') }}">
-                                <i class="fas fa-forward"></i>
+                                    title="{{ __('Carry over to another sprint', 'sprint') }}"
+                                    aria-label="{{ __('Carry over to another sprint', 'sprint') }}: {{ si.name }}">
+                                <i class="fas fa-forward" aria-hidden="true"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><h6 class="dropdown-header">{{ __('Carry over to sprint', 'sprint') }}</h6></li>
@@ -212,8 +233,10 @@
                         <button type="button"
                                 class="btn btn-sm btn-outline-warning sprint-backlog-btn"
                                 title="{{ __('Back to backlog', 'sprint') }}"
+                                aria-label="{{ __('Back to backlog', 'sprint') }}: {{ si.name }}"
+                                aria-haspopup="dialog"
                                 data-backlog-id="{{ si.id }}">
-                            <i class="fas fa-undo"></i>
+                            <i class="fas fa-undo" aria-hidden="true"></i>
                         </button>
                         {% endif %}
                     </td>
@@ -237,20 +260,32 @@
     <div class="sprint-collapsible-body">
     {% if regular_items|length > 0 %}
     <div id="sprint-filter-regular" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
-         data-target="sprint-review-regular">
-        <div class="d-flex align-items-center gap-1 text-muted sprint-small">
+         data-target="sprint-review-regular"
+         role="search" aria-label="{{ __('Filter items', 'sprint') }}"
+         data-sf-all-one="{{ _n('%s item', '%s items', 1, 'sprint') }}"
+         data-sf-all-many="{{ _n('%s item', '%s items', 2, 'sprint') }}"
+         data-sf-of-one="{{ _n('%1$s of %2$s item', '%1$s of %2$s items', 1, 'sprint') }}"
+         data-sf-of-many="{{ _n('%1$s of %2$s item', '%1$s of %2$s items', 2, 'sprint') }}"
+         data-sf-empty="{{ __('No items match these filters.', 'sprint') }}"
+         data-sf-empty-hint="{{ __('The list has items, but the active filters hide all of them.', 'sprint') }}"
+         data-sf-reset-label="{{ __('Reset filters', 'sprint') }}"
+         data-sf-remove="{{ __('Remove filter: %s', 'sprint') }}">
+        <div class="d-flex align-items-center gap-1 text-muted sprint-small" aria-hidden="true">
             <i class="fas fa-filter"></i><span>{{ __('Filter', 'sprint') }}</span>
         </div>
         <input type="search" class="form-control form-control-sm sf-text" style="max-width:220px;"
-               placeholder="{{ __('Search name...', 'sprint') }}">
-        <select class="form-select form-select-sm sf-status" style="max-width:180px;">
+               placeholder="{{ __('Search name...', 'sprint') }}"
+               aria-label="{{ __('Search name', 'sprint') }}" data-sf-label="{{ __('Search', 'sprint') }}">
+        <select class="form-select form-select-sm sf-status" style="max-width:180px;"
+                aria-label="{{ __('Status') }}" data-sf-label="{{ __('Status') }}">
             <option value="">{{ __('All statuses', 'sprint') }}</option>
             <option value="__not_done__">{{ __('Not done', 'sprint') }}</option>
             {% for key, label in item_statuses %}
             <option value="{{ key }}">{{ label }}</option>
             {% endfor %}
         </select>
-        <select class="form-select form-select-sm sf-owner" style="max-width:220px;">
+        <select class="form-select form-select-sm sf-owner" style="max-width:220px;"
+                aria-label="{{ __('Owner', 'sprint') }}" data-sf-label="{{ __('Owner', 'sprint') }}">
             <option value="">{{ __('All owners', 'sprint') }}</option>
             <option value="__unassigned__">{{ __('Unassigned only', 'sprint') }}</option>
             {% for uid, uname in member_options %}
@@ -260,16 +295,19 @@
             {% endfor %}
         </select>
         {% if defined_tags|default([])|length > 0 %}
-        <select class="form-select form-select-sm sf-tag" style="max-width:180px;">
+        <select class="form-select form-select-sm sf-tag" style="max-width:180px;"
+                aria-label="{{ __('Tag', 'sprint') }}" data-sf-label="{{ __('Tag', 'sprint') }}">
             <option value="">{{ __('All tags', 'sprint') }}</option>
             {% for t in defined_tags %}
             <option value="{{ t|lower }}">{{ t }}</option>
             {% endfor %}
         </select>
         {% endif %}
+        <span class="sf-summary text-muted sprint-small ms-auto" aria-live="polite"></span>
         <button type="button" class="btn btn-sm btn-outline-secondary sf-reset" data-sprint-action="filter-reset">
-            <i class="fas fa-times me-1"></i>{{ __('Reset', 'sprint') }}
+            <i class="fas fa-times me-1" aria-hidden="true"></i>{{ __('Reset filters', 'sprint') }}
         </button>
+        <div class="sf-chips d-flex flex-wrap gap-1 w-100" style="display:none !important;" aria-label="{{ __('Active filters', 'sprint') }}"></div>
     </div>
     <div>
         <table class="table table-striped table-hover mb-0 sprint-review-table sprint-review-regular">
@@ -310,6 +348,8 @@
                     data-item-tags="{{ si.tags_blob|default('|') }}"
                     data-category-id="{{ si.category_id|default(0) }}"
                     data-category-name="{{ si.category_name|default('') }}"
+                    data-done-checks="{{ si.done_checks|default('') }}"
+                    data-epic-id="{{ si.epic_id|default(0) }}"
                     data-linked-itemtype="{{ si.itemtype }}"
                     data-note="{{ si.note }}">
                     <td class="text-center" style="white-space:nowrap;">
@@ -367,8 +407,10 @@
                         <button type="button"
                                 class="btn btn-sm btn-outline-primary sprint-quick-edit-btn me-1"
                                 title="{{ __('Quick edit', 'sprint') }}"
+                                aria-label="{{ __('Quick edit', 'sprint') }}: {{ si.name }}"
+                                aria-haspopup="dialog"
                                 data-item-id="{{ si.id }}">
-                            <i class="fas fa-pen"></i>
+                            <i class="fas fa-pen" aria-hidden="true"></i>
                         </button>
                         {% if move_target_sprints is defined and move_target_sprints|length > 0 %}
                         <div class="dropdown d-inline-block me-1">
@@ -376,8 +418,9 @@
                                     class="btn btn-sm btn-outline-success dropdown-toggle"
                                     data-bs-toggle="dropdown"
                                     aria-expanded="false"
-                                    title="{{ __('Carry over to another sprint', 'sprint') }}">
-                                <i class="fas fa-forward"></i>
+                                    title="{{ __('Carry over to another sprint', 'sprint') }}"
+                                    aria-label="{{ __('Carry over to another sprint', 'sprint') }}: {{ si.name }}">
+                                <i class="fas fa-forward" aria-hidden="true"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><h6 class="dropdown-header">{{ __('Carry over to sprint', 'sprint') }}</h6></li>
@@ -398,8 +441,10 @@
                         <button type="button"
                                 class="btn btn-sm btn-outline-warning sprint-backlog-btn"
                                 title="{{ __('Back to backlog', 'sprint') }}"
+                                aria-label="{{ __('Back to backlog', 'sprint') }}: {{ si.name }}"
+                                aria-haspopup="dialog"
                                 data-backlog-id="{{ si.id }}">
-                            <i class="fas fa-undo"></i>
+                            <i class="fas fa-undo" aria-hidden="true"></i>
                         </button>
                         {% endif %}
                     </td>
@@ -410,8 +455,9 @@
     </div>
     {% else %}
     <div class="text-center text-muted py-3">
-        <i class="fas fa-inbox" style="font-size:1.5em;"></i><br>
-        {{ __('No items in this sprint', 'sprint') }}
+        <i class="fas fa-inbox" style="font-size:1.5em;" aria-hidden="true"></i><br>
+        <span class="fw-bold">{{ __('No items in this sprint', 'sprint') }}</span><br>
+        <span class="sprint-small">{{ __("Plan items from the backlog or add them on the sprint's Items tab.", 'sprint') }}</span>
     </div>
     {% endif %}
     </div>

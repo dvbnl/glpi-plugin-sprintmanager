@@ -128,59 +128,299 @@ class SprintMember extends CommonDBRelation
     }
 
     /**
-     * Render a stacked capacity bar. Segments are sized against max(total, used)
-     * so they fit even when over capacity; the slice past total renders as a
-     * striped red overflow band with a 100% marker line.
+     * Capacity number input: any value 0..100 on the 0.5 grid, with the
+     * getCapacityChoices() presets offered as suggestions (a <datalist>), so
+     * 12.5% can be typed while 5/10/50% stay one click away. The server
+     * still normalises every write through normalizeCapacity().
      *
-     * $baseTotal is the configured member capacity before availability
-     * exceptions; when it exceeds $total the difference renders as a dark grey
-     * band pinned to the right, so the bar still spans the configured capacity.
+     * Options: id, class, aria_label, required (bool), min (default 0),
+     * placeholder, attrs (extra raw attribute string, already escaped).
      */
-    public static function renderCapacityBar(
-        float $total,
-        float $regularUsed,
-        float $fastlaneUsed,
-        float $dependencyUsed,
-        int $height = 10,
-        string $borderRadius = '5px',
-        float $baseTotal = 0
-    ): string {
-        $used        = $regularUsed + $fastlaneUsed + $dependencyUsed;
-        $unavailable = max($baseTotal - $total, 0);
-        $denom       = max($total + $unavailable, $used, 1);
-        $regularW    = ($denom > 0) ? round(($regularUsed / $denom) * 100, 2) : 0;
-        $fastlaneW   = ($denom > 0) ? round(($fastlaneUsed / $denom) * 100, 2) : 0;
-        $dependencyW = ($denom > 0) ? round(($dependencyUsed / $denom) * 100, 2) : 0;
+    public static function capacityInput(string $name, $value, array $opts = []): string
+    {
+        $id   = (string)($opts['id'] ?? ('sprint-cap-' . preg_replace('/[^a-z0-9_]+/i', '-', $name) . '-' . mt_rand()));
+        $list = $id . '-presets';
+        $min  = self::formatCapacity(max(0.0, (float)($opts['min'] ?? 0)));
+        $val  = ($value === '' || $value === null) ? '' : self::formatCapacity(self::normalizeCapacity($value));
 
-        $overflow  = max($used - $total, 0);
-        $overflowW = ($denom > 0 && $overflow > 0) ? round(($overflow / $denom) * 100, 2) : 0;
+        $out = "<input type='number' name='" . htmlescape($name) . "' id='" . htmlescape($id) . "'"
+            . " class='" . htmlescape((string)($opts['class'] ?? 'form-control')) . " sprint-cap-input'"
+            . " min='{$min}' max='100' step='0.5' inputmode='decimal' list='" . htmlescape($list) . "'"
+            . " value='" . htmlescape($val) . "'"
+            . (isset($opts['aria_label']) ? " aria-label='" . htmlescape((string)$opts['aria_label']) . "'" : '')
+            . (isset($opts['placeholder']) ? " placeholder='" . htmlescape((string)$opts['placeholder']) . "'" : '')
+            . (!empty($opts['required']) ? ' required' : '')
+            . (isset($opts['attrs']) ? ' ' . $opts['attrs'] : '')
+            . ">";
+        $out .= "<datalist id='" . htmlescape($list) . "'>";
+        foreach (array_keys(self::getCapacityChoices()) as $v) {
+            $out .= "<option value='" . htmlescape((string)$v) . "'></option>";
+        }
+        return $out . "</datalist>";
+    }
 
-        $totalMarkerLeft = ($used > $total && $denom > 0) ? round(($total / $denom) * 100, 2) : 0;
-        $regularColor    = $used > $total ? '#dc3545' : ($used >= $total * 0.8 ? '#e67e22' : '#198754');
+    /**
+     * One member's capacity in one sprint, in the terms every capacity view
+     * uses (see SprintCapacityMath): Set − not available = Available,
+     * Planned = regular + fastlane + helping (resolved help stays planned,
+     * that capacity was spent), Remaining = Available − Planned, or "over".
+     * Proposed backlog work is carried separately.
+     *
+     * @return array see SprintCapacityMath::figures()
+     */
+    public static function capacityFigures(
+        float $set,
+        float $available,
+        float $regular,
+        float $fastlane,
+        float $helping,
+        float $helpingOpen,
+        float $proposed = 0.0
+    ): array {
+        return SprintCapacityMath::figures($set, $available, $regular, $fastlane, $helping, $helpingOpen, $proposed);
+    }
 
-        $html = "<div style='position:relative;display:flex;height:{$height}px;background:var(--tblr-border-color,#e9ecef);border-radius:{$borderRadius};overflow:hidden;'>";
-        if ($regularW > 0) {
-            $html .= "<div style='width:{$regularW}%;height:100%;background:{$regularColor};' title='" . __('Regular', 'sprint') . " " . self::formatCapacity($regularUsed) . "%'></div>";
+    /**
+     * The shared model for a member row of a sprint, straight from the data:
+     * effective availability plus the grouped usage of usedCapacityBySprint().
+     * Every view (team card, dashboards, report, CSV) calls this, so the same
+     * member and sprint always show the same figures.
+     *
+     * @param array $memberRow glpi_plugin_sprint_sprintmembers row
+     */
+    public static function figuresForMember(int $sprintId, array $memberRow, float $proposed = 0.0): array
+    {
+        $userId = (int)($memberRow['users_id'] ?? 0);
+        $set    = self::normalizeCapacity($memberRow['capacity_percent'] ?? 0);
+        $used   = self::usedCapacityBySprint($sprintId)[$userId] ?? [];
+        return self::capacityFigures(
+            $set,
+            SprintAgility::effectiveCapacity($sprintId, $userId, $set),
+            (float)($used['regular'] ?? 0.0),
+            (float)($used['fastlane'] ?? 0.0),
+            (float)($used['dependency'] ?? 0.0),
+            (float)($used['dependency_open'] ?? 0.0),
+            $proposed
+        );
+    }
+
+    /** "15%" style label on the shared rounding (0.5 grid). */
+    private static function pct(float $v): string
+    {
+        return self::formatCapacity($v) . '%';
+    }
+
+    /**
+     * "Remaining 15%" / "10% over capacity" (or the "after proposals"
+     * variants). Over capacity is a difference in percentage points.
+     */
+    public static function remainingText(array $f, bool $afterProposals = false): string
+    {
+        $over = $afterProposals ? $f['over_after_proposals'] : $f['over'];
+        if ($over > SprintCapacityMath::EPSILON) {
+            return $afterProposals
+                ? sprintf(__('%s%% over capacity after proposals', 'sprint'), self::formatCapacity($over))
+                : sprintf(__('%s%% over capacity', 'sprint'), self::formatCapacity($over));
         }
-        if ($fastlaneW > 0) {
-            $html .= "<div style='width:{$fastlaneW}%;height:100%;background:#fd7e14;' title='" . __('Fastlane', 'sprint') . " " . self::formatCapacity($fastlaneUsed) . "%'></div>";
+        return $afterProposals
+            ? sprintf(__('Remaining after proposals %s', 'sprint'), self::pct($f['remaining_after_proposals']))
+            : sprintf(__('Remaining %s', 'sprint'), self::pct($f['remaining']));
+    }
+
+    /**
+     * Badge for the shared warning state. Normal planning gets no badge.
+     * Full (exactly 0 remaining) and over capacity are distinct states.
+     */
+    public static function capacityStateBadge(string $state, array $f = []): string
+    {
+        $map = [
+            SprintCapacityMath::STATE_NONE        => ['fa-user-clock', __('Not available in this sprint', 'sprint')],
+            SprintCapacityMath::STATE_ALMOST_FULL => ['fa-hourglass-half', __('Almost full', 'sprint')],
+            SprintCapacityMath::STATE_FULL        => ['fa-circle-check', __('Full', 'sprint')],
+            SprintCapacityMath::STATE_OVER        => ['fa-triangle-exclamation', __('Over capacity', 'sprint')],
+        ];
+        if (!isset($map[$state])) {
+            return '';
         }
-        if ($dependencyW > 0) {
-            $html .= "<div style='width:{$dependencyW}%;height:100%;background:#20c997;' title='" . __('Dependencies', 'sprint') . " " . self::formatCapacity($dependencyUsed) . "%'></div>";
+        [$icon, $label] = $map[$state];
+        $title = $state === SprintCapacityMath::STATE_ALMOST_FULL
+            ? sprintf(__('Less than %s%% remaining', 'sprint'), self::formatCapacity(SprintCapacityMath::ALMOST_FULL_PP))
+            : $label;
+        return "<span class='sprint-cap-state sprint-cap-state-{$state}' title='" . htmlescape($title) . "'>"
+            . "<i class='fas {$icon}' aria-hidden='true'></i> " . htmlescape($label) . "</span>";
+    }
+
+    /**
+     * Accessible description of a bar: whose, which sprint, the scale and
+     * the figures. Plain text (callers escape).
+     */
+    public static function capacityDescription(array $f, string $userName, string $sprintName): string
+    {
+        $geo   = SprintCapacityMath::bar($f);
+        $whose = $sprintName !== ''
+            ? sprintf(__('Capacity of %1$s in %2$s', 'sprint'), $userName, $sprintName)
+            : sprintf(__('Capacity of %s', 'sprint'), $userName);
+        $parts = [
+            sprintf(__('Set %s', 'sprint'), self::pct($f['set'])),
+        ];
+        if ($f['leave'] > 0) {
+            $parts[] = sprintf(__('Not available %s', 'sprint'), self::pct($f['leave']));
         }
-        if ($overflowW > 0) {
-            $stripe = 'repeating-linear-gradient(45deg,#dc3545,#dc3545 4px,#a71d2a 4px,#a71d2a 8px)';
-            $html .= "<div style='width:{$overflowW}%;height:100%;background:{$stripe};' title='" . sprintf(__('Overflow %s%%', 'sprint'), self::formatCapacity($overflow)) . "'></div>";
-            $html .= "<div style='position:absolute;top:-2px;bottom:-2px;left:{$totalMarkerLeft}%;width:2px;background:#212529;' title='100%'></div>";
-        } elseif ($unavailable > 0) {
-            // Availability exceptions eat into the configured capacity from the
-            // right; margin-left:auto keeps the band pinned there past the free space.
-            $unavailableW = round(($unavailable / $denom) * 100, 2);
-            $html .= "<div style='width:{$unavailableW}%;height:100%;margin-left:auto;background:#6c757d;' title='"
-                . sprintf(__('%s%% unavailable (availability exceptions)', 'sprint'), self::formatCapacity($unavailable)) . "'></div>";
+        $parts[] = sprintf(__('Available %s', 'sprint'), self::pct($f['available']));
+        $parts[] = sprintf(__('Planned %s', 'sprint'), self::pct($f['planned']))
+            . ' (' . sprintf(__('Regular %s', 'sprint'), self::pct($f['regular']))
+            . ', ' . sprintf(__('Fastlane %s', 'sprint'), self::pct($f['fastlane']))
+            . ', ' . sprintf(__('Helping %s', 'sprint'), self::pct($f['helping'])) . ')';
+        $parts[] = self::remainingText($f);
+        if ($f['proposed'] > 0) {
+            $parts[] = sprintf(__('Proposed %s', 'sprint'), self::pct($f['proposed']));
+            $parts[] = self::remainingText($f, true);
         }
-        $html .= "</div>";
-        return $html;
+        return $whose . ' — ' . sprintf(__('scale 0–%s', 'sprint'), self::pct($geo['scale'])) . ': ' . implode(', ', $parts);
+    }
+
+    /**
+     * The one capacity bar. Segment order everywhere: regular, fastlane,
+     * helping, proposed (hatched), then not-available (grey, from the
+     * available marker to the set capacity). Overload is a striped overlay
+     * from the available marker over segments that are already drawn, so it
+     * never counts work twice and is never clipped away.
+     */
+    public static function renderFiguresBar(array $f, string $description = '', int $height = 10, string $borderRadius = '5px'): string
+    {
+        $g = SprintCapacityMath::bar($f);
+        $html = "<div class='sprint-capacity-bar'"
+            . ($description !== '' ? " role='img' aria-label='" . htmlescape($description) . "' title='" . htmlescape($description) . "'" : '')
+            . " style='position:relative;display:flex;height:{$height}px;background:var(--tblr-border-color,#e9ecef);"
+            . "border-radius:{$borderRadius};overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;'>";
+        if ($g['unavailable_width'] > 0) {
+            $html .= "<div class='sprint-cap-seg-unavailable' style='position:absolute;top:0;bottom:0;left:{$g['unavailable_left']}%;"
+                . "width:{$g['unavailable_width']}%;background:#6c757d;'></div>";
+        }
+        $colors = [
+            'regular'  => '#0d6efd',
+            'fastlane' => '#fd7e14',
+            'helping'  => '#20c997',
+            'proposed' => 'repeating-linear-gradient(135deg,rgba(13,110,253,.55) 0 3px,rgba(13,110,253,.18) 3px 6px)',
+        ];
+        foreach ($g['segments'] as $key => $w) {
+            if ($w > 0) {
+                $html .= "<div class='sprint-cap-seg-{$key}' style='position:relative;width:{$w}%;height:100%;background:{$colors[$key]};'></div>";
+            }
+        }
+        if ($g['overflow_width'] > 0) {
+            $html .= "<div class='sprint-cap-seg-over' style='position:absolute;top:0;bottom:0;left:{$g['overflow_left']}%;width:{$g['overflow_width']}%;"
+                . "background:repeating-linear-gradient(45deg,rgba(220,53,69,.9) 0 3px,transparent 3px 7px);box-shadow:inset 0 0 0 1px #dc3545;'></div>";
+        }
+        if ($g['overflow_width'] > 0 || $g['unavailable_width'] > 0) {
+            $html .= "<div style='position:absolute;top:0;bottom:0;left:calc({$g['marker']}% - 1px);width:2px;background:var(--tblr-body-color,#212529);'></div>";
+        }
+        return $html . "</div>";
+    }
+
+    /** Legend for the shared bar, with the one-line reading aid. */
+    public static function renderCapacityLegend(bool $withProposed = false): string
+    {
+        $key = static fn(string $cls, string $label): string =>
+            "<span><span class='sprint-cap-key sprint-cap-key-{$cls}' aria-hidden='true'></span>" . htmlescape($label) . "</span>";
+        $out = "<div class='sprint-cap-legend'>"
+            . $key('regular', __('Regular', 'sprint'))
+            . $key('fastlane', __('Fastlane', 'sprint'))
+            . $key('helping', __('Helping', 'sprint'))
+            . ($withProposed ? $key('proposed', __('Proposed (backlog, not assigned yet)', 'sprint')) : '')
+            . $key('unavailable', __('Not available (leave, absence)', 'sprint'))
+            . $key('over', __('Over capacity', 'sprint'))
+            . "</div>";
+        $out .= "<div class='sprint-cap-note'>" . htmlescape(sprintf(
+            __('Figures are shares of a full sprint, in percentage points. Remaining = available − planned, not a utilisation rate. Almost full: less than %s%% remaining.', 'sprint'),
+            self::formatCapacity(SprintCapacityMath::ALMOST_FULL_PP)
+        )) . "</div>";
+        return $out;
+    }
+
+    /**
+     * Remaining cell for capacity tables: "15%" or "10% over capacity",
+     * plus the state badge (almost full / full).
+     */
+    public static function renderRemainingCell(array $f): string
+    {
+        if ($f['over'] > SprintCapacityMath::EPSILON) {
+            return "<span class='sprint-cap-over'><i class='fas fa-triangle-exclamation' aria-hidden='true'></i> "
+                . htmlescape(self::remainingText($f)) . "</span>";
+        }
+        $badge = in_array($f['state'], [SprintCapacityMath::STATE_ALMOST_FULL, SprintCapacityMath::STATE_FULL, SprintCapacityMath::STATE_NONE], true)
+            ? ' ' . self::capacityStateBadge($f['state'], $f) : '';
+        return "<strong>" . self::pct($f['remaining']) . "</strong>" . $badge;
+    }
+
+    /**
+     * "Available 80% · Planned 65% · Remaining 15%" with the bar and the
+     * breakdown that explains it, for one member in one sprint. Low
+     * availability on its own is neutral. Almost full, full and over
+     * capacity are named in words as well as colour. Proposed backlog work
+     * (when passed in the figures) is listed apart, with what remains after it.
+     *
+     * @param array $f capacityFigures() result
+     */
+    public static function renderCapacitySummary(array $f, string $userName, string $sprintName): string
+    {
+        $pct = static fn(float $v): string => self::pct($v);
+
+        $out = "<div class='sprint-cap-summary'>";
+        $out .= "<div class='sprint-cap-caption'>"
+            . htmlescape($sprintName !== '' ? sprintf(__('Capacity in %s', 'sprint'), $sprintName) : __('Capacity', 'sprint'))
+            . "</div>";
+        $out .= "<div class='sprint-cap-figures'>"
+            . "<span>" . __s('Available', 'sprint') . " <strong>" . $pct($f['available']) . "</strong></span>"
+            . "<span aria-hidden='true'>·</span>"
+            . "<span>" . __s('Planned', 'sprint') . " <strong>" . $pct($f['planned']) . "</strong></span>"
+            . "<span aria-hidden='true'>·</span>";
+        if ($f['over'] > SprintCapacityMath::EPSILON) {
+            $out .= "<span class='sprint-cap-over'><i class='fas fa-triangle-exclamation' aria-hidden='true'></i> "
+                . htmlescape(self::remainingText($f)) . "</span>";
+        } else {
+            $out .= "<span>" . __s('Remaining', 'sprint') . " <strong>" . $pct($f['remaining']) . "</strong></span>";
+            $out .= self::capacityStateBadge($f['state'], $f);
+        }
+        $out .= "</div>";
+        $out .= self::renderFiguresBar($f, self::capacityDescription($f, $userName, $sprintName));
+
+        // Why the numbers are what they are.
+        $out .= "<ul class='sprint-cap-breakdown'>";
+        if ($f['leave'] > 0) {
+            $out .= "<li><span class='sprint-cap-key sprint-cap-key-unavailable' aria-hidden='true'></span>" . htmlescape(sprintf(
+                __('Set %1$s − not available %2$s = available %3$s', 'sprint'),
+                $pct($f['set']),
+                $pct($f['leave']),
+                $pct($f['available'])
+            )) . "</li>";
+        }
+        $parts = [
+            "<span class='sprint-cap-key sprint-cap-key-regular' aria-hidden='true'></span>"
+                . htmlescape(sprintf(__('Regular %s', 'sprint'), $pct($f['regular']))),
+            "<span class='sprint-cap-key sprint-cap-key-fastlane' aria-hidden='true'></span>"
+                . htmlescape(sprintf(__('Fastlane %s', 'sprint'), $pct($f['fastlane']))),
+        ];
+        $helping = "<span class='sprint-cap-key sprint-cap-key-helping' aria-hidden='true'></span>"
+            . htmlescape(sprintf(__('Helping %s', 'sprint'), $pct($f['helping'])));
+        if ($f['helping'] > 0) {
+            $helping .= " <span class='text-muted'>(" . htmlescape(sprintf(
+                __('%1$s open, %2$s resolved', 'sprint'),
+                $pct($f['helping_open']),
+                $pct($f['helping_resolved'])
+            )) . ")</span>";
+        }
+        $parts[] = $helping;
+        $out .= "<li>" . __s('Planned', 'sprint') . ": " . implode(' · ', $parts) . "</li>";
+        if ($f['proposed'] > 0) {
+            $out .= "<li><span class='sprint-cap-key sprint-cap-key-proposed' aria-hidden='true'></span>"
+                . htmlescape(sprintf(__('Proposed from the backlog %s (not assigned yet)', 'sprint'), $pct($f['proposed'])))
+                . " · <span class='" . ($f['over_after_proposals'] > SprintCapacityMath::EPSILON ? 'sprint-cap-over' : '') . "'>"
+                . htmlescape(self::remainingText($f, true)) . "</span></li>";
+        }
+        $out .= "</ul>";
+        $out .= "</div>";
+        return $out;
     }
 
     public static function getAllRoles(): array
@@ -264,13 +504,15 @@ class SprintMember extends CommonDBRelation
             echo "<td>" . __('Role', 'sprint') . "</td>";
             echo "<td>";
             Dropdown::showFromArray('role', $roles, [
-                'value' => self::ROLE_DEVELOPER,
+                'value'      => self::ROLE_DEVELOPER,
+                'aria_label' => __('Role', 'sprint'),
             ]);
             echo "</td>";
-            echo "<td>" . __('Maximum capacity (%)', 'sprint') . "</td>";
+            echo "<td><label for='sprint-member-add-capacity'>" . __('Set capacity (%)', 'sprint') . "</label></td>";
             echo "<td>";
-            Dropdown::showFromArray('capacity_percent', self::getCapacityChoices(), [
-                'value' => 100,
+            echo self::capacityInput('capacity_percent', 100, [
+                'id'       => 'sprint-member-add-capacity',
+                'required' => true,
             ]);
             echo "</td>";
             echo "</tr>";
@@ -278,7 +520,7 @@ class SprintMember extends CommonDBRelation
             echo "<tr class='tab_bg_1'>";
             echo "<td>" . __('Comment') . "</td>";
             echo "<td colspan='3'>";
-            echo "<textarea name='comment' rows='2' cols='60'></textarea>";
+            echo "<textarea name='comment' rows='2' cols='60' aria-label='" . __s('Comment') . "'></textarea>";
             echo "</td>";
             echo "<td colspan='2'>";
             echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
@@ -298,7 +540,7 @@ class SprintMember extends CommonDBRelation
 
         $memberStatusCounts = self::getMemberStatusCounts($ID);
 
-        self::renderMembersDashboard($ID, $members, $memberStatusCounts);
+        self::renderMembersDashboard($ID, $members, $memberStatusCounts, (string)($sprint->fields['name'] ?? ''));
 
         // Leave / training per member sits next to the capacity settings; the
         // effective capacity in the cards above already accounts for it.
@@ -324,7 +566,7 @@ class SprintMember extends CommonDBRelation
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('User') . "</th>";
         echo "<th>" . __('Role', 'sprint') . "</th>";
-        echo "<th>" . __('Capacity', 'sprint') . "</th>";
+        echo "<th>" . __('Set capacity', 'sprint') . "</th>";
         if ($canedit) {
             echo "<th>" . __('Actions') . "</th>";
         }
@@ -345,22 +587,35 @@ class SprintMember extends CommonDBRelation
             echo "<td><i class='fas fa-user'></i> " . htmlescape(SprintCache::userName($userId)) . "</td>";
             echo "<td><i class='{$icon}'></i> {$roleName}</td>";
             echo "<td class='center'>";
-            $pct      = self::normalizeCapacity($row['capacity_percent']);
-            $pctLabel = self::formatCapacity($pct);
-            $barColor = $pct >= 80 ? '#198754' : ($pct >= 50 ? '#ffc107' : '#dc3545');
-            echo "<div style='display:flex;align-items:center;gap:8px;'>";
-            echo "<div style='width:80px;height:10px;background:var(--tblr-border-color,#e9ecef);border-radius:5px;overflow:hidden;'>";
-            echo "<div style='width:{$pct}%;height:100%;background:{$barColor};'></div>";
+            // The configured share is a fact, not a verdict and not progress:
+            // a neutral, outlined "Set capacity" bar whatever the value (a 20%
+            // part-timer is not a problem). Planning and overload show on the
+            // team dashboard above.
+            $pct       = self::normalizeCapacity($row['capacity_percent']);
+            $pctLabel  = self::formatCapacity($pct);
+            $available = SprintAgility::effectiveCapacity($ID, $userId, $pct);
+            $setLabel  = sprintf(__('Set capacity %s', 'sprint'), $pctLabel . '%');
+            echo "<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;'>";
+            echo "<div class='sprint-cap-setbar' role='img' aria-label='" . htmlescape($setLabel) . "' title='" . htmlescape($setLabel) . "'>";
+            echo "<div style='width:{$pct}%;'></div>";
             echo "</div>";
-            echo "<span>{$pctLabel}%</span>";
+            echo "<span>" . htmlescape($setLabel) . "</span>";
+            if (($pct - $available) > 0.01) {
+                echo "<span class='text-muted sprint-small'>" . htmlescape(sprintf(
+                    __('%s%% available in this sprint', 'sprint'),
+                    self::formatCapacity($available)
+                )) . "</span>";
+            }
             echo "</div>";
             echo "</td>";
 
             if ($canedit) {
                 echo "<td class='center'>";
+                $memberName = SprintCache::userName($userId);
                 echo "<a href='" . static::getFormURLWithID($row['id']) .
-                    "' class='btn btn-sm btn-outline-primary' title='" . __('Edit') . "'>" .
-                    "<i class='fas fa-edit'></i></a> ";
+                    "' class='btn btn-sm btn-outline-primary' title='" . __s('Edit') . "' "
+                    . "aria-label='" . htmlescape(sprintf(__('Edit %s', 'sprint'), $memberName)) . "'>" .
+                    "<i class='fas fa-edit' aria-hidden='true'></i></a> ";
                 echo "<form method='post' action='" . static::getFormURL() .
                     "' style='display:inline;'>";
                 echo Html::hidden('id', ['value' => $row['id']]);
@@ -384,7 +639,7 @@ class SprintMember extends CommonDBRelation
      *
      * @param array<int,array<string,int>> $memberStatusCounts
      */
-    private static function renderMembersDashboard(int $sprintId, array $members, array $memberStatusCounts): void
+    private static function renderMembersDashboard(int $sprintId, array $members, array $memberStatusCounts, string $sprintName = ''): void
     {
         if (count($members) === 0) {
             return;
@@ -407,21 +662,13 @@ class SprintMember extends CommonDBRelation
             __('Team dashboard', 'sprint') . "</h4>";
         echo "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;'>";
 
-        // One capacity dataset for the whole team, not three queries per member.
-        $usedBySprint = self::usedCapacityBySprint($sprintId);
+        // One capacity dataset for the whole team, not three queries per
+        // member, and one model: the same figures as the dashboard and report.
+        $proposedByUser = self::proposedCapacityBySprint($sprintId);
         foreach ($members as $row) {
             $userId   = (int)$row['users_id'];
-            $baseCap  = self::normalizeCapacity($row['capacity_percent']);
-            $totalCap = SprintAgility::effectiveCapacity($sprintId, $userId, $baseCap);
             $roleName = $roles[$row['role']] ?? $row['role'];
             $roleIcon = $roleIcons[$row['role']] ?? 'fas fa-user';
-
-            $regularUsed    = (float)($usedBySprint[$userId]['regular'] ?? 0.0);
-            $fastlaneUsed   = (float)($usedBySprint[$userId]['fastlane'] ?? 0.0);
-            $dependencyUsed = (float)($usedBySprint[$userId]['dependency'] ?? 0.0);
-            $usedCap        = $regularUsed + $fastlaneUsed + $dependencyUsed;
-            $remaining      = max($totalCap - $usedCap, 0);
-            $capUsedPct     = $totalCap > 0 ? round(($usedCap / $totalCap) * 100) : 0;
 
             $counts = $memberStatusCounts[$userId] ?? [];
             $total  = (int)($counts['total'] ?? 0);
@@ -432,7 +679,6 @@ class SprintMember extends CommonDBRelation
             $dependencyItemCount = (int)($counts['dependency_total'] ?? 0);
 
             $progressColor = $progressPct >= 80 ? '#198754' : ($progressPct >= 50 ? '#ffc107' : ($progressPct > 0 ? '#0d6efd' : '#adb5bd'));
-            $capBarColor   = $capUsedPct >= 100 ? '#dc3545' : ($capUsedPct >= 80 ? '#e67e22' : '#198754');
 
             echo "<div style='border:1px solid var(--tblr-border-color,#e9ecef);border-radius:10px;padding:14px 16px;background:var(--tblr-bg-surface,#fff);box-shadow:0 1px 2px rgba(0,0,0,0.03);'>";
 
@@ -443,14 +689,14 @@ class SprintMember extends CommonDBRelation
             echo "<div style='font-size:0.82em;color:#6c757d;'><i class='{$roleIcon}'></i> " . htmlescape($roleName) . "</div>";
             echo "</div>";
             if ($fastlaneItemCount > 0) {
-                echo "<span title='" . __('Fastlane items assigned', 'sprint') . "' "
-                    . "style='background:color-mix(in srgb,#fd7e14 18%,var(--tblr-bg-surface,#fff));color:#fd7e14;padding:2px 8px;border-radius:10px;font-size:0.78em;font-weight:700;margin-right:4px;'>"
-                    . "<i class='fas fa-bolt'></i> {$fastlaneItemCount}</span>";
+                echo "<span class='sprint-cap-chip sprint-cap-chip-fastlane' title='" . __s('Fastlane items assigned', 'sprint') . "'>"
+                    . "<i class='fas fa-bolt' aria-hidden='true'></i> {$fastlaneItemCount}"
+                    . "<span class='visually-hidden'> " . __s('Fastlane items assigned', 'sprint') . "</span></span>";
             }
             if ($dependencyItemCount > 0) {
-                echo "<span title='" . __('Open dependency allocations', 'sprint') . "' "
-                    . "style='background:#d1f2ea;color:#20c997;padding:2px 8px;border-radius:10px;font-size:0.78em;font-weight:700;'>"
-                    . "<i class='fas fa-link'></i> {$dependencyItemCount}</span>";
+                echo "<span class='sprint-cap-chip sprint-cap-chip-helping' title='" . __s('Open dependency allocations', 'sprint') . "'>"
+                    . "<i class='fas fa-link' aria-hidden='true'></i> {$dependencyItemCount}"
+                    . "<span class='visually-hidden'> " . __s('Open dependency allocations', 'sprint') . "</span></span>";
             }
             echo "</div>";
 
@@ -464,29 +710,9 @@ class SprintMember extends CommonDBRelation
             echo "</div>";
             echo "</div>";
 
-            $overflowCap   = max($usedCap - $totalCap, 0);
-            $usedCapLabel  = self::formatCapacity($usedCap);
-            $totalCapLabel = self::formatCapacity($totalCap);
-            // Availability exceptions lower the effective total below the
-            // configured capacity — keep the configured value visible.
-            $baseNote = ($baseCap - $totalCap) > 0.01
-                ? " <span style='color:#adb5bd;'>" . sprintf(__('of %s%% set', 'sprint'), self::formatCapacity($baseCap)) . "</span>"
-                : '';
+            $figures = self::figuresForMember($sprintId, $row, (float)($proposedByUser[$userId] ?? 0.0));
             echo "<div style='margin-bottom:10px;'>";
-            echo "<div style='display:flex;justify-content:space-between;font-size:0.78em;color:#6c757d;margin-bottom:3px;'>";
-            echo "<span>" . __('Capacity used', 'sprint') . "</span>";
-            if ($overflowCap > 0) {
-                echo "<span><strong style='color:#dc3545;'>{$usedCapLabel}%</strong> / {$totalCapLabel}%{$baseNote} &mdash; "
-                    . "<span style='color:#dc3545;font-weight:600;'>"
-                    . "<i class='fas fa-exclamation-triangle' style='margin-right:2px;'></i>"
-                    . sprintf(__('%s%% overflow', 'sprint'), self::formatCapacity($overflowCap))
-                    . "</span></span>";
-            } else {
-                echo "<span><strong>{$usedCapLabel}%</strong> / {$totalCapLabel}%{$baseNote} &mdash; "
-                    . sprintf(__('%s%% free', 'sprint'), self::formatCapacity($remaining)) . "</span>";
-            }
-            echo "</div>";
-            echo self::renderCapacityBar($totalCap, $regularUsed, $fastlaneUsed, $dependencyUsed, 10, '5px', $baseCap);
+            echo self::renderCapacitySummary($figures, SprintCache::userName($userId), $sprintName);
             echo "</div>";
 
             echo self::renderStatusDistribution($counts);
@@ -523,7 +749,9 @@ class SprintMember extends CommonDBRelation
             echo "</div>";
         }
 
-        echo "</div></div>";
+        echo "</div>";
+        echo self::renderCapacityLegend(count($proposedByUser) > 0);
+        echo "</div>";
     }
 
     /**
@@ -701,8 +929,10 @@ class SprintMember extends CommonDBRelation
                     'item'             => $this,
                     'params'           => $options,
                     'roles'            => self::getAllRoles(),
-                    'capacity_choices' => self::getCapacityChoices(),
-                    'capacity_value'   => self::capacityKey($this->fields['capacity_percent'] ?? 100),
+                    'capacity_input'   => self::capacityInput('capacity_percent', $this->fields['capacity_percent'] ?? 100, [
+                        'id'       => 'sprint-member-capacity',
+                        'required' => true,
+                    ]),
                 ]
             );
         } else {
@@ -715,9 +945,10 @@ class SprintMember extends CommonDBRelation
             Dropdown::showFromArray('role', $roles, ['value' => $this->fields['role'] ?? self::ROLE_DEVELOPER]);
             echo "</td></tr>";
 
-            echo "<tr class='tab_bg_1'><td>" . __('Maximum capacity (%)', 'sprint') . "</td><td>";
-            Dropdown::showFromArray('capacity_percent', self::getCapacityChoices(), [
-                'value' => self::capacityKey($this->fields['capacity_percent'] ?? 100),
+            echo "<tr class='tab_bg_1'><td><label for='sprint-member-capacity'>" . __('Set capacity (%)', 'sprint') . "</label></td><td>";
+            echo self::capacityInput('capacity_percent', $this->fields['capacity_percent'] ?? 100, [
+                'id'       => 'sprint-member-capacity',
+                'required' => true,
             ]);
             echo "</td><td>" . __('Sprint') . "</td><td>";
             Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $this->fields['plugin_sprint_sprints_id'] ?? 0]);
@@ -732,7 +963,7 @@ class SprintMember extends CommonDBRelation
         return true;
     }
 
-    /** @var array<int,array<int,array{regular:float,fastlane:float,dependency:float,total:float}>> per sprint, per request */
+    /** @var array<int,array<int,array{regular:float,fastlane:float,dependency:float,dependency_open:float,total:float}>> per sprint, per request */
     private static array $usedBySprint = [];
 
     /**
@@ -743,7 +974,7 @@ class SprintMember extends CommonDBRelation
      * the team. Validation keeps using getUsedCapacityForUser(): it runs
      * between writes and must see them.
      *
-     * @return array<int,array{regular:float,fastlane:float,dependency:float,total:float}> by user id
+     * @return array<int,array{regular:float,fastlane:float,dependency:float,dependency_open:float,total:float}> by user id
      */
     public static function usedCapacityBySprint(int $sprintId): array
     {
@@ -760,7 +991,7 @@ class SprintMember extends CommonDBRelation
             if ($uid <= 0 || $value == 0.0) {
                 return;
             }
-            $out[$uid] ??= ['regular' => 0.0, 'fastlane' => 0.0, 'dependency' => 0.0, 'total' => 0.0];
+            $out[$uid] ??= ['regular' => 0.0, 'fastlane' => 0.0, 'dependency' => 0.0, 'dependency_open' => 0.0, 'total' => 0.0];
             $out[$uid][$key]    += $value;
             $out[$uid]['total'] += $value;
         };
@@ -790,14 +1021,20 @@ class SprintMember extends CommonDBRelation
         // Resolved dependency rows still count: that capacity was spent.
         if (SprintItemDependency::isTableReady()) {
             $deps = SprintItemDependency::getTable();
+            // Grouped by is_resolved too, so views can tell open help from
+            // resolved help; 'dependency_open' is a subset, not added to total.
             foreach ($DB->request([
-                'SELECT'     => ["{$deps}.users_id", 'SUM' => "{$deps}.capacity AS used"],
+                'SELECT'     => ["{$deps}.users_id", "{$deps}.is_resolved", 'SUM' => "{$deps}.capacity AS used"],
                 'FROM'       => $deps,
                 'INNER JOIN' => [$items => ['ON' => [$deps => 'plugin_sprint_sprintitems_id', $items => 'id']]],
                 'WHERE'      => ["{$items}.plugin_sprint_sprints_id" => $sprintId],
-                'GROUPBY'    => "{$deps}.users_id",
+                'GROUPBY'    => ["{$deps}.users_id", "{$deps}.is_resolved"],
             ]) as $row) {
-                $bump((int)$row['users_id'], 'dependency', (float)$row['used']);
+                $uid = (int)$row['users_id'];
+                $bump($uid, 'dependency', (float)$row['used']);
+                if ((int)$row['is_resolved'] === 0 && isset($out[$uid])) {
+                    $out[$uid]['dependency_open'] += (float)$row['used'];
+                }
             }
         }
 
@@ -865,7 +1102,7 @@ class SprintMember extends CommonDBRelation
      * pencilled in by other backlog items proposed for that same sprint.
      * Cached per request so rendering many backlog rows stays cheap.
      *
-     * @return array{total: float, used: float, pending_other: float, is_member: bool}|null
+     * @return array{total: float, used: float, pending_other: float, is_member: bool, figures: ?array}|null
      *         null when the sprint/user pair is invalid.
      */
     public static function backlogCapacityPreview(int $sprintId, int $userId, int $excludeItemId = 0): ?array
@@ -874,75 +1111,123 @@ class SprintMember extends CommonDBRelation
             return null;
         }
 
-        // Everything is loaded once per sprint — members, the backlog rows
-        // proposed for it, their open dependency allocations, the used
-        // capacity per user — and every user's preview is cut from that.
-        static $sprintCache = [];
-        if (!isset($sprintCache[$sprintId])) {
-            $members = [];
-            foreach ((new self())->find(['plugin_sprint_sprints_id' => $sprintId]) as $m) {
-                $members[(int)$m['users_id']] = self::normalizeCapacity($m['capacity_percent'] ?? 0);
-            }
-
-            // Pending = backlog rows pencilled in for this sprint: items the
-            // user owns (fastlane rows spread capacity via their own junction
-            // table) plus open dependency allocations where the user is the
-            // coupled helper — those claim their capacity too.
-            $pendingByUser = [];
-            $depByUser     = [];
-            $allProposed   = (new SprintItem())->find([
-                'plugin_sprint_sprints_id' => 0,
-                'proposed_sprints_id'      => $sprintId,
-            ]);
-            foreach ($allProposed as $r) {
-                $owner = (int)$r['users_id'];
-                if ($owner > 0 && (int)($r['is_fastlane'] ?? 0) === 0) {
-                    $pendingByUser[$owner][(int)$r['id']] = (float)($r['capacity'] ?? 0);
-                }
-            }
-            $proposedItemIds = array_map(fn($r) => (int)$r['id'], $allProposed);
-            if (count($proposedItemIds) > 0 && SprintItemDependency::isTableReady()) {
-                foreach ((new SprintItemDependency())->find([
-                    'plugin_sprint_sprintitems_id' => $proposedItemIds,
-                    'is_resolved'                  => 0,
-                ]) as $d) {
-                    $helper = (int)$d['users_id'];
-                    $iid    = (int)$d['plugin_sprint_sprintitems_id'];
-                    $depByUser[$helper][$iid] = ($depByUser[$helper][$iid] ?? 0.0) + (float)$d['capacity'];
-                }
-            }
-
-            $sprintCache[$sprintId] = [
-                'members' => $members,
-                'pending' => $pendingByUser,
-                'deps'    => $depByUser,
-                'used'    => self::usedCapacityBySprint($sprintId),
-            ];
-        }
-
-        $s        = $sprintCache[$sprintId];
+        $s        = self::backlogPlanningData($sprintId);
         $isMember = isset($s['members'][$userId]);
-        $c        = [
-            // Effective capacity (availability exceptions applied), matching the sprint views.
-            'total'       => $isMember ? SprintAgility::effectiveCapacity($sprintId, $userId, $s['members'][$userId]) : 0.0,
-            'used'        => (float)($s['used'][$userId]['total'] ?? 0.0),
-            'pending_ids' => $s['pending'][$userId] ?? [],
-            'dep_ids'     => $s['deps'][$userId] ?? [],
-            'is_member'   => $isMember,
-        ];
-        $pendingOther = array_sum($c['pending_ids']) + array_sum($c['dep_ids']);
-        if ($excludeItemId > 0 && isset($c['pending_ids'][$excludeItemId])) {
-            $pendingOther -= $c['pending_ids'][$excludeItemId];
+        $pendingIds = $s['pending'][$userId] ?? [];
+        $depIds     = $s['deps'][$userId] ?? [];
+        $pendingOther = array_sum($pendingIds) + array_sum($depIds);
+        if ($excludeItemId > 0 && isset($pendingIds[$excludeItemId])) {
+            $pendingOther -= $pendingIds[$excludeItemId];
         }
-        if ($excludeItemId > 0 && isset($c['dep_ids'][$excludeItemId])) {
-            $pendingOther -= $c['dep_ids'][$excludeItemId];
+        if ($excludeItemId > 0 && isset($depIds[$excludeItemId])) {
+            $pendingOther -= $depIds[$excludeItemId];
         }
+        $used = $s['used'][$userId] ?? [];
 
         return [
-            'total'         => $c['total'],
-            'used'          => $c['used'],
+            // Effective capacity (availability exceptions applied), matching the sprint views.
+            'total'         => $isMember ? SprintAgility::effectiveCapacity($sprintId, $userId, $s['members'][$userId]) : 0.0,
+            'used'          => (float)($used['total'] ?? 0.0),
             'pending_other' => $pendingOther,
-            'is_member'     => $c['is_member'],
+            'is_member'     => $isMember,
+            // The shared model (without this item's own estimate), so the
+            // dialog speaks the same terms as the sprint views.
+            'figures'       => $isMember ? self::capacityFigures(
+                $s['members'][$userId],
+                SprintAgility::effectiveCapacity($sprintId, $userId, $s['members'][$userId]),
+                (float)($used['regular'] ?? 0.0),
+                (float)($used['fastlane'] ?? 0.0),
+                (float)($used['dependency'] ?? 0.0),
+                (float)($used['dependency_open'] ?? 0.0),
+                $pendingOther
+            ) : null,
+        ];
+    }
+
+    /**
+     * Which backlog rows count as "proposed" for a sprint: still on the
+     * backlog, pencilled in for it, not parked and not blocked. Shared by the
+     * edit-dialog preview, the team cards and the member × sprint forecast,
+     * so their proposal totals agree.
+     *
+     * @param int|int[] $sprintIds
+     */
+    public static function proposedBacklogCriteria($sprintIds): array
+    {
+        return [
+            'plugin_sprint_sprints_id' => 0,
+            'proposed_sprints_id'      => $sprintIds,
+            'is_parked'                => 0,
+            'is_blocked'               => 0,
+        ];
+    }
+
+    /**
+     * Proposed backlog capacity per user for one sprint: owned non-fastlane
+     * rows (a fastlane row spreads its load only once it is in a sprint) plus
+     * open dependency allocations where the user is the coupled helper.
+     *
+     * @return array<int,float> by user id
+     */
+    public static function proposedCapacityBySprint(int $sprintId): array
+    {
+        if ($sprintId <= 0) {
+            return [];
+        }
+        $s   = self::backlogPlanningData($sprintId);
+        $out = [];
+        foreach ([$s['pending'], $s['deps']] as $byUser) {
+            foreach ($byUser as $uid => $byItem) {
+                $out[(int)$uid] = ($out[(int)$uid] ?? 0.0) + array_sum($byItem);
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Everything the backlog previews need for one sprint, loaded once per
+     * request: members, the backlog rows proposed for it, their open
+     * dependency allocations and the used capacity per user.
+     *
+     * @return array{members:array<int,float>,pending:array<int,array<int,float>>,deps:array<int,array<int,float>>,used:array}
+     */
+    private static function backlogPlanningData(int $sprintId): array
+    {
+        static $sprintCache = [];
+        if (isset($sprintCache[$sprintId])) {
+            return $sprintCache[$sprintId];
+        }
+        $members = [];
+        foreach ((new self())->find(['plugin_sprint_sprints_id' => $sprintId]) as $m) {
+            $members[(int)$m['users_id']] = self::normalizeCapacity($m['capacity_percent'] ?? 0);
+        }
+
+        $pendingByUser = [];
+        $depByUser     = [];
+        $allProposed   = (new SprintItem())->find(self::proposedBacklogCriteria($sprintId));
+        foreach ($allProposed as $r) {
+            $owner = (int)$r['users_id'];
+            if ($owner > 0 && (int)($r['is_fastlane'] ?? 0) === 0) {
+                $pendingByUser[$owner][(int)$r['id']] = (float)($r['capacity'] ?? 0);
+            }
+        }
+        $proposedItemIds = array_map(fn($r) => (int)$r['id'], $allProposed);
+        if (count($proposedItemIds) > 0 && SprintItemDependency::isTableReady()) {
+            foreach ((new SprintItemDependency())->find([
+                'plugin_sprint_sprintitems_id' => $proposedItemIds,
+                'is_resolved'                  => 0,
+            ]) as $d) {
+                $helper = (int)$d['users_id'];
+                $iid    = (int)$d['plugin_sprint_sprintitems_id'];
+                $depByUser[$helper][$iid] = ($depByUser[$helper][$iid] ?? 0.0) + (float)$d['capacity'];
+            }
+        }
+
+        return $sprintCache[$sprintId] = [
+            'members' => $members,
+            'pending' => $pendingByUser,
+            'deps'    => $depByUser,
+            'used'    => self::usedCapacityBySprint($sprintId),
         ];
     }
 

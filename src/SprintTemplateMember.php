@@ -87,10 +87,11 @@ class SprintTemplateMember extends CommonDBRelation
             echo "<td>";
             Dropdown::showFromArray('role', $roles, ['value' => SprintMember::ROLE_DEVELOPER]);
             echo "</td>";
-            echo "<td>" . __('Maximum capacity (%)', 'sprint') . "</td>";
+            echo "<td><label for='sprint-tmpl-member-capacity'>" . __('Set capacity (%)', 'sprint') . "</label></td>";
             echo "<td>";
-            Dropdown::showFromArray('capacity_percent', SprintMember::getCapacityChoices(), [
-                'value' => 100,
+            echo SprintMember::capacityInput('capacity_percent', 100, [
+                'id'       => 'sprint-tmpl-member-capacity',
+                'required' => true,
             ]);
             echo "</td></tr>";
 

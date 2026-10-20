@@ -29,12 +29,14 @@
         field_options
     ) }}
 
-    {{ fields.dropdownArrayField(
+    {# Number input on the 0.5 grid with the usual presets as suggestions
+       (SprintMember::capacityInput(), escaped server-side). #}
+    {% set capacity_field %}{{ capacity_input|raw }}{% endset %}
+    {{ fields.field(
         'capacity_percent',
-        capacity_value|default(item.fields['capacity_percent']),
-        capacity_choices,
-        __('Maximum capacity (%)', 'sprint'),
-        field_options
+        capacity_field,
+        __('Set capacity (%)', 'sprint'),
+        field_options|merge({'id': 'sprint-member-capacity'})
     ) }}
 
     {{ fields.textareaField(

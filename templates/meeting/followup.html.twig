@@ -1,0 +1,142 @@
+{# Retrospective phase "Follow-up of earlier actions". Every action keeps its
+   own identity (it lives in the sprint where it was agreed); progress notes
+   and evaluations are stored per retrospective, so earlier discussions stay
+   readable. Status toggles and notes post to front/sprintagility.form.php
+   with this meeting's id (see SprintAgility::handleActionFollowUp()). #}
+
+{% set fu = guided.followup|default({}) %}
+{% set helped_options = guided.followup_helped|default({}) %}
+{% set fu_groups = {
+    'previous': __('Agreed in the previous retrospective', 'sprint'),
+    'older':    __('Still open from earlier retrospectives', 'sprint'),
+} %}
+
+<div class="sprint-phase-block sprint-fu">
+    <div class="sprint-fu-context sprint-small mb-2">
+        {% if fu.predecessor_name|default('') != '' %}
+        <span class="text-muted"><i class="fas fa-link me-1"></i>{{ __('Previous sprint in this series:', 'sprint') }}</span>
+        <a href="{{ fu.predecessor_url }}">{{ fu.predecessor_name }}</a>
+        {% if fu.manual %}<span class="badge bg-secondary-lt ms-1">{{ __('Chosen manually', 'sprint') }}</span>{% endif %}
+        {% endif %}
+    </div>
+
+    {% if fu.predecessor_name|default('') == '' %}
+    <div class="alert alert-info py-2 mb-2">
+        <i class="fas fa-circle-info me-1"></i>{{ __('No earlier sprint of this team was found (same entity, same template and at least one shared team member), so there are no earlier actions to follow up.', 'sprint') }}
+    </div>
+    {% elseif fu.ambiguous %}
+    <div class="alert alert-warning py-2 mb-2">
+        <i class="fas fa-triangle-exclamation me-1"></i>{{ __('Several sprints of this series ran at the same time. Check that the right previous sprint is selected.', 'sprint') }}
+    </div>
+    {% endif %}
+
+    {% if guided.can_drive and fu.choices|default({})|length > 0 %}
+    <details class="sprint-fu-choice mb-3"{% if fu.ambiguous or fu.predecessor_name|default('') == '' %} open{% endif %}>
+        <summary class="sprint-small text-muted">{{ __('Choose a different previous sprint', 'sprint') }}</summary>
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <select class="form-select form-select-sm w-auto sprint-fu-prev-select" aria-label="{{ __('Previous sprint', 'sprint') }}">
+                <option value="0">{{ __('Automatic (sprint series)', 'sprint') }}</option>
+                {% for sid, label in fu.choices %}
+                <option value="{{ sid }}"{% if sid == fu.chosen_id %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-primary" data-sprint-action="meeting-fu-prev">{{ __('Apply', 'sprint') }}</button>
+        </div>
+    </details>
+    {% endif %}
+
+    {% for group, group_title in fu_groups %}
+    {% set rows = fu[group]|default([]) %}
+    {% if (group == 'previous' and fu.predecessor_name|default('') != '') or rows|length > 0 %}
+    <div class="sprint-fu-group mb-3" data-fu-group="{{ group }}">
+        <div class="fw-bold mb-2">
+            <i class="fas {{ group == 'previous' ? 'fa-list-check' : 'fa-hourglass-half' }} me-1"></i>{{ group_title }}
+            <span class="badge bg-secondary-lt ms-1">{{ rows|length }}</span>
+        </div>
+        {% for row in rows %}
+        <div class="sprint-fu-item card mb-2" data-improvement-id="{{ row.id }}" data-status="{{ row.status }}">
+            <div class="card-body p-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="sprint-imp-desc fw-bold flex-grow-1">{{ row.description|nl2br }}</span>
+                    <span class="badge sprint-imp-statuspill {{ row.status == 'done' ? 'bg-green-lt' : 'bg-yellow-lt' }}">
+                        {{ row.status == 'done' ? __('Done', 'sprint') : __('Open', 'sprint') }}
+                    </span>
+                    {% if row.can_edit %}
+                    <button type="button" class="btn btn-sm btn-outline-success sprint-imp-toggle-btn"
+                            data-sprint-action="meeting-imp-toggle" title="{{ __('Toggle done', 'sprint') }}"
+                            aria-label="{{ __('Toggle done', 'sprint') }}">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="d-flex flex-wrap gap-3 mt-1 sprint-small text-muted">
+                    <span><i class="fas fa-flag me-1"></i>{{ __('Agreed in', 'sprint') }}
+                        <a href="{{ row.source_sprint_url }}">{{ row.source_sprint_name }}</a>{% if row.source_meeting_url %} · <a href="{{ row.source_meeting_url }}">{{ row.source_meeting_name }}</a>{% endif %}
+                    </span>
+                    <span><i class="fas fa-user me-1"></i>{{ row.owner_name != '' ? row.owner_name : __('No owner', 'sprint') }}</span>
+                    <span{% if row.is_overdue %} class="text-danger"{% endif %}><i class="far fa-calendar me-1"></i>{{ row.due_date != '' ? row.due_date : __('No due date', 'sprint') }}</span>
+                    {% if row.last_update != '' %}<span><i class="fas fa-clock-rotate-left me-1"></i>{{ __('Last update', 'sprint') }}: {{ row.last_update }}</span>{% endif %}
+                </div>
+
+                {% if row.history|length > 0 %}
+                <details class="sprint-fu-history mt-2">
+                    <summary class="sprint-small">{{ _n('%d earlier discussion', '%d earlier discussions', row.history|length, 'sprint')|format(row.history|length) }}</summary>
+                    <ul class="list-unstyled mb-0 mt-1 sprint-small">
+                        {% for h in row.history %}
+                        <li class="border-start ps-2 mb-2">
+                            <div class="text-muted">
+                                {% if h.meeting_url %}<a href="{{ h.meeting_url }}">{{ h.meeting_name }}</a> · {% endif %}{{ h.date }}{% if h.author %} · {{ h.author }}{% endif %}
+                                · {{ h.status == 'done' ? __('Done', 'sprint') : __('Open', 'sprint') }}
+                            </div>
+                            {% if h.progress_note %}<div>{{ h.progress_note|nl2br }}</div>{% endif %}
+                            {% if h.evaluation or h.helped_label %}<div><strong>{{ __('Evaluation', 'sprint') }}:</strong> {% if h.helped_label %}{{ h.helped_label }}{% endif %}{% if h.evaluation %} — {{ h.evaluation|nl2br }}{% endif %}</div>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
+
+                {% if row.can_edit %}
+                <div class="sprint-fu-edit mt-2">
+                    <label class="form-label sprint-small fw-bold mb-1" for="sprint-fu-progress-{{ row.id }}">{{ __('Progress in this retrospective', 'sprint') }}</label>
+                    <textarea id="sprint-fu-progress-{{ row.id }}" class="form-control form-control-sm sprint-fu-progress" rows="2"
+                              placeholder="{{ __('What was tried, what is blocking, what is the next concrete step?', 'sprint') }}">{{ row.progress_note }}</textarea>
+                    <div class="sprint-fu-eval mt-2"{% if row.status != 'done' %} style="display:none;"{% endif %}>
+                        <label class="form-label sprint-small fw-bold mb-1" for="sprint-fu-helped-{{ row.id }}">{{ __('Did the change help?', 'sprint') }}</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <select id="sprint-fu-helped-{{ row.id }}" class="form-select form-select-sm w-auto sprint-fu-helped">
+                                {% for value, label in helped_options %}
+                                <option value="{{ value }}"{% if value == row.helped %} selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <textarea class="form-control form-control-sm sprint-fu-evaluation flex-grow-1" rows="1"
+                                      aria-label="{{ __('Result achieved', 'sprint') }}"
+                                      placeholder="{{ __('Which result was achieved?', 'sprint') }}">{{ row.evaluation }}</textarea>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-sprint-action="meeting-fu-save">
+                            <i class="fas fa-save me-1"></i>{{ __('Save follow-up', 'sprint') }}
+                        </button>
+                        <span class="sprint-fu-status sprint-small" role="status" aria-live="polite"></span>
+                    </div>
+                </div>
+                {% elseif row.progress_note or row.evaluation %}
+                <div class="mt-2 sprint-small">
+                    {% if row.progress_note %}<div>{{ row.progress_note|nl2br }}</div>{% endif %}
+                    {% if row.evaluation or row.helped %}<div><strong>{{ __('Evaluation', 'sprint') }}:</strong> {{ helped_options[row.helped]|default('') }}{% if row.evaluation %} — {{ row.evaluation|nl2br }}{% endif %}</div>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="text-muted fst-italic sprint-imp-empty">{{ __('No actions were agreed in the previous retrospective.', 'sprint') }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <div class="sprint-small text-muted">
+        <i class="fas fa-circle-info me-1"></i>{{ __('New actions of this retrospective are recorded in the “Decide actions” phase and are followed up in the next retrospective.', 'sprint') }}
+    </div>
+</div>

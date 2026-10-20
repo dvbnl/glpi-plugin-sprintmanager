@@ -68,6 +68,6 @@ echo json_encode([
     'request_id' => $reqId,
     'message'    => sprintf(
         __('Assignment requested — the Scrum Master of %s will review it.', 'sprint'),
-        (string)$sprint->fields['name']
+        plugin_sprint_html((string)$sprint->fields['name'])
     ),
 ]);

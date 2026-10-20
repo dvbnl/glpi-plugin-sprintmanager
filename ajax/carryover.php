@@ -1,9 +1,9 @@
 <?php
 
 /**
- * AJAX handler that carries a SprintItem over to another sprint. JSON variant
- * of front/backlog.form.php's `carry_over_to_sprint`. Carry-over is additive:
- * the original stays put and a fresh copy is created in the target sprint.
+ * AJAX handler that carries a SprintItem over to another sprint. Carry-over
+ * is additive: the original stays put and a fresh copy is created in the
+ * target sprint. Anyone but the target sprint's Scrum Master files a request.
  */
 
 if (!defined('GLPI_ROOT')) {
@@ -15,7 +15,7 @@ header('Content-Type: application/json');
 Session::checkCSRF($_POST);
 Session::checkRight('plugin_sprint_item', READ);
 
-$response = ['success' => false, 'message' => 'Request failed'];
+$response = ['success' => false, 'message' => __('Request failed', 'sprint')];
 
 $id       = (int)($_POST['id'] ?? 0);
 $sprintId = (int)($_POST['plugin_sprint_sprints_id'] ?? 0);
@@ -44,36 +44,29 @@ if (!$hasFullUpdate && !($hasOwnOnly && $isOwner)) {
     return;
 }
 
-$sprint = new GlpiPlugin\Sprint\Sprint();
-if (!$sprint->getFromDB($sprintId)
-    || !Session::haveAccessToEntity($sprint->fields['entities_id'] ?? 0)) {
-    echo json_encode([
-        'success' => false,
-        'message' => __('Please select a sprint', 'sprint'),
-    ]);
-    return;
-}
-
 $carryCapacity = isset($_POST['carry_capacity']) && $_POST['carry_capacity'] !== '' ? (float)$_POST['carry_capacity'] : null;
 $carryCredits  = isset($_POST['carry_credits']) && $_POST['carry_credits'] !== '' ? (float)$_POST['carry_credits'] : null;
 if (!GlpiPlugin\Sprint\SprintCustomer::canUseCredits()) {
     $carryCredits = $carryCapacity !== null ? 0.0 : null;
 }
-$newId = GlpiPlugin\Sprint\SprintItem::carryOverTo($id, $sprintId, $carryCapacity, $carryCredits);
-
-if ($newId <= 0) {
-    echo json_encode([
-        'success' => false,
-        'message' => __('Could not carry the item over to the target sprint', 'sprint'),
-    ]);
-    return;
-}
+// Direct for the target sprint's Scrum Master, an approval request otherwise.
+$result = GlpiPlugin\Sprint\SprintItem::carryOverOrRequest(
+    $id,
+    $sprintId,
+    $carryCapacity,
+    $carryCredits,
+    trim((string)($_POST['reason'] ?? ''))
+);
 
 echo json_encode([
-    'success'     => true,
-    'message'     => sprintf(__('Carried over to %s', 'sprint'), (string)$sprint->fields['name']),
-    'item_id'     => $id,
-    'new_id'      => $newId,
-    'sprint_id'   => $sprintId,
-    'sprint_name' => (string)$sprint->fields['name'],
+    'success'   => $result['ok'],
+    'requested' => $result['requested'],
+    'message'   => $result['message'],
+    'item_id'   => $id,
+    'new_id'    => $result['new_id'],
+    'sprint_id' => $sprintId,
+    // A request is reported as such (current → requested), never as done.
+    'requests'  => $result['requested']
+        ? GlpiPlugin\Sprint\SprintRequest::describePendingForItem($id)['requests']
+        : [],
 ]);

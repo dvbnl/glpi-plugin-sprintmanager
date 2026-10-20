@@ -468,9 +468,30 @@ function plugin_sprint_install(): bool
             `votes` INT UNSIGNED NOT NULL DEFAULT 0,
             `carry_to_next` TINYINT NOT NULL DEFAULT 1,
             `is_anonymous` TINYINT NOT NULL DEFAULT 0,
+            `origin_improvements_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Legacy carry-over copy: id of the original action, 0 = this row is the action itself',
+            `plugin_sprint_sprintmeetings_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Retrospective in which the action was agreed, 0 = unknown',
             `date_creation` TIMESTAMP NULL DEFAULT NULL,
             `date_mod` TIMESTAMP NULL DEFAULT NULL,
-            PRIMARY KEY (`id`), KEY `sprint_status` (`plugin_sprint_sprints_id`,`status`), KEY `owner` (`users_id`)
+            PRIMARY KEY (`id`), KEY `sprint_status` (`plugin_sprint_sprints_id`,`status`), KEY `owner` (`users_id`),
+            KEY `origin_improvements_id` (`origin_improvements_id`), KEY `plugin_sprint_sprintmeetings_id` (`plugin_sprint_sprintmeetings_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        // One follow-up note per improvement action per retrospective, so the
+        // discussion history of an action stays readable across sprints.
+        'glpi_plugin_sprint_sprintimprovementfollowups' => "CREATE TABLE `glpi_plugin_sprint_sprintimprovementfollowups` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprintimprovements_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `plugin_sprint_sprintmeetings_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `plugin_sprint_sprints_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Sprint of the retrospective that discussed the action',
+            `users_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Last author',
+            `status` VARCHAR(20) NOT NULL DEFAULT 'open' COMMENT 'Action status when the note was saved',
+            `progress_note` TEXT,
+            `evaluation` TEXT,
+            `helped` VARCHAR(10) NOT NULL DEFAULT '',
+            `date_creation` TIMESTAMP NULL DEFAULT NULL,
+            `date_mod` TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unicity` (`plugin_sprint_sprintimprovements_id`, `plugin_sprint_sprintmeetings_id`),
+            KEY `plugin_sprint_sprintmeetings_id` (`plugin_sprint_sprintmeetings_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
         'glpi_plugin_sprint_sprintimprovementvotes' => "CREATE TABLE `glpi_plugin_sprint_sprintimprovementvotes` (
             `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -498,7 +519,20 @@ function plugin_sprint_install(): bool
         }
     }
     if ($DB->tableExists('glpi_plugin_sprint_sprintimprovements')) {
-        $migration->addField('glpi_plugin_sprint_sprintimprovements', 'is_anonymous', 'bool', ['value' => 0, 'after' => 'carry_to_next']);
+        $impTable = 'glpi_plugin_sprint_sprintimprovements';
+        // 1.3.1: improvement actions get one persistent identity. Carry-over
+        // used to insert loose copies into the next sprint; existing copies
+        // are linked to their original once, when the column first appears.
+        $linkLegacyCopies = !$DB->fieldExists($impTable, 'origin_improvements_id');
+        $migration->addField($impTable, 'is_anonymous', 'bool', ['value' => 0, 'after' => 'carry_to_next']);
+        $migration->addField($impTable, 'origin_improvements_id', 'integer', ['value' => 0, 'after' => 'is_anonymous']);
+        $migration->addField($impTable, 'plugin_sprint_sprintmeetings_id', 'integer', ['value' => 0, 'after' => 'origin_improvements_id']);
+        $migration->addKey($impTable, 'origin_improvements_id');
+        $migration->addKey($impTable, 'plugin_sprint_sprintmeetings_id');
+        $migration->migrationOneTable($impTable);
+        if ($linkLegacyCopies) {
+            GlpiPlugin\Sprint\SprintAgility::linkLegacyCarryCopies();
+        }
     }
     if ($DB->tableExists('glpi_plugin_sprint_sprintepics')) {
         $migration->addField('glpi_plugin_sprint_sprintepics', 'entities_id', 'integer', ['value' => 0, 'after' => 'plugin_sprint_sprints_id']);
@@ -980,14 +1014,15 @@ function plugin_sprint_install(): bool
     if (!$DB->tableExists('glpi_plugin_sprint_sprintrequests')) {
         $query = "CREATE TABLE `glpi_plugin_sprint_sprintrequests` (
             `id`                           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity | category',
+            `request_type`                 VARCHAR(20) NOT NULL DEFAULT 'assign' COMMENT 'assign | capacity | category | adhoc | carryover',
             `plugin_sprint_sprintitems_id` INT UNSIGNED NOT NULL DEFAULT 0,
             `plugin_sprint_sprints_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Target sprint (assign) or the item sprint (capacity/category)',
             `users_id`                     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requester',
             `requested_capacity`           DECIMAL(5,1) NOT NULL DEFAULT 0,
             `requested_category_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requested backlog category for a category request',
+            `requested_flag`               TINYINT NOT NULL DEFAULT 0 COMMENT 'Requested adhoc flag for an adhoc request',
             `reason`                       TEXT NULL COMMENT 'Requester motivation shown to the Scrum Master',
-            `status`                       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending | accepted | rejected',
+            `status`                       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending | accepted | rejected | cancelled',
             `users_id_validate`            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master who handled it',
             `date_creation`                TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                     TIMESTAMP NULL DEFAULT NULL,
@@ -1017,6 +1052,15 @@ function plugin_sprint_install(): bool
         $DB->doQueryOrDie(
             "ALTER TABLE `glpi_plugin_sprint_sprintrequests` ADD COLUMN `requested_category_id` INT UNSIGNED NOT NULL DEFAULT 0 "
             . "COMMENT 'Requested backlog category for a category request'",
+            $DB->error()
+        );
+    }
+    // Migration: requested on/off value for 'adhoc' approval requests.
+    if ($DB->tableExists('glpi_plugin_sprint_sprintrequests')
+        && !$DB->fieldExists('glpi_plugin_sprint_sprintrequests', 'requested_flag')) {
+        $DB->doQueryOrDie(
+            "ALTER TABLE `glpi_plugin_sprint_sprintrequests` ADD COLUMN `requested_flag` TINYINT NOT NULL DEFAULT 0 "
+            . "COMMENT 'Requested adhoc flag for an adhoc request'",
             $DB->error()
         );
     }
@@ -1167,6 +1211,7 @@ function plugin_sprint_uninstall(): bool
         'glpi_plugin_sprint_sprintcategorycaps',
         'glpi_plugin_sprint_sprintcategories',
         'glpi_plugin_sprint_sprintsignals',
+        'glpi_plugin_sprint_sprintimprovementfollowups',
         'glpi_plugin_sprint_sprintimprovementvotes',
         'glpi_plugin_sprint_sprintimprovements',
         'glpi_plugin_sprint_sprintavailabilities',
@@ -1213,6 +1258,10 @@ function plugin_sprint_uninstall(): bool
     // Remove the plugin's profile rights
     GlpiPlugin\Sprint\Profile::uninstallRights();
 
+    // Plugin settings (credit managers, categories, toggles) in glpi_configs
+    $config = new Config();
+    $config->deleteByCriteria(['context' => GlpiPlugin\Sprint\Config::CONTEXT]);
+
     return true;
 }
 
@@ -1226,13 +1275,6 @@ function plugin_sprint_check_prerequisites(): bool
     return true;
 }
 
-function plugin_sprint_display_central(): void
-{
-    if (Session::haveRight('plugin_sprint_sprint', READ)) {
-        GlpiPlugin\Sprint\SprintAgility::renderHomeWidget();
-    }
-}
-
 /**
  * Check configuration
  *
@@ -1243,4 +1285,16 @@ function plugin_sprint_check_config(bool $verbose = false): bool
 {
     // The plugin works out of the box — no mandatory configuration step.
     return true;
+}
+
+/**
+ * Search engine: restrict plugin tables without their own entities_id to the
+ * rows whose parent (sprint, item, template, customer) the session can see.
+ *
+ * @param string $itemtype
+ * @return string
+ */
+function plugin_sprint_addDefaultWhere($itemtype): string
+{
+    return GlpiPlugin\Sprint\SearchScope::defaultWhere((string)$itemtype);
 }

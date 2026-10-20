@@ -66,7 +66,14 @@
      data-lbl-open="{{ __('Open', 'sprint') }}"
      data-lbl-done="{{ __('Done', 'sprint') }}"
      data-lbl-vote="{{ __('Vote', 'sprint') }}"
-     data-lbl-unvote="{{ __('Remove my vote', 'sprint') }}">
+     data-lbl-unvote="{{ __('Remove my vote', 'sprint') }}"
+     data-lbl-note-dirty="{{ __('Not saved', 'sprint') }}"
+     data-lbl-note-saving="{{ __('Saving…', 'sprint') }}"
+     data-lbl-note-saved="{{ __('Saved', 'sprint') }}"
+     data-lbl-note-failed="{{ __('Save failed', 'sprint') }}"
+     data-lbl-note-retry="{{ __('Retry', 'sprint') }}"
+     data-lbl-note-restored="{{ __('Unsaved text restored from this browser', 'sprint') }}"
+     data-lbl-note-leave="{{ __('Some notes are not saved yet. Leave the page anyway?', 'sprint') }}">
 
     {# ============================ Control bar ============================ #}
     <div class="sprint-meeting-controlbar">
@@ -94,7 +101,7 @@
                 {{ __('Next phase', 'sprint') }} <i class="fas fa-arrow-right"></i>
             </button>
             <button type="button" class="btn btn-sm btn-outline-danger sprint-meeting-btn-end" data-sprint-action="meeting-end"
-                    data-confirm="{{ __('End this meeting? The session is marked completed; notes and results stay available.', 'sprint') }}">
+                    data-confirm="{{ __('End this meeting? The session is marked completed. Notes and results stay available.', 'sprint') }}">
                 {{ is_retro ? __('End retrospective', 'sprint') : __('End review', 'sprint') }}
             </button>
             {% endif %}
@@ -233,13 +240,7 @@
                 </div>
 
                 {% elseif block == 'prev_actions' %}
-                <div class="sprint-phase-block sprint-imp-list" data-imp-static="1">
-                    {% for row in guided.prev_actions|default([]) %}
-                        {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_owner: true, show_status: true, show_toggle: true, can_toggle: guided.can_toggle_actions}) }}
-                    {% else %}
-                    <div class="text-muted fst-italic sprint-imp-empty">{{ __('No open actions from the previous retrospective.', 'sprint') }}</div>
-                    {% endfor %}
-                </div>
+                {% include '@sprint/meeting/followup.html.twig' %}
 
                 {% elseif block == 'improvement_collect' %}
                 <div class="sprint-phase-block">
@@ -360,11 +361,17 @@
 
             {% if phase.has_notes %}
             <div class="sprint-phase-notes mt-3">
-                <label class="form-label sprint-small fw-bold mb-1">
-                    <i class="fas fa-pen me-1"></i>{{ __('Phase notes', 'sprint') }}
-                    <span class="sprint-phase-note-saved text-success ms-2" style="display:none;"><i class="fas fa-check"></i> {{ __('Saved', 'sprint') }}</span>
-                </label>
-                <textarea class="form-control form-control-sm sprint-phase-note" rows="2"
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                    <label class="form-label sprint-small fw-bold mb-0" for="sprint-phase-note-{{ phase.key }}">
+                        <i class="fas fa-pen me-1"></i>{{ __('Phase notes', 'sprint') }}
+                    </label>
+                    {# Autosave status: Not saved / Saving… / Saved / Save failed + Retry (js/sprint.js). #}
+                    <span class="sprint-phase-note-status sprint-small" role="status" aria-live="polite"></span>
+                    <button type="button" class="btn btn-sm btn-link p-0 sprint-small sprint-phase-note-retry" data-sprint-action="note-retry" style="display:none;">
+                        <i class="fas fa-rotate-right me-1"></i>{{ __('Retry', 'sprint') }}
+                    </button>
+                </div>
+                <textarea id="sprint-phase-note-{{ phase.key }}" class="form-control form-control-sm sprint-phase-note" rows="2"
                           data-phase-key="{{ phase.key }}"
                           {% if not guided.can_drive %}readonly{% endif %}
                           placeholder="{{ __('Notes for this phase...', 'sprint') }}">{{ guided.phase_notes[phase.key]|default('') }}</textarea>

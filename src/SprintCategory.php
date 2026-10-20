@@ -331,11 +331,11 @@ class SprintCategory extends CommonDBTM
         $canedit = Session::haveRight('config', UPDATE);
         $all     = self::getAll(false);
 
-        echo "<div class='center' style='margin-top:18px;'>";
+        echo "<div>";
         if ($canedit) {
             echo "<form method='post' action='" . \Plugin::getWebDir('sprint') . "/front/config.form.php'>";
         }
-        echo "<table class='tab_cadre_fixe sprint-themed'>";
+        echo "<table class='tab_cadre_fixe sprint-themed' style='width:100%;'>";
         echo "<tr class='tab_bg_2'><th colspan='7'>"
             . "<i class='" . self::getIcon() . "' style='margin-right:6px;'></i>"
             . __('Backlog categories', 'sprint') . "</th></tr>";
@@ -344,7 +344,7 @@ class SprintCategory extends CommonDBTM
             . ' '
             . __('Pick a parent to turn a category into a subcategory: it nests under its parent on the backlog and in the planning matrix (one level deep).', 'sprint')
             . ' '
-            . __('Default min/max limits apply to every sprint without its own limits for that category; 0 = no limit.', 'sprint')
+            . __('Default min/max limits apply to every sprint without its own limits for that category. 0 = no limit.', 'sprint')
             . "</td></tr>";
 
         echo "<tr class='tab_bg_2'>"
@@ -360,7 +360,7 @@ class SprintCategory extends CommonDBTM
 
         // A category that has children cannot itself become a child.
         $parentSelect = function (string $fieldName, int $selfId, int $selected, bool $enabled) use ($all, $canedit): string {
-            $html = "<select class='form-select' name='{$fieldName}'" . (($canedit && $enabled) ? '' : ' disabled') . ">";
+            $html = "<select class='form-select' name='{$fieldName}' aria-label='" . __s('Parent category', 'sprint') . "'" . (($canedit && $enabled) ? '' : ' disabled') . ">";
             $html .= "<option value='0'>-----</option>";
             foreach ($all as $pid => $parent) {
                 if ((int)$pid === $selfId || (int)($parent['plugin_sprint_sprintcategories_id'] ?? 0) > 0) {
@@ -382,31 +382,31 @@ class SprintCategory extends CommonDBTM
                 ? "<i class='fas fa-turn-up fa-rotate-90 text-muted me-1' style='margin-left:14px;'></i>"
                 : '';
             echo "<tr class='tab_bg_1'>";
-            echo "<td><div class='d-flex align-items-center'>{$indent}<input type='text' class='form-control' name='cat_name[{$id}]' value='{$name}'" . ($canedit ? '' : ' readonly') . "></div></td>";
+            echo "<td><div class='d-flex align-items-center'>{$indent}<input type='text' class='form-control' name='cat_name[{$id}]' aria-label='" . htmlescape(__('Name') . ': ' . (string)$row['name']) . "' value='{$name}'" . ($canedit ? '' : ' readonly') . "></div></td>";
             echo "<td class='center'" . ($isParent ? " title='" . __s('This category has subcategories, so it stays top-level.', 'sprint') . "'" : '') . ">"
                 . $parentSelect("cat_parent[{$id}]", (int)$id, $parentId, !$isParent) . "</td>";
-            echo "<td class='center'><input type='color' class='form-control form-control-color' name='cat_color[{$id}]' value='{$color}'" . ($canedit ? '' : ' disabled') . "></td>";
-            echo "<td class='center'><input type='number' class='form-control' name='cat_sort[{$id}]' value='{$sort}' style='width:80px;'" . ($canedit ? '' : ' readonly') . "></td>";
+            echo "<td class='center'><input type='color' class='form-control form-control-color' name='cat_color[{$id}]' aria-label='" . htmlescape((string)$row['name'] . ': ' . __('Color', 'sprint')) . "' value='{$color}'" . ($canedit ? '' : ' disabled') . "></td>";
+            echo "<td class='center'><input type='number' class='form-control' name='cat_sort[{$id}]' aria-label='" . htmlescape((string)$row['name'] . ': ' . __('Order', 'sprint')) . "' value='{$sort}' style='width:80px;'" . ($canedit ? '' : ' readonly') . "></td>";
             $defMin = (float)($defaultLimits[(int)$id]['min'] ?? 0);
             $defMax = (float)($defaultLimits[(int)$id]['max'] ?? 0);
-            echo "<td class='center'><input type='number' min='0' max='9999' step='0.5' class='form-control' name='cat_limit_min[{$id}]' value='" . ($defMin > 0 ? $defMin : 0) . "' style='width:90px;'" . ($canedit ? '' : ' readonly') . "></td>";
-            echo "<td class='center'><input type='number' min='0' max='9999' step='0.5' class='form-control' name='cat_limit_max[{$id}]' value='" . ($defMax > 0 ? $defMax : 0) . "' style='width:90px;'" . ($canedit ? '' : ' readonly') . "></td>";
-            echo "<td class='center'><input type='checkbox' name='cat_delete[]' value='{$id}'" . ($canedit ? '' : ' disabled') . "></td>";
+            echo "<td class='center'><input type='number' min='0' max='9999' step='0.5' class='form-control' name='cat_limit_min[{$id}]' aria-label='" . htmlescape((string)$row['name'] . ': ' . __('Default min %', 'sprint')) . "' value='" . ($defMin > 0 ? $defMin : 0) . "' style='width:90px;'" . ($canedit ? '' : ' readonly') . "></td>";
+            echo "<td class='center'><input type='number' min='0' max='9999' step='0.5' class='form-control' name='cat_limit_max[{$id}]' aria-label='" . htmlescape((string)$row['name'] . ': ' . __('Default max %', 'sprint')) . "' value='" . ($defMax > 0 ? $defMax : 0) . "' style='width:90px;'" . ($canedit ? '' : ' readonly') . "></td>";
+            echo "<td class='center'><input type='checkbox' name='cat_delete[]' aria-label='" . htmlescape(sprintf(__('Delete category %s', 'sprint'), (string)$row['name'])) . "' value='{$id}'" . ($canedit ? '' : ' disabled') . "></td>";
             echo "</tr>";
         }
 
         if ($canedit) {
             echo "<tr class='tab_bg_1'>";
-            echo "<td><input type='text' class='form-control' name='cat_new_name' placeholder='" . __s('New category…', 'sprint') . "'></td>";
+            echo "<td><input type='text' class='form-control' name='cat_new_name' aria-label='" . __s('New category', 'sprint') . "' placeholder='" . __s('New category…', 'sprint') . "'></td>";
             echo "<td class='center'>" . $parentSelect('cat_new_parent', 0, 0, true) . "</td>";
-            echo "<td class='center'><input type='color' class='form-control form-control-color' name='cat_new_color' value='#0d6efd'></td>";
-            echo "<td class='center'><input type='number' class='form-control' name='cat_new_sort' value='0' style='width:80px;'></td>";
-            echo "<td class='center'><input type='number' min='0' max='9999' step='0.5' class='form-control' name='cat_new_limit_min' value='0' style='width:90px;'></td>";
-            echo "<td class='center'><input type='number' min='0' max='9999' step='0.5' class='form-control' name='cat_new_limit_max' value='0' style='width:90px;'></td>";
+            echo "<td class='center'><input type='color' class='form-control form-control-color' name='cat_new_color' aria-label='" . htmlescape(__('New category', 'sprint') . ': ' . __('Color', 'sprint')) . "' value='#0d6efd'></td>";
+            echo "<td class='center'><input type='number' class='form-control' name='cat_new_sort' aria-label='" . htmlescape(__('New category', 'sprint') . ': ' . __('Order', 'sprint')) . "' value='0' style='width:80px;'></td>";
+            echo "<td class='center'><input type='number' min='0' max='9999' step='0.5' class='form-control' name='cat_new_limit_min' aria-label='" . htmlescape(__('New category', 'sprint') . ': ' . __('Default min %', 'sprint')) . "' value='0' style='width:90px;'></td>";
+            echo "<td class='center'><input type='number' min='0' max='9999' step='0.5' class='form-control' name='cat_new_limit_max' aria-label='" . htmlescape(__('New category', 'sprint') . ': ' . __('Default max %', 'sprint')) . "' value='0' style='width:90px;'></td>";
             echo "<td></td>";
             echo "</tr>";
             echo "<tr class='tab_bg_1'><td colspan='7' class='center'>";
-            echo \Html::submit(__('Save'), [
+            echo \Html::submit(__('Save categories', 'sprint'), [
                 'name'  => 'save_sprint_categories',
                 'class' => 'btn btn-primary',
             ]);

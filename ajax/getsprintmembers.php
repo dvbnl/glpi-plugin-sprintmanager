@@ -16,7 +16,7 @@ Session::checkRight('plugin_sprint_item', READ);
 $sprintId = (int)($_GET['sprint_id'] ?? $_POST['sprint_id'] ?? 0);
 $exclude  = (int)($_GET['exclude_user'] ?? $_POST['exclude_user'] ?? 0);
 
-if ($sprintId <= 0) {
+if ($sprintId <= 0 || !GlpiPlugin\Sprint\SprintItem::sprintEntityAccessible($sprintId)) {
     echo json_encode(['success' => false, 'members' => []]);
     return;
 }

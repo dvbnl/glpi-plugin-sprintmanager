@@ -37,11 +37,15 @@ function plugin_sprint_backlog_plan_fields(array $post): array
     foreach ([
         'users_id', 'capacity', 'credits', 'proposed_sprints_id',
         'plugin_sprint_sprintcategories_id', 'plugin_sprint_sprintcustomers_id', 'is_fastlane',
-        'plugin_sprint_sprintcreditproducts_id',
+        'plugin_sprint_sprintcreditproducts_id', 'is_adhoc',
     ] as $key) {
         if (array_key_exists($key, $post)) {
             $out[$key] = in_array($key, ['capacity', 'credits'], true) ? (float)$post[$key] : (int)$post[$key];
         }
+    }
+    // Tag checkboxes come with a hidden empty `_tags` so "none ticked" still posts.
+    if (array_key_exists('_tags', $post)) {
+        $out['_tags'] = is_array($post['_tags']) ? array_values(array_filter($post['_tags'], 'strlen')) : [];
     }
     return $out;
 }
@@ -266,7 +270,10 @@ if (isset($_POST['purge'])) {
     $id   = (int)($_POST['id'] ?? 0);
     $item = new GlpiPlugin\Sprint\SprintItem();
     $item->check($id, PURGE);
-    $item->delete(['id' => $id], 1);
+    $name = (string)($item->fields['name'] ?? '');
+    if ($item->delete(['id' => $id], 1)) {
+        Session::addMessageAfterRedirect(sprintf(__('"%s" was deleted from the backlog', 'sprint'), plugin_sprint_html($name)));
+    }
     Html::back();
 }
 

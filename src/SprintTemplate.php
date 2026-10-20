@@ -178,38 +178,148 @@ class SprintTemplate extends CommonDBTM
             $this->showFormButtons($options);
         }
 
+        $this->renderSummary();
+
         return true;
     }
 
     /**
-     * Get template data for AJAX pre-fill
+     * Get template data for AJAX pre-fill, plus a translated summary of what
+     * applying the template adds (shown on the sprint form before saving).
      */
     public function getTemplateData(): array
     {
         $templateId = $this->getID();
-
-        $membersCount = countElementsInTable(
-            SprintTemplateMember::getTable(),
-            ['plugin_sprint_sprinttemplates_id' => $templateId]
-        );
-        $itemsCount = countElementsInTable(
-            SprintTemplateItem::getTable(),
-            ['plugin_sprint_sprinttemplates_id' => $templateId]
-        );
-        $meetingsCount = countElementsInTable(
-            SprintTemplateMeeting::getTable(),
-            ['plugin_sprint_sprinttemplates_id' => $templateId]
-        );
+        $summary    = self::summarize($templateId, $this->fields);
 
         return [
             'name_pattern'    => $this->fields['name_pattern'] ?? '',
             'duration_weeks'  => (int)($this->fields['duration_weeks'] ?? 2),
             'goal'            => $this->fields['goal'] ?? '',
             'comment'         => $this->fields['comment'] ?? '',
-            'members_count'   => $membersCount,
-            'items_count'     => $itemsCount,
-            'meetings_count'  => $meetingsCount,
+            'members_count'   => $summary['members'],
+            'items_count'     => $summary['items'],
+            'meetings_count'  => $summary['meetings'],
+            'summary_lines'   => $summary['lines'],
         ];
+    }
+
+    /**
+     * What a template adds to a sprint, as counts and short translated lines
+     * ("3 team members: Ann, Bob, Carl", "5 items · 21 story points", ...).
+     *
+     * @return array{members:int,items:int,meetings:int,leave:int,lines:string[]}
+     */
+    public static function summarize(int $templateId, array $fields): array
+    {
+        $lines = [];
+
+        $members = (new SprintTemplateMember())->find(['plugin_sprint_sprinttemplates_id' => $templateId]);
+        if ($members) {
+            $names = [];
+            foreach ($members as $row) {
+                $names[] = SprintCache::userName((int)$row['users_id'])
+                    . ' (' . SprintMember::formatCapacity($row['capacity_percent'] ?? 0) . '%)';
+            }
+            $shown = array_slice($names, 0, 6);
+            $more  = count($names) - count($shown);
+            $lines[] = sprintf(_n('%d team member', '%d team members', count($members), 'sprint'), count($members))
+                . ': ' . implode(', ', $shown) . ($more > 0 ? ' ' . sprintf(__('and %d more', 'sprint'), $more) : '');
+        }
+
+        $items = (new SprintTemplateItem())->find(['plugin_sprint_sprinttemplates_id' => $templateId]);
+        if ($items) {
+            $points = 0;
+            foreach ($items as $row) {
+                $points += max(0, (int)($row['story_points'] ?? 0));
+            }
+            $lines[] = sprintf(_n('%d item', '%d items', count($items), 'sprint'), count($items))
+                . ' · ' . sprintf(_n('%d story point', '%d story points', $points, 'sprint'), $points);
+        }
+
+        $meetings = (new SprintTemplateMeeting())->find(['plugin_sprint_sprinttemplates_id' => $templateId], ['sort_order ASC']);
+        if ($meetings) {
+            $schedules = SprintTemplateMeeting::getAllScheduleTypes();
+            $parts = [];
+            foreach ($meetings as $row) {
+                $when = ($row['schedule_type'] ?? '') === SprintTemplateMeeting::SCHEDULE_INTERVAL
+                    ? sprintf(__('every %d days', 'sprint'), (int)$row['interval_days'])
+                    : mb_strtolower((string)($schedules[$row['schedule_type']] ?? $row['schedule_type']));
+                $parts[] = (string)$row['name'] . ' (' . $when . ')';
+            }
+            $lines[] = sprintf(_n('%d meeting schedule', '%d meeting schedules', count($meetings), 'sprint'), count($meetings))
+                . ': ' . implode(', ', $parts);
+        }
+
+        $leave = countElementsInTable(SprintTemplateAvailability::getTable(), ['plugin_sprint_sprinttemplates_id' => $templateId]);
+        if ($leave > 0) {
+            $lines[] = sprintf(_n('%d fixed weekly leave rule', '%d fixed weekly leave rules', $leave, 'sprint'), $leave);
+        }
+
+        $wip = array_filter([
+            (int)($fields['wip_in_progress'] ?? 0),
+            (int)($fields['wip_review'] ?? 0),
+            (int)($fields['wip_dependency'] ?? 0),
+        ]);
+        if ($wip) {
+            $lines[] = sprintf(
+                __('WIP limits: %1$d in progress / %2$d review / %3$d dependency', 'sprint'),
+                (int)($fields['wip_in_progress'] ?? 0),
+                (int)($fields['wip_review'] ?? 0),
+                (int)($fields['wip_dependency'] ?? 0)
+            ) . ((int)($fields['wip_hard'] ?? 0) === 1 ? ' (' . __('enforced', 'sprint') . ')' : '');
+        }
+        if ((float)($fields['fastlane_capacity'] ?? 0) > 0) {
+            $lines[] = sprintf(__('Fastlane cap: %s%%', 'sprint'), SprintMember::formatCapacity($fields['fastlane_capacity']));
+        }
+
+        return [
+            'members'  => count($members),
+            'items'    => count($items),
+            'meetings' => count($meetings),
+            'leave'    => $leave,
+            'lines'    => $lines,
+        ];
+    }
+
+    /** "This template adds ..." card below the template's main form. */
+    private function renderSummary(): void
+    {
+        $id = (int)$this->getID();
+        if ($id <= 0) {
+            return;
+        }
+        $summary = self::summarize($id, $this->fields);
+        $url     = static fn(string $tab) => self::getFormURLWithID($id) . '&forcetab=' . rawurlencode($tab . '$1');
+
+        echo "<div class='card mt-3 sprint-template-overview' style='max-width:1200px;margin:18px auto 0;'>";
+        echo "<div class='card-header'><h3 class='card-title m-0'><i class='fas fa-clipboard-check me-2' aria-hidden='true'></i>"
+            . __s('What this template adds to a new sprint', 'sprint') . "</h3></div>";
+        echo "<div class='card-body'>";
+        if ($summary['lines']) {
+            echo "<ul class='mb-2'>";
+            foreach ($summary['lines'] as $line) {
+                echo "<li>" . htmlescape($line) . "</li>";
+            }
+            echo "</ul>";
+        } else {
+            echo "<p class='text-muted mb-2'>" . __s('Nothing yet: add team members, items or meetings in the tabs above.', 'sprint') . "</p>";
+        }
+        echo "<div class='d-flex flex-wrap gap-2 sprint-small'>";
+        foreach ([
+            [SprintTemplateMember::class, __('Edit team', 'sprint'), 'fas fa-users'],
+            [SprintTemplateItem::class, __('Edit items', 'sprint'), 'fas fa-list-ul'],
+            [SprintTemplateMeeting::class, __('Edit meetings', 'sprint'), 'fas fa-calendar'],
+        ] as [$tab, $label, $icon]) {
+            echo "<a class='btn btn-sm btn-outline-secondary' href='" . htmlescape($url($tab)) . "'><i class='" . $icon . " me-1' aria-hidden='true'></i>" . htmlescape($label) . "</a>";
+        }
+        if (Sprint::canCreate()) {
+            echo "<a class='btn btn-sm btn-primary' href='" . htmlescape(Sprint::getFormURL() . '?' . http_build_query(['tab_params' => ['plugin_sprint_sprinttemplates_id' => $id]])) . "'>"
+                . "<i class='fas fa-plus me-1' aria-hidden='true'></i>" . __s('Create a sprint from this template', 'sprint') . "</a>";
+        }
+        echo "</div>";
+        echo "<div class='sprint-small text-muted mt-2'>" . __s('Values you type on the sprint form win over the template: name, goal and description are only filled in when left empty.', 'sprint') . "</div>";
+        echo "</div></div>";
     }
 
     /**

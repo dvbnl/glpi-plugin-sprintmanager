@@ -22,7 +22,7 @@ $limits   = json_decode((string)($_POST['limits'] ?? ''), true);
 $sprint = new GlpiPlugin\Sprint\Sprint();
 if ($sprintId <= 0 || !is_array($limits) || !$sprint->getFromDB($sprintId)
     || !Session::haveAccessToEntity($sprint->fields['entities_id'] ?? 0)) {
-    echo json_encode(['success' => false, 'message' => 'Invalid sprint or limits']);
+    echo json_encode(['success' => false, 'message' => __('Invalid sprint or limits', 'sprint')]);
     return;
 }
 

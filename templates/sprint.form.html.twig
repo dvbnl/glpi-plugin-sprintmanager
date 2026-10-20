@@ -3,7 +3,11 @@
 
 {% set no_header = no_header|default(true) %}
 
+{# Grouped as Basis / Planning / Advanced so a first setup reads top-down;
+   every field keeps its name, so the direct creation route is unchanged. #}
 {% block form_fields %}
+
+    {{ fields.largeTitle(__('Basics', 'sprint'), 'fas fa-flag', true) }}
 
     {{ fields.textField(
         'name',
@@ -16,21 +20,20 @@
     {{ fields.dropdownField(
         'GlpiPlugin\\Sprint\\SprintTemplate',
         'plugin_sprint_sprinttemplates_id',
-        0,
+        preselected_template|default(0),
         __('From template', 'sprint'),
         field_options|merge({
             'condition': {'is_active': 1},
             'on_change': 'sprintLoadTemplate(this.value)',
+            'helper': __('Optional. Shows what the template adds before you save. Fields you already filled in are kept.', 'sprint'),
         })
     ) }}
-    {% endif %}
 
-    {{ fields.numberField(
-        'sprint_number',
-        item.fields['sprint_number'],
-        __('Sprint number', 'sprint'),
-        field_options
-    ) }}
+    {# Filled by sprintLoadTemplate() in js/sprint.js after a template is picked. #}
+    <div class="col-12 mb-2 sprint-template-summary" hidden aria-live="polite"
+         data-preselect="{{ preselected_template|default(0) }}"
+         data-labels="{{ template_summary_labels|json_encode|e('html_attr') }}"></div>
+    {% endif %}
 
     {{ fields.dropdownArrayField(
         'status',
@@ -38,43 +41,6 @@
         statuses,
         __('Status'),
         field_options
-    ) }}
-
-    {{ fields.datetimeField(
-        'date_start',
-        item.fields['date_start'],
-        __('Start date', 'sprint'),
-        field_options
-    ) }}
-
-    {{ fields.datetimeField(
-        'date_end',
-        item.fields['date_end'],
-        __('End date', 'sprint'),
-        field_options
-    ) }}
-
-    {{ fields.dropdownNumberField(
-        'duration_weeks',
-        item.fields['duration_weeks'],
-        __('Duration (weeks)', 'sprint'),
-        field_options|merge({
-            'min': 1,
-            'max': 8,
-        })
-    ) }}
-
-    {{ fields.dropdownNumberField(
-        'fastlane_capacity',
-        item.fields['fastlane_capacity'],
-        __('Fastlane capacity cap (%)', 'sprint'),
-        field_options|merge({
-            'min': 0,
-            'max': 100,
-            'step': 0.5,
-            'unit': '%',
-            'helper': __('0 = no cap. Exceeding it shows as overflow on the fastlane', 'sprint'),
-        })
     ) }}
 
     {% if can_reassign_scrum_master|default(true) %}
@@ -107,11 +73,79 @@
         field_options
     ) }}
 
+    {{ fields.largeTitle(__('Planning', 'sprint'), 'fas fa-calendar-alt') }}
+
+    {{ fields.datetimeField(
+        'date_start',
+        item.fields['date_start'],
+        __('Start date', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.datetimeField(
+        'date_end',
+        item.fields['date_end'],
+        __('End date', 'sprint'),
+        field_options|merge({
+            'helper': is_new|default(false)
+                ? __('Leave empty to calculate it from the start date and the duration. A filled-in end date always takes precedence over the duration.', 'sprint')
+                : __('The end date is leading. Changing the duration afterwards does not move it.', 'sprint'),
+        })
+    ) }}
+
+    {{ fields.dropdownNumberField(
+        'duration_weeks',
+        item.fields['duration_weeks'],
+        __('Duration (weeks)', 'sprint'),
+        field_options|merge({
+            'min': 1,
+            'max': 8,
+        })
+    ) }}
+
+    {% if is_new|default(false) %}
+    {# Live explanation of which value wins; see sprint.js "sprint form" block. #}
+    <div class="col-12 mb-2 sprint-small text-muted sprint-enddate-hint" aria-live="polite"
+         data-calc="{{ __('End date will be calculated: %s (start date + %d weeks).', 'sprint')|e('html_attr') }}"
+         data-manual="{{ __('The end date you entered is used. The duration is not applied.', 'sprint')|e('html_attr') }}"
+         data-nostart="{{ __('Set a start date to calculate the end date from the duration.', 'sprint')|e('html_attr') }}"></div>
+    {% endif %}
+
+    {{ fields.numberField(
+        'sprint_number',
+        item.fields['sprint_number'],
+        __('Sprint number', 'sprint'),
+        field_options
+    ) }}
+
+    {{ fields.largeTitle(__('Advanced', 'sprint'), 'fas fa-sliders-h') }}
+
+    {% set advanced_open = (item.fields['fastlane_capacity']|default(0) > 0) or (item.fields['comment']|default('') is not empty) %}
+    <details class="col-12 sprint-form-advanced"{{ advanced_open ? ' open' : '' }}>
+        <summary>{{ __('Fastlane cap and description', 'sprint') }}</summary>
+        <div class="row flex-row mt-2">
+
+    {{ fields.dropdownNumberField(
+        'fastlane_capacity',
+        item.fields['fastlane_capacity'],
+        __('Fastlane capacity cap (%)', 'sprint'),
+        field_options|merge({
+            'min': 0,
+            'max': 100,
+            'step': 0.5,
+            'unit': '%',
+            'helper': __('0 = no cap. Exceeding it shows as overflow on the fastlane', 'sprint'),
+        })
+    ) }}
+
     {{ fields.textareaField(
         'comment',
         item.fields['comment'],
         __('Description', 'sprint'),
         field_options
     ) }}
+
+        </div>
+    </details>
 
 {% endblock %}

@@ -242,7 +242,7 @@ class Sprint extends CommonDBTM
     {
         $criteria = [
             'status' => [self::STATUS_PLANNED, self::STATUS_ACTIVE],
-        ];
+        ] + getEntitiesRestrictCriteria(self::getTable(), '', '', true);
         if ($excludeSprintId > 0) {
             $criteria[] = ['NOT' => ['id' => $excludeSprintId]];
         }
@@ -429,14 +429,22 @@ class Sprint extends CommonDBTM
         }
 
         echo "<div class='sprint-header-right'>";
-        echo "<div class='sprint-header-progress' title='" . sprintf(__('%1$d of %2$d items done', 'sprint'), $done, $total) . "'>";
-        echo "<div class='sprint-header-progress-bar'><span style='width:{$pct}%;'></span></div>";
-        echo "<span class='sprint-header-progress-label'>{$done}/{$total} · {$pct}%</span>";
+        // Counts items, not capacity or points: the unit is spelled out so it
+        // does not clash with the dashboard's capacity-weighted bar.
+        $progressText = sprintf(__('Items done: %1$d/%2$d', 'sprint'), $done, $total) . ' · ' . $pct . '%';
+        echo "<div class='sprint-header-progress' title='" . htmlescape(sprintf(__('%1$d of %2$d items done', 'sprint'), $done, $total)) . "'>";
+        echo "<div class='sprint-header-progress-bar' role='progressbar' aria-valuemin='0' aria-valuemax='100' aria-valuenow='{$pct}' "
+            . "aria-label='" . htmlescape($progressText) . "'><span style='width:{$pct}%;'></span></div>";
+        echo "<span class='sprint-header-progress-label'>" . htmlescape($progressText) . "</span>";
         echo "</div>";
 
-        // Sprint switcher — planned/active sprints plus the current one.
+        // Sprint switcher — planned/active sprints of the session's entities
+        // plus the current one.
         $model = new self();
-        $rows  = $model->find(['status' => [self::STATUS_PLANNED, self::STATUS_ACTIVE]]);
+        $rows  = $model->find(
+            ['status' => [self::STATUS_PLANNED, self::STATUS_ACTIVE]]
+            + getEntitiesRestrictCriteria(self::getTable(), '', '', true)
+        );
         $haveCurrent = false;
         foreach ($rows as $r) {
             if ((int)$r['id'] === $id) { $haveCurrent = true; break; }
@@ -450,7 +458,7 @@ class Sprint extends CommonDBTM
         echo "<select class='form-select form-select-sm sprint-switcher' "
             . "data-base-url='" . htmlescape(self::getFormURL()) . "' "
             . "data-forcetab='" . htmlescape($activeTab) . "' "
-            . "title='" . __('Switch sprint', 'sprint') . "' style='max-width:240px;'>";
+            . "title='" . __s('Switch sprint', 'sprint') . "' aria-label='" . __s('Switch sprint', 'sprint') . "' style='max-width:240px;'>";
         foreach ($rows as $r) {
             $rid = (int)$r['id'];
             $sel = $rid === $id ? ' selected' : '';
@@ -611,6 +619,25 @@ class Sprint extends CommonDBTM
         $this->initForm($ID, $options);
         $isNew = !$this->getID() || $this->isNewItem();
 
+        // Setup checklist (team, backlog, meetings) right on the General tab,
+        // where GLPI lands after creating a sprint.
+        if (!$isNew) {
+            SprintDashboard::renderNextSteps($this);
+        }
+
+        // "Create a sprint from this template" deeplink preselects the template.
+        // Arrives as a tab option (?tab_params[...]=id, see SprintTemplate::renderSummary()).
+        $preselectedTemplate = 0;
+        $requestedTemplate   = (int)($options['plugin_sprint_sprinttemplates_id'] ?? $_GET['plugin_sprint_sprinttemplates_id'] ?? 0);
+        if ($isNew && $requestedTemplate > 0) {
+            $tpl = new SprintTemplate();
+            if ($tpl->getFromDB($requestedTemplate)
+                && (int)($tpl->fields['is_active'] ?? 0) === 1
+                && Session::haveAccessToEntity((int)($tpl->fields['entities_id'] ?? 0), (bool)($tpl->fields['is_recursive'] ?? false))) {
+                $preselectedTemplate = (int)$tpl->getID();
+            }
+        }
+
         if (class_exists('Glpi\Application\View\TemplateRenderer')) {
             $memberOptions = [];
             if (!$isNew && $this->getID()) {
@@ -637,6 +664,8 @@ class Sprint extends CommonDBTM
                     'is_new'                   => $isNew,
                     'member_options'           => $memberOptions,
                     'can_reassign_scrum_master' => $canReassignScrumMaster,
+                    'preselected_template'     => $preselectedTemplate,
+                    'template_summary_labels'  => self::templateSummaryLabels(),
                 ]
             );
 
@@ -657,10 +686,13 @@ class Sprint extends CommonDBTM
                 echo "<td colspan='3'>";
                 SprintTemplate::dropdown([
                     'name'      => 'plugin_sprint_sprinttemplates_id',
-                    'value'     => 0,
+                    'value'     => $preselectedTemplate,
                     'condition' => ['is_active' => 1],
                     'on_change' => 'sprintLoadTemplate(this.value)',
                 ]);
+                echo "<div class='sprint-template-summary mt-2' hidden aria-live='polite'"
+                    . " data-preselect='" . $preselectedTemplate . "'"
+                    . " data-labels='" . htmlescape(json_encode(self::templateSummaryLabels())) . "'></div>";
                 echo "</td></tr>";
             }
 
@@ -700,6 +732,9 @@ class Sprint extends CommonDBTM
             echo "<td>" . __('End date', 'sprint') . "</td>";
             echo "<td>";
             Html::showDateTimeField('date_end', ['value' => $this->fields['date_end'] ?? '']);
+            echo "<div class='text-muted' style='font-size:0.82em;'>" . htmlescape($isNew
+                ? __('Leave empty to calculate it from the start date and the duration. A filled-in end date always takes precedence over the duration.', 'sprint')
+                : __('The end date is leading. Changing the duration afterwards does not move it.', 'sprint')) . "</div>";
             echo "</td></tr>";
 
             echo "<tr class='tab_bg_1'>";
@@ -737,13 +772,41 @@ class Sprint extends CommonDBTM
         return true;
     }
 
+    /** Strings for the template summary rendered by sprintLoadTemplate() (js/sprint.js). */
+    private static function templateSummaryLabels(): array
+    {
+        return [
+            'title'  => __('This template adds', 'sprint'),
+            'empty'  => __('This template only sets defaults. It adds no team, items or meetings.', 'sprint'),
+            'filled' => __('Filled in from the template: %s', 'sprint'),
+            'kept'   => __('Kept your own value: %s', 'sprint'),
+            'error'  => __('The template could not be loaded.', 'sprint'),
+            'fields' => [
+                'name'           => __('Name'),
+                'goal'           => __('Sprint goal', 'sprint'),
+                'comment'        => __('Description', 'sprint'),
+                'duration_weeks' => __('Duration (weeks)', 'sprint'),
+            ],
+        ];
+    }
+
     /**
      * Scrum-Master-only permanent delete, rendered below the General form.
      */
     private function renderDangerZone(): void
     {
-        $id      = (int)$this->getID();
-        $confirm = __('This permanently removes the sprint and all its items, members, meetings and audit history. This cannot be undone. Continue?', 'sprint');
+        $id   = (int)$this->getID();
+        $name = (string)($this->fields['name'] ?? '');
+        $rand = mt_rand();
+        // What goes with it, counted, so the confirmation names the real cost.
+        $count = static fn(string $table) => countElementsInTable($table, ['plugin_sprint_sprints_id' => $id]);
+        $consequences = [
+            sprintf(_n('%d sprint item', '%d sprint items', $n = $count(SprintItem::getTable()), 'sprint'), $n),
+            sprintf(_n('%d team member', '%d team members', $n = $count(SprintMember::getTable()), 'sprint'), $n),
+            sprintf(_n('%d meeting with its notes', '%d meetings with their notes', $n = $count(SprintMeeting::getTable()), 'sprint'), $n),
+            __('the audit history of the sprint', 'sprint'),
+            __('the credits its items claimed: customer balances are recalculated without them', 'sprint'),
+        ];
 
         echo "<div class='card mt-3' style='max-width:1200px;margin:18px auto 0;border-color:#dc3545;'>";
         echo "<div class='card-header' style='background:color-mix(in srgb,#dc3545 14%,var(--tblr-bg-surface,#fff));color:var(--tblr-danger,#b02a37);'>"
@@ -754,15 +817,35 @@ class Sprint extends CommonDBTM
         echo "<p class='mb-3 sprint-small text-muted'>"
             . htmlescape(__('Permanent deletion is restricted to the Scrum Master and bypasses the trash. Use this only when the sprint should leave no trace.', 'sprint'))
             . "</p>";
-        echo "<form method='post' action='" . htmlescape(self::getFormURL()) . "'>";
+        echo "<p class='mb-1 sprint-small fw-bold'>" . htmlescape(sprintf(
+            __('Deleting "%s" permanently removes, without undo:', 'sprint'),
+            $name
+        )) . "</p>";
+        echo "<ul class='sprint-small mb-3'>";
+        foreach ($consequences as $line) {
+            echo "<li>" . htmlescape($line) . "</li>";
+        }
+        echo "</ul>";
+        // No browser dialog: typing the name arms the button.
+        echo "<form method='post' action='" . htmlescape(self::getFormURL()) . "' class='sprint-danger-form' data-sprint-name='" . htmlescape($name) . "'>";
         echo Html::hidden('id', ['value' => $id]);
         echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
-        echo "<button type='submit' name='purge' value='1' class='btn btn-danger' "
-            . "data-sprint-confirm='" . htmlescape($confirm) . "'>"
-            . "<i class='fas fa-trash me-1'></i>"
-            . htmlescape(__('Permanently delete sprint', 'sprint'))
+        echo "<label class='form-label sprint-small' for='sprint-danger-name-{$rand}'>"
+            . htmlescape(sprintf(__('Type the sprint name "%s" to confirm', 'sprint'), $name)) . "</label>";
+        echo "<div class='d-flex flex-wrap gap-2 align-items-center'>";
+        echo "<input type='text' class='form-control sprint-danger-name' id='sprint-danger-name-{$rand}' autocomplete='off' style='max-width:320px;'>";
+        echo "<button type='submit' name='purge' value='1' class='btn btn-danger sprint-danger-submit' disabled>"
+            . "<i class='fas fa-trash me-1' aria-hidden='true'></i>"
+            . htmlescape(sprintf(__('Permanently delete "%s"', 'sprint'), $name))
             . "</button>";
+        echo "</div>";
         echo "</form>";
+        echo "<script>(function(){var forms=document.querySelectorAll('form.sprint-danger-form');"
+            . "forms.forEach(function(f){if(f.__sprintBound){return;}f.__sprintBound=true;"
+            . "var i=f.querySelector('.sprint-danger-name'),b=f.querySelector('.sprint-danger-submit');"
+            . "var ok=function(){return i.value.trim()===f.getAttribute('data-sprint-name').trim();};"
+            . "i.addEventListener('input',function(){b.disabled=!ok();});"
+            . "f.addEventListener('submit',function(e){if(!ok()){e.preventDefault();i.focus();}});});})();</script>";
         echo "</div></div>";
     }
 
@@ -908,6 +991,13 @@ class Sprint extends CommonDBTM
             SprintTemplate::applyToSprint($templateId, $this->getID());
         }
         SprintAgility::carryImprovementsToSprint($this);
+
+        // Point at the setup checklist shown on the General and Dashboard tabs.
+        Session::addMessageAfterRedirect(
+            __('Sprint created. Next steps: add the team, plan items from the backlog and schedule the meetings — see the checklist below.', 'sprint'),
+            false,
+            INFO
+        );
     }
 
 }

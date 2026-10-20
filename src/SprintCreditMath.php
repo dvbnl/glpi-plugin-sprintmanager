@@ -335,4 +335,79 @@ final class SprintCreditMath
             'wallet_needed' => self::round2($needed),
         ];
     }
+
+    // =========================================================================
+    // Explaining a balance
+    // =========================================================================
+
+    /**
+     * How a customer's wallet arrives at "left" and "free to plan", as the
+     * ordered steps the Credits page shows in its worked example. It follows
+     * wallet(): balance = bought − corrections − drawn − lapsed, and free =
+     * balance − what open work still needs beyond the grants. `consistent`
+     * is false when the stored balance does not match the steps (a draw the
+     * lots could not cover), so the screen can say so instead of showing a
+     * sum that does not add up.
+     *
+     * @param array $b one row of SprintCustomer::balances()
+     * @return array{
+     *   steps: list<array{key: string, sign: string, value: float}>,
+     *   left: float, reserved: float, free: float, consistent: bool
+     * }
+     */
+    public static function walletSteps(array $b): array
+    {
+        $bought      = self::round2($b['purchased'] ?? 0);
+        $corrections = self::round2($b['corrections'] ?? 0);
+        $drawn       = self::round2($b['overflow'] ?? 0);
+        $lapsed      = self::round2($b['purchase_lapsed'] ?? 0);
+        $reserved    = self::round2($b['wallet_reserved'] ?? 0);
+        $left        = self::round2($b['wallet_balance'] ?? ($bought - $corrections - $drawn - $lapsed));
+
+        $steps = [['key' => 'bought', 'sign' => '', 'value' => $bought]];
+        foreach (['corrections' => $corrections, 'drawn' => $drawn, 'lapsed' => $lapsed] as $key => $value) {
+            if ($value > 0) {
+                $steps[] = ['key' => $key, 'sign' => '-', 'value' => $value];
+            }
+        }
+        $sum = self::round2($bought - $corrections - $drawn - $lapsed);
+
+        return [
+            'steps'      => $steps,
+            'left'       => $left,
+            'reserved'   => $reserved,
+            'free'       => self::round2($left - $reserved),
+            'consistent' => abs($sum - $left) < 0.005,
+        ];
+    }
+
+    /**
+     * The one signal a customer row raises, most urgent first:
+     * 'overdrawn' (the wallet is below zero), 'short' (open work needs more
+     * than the wallet holds), 'low' (free credits under the alert level),
+     * 'over_cap' (an upcoming sprint claims past its cap), 'lapse' (agreed
+     * volume in upcoming sprints is still unbooked), or '' for none.
+     */
+    public static function attention(array $b, bool $overCap = false, float $willLapse = 0.0): string
+    {
+        $left  = (float)($b['wallet_balance'] ?? 0);
+        $free  = (float)($b['available'] ?? $left);
+        $alert = (float)($b['alert'] ?? 0);
+        if ($left < 0) {
+            return 'overdrawn';
+        }
+        if ($free < 0) {
+            return 'short';
+        }
+        if ($alert > 0 && $free < $alert) {
+            return 'low';
+        }
+        if ($overCap) {
+            return 'over_cap';
+        }
+        if ($willLapse > 0) {
+            return 'lapse';
+        }
+        return '';
+    }
 }

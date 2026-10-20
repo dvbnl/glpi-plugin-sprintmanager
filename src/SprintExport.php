@@ -73,7 +73,17 @@ class SprintExport extends CommonGLPI
                 . "</a>";
         }
         echo "</div>";
-        echo "<div style='display:flex;gap:8px;'>";
+        echo "<div style='display:flex;gap:8px;flex-wrap:wrap;align-items:center;'>";
+        // Report presets: what the page (and so the print / PDF) contains.
+        echo "<div class='btn-group btn-group-sm sprint-export-presets' role='group' aria-label='" . __s('Report content', 'sprint') . "'>";
+        echo "<input type='radio' class='btn-check' name='sprint-export-view' id='sprint-export-view-full' value='full' checked>"
+            . "<label class='btn btn-outline-secondary' for='sprint-export-view-full'>"
+            . "<i class='fas fa-file-lines me-1' aria-hidden='true'></i>" . __('Full sprint report', 'sprint') . "</label>";
+        echo "<input type='radio' class='btn-check' name='sprint-export-view' id='sprint-export-view-summary' value='summary'>"
+            . "<label class='btn btn-outline-secondary' for='sprint-export-view-summary' "
+            . "title='" . __s('Summary, burndown, velocity and workload per member — no item lists', 'sprint') . "'>"
+            . "<i class='fas fa-briefcase me-1' aria-hidden='true'></i>" . __('Management summary', 'sprint') . "</label>";
+        echo "</div>";
         echo "<button type='button' class='btn btn-outline-success sprint-csv-open'>"
             . "<i class='fas fa-file-csv me-1'></i>" . __('Download CSV', 'sprint')
             . "</button>";
@@ -86,14 +96,23 @@ class SprintExport extends CommonGLPI
         echo "<div class='sprint-export-page'>";
 
         self::renderHeader($sprint);
-        self::renderSummary($sprintId);
-        self::renderBurndown($sprint);
-        self::renderVelocity($sprint);
-        self::renderMemberWorkload($sprintId);
-        self::renderFastlane($sprintId);
-        self::renderDependencies($sprintId);
-        self::renderTeamActivity($sprintId);
-        self::renderItemsBreakdown($sprintId);
+        // Each block is marked for the presets: the management summary keeps
+        // the overview blocks and leaves out the detail lists.
+        $blocks = [
+            'summary'    => [false, static fn() => self::renderSummary($sprintId)],
+            'burndown'   => [false, static fn() => self::renderBurndown($sprint)],
+            'velocity'   => [false, static fn() => self::renderVelocity($sprint)],
+            'workload'   => [false, static fn() => self::renderMemberWorkload($sprintId)],
+            'fastlane'   => [true, static fn() => self::renderFastlane($sprintId)],
+            'deps'       => [true, static fn() => self::renderDependencies($sprintId)],
+            'activity'   => [true, static fn() => self::renderTeamActivity($sprintId)],
+            'items'      => [true, static fn() => self::renderItemsBreakdown($sprintId)],
+        ];
+        foreach ($blocks as $key => [$detail, $renderBlock]) {
+            echo "<div class='sprint-export-block' data-export-block='{$key}'" . ($detail ? " data-export-detail='1'" : '') . ">";
+            $renderBlock();
+            echo "</div>";
+        }
 
         echo "<div class='sprint-export-footer' style='margin-top:32px;padding-top:12px;border-top:1px solid #dee2e6;font-size:0.78em;color:#6c757d;text-align:center;'>"
             . sprintf(__('Generated on %s', 'sprint'), Html::convDateTime(date('Y-m-d H:i:s')))
@@ -477,6 +496,12 @@ class SprintExport extends CommonGLPI
         return $stats;
     }
 
+    /**
+     * Workload per member on the shared capacity model: the same Set,
+     * Available, Planned (regular + fastlane + helping) and Remaining as the
+     * dashboard and team cards, overload shown instead of clipped to 0, and
+     * the same bar. The print layout differs, the data does not.
+     */
     private static function renderMemberWorkload(int $sprintId): void
     {
         $member  = new SprintMember();
@@ -491,58 +516,53 @@ class SprintExport extends CommonGLPI
             return;
         }
 
-        $roles = SprintMember::getAllRoles();
-        $si    = new SprintItem();
+        $roles      = SprintMember::getAllRoles();
+        $sprintName = (string)(SprintCache::getObject(Sprint::class, $sprintId)?->fields['name'] ?? '');
+        $pct        = static fn(float $v): string => SprintMember::formatCapacity($v) . '%';
+        $th = static fn(string $label, string $align = 'right', string $extra = ''): string =>
+            "<th style='text-align:{$align};padding:8px;border-bottom:1px solid #dee2e6;{$extra}'>" . $label . "</th>";
 
         echo "<table style='width:100%;border-collapse:collapse;font-size:0.9em;'>";
         echo "<thead><tr style='background:#f1f3f5;'>";
-        echo "<th style='text-align:left;padding:8px;border-bottom:1px solid #dee2e6;'>" . __('Member', 'sprint') . "</th>";
-        echo "<th style='text-align:left;padding:8px;border-bottom:1px solid #dee2e6;'>" . __('Role', 'sprint') . "</th>";
-        echo "<th style='text-align:right;padding:8px;border-bottom:1px solid #dee2e6;'>" . __('Capacity', 'sprint') . "</th>";
-        echo "<th style='text-align:right;padding:8px;border-bottom:1px solid #dee2e6;'>" . __('Regular', 'sprint') . "</th>";
-        echo "<th style='text-align:right;padding:8px;border-bottom:1px solid #dee2e6;'>" . __('Fastlane', 'sprint') . "</th>";
-        echo "<th style='text-align:right;padding:8px;border-bottom:1px solid #dee2e6;'>" . __('Used', 'sprint') . "</th>";
-        echo "<th style='text-align:right;padding:8px;border-bottom:1px solid #dee2e6;'>" . __('Free', 'sprint') . "</th>";
-        echo "<th style='padding:8px;border-bottom:1px solid #dee2e6;width:160px;'>" . __('Distribution', 'sprint') . "</th>";
+        echo $th(__s('Member', 'sprint'), 'left');
+        echo $th(__s('Role', 'sprint'), 'left');
+        echo $th(__s('Set', 'sprint'));
+        echo $th(__s('Available', 'sprint'));
+        echo $th(__s('Regular', 'sprint'));
+        echo $th(__s('Fastlane', 'sprint'));
+        echo $th(__s('Helping', 'sprint'));
+        echo $th(__s('Planned', 'sprint'));
+        echo $th(__s('Remaining', 'sprint'));
+        echo $th(__s('Distribution', 'sprint'), 'left', 'width:160px;');
         echo "</tr></thead><tbody>";
 
-        $usedBySprint = SprintMember::usedCapacityBySprint($sprintId);
         foreach ($members as $row) {
             $userId   = (int)$row['users_id'];
-            // Effective capacity (availability exceptions applied), matching the dashboard.
-            $totalCap = SprintAgility::effectiveCapacity(
-                $sprintId,
-                $userId,
-                SprintMember::normalizeCapacity($row['capacity_percent'])
-            );
+            $userName = SprintCache::userName($userId);
+            $f        = SprintMember::figuresForMember($sprintId, $row);
             $roleName = $roles[$row['role']] ?? $row['role'];
-
-            $regularUsed  = (float)($usedBySprint[$userId]['regular'] ?? 0.0);
-            $fastlaneUsed = (float)($usedBySprint[$userId]['fastlane'] ?? 0.0);
-            $used         = $regularUsed + $fastlaneUsed;
-            $free         = max($totalCap - $used, 0);
-            $regWidth     = $totalCap > 0 ? min(round(($regularUsed / $totalCap) * 100), 100) : 0;
-            $fastWidth    = $totalCap > 0 ? min(round(($fastlaneUsed / $totalCap) * 100), 100 - $regWidth) : 0;
-            $regBg        = $used >= $totalCap ? '#dc3545' : ($used >= ($totalCap * 0.8) ? '#e67e22' : '#198754');
+            $td       = "padding:6px 8px;text-align:right;";
 
             echo "<tr style='border-bottom:1px solid #e9ecef;'>";
-            echo "<td style='padding:6px 8px;'>" . htmlescape(SprintCache::userName($userId)) . "</td>";
+            echo "<td style='padding:6px 8px;'>" . htmlescape($userName) . "</td>";
             echo "<td style='padding:6px 8px;color:#6c757d;'>" . htmlescape((string)$roleName) . "</td>";
-            echo "<td style='padding:6px 8px;text-align:right;'>{$totalCap}%</td>";
-            echo "<td style='padding:6px 8px;text-align:right;'>{$regularUsed}%</td>";
-            echo "<td style='padding:6px 8px;text-align:right;color:" . ($fastlaneUsed > 0 ? '#fd7e14' : '#6c757d') . ";'>{$fastlaneUsed}%</td>";
-            echo "<td style='padding:6px 8px;text-align:right;font-weight:600;'>{$used}%</td>";
-            echo "<td style='padding:6px 8px;text-align:right;color:#6c757d;'>{$free}%</td>";
-            echo "<td style='padding:6px 8px;'>";
-            echo "<div style='display:flex;height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;'>";
-            if ($regWidth > 0)  { echo "<div style='width:{$regWidth}%;height:100%;background:{$regBg};'></div>"; }
-            if ($fastWidth > 0) { echo "<div style='width:{$fastWidth}%;height:100%;background:#fd7e14;'></div>"; }
-            echo "</div>";
-            echo "</td>";
+            echo "<td style='{$td}'>" . $pct($f['set']) . "</td>";
+            echo "<td style='{$td}'>" . $pct($f['available'])
+                . ($f['leave'] > 0 ? "<div style='font-size:0.8em;color:#6c757d;'>" . htmlescape(sprintf(__('%s not available', 'sprint'), $pct($f['leave']))) . "</div>" : '')
+                . "</td>";
+            echo "<td style='{$td}'>" . $pct($f['regular']) . "</td>";
+            echo "<td style='{$td}'>" . $pct($f['fastlane']) . "</td>";
+            echo "<td style='{$td}'>" . $pct($f['helping']) . "</td>";
+            echo "<td style='{$td}font-weight:600;'>" . $pct($f['planned']) . "</td>";
+            echo "<td style='{$td}'>" . SprintMember::renderRemainingCell($f) . "</td>";
+            echo "<td style='padding:6px 8px;'>"
+                . SprintMember::renderFiguresBar($f, SprintMember::capacityDescription($f, $userName, $sprintName))
+                . "</td>";
             echo "</tr>";
         }
 
         echo "</tbody></table>";
+        echo "<div style='margin-top:6px;font-size:0.82em;'>" . SprintMember::renderCapacityLegend() . "</div>";
     }
 
     /**
@@ -995,15 +1015,47 @@ class SprintExport extends CommonGLPI
         $baseUrl    = self::getExportURL($sprintId);
         $categories = SprintCategory::getAll(false);
 
-        echo "<div class='modal fade sprint-csv-modal' id='sprint-csv-modal' tabindex='-1' aria-hidden='true'>";
+        echo "<div class='modal fade sprint-csv-modal' id='sprint-csv-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-csv-modal-title'>";
         echo "<div class='modal-dialog modal-dialog-centered modal-lg'>";
         echo "<div class='modal-content'>";
         echo "<div class='modal-header'>";
-        echo "<h5 class='modal-title'><i class='fas fa-file-csv me-1'></i>" . __('Download CSV', 'sprint') . "</h5>";
-        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>";
+        echo "<h5 class='modal-title' id='sprint-csv-modal-title'><i class='fas fa-file-csv me-1' aria-hidden='true'></i>" . __('Download CSV', 'sprint') . "</h5>";
+        echo "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='" . __s('Close') . "'></button>";
         echo "</div>";
         echo self::csvDialogStyles();
         echo "<div class='modal-body sprint-csv-body'>";
+
+        // Presets tick a known-good selection; every box stays editable after.
+        $sections = array_keys(self::getCsvSections());
+        $columns  = array_keys(self::getCsvColumns());
+        $presets  = [
+            'summary' => [
+                __('Management summary', 'sprint'),
+                __('Totals per category, workload per member and, with the credits right, credits per customer.', 'sprint'),
+                ['sections' => array_values(array_intersect($sections, ['categories', 'members', 'credits'])), 'cols' => [], 'split' => false],
+            ],
+            'full' => [
+                __('Full sprint report', 'sprint'),
+                __('Every section and every column, items split per category.', 'sprint'),
+                ['sections' => $sections, 'cols' => $columns, 'split' => true],
+            ],
+            'default' => [
+                __('Default selection', 'sprint'),
+                __('The items with the usual columns, and the dependencies.', 'sprint'),
+                ['sections' => self::CSV_DEFAULT_SECTIONS, 'cols' => self::CSV_DEFAULT_COLUMNS, 'split' => false],
+            ],
+        ];
+        echo "<section class='sprint-csv-group sprint-csv-presets' aria-labelledby='sprint-csv-presets-head'>";
+        echo "<h6 class='sprint-csv-head' id='sprint-csv-presets-head'>" . htmlescape(__('Presets', 'sprint')) . "</h6>";
+        echo "<div class='d-flex flex-wrap gap-2'>";
+        foreach ($presets as $key => [$label, $help, $config]) {
+            echo "<button type='button' class='btn btn-sm btn-outline-primary sprint-csv-preset' data-preset='"
+                . htmlescape(json_encode($config)) . "' title='" . htmlescape($help) . "'>"
+                . htmlescape($label) . "</button>";
+        }
+        echo "</div>";
+        echo "<div class='text-muted sprint-small mt-1 sprint-csv-preset-note' aria-live='polite'></div>";
+        echo "</section>";
 
         // Wide dialogs: sections left, item columns right.
         echo "<div class='sprint-csv-cols'>";
@@ -1060,7 +1112,7 @@ class SprintExport extends CommonGLPI
         echo "</label>";
         echo "</section>";
 
-        echo "<div class='alert alert-warning py-2 sprint-small sprint-csv-error' style='display:none;'></div>";
+        echo "<div class='alert alert-warning py-2 sprint-small sprint-csv-error' role='alert' style='display:none;'></div>";
         echo "</div>"; // modal-body
 
         echo "<div class='modal-footer'>";
@@ -1070,7 +1122,7 @@ class SprintExport extends CommonGLPI
         echo "</div>";
         echo "</div></div></div>";
 
-        $errNothing = addslashes(__('Pick at least one section and one column.', 'sprint'));
+        $errNothing = addslashes(__('Pick at least one section, and one column when the items are included.', 'sprint'));
         $errNoCats  = addslashes(__('Pick at least one category.', 'sprint'));
         $baseUrlJs  = addslashes($baseUrl);
 
@@ -1112,6 +1164,26 @@ class SprintExport extends CommonGLPI
     });
     jQuery(document).on('click', '.sprint-csv-toggle-cats', function(){
         toggleGroup(modal().find('.sprint-csv-cat'));
+    });
+
+    // A preset ticks its sections and columns; categories stay as they are.
+    jQuery(document).on('click', '.sprint-csv-preset', function(){
+        var \$m = modal();
+        var cfg = {};
+        try { cfg = JSON.parse(this.getAttribute('data-preset') || '{}'); } catch (e) { return; }
+        \$m.find('.sprint-csv-section').each(function(){ this.checked = (cfg.sections || []).indexOf(this.value) !== -1; });
+        \$m.find('.sprint-csv-col').each(function(){ this.checked = (cfg.cols || []).indexOf(this.value) !== -1; });
+        \$m.find('#sprint-csv-split').prop('checked', !!cfg.split);
+        \$m.find('.sprint-csv-preset').removeClass('active').attr('aria-pressed', 'false');
+        jQuery(this).addClass('active').attr('aria-pressed', 'true');
+        \$m.find('.sprint-csv-preset-note').text(this.getAttribute('title') || '');
+        \$m.find('.sprint-csv-error').hide().text('');
+    });
+
+    // Report presets on the page itself: hide the detail blocks for the summary.
+    jQuery(document).on('change', 'input[name="sprint-export-view"]', function(){
+        var summary = this.value === 'summary' && this.checked;
+        jQuery('.sprint-export-page').toggleClass('sprint-export-summary', summary);
     });
 
     jQuery(document).on('click', '.sprint-csv-download', function(){
@@ -1410,13 +1482,24 @@ HTML;
 
     /**
      * One CSV line. Explicit escape arg ('') keeps output RFC-compliant and
-     * silences the PHP 8.4+ escape-default deprecation.
+     * silences the PHP 8.4+ escape-default deprecation. Text cells that a
+     * spreadsheet would evaluate as a formula (=, +, -, @, tab, CR) get a
+     * leading quote: names and ticket titles come from any requester.
      *
      * @param resource $out
      */
     private static function csvRow($out, array $fields): void
     {
-        fputcsv($out, $fields, ',', '"', '');
+        fputcsv($out, array_map([self::class, 'csvCell'], $fields), ',', '"', '');
+    }
+
+    /** Neutralize spreadsheet formula triggers; numbers pass unchanged. */
+    public static function csvCell($value)
+    {
+        if (!is_string($value) || $value === '' || is_numeric($value)) {
+            return $value;
+        }
+        return strpbrk($value[0], "=+-@\t\r") !== false ? "'" . $value : $value;
     }
 
     /**
@@ -1659,7 +1742,7 @@ HTML;
         }
 
         self::csvRow($out, [__('Credits per customer', 'sprint')]);
-        self::csvRow($out, [__('"Delivered" and "open" follow the exported items (filters apply); the sprint agreement and the customer totals do not.', 'sprint')]);
+        self::csvRow($out, [__('"Delivered" and "open" follow the exported items (filters apply). The sprint agreement and the customer totals do not.', 'sprint')]);
         self::csvRow($out, [
             SprintCustomer::getTypeName(1),
             __('Agreed this sprint', 'sprint'),
@@ -1788,8 +1871,9 @@ HTML;
     }
 
     /**
-     * Capacity per sprint member: what they can take, what is planned on them
-     * and what it really took. Mirrors the workload table in the HTML report.
+     * Capacity per sprint member on the shared model, the same figures as the
+     * workload table in the HTML report and the dashboard. Remaining is
+     * negative when the member is over capacity (never clipped to 0).
      *
      * @param resource $out
      */
@@ -1799,38 +1883,42 @@ HTML;
         self::csvRow($out, [
             __('Member', 'sprint'),
             __('Role', 'sprint'),
-            __('Capacity', 'sprint') . ' %',
-            __('Planned capacity', 'sprint') . ' %',
+            __('Set', 'sprint') . ' %',
+            __('Not available', 'sprint') . ' %',
+            __('Available', 'sprint') . ' %',
+            __('Regular', 'sprint') . ' %',
             __('Fastlane', 'sprint') . ' %',
-            __('Used', 'sprint') . ' %',
-            __('Free', 'sprint') . ' %',
+            __('Helping', 'sprint') . ' %',
+            __('Planned', 'sprint') . ' %',
+            __('Remaining', 'sprint') . ' %',
+            __('Status'),
         ]);
 
-        $roles        = SprintMember::getAllRoles();
-        $usedBySprint = SprintMember::usedCapacityBySprint($sprintId);
+        $roles  = SprintMember::getAllRoles();
+        $states = [
+            SprintCapacityMath::STATE_NONE        => __('Not available in this sprint', 'sprint'),
+            SprintCapacityMath::STATE_NORMAL      => '',
+            SprintCapacityMath::STATE_ALMOST_FULL => __('Almost full', 'sprint'),
+            SprintCapacityMath::STATE_FULL        => __('Full', 'sprint'),
+            SprintCapacityMath::STATE_OVER        => __('Over capacity', 'sprint'),
+        ];
 
         foreach ((new SprintMember())->find(['plugin_sprint_sprints_id' => $sprintId], ['role ASC']) as $row) {
             $userId = (int)$row['users_id'];
-            // Effective capacity (availability exceptions applied), matching
-            // the dashboard and the HTML report.
-            $totalCap = SprintAgility::effectiveCapacity(
-                $sprintId,
-                $userId,
-                SprintMember::normalizeCapacity($row['capacity_percent'])
-            );
-
-            $planned  = (float)($usedBySprint[$userId]['regular'] ?? 0.0);
-            $fastlane = (float)($usedBySprint[$userId]['fastlane'] ?? 0.0);
-            $used     = $planned + $fastlane;
+            $f      = SprintMember::figuresForMember($sprintId, $row);
 
             self::csvRow($out, [
                 SprintCache::userName($userId),
                 (string)($roles[$row['role']] ?? $row['role']),
-                SprintMember::formatCapacity($totalCap),
-                SprintMember::formatCapacity($planned),
-                SprintMember::formatCapacity($fastlane),
-                SprintMember::formatCapacity($used),
-                SprintMember::formatCapacity(max($totalCap - $used, 0)),
+                SprintMember::formatCapacity($f['set']),
+                SprintMember::formatCapacity($f['leave']),
+                SprintMember::formatCapacity($f['available']),
+                SprintMember::formatCapacity($f['regular']),
+                SprintMember::formatCapacity($f['fastlane']),
+                SprintMember::formatCapacity($f['helping']),
+                SprintMember::formatCapacity($f['planned']),
+                SprintMember::formatCapacity($f['balance']),
+                $states[$f['state']] ?? '',
             ]);
         }
     }
@@ -1918,7 +2006,8 @@ HTML;
             [aria-label*=\"notification\" i], [title*=\"notification\" i],
             .nav-tabs, .nav.nav-tabs, ul.nav-tabs, .nav-tabs-container,
             .tab-content > .nav, .glpi-form-tabs, .tabs-bg,
-            .sprint-export-toolbar, .alert.alert-info, .sprint-csv-modal { display: none !important; }
+            .sprint-export-toolbar, .alert.alert-info, .sprint-csv-modal, .modal-backdrop,
+            .sprint-export-presets, .toast-container, #messages_after_redirect { display: none !important; }
             body, .container, .container-fluid, #page, #page > .container-fluid,
             main, .main-content, .tab-content, .tab-pane, .card, .card-body {
                 margin: 0 !important;
@@ -1936,10 +2025,27 @@ HTML;
                 background-color: #ffffff !important;
                 color: #212529 !important;
             }
-            h1, h2 { page-break-after: avoid; }
-            table, tr { page-break-inside: avoid; }
+            /* A long table may run over several pages: let it break between
+               rows, never inside one, and repeat its header on every page. */
+            h1, h2, h3 { page-break-after: avoid; break-after: avoid; }
+            table { page-break-inside: auto; break-inside: auto; width: 100% !important; }
+            thead { display: table-header-group; }
+            tfoot { display: table-footer-group; }
+            tr, td, th, img, svg, .sprint-export-header { page-break-inside: avoid; break-inside: avoid; }
+            th, td { word-break: break-word; overflow-wrap: anywhere; }
+            /* Sticky or fixed headers from the screen styles would print on
+               top of the rows; scroll boxes would clip the overflow. */
+            thead, th, .sticky-top, [style*=\"position:sticky\"], [style*=\"position: sticky\"] {
+                position: static !important;
+                top: auto !important;
+            }
+            .table-responsive, .sprint-export-page * { overflow: visible !important; max-height: none !important; }
+            .sprint-export-block { break-inside: auto; }
+            svg { max-width: 100% !important; height: auto !important; }
             a { color: inherit !important; text-decoration: none !important; }
         }
+        .sprint-export-page.sprint-export-summary [data-export-detail] { display: none !important; }
+        .sprint-export-page h1, .sprint-export-page h2, .sprint-export-page td { overflow-wrap: anywhere; }
         @page { margin: 12mm; }
         .sprint-export-page {
             max-width: 1100px;

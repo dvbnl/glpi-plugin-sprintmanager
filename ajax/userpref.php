@@ -16,12 +16,23 @@ Session::checkLoginUser();
 
 $allowed = [
     GlpiPlugin\Sprint\UserPref::BACKLOG_SORT => ['team', 'project'],
+    GlpiPlugin\Sprint\Backlog::VIEW_PREF     => ['queue', 'planning'],
+];
+// Free-form preferences validated by a normalizer instead of a fixed list.
+$normalizers = [
+    GlpiPlugin\Sprint\UserPref::OVERVIEW_COLLAPSED => [GlpiPlugin\Sprint\UserPref::class, 'normalizeSectionList'],
 ];
 
 $name  = (string)($_POST['name'] ?? '');
 $value = (string)($_POST['value'] ?? '');
-if (!isset($allowed[$name]) || !in_array($value, $allowed[$name], true)) {
-    echo json_encode(['success' => false, 'message' => 'Unknown preference']);
+if (isset($normalizers[$name])) {
+    $value = call_user_func($normalizers[$name], $value);
+    if ($value === null) {
+        echo json_encode(['success' => false, 'message' => __('Invalid preference value', 'sprint')]);
+        return;
+    }
+} elseif (!isset($allowed[$name]) || !in_array($value, $allowed[$name], true)) {
+    echo json_encode(['success' => false, 'message' => __('Unknown preference', 'sprint')]);
     return;
 }
 

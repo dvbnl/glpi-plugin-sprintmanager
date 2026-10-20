@@ -426,24 +426,6 @@ class SprintCustomer extends CommonDBTM
         return $out;
     }
 
-    /**
-     * @param int[] $sprintIds
-     * @return array<int,array<int,array{consumed:float,reserved:float}>> [customer][sprint]
-     */
-    public static function usageBySprint(array $sprintIds): array
-    {
-        $out  = [];
-        $keep = array_flip(array_map('intval', $sprintIds));
-        foreach (self::itemUsage() as $cid => $bySprint) {
-            foreach ($bySprint as $sid => $bucket) {
-                if ($sid > 0 && isset($keep[$sid])) {
-                    $out[$cid][$sid] = ['consumed' => $bucket['consumed'], 'reserved' => $bucket['reserved']];
-                }
-            }
-        }
-        return $out;
-    }
-
     // =========================================================================
     // Retainer: a recurring per-sprint grant that lapses at the sprint's end
     // =========================================================================
@@ -807,31 +789,31 @@ class SprintCustomer extends CommonDBTM
         $this->showFormHeader($options);
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Name') . "</td><td>";
-        echo Html::input('name', ['value' => $this->fields['name'] ?? '', 'size' => 40]);
+        echo "<td><label for='sprint-customer-name'>" . __('Name') . "</label></td><td>";
+        echo Html::input('name', ['id' => 'sprint-customer-name', 'value' => $this->fields['name'] ?? '', 'size' => 40]);
         echo "</td>";
-        echo "<td>" . __('Reference code', 'sprint') . "</td><td>";
-        echo Html::input('code', ['value' => $this->fields['code'] ?? '', 'size' => 20]);
+        echo "<td><label for='sprint-customer-code'>" . __('Reference code', 'sprint') . "</label></td><td>";
+        echo Html::input('code', ['id' => 'sprint-customer-code', 'value' => $this->fields['code'] ?? '', 'size' => 20]);
         echo "</td></tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Contact', 'sprint') . "</td><td>";
-        echo Html::input('contact', ['value' => $this->fields['contact'] ?? '', 'size' => 40]);
+        echo "<td><label for='sprint-customer-contact'>" . __('Contact', 'sprint') . "</label></td><td>";
+        echo Html::input('contact', ['id' => 'sprint-customer-contact', 'value' => $this->fields['contact'] ?? '', 'size' => 40]);
         echo "</td>";
-        echo "<td>" . __('Email') . "</td><td>";
-        echo Html::input('email', ['value' => $this->fields['email'] ?? '', 'size' => 40]);
+        echo "<td><label for='sprint-customer-email'>" . __('Email') . "</label></td><td>";
+        echo Html::input('email', ['id' => 'sprint-customer-email', 'value' => $this->fields['email'] ?? '', 'size' => 40]);
         echo "</td></tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Color', 'sprint') . "</td><td>";
-        echo "<input type='color' class='form-control form-control-color' name='color' value='"
+        echo "<td><label for='sprint-customer-color'>" . __('Color', 'sprint') . "</label></td><td>";
+        echo "<input type='color' class='form-control form-control-color' id='sprint-customer-color' name='color' value='"
             . htmlescape((string)($this->fields['color'] ?? '#0d6efd')) . "'>";
         echo "</td>";
-        echo "<td>" . __('Low-balance alert', 'sprint') . "<br>";
-        echo "<span class='text-muted sprint-small'>"
+        echo "<td><label for='sprint-customer-alert'>" . __('Low-balance alert', 'sprint') . "</label><br>";
+        echo "<span class='text-muted sprint-small' id='sprint-customer-alert-help'>"
             . __('Flag the customer once fewer than this many credits are left. 0 = no alert.', 'sprint')
             . "</span></td><td>";
-        echo "<input type='number' class='form-control' name='credit_alert' min='0' step='0.25' style='max-width:140px;' value='"
+        echo "<input type='number' class='form-control' id='sprint-customer-alert' aria-describedby='sprint-customer-alert-help' name='credit_alert' min='0' step='0.25' style='max-width:140px;' value='"
             . self::formatCredits($this->fields['credit_alert'] ?? 0) . "'>";
         echo "</td></tr>";
 
@@ -841,8 +823,8 @@ class SprintCustomer extends CommonDBTM
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Active') . "</td><td>";
         \Dropdown::showYesNo('is_active', $this->fields['is_active'] ?? 1);
-        echo "</td><td>" . __('Comments') . "</td><td>";
-        echo "<textarea class='form-control' name='comment' rows='3'>"
+        echo "</td><td><label for='sprint-customer-comment'>" . __('Comments') . "</label></td><td>";
+        echo "<textarea class='form-control' id='sprint-customer-comment' name='comment' rows='3'>"
             . htmlescape((string)($this->fields['comment'] ?? '')) . "</textarea>";
         echo "</td></tr>";
 
