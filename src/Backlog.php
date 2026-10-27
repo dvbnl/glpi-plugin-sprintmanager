@@ -198,6 +198,10 @@ class Backlog
             'width' => '100%',
         ]);
         echo "</div>";
+        $justification = SprintItem::capacityJustificationField((string)($existing['capacity_justification'] ?? ''), "sprint-plan-capjust{$rand}");
+        if ($justification !== '') {
+            echo "<div class='col-12 mb-2'><label class='form-label' for='sprint-plan-capjust{$rand}'>" . __('Reason above the maximum', 'sprint') . "</label>{$justification}</div>";
+        }
 
         echo "<div class='col-md-6 mb-2'><label class='form-label' for='dropdown_proposed_sprints_id{$rand}'>" . __('Proposed sprint', 'sprint') . "</label>";
         Sprint::dropdown([
@@ -468,7 +472,13 @@ class Backlog
                 : __s('Assign to the selected sprint', 'sprint');
             $btnLabel = "<i class='fas fa-arrow-right me-1'></i>" . htmlescape(sprintf(__('Assign to %s', 'sprint'), $sprintName));
 
-            if (!$dor) {
+            // The Scrum Master's questions, rendered up front (no JS round
+            // trip on this path): items above the maximum capacity per item
+            // and customers past their credits for the sprint.
+            $capReview = SprintAssignGuard::capacityReview([$row], [])['review'];
+            $overruns  = SprintAssignGuard::creditOverruns([$row], $proposedId);
+
+            if (!$dor && !$capReview && !$overruns) {
                 echo "<form method='post' action='" . self::getFormURL() . "' style='display:inline;'>";
                 echo Html::hidden('id', ['value' => $rowId]);
                 echo Html::hidden('plugin_sprint_sprints_id', ['value' => $proposedId]);
@@ -477,27 +487,53 @@ class Backlog
                 return;
             }
 
-            // DoR configured: the checks are confirmed in a dialog and travel
-            // with the POST (front/backlog.form.php enforces them again).
+            // Checks are confirmed in a dialog and travel with the POST
+            // (front/backlog.form.php enforces them again).
+            $dialogTitle = $dor ? __s('Definition of Ready', 'sprint') : htmlescape(sprintf(__('Assign to %s', 'sprint'), $sprintName));
             echo "<button type='button' class='btn btn-sm btn-primary' data-bs-toggle='modal' data-bs-target='#{$modalId}' title='{$btnTitle}'>{$btnLabel}</button>";
             echo "<div class='modal fade' id='{$modalId}' tabindex='-1' aria-hidden='true' aria-labelledby='{$modalId}-title'>";
             echo "<div class='modal-dialog modal-dialog-centered'><div class='modal-content'>";
             echo "<form method='post' action='" . self::getFormURL() . "'>";
             echo "<div class='modal-header'><h5 class='modal-title' id='{$modalId}-title'><i class='fas fa-clipboard-check me-1' aria-hidden='true'></i> "
-                . __s('Definition of Ready', 'sprint') . "</h5>"
+                . $dialogTitle . "</h5>"
                 . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='" . __s('Close') . "'></button></div>";
             echo "<div class='modal-body'>";
             echo Html::hidden('id', ['value' => $rowId]);
             echo Html::hidden('plugin_sprint_sprints_id', ['value' => $proposedId]);
-            echo "<p class='text-muted sprint-small'>" . __s('Confirm the checks that hold for this item.', 'sprint') . "</p>";
-            foreach ($dor as $check) {
-                echo "<label class='form-check d-block'><input class='form-check-input sprint-plan-dor-check' type='checkbox' name='ready[]' value='"
-                    . htmlescape($check) . "'><span class='form-check-label'>" . htmlescape($check) . "</span></label>";
+            if ($dor) {
+                echo "<p class='text-muted sprint-small'>" . __s('Confirm the checks that hold for this item.', 'sprint') . "</p>";
+                foreach ($dor as $check) {
+                    echo "<label class='form-check d-block'><input class='form-check-input sprint-plan-dor-check' type='checkbox' name='ready[]' value='"
+                        . htmlescape($check) . "'><span class='form-check-label'>" . htmlescape($check) . "</span></label>";
+                }
+            }
+            foreach ($capReview as $cr) {
+                $capId = "sprint-plan-capreview-{$rowId}";
+                echo "<div class='alert alert-warning py-2 mt-2 mb-2 sprint-small'>"
+                    . "<div class='fw-bold mb-1'><i class='fas fa-gauge-high me-1' aria-hidden='true'></i>"
+                    . htmlescape(__('Capacity above the maximum', 'sprint')) . " <span class='badge bg-yellow-lt'>" . htmlescape($cr['capacity']) . "% (+" . htmlescape($cr['over']) . "%)</span></div>"
+                    . "<div class='mb-2'>" . htmlescape(sprintf(__('%s%% is the maximum capacity per item. Approve the reason or lower the capacity.', 'sprint'), SprintMember::formatCapacity(SprintItem::itemCapacityLimit()))) . "</div>"
+                    . "<div class='mb-2' style='white-space:pre-line;'>" . ($cr['justification'] !== ''
+                        ? "<span class='fw-bold'>" . htmlescape(__('Reason', 'sprint')) . ":</span> " . htmlescape($cr['justification'])
+                        : "<span class='text-muted fst-italic'>" . htmlescape(__('No reason given', 'sprint')) . "</span>") . "</div>"
+                    . "<label class='form-label mb-1' for='{$capId}'>" . htmlescape(__('Capacity (%)', 'sprint')) . "</label>"
+                    . "<input type='number' class='form-control form-control-sm' style='max-width:120px;' id='{$capId}' name='cap_capacity[{$rowId}]'"
+                    . " min='0.5' max='" . htmlescape($cr['capacity']) . "' step='0.5' value='" . htmlescape($cr['capacity']) . "'>"
+                    . "<div class='text-muted'>" . htmlescape(__('Keep the value to approve it, or lower it', 'sprint')) . "</div>"
+                    . "</div>";
+            }
+            if ($overruns) {
+                echo "<div class='alert alert-warning py-2 mt-2 mb-2 sprint-small'>"
+                    . "<div class='fw-bold mb-1'><i class='fas fa-coins me-1' aria-hidden='true'></i>" . htmlescape(__('Credits past the agreement', 'sprint')) . "</div>"
+                    . "<div style='white-space:pre-line;'>" . htmlescape(SprintAssignGuard::creditOverrunMessage($overruns, $sprintName)) . "</div>"
+                    . "<label class='form-check d-block mt-2'><input class='form-check-input sprint-plan-dor-check' type='checkbox' name='confirm_credits' value='1'>"
+                    . "<span class='form-check-label'>" . htmlescape(__('Assign anyway', 'sprint')) . "</span></label>"
+                    . "</div>";
             }
             echo "</div>";
             echo "<div class='modal-footer'>";
             echo "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>" . __s('Cancel') . "</button>";
-            echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-success sprint-plan-dor-go' disabled>"
+            echo "<button type='submit' name='assign_to_sprint' value='1' class='btn btn-success sprint-plan-dor-go'" . (($dor || $overruns) ? ' disabled' : '') . ">"
                 . "<i class='fas fa-check me-1'></i>" . __s('Assign', 'sprint') . "</button>";
             echo "</div>";
             Html::closeForm();
@@ -1671,6 +1707,9 @@ HTML;
         return true;
     }
 
+    // Reason for a capacity above the maximum per item, asked by the server
+    // once (needs_justification) and sent with the next save.
+    var capJustification = null;
     function saveItem() {
         var itemId = parseInt(\$modal.find('input[name=id]').val(), 10) || 0;
         var tags = [];
@@ -1688,6 +1727,7 @@ HTML;
                     name: \$modal.find('input[name=name]').val(),
                     users_id: parseInt(\$modal.find("select[name='_backlog_modal_users_id']").val(), 10) || 0,
                     capacity: parseFloat(\$modal.find("input[name='_backlog_modal_capacity']").val()) || 0,
+                    capacity_justification: capJustification === null ? undefined : capJustification,
                     proposed_sprints_id: selectedSprint(),
                     is_fastlane: \$modal.find('input[name=is_fastlane]').is(':checked') ? 1 : 0,
                     is_blocked: \$modal.find('input[name=is_blocked]').is(':checked') ? 1 : 0,
@@ -1781,7 +1821,16 @@ HTML;
             updateDepsButton();
         };
         saveItem().done(function(resp){
+            if (resp && resp.needs_justification && window.sprintCapacityJustify) {
+                restore();
+                window.sprintCapacityJustify(resp, function(reason){
+                    capJustification = reason;
+                    saveFlow(\$btn, thenAssign);
+                });
+                return;
+            }
             if (resp && resp.success) {
+                capJustification = null;
                 var msg = savedMessage(resp);
                 refreshRow(itemId, function(\$row){
                     restore();
@@ -2356,6 +2405,7 @@ HTML;
         }
     });
 
+    var bulkExtra = {};
     jQuery(document).on('click', '.sprint-backlog-bulk-go', function() {
         var \$btn     = jQuery(this);
         var sprintId = parseInt(\$bulkModal.find('.sprint-bulk-sprint-choice').val(), 10) || 0;
@@ -2364,15 +2414,28 @@ HTML;
         \$btn.prop('disabled', true);
         jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
         .then(function(tok) {
+            var data = {
+                sprint_id: sprintId,
+                ready: ready,
+                _glpi_csrf_token: tok && tok.token ? tok.token : ''
+            };
+            Object.keys(bulkExtra).forEach(function(k) { data[k] = bulkExtra[k]; });
             return jQuery.ajax({
                 url: "{$bulkUrl}", type: 'POST', dataType: 'json',
-                data: {
-                    sprint_id: sprintId,
-                    ready: ready,
-                    _glpi_csrf_token: tok && tok.token ? tok.token : ''
-                }
+                data: data
             });
         }).done(function(resp) {
+            // Capacity review / credit confirmation per target sprint, then again.
+            if (window.sprintAssignGuard && window.sprintAssignGuard(resp, function(more) {
+                Object.keys(more).forEach(function(k) {
+                    bulkExtra[k] = (k === 'cap_capacity') ? Object.assign(bulkExtra[k] || {}, more[k]) : more[k];
+                });
+                \$btn.prop('disabled', false).trigger('click');
+            })) {
+                \$btn.prop('disabled', false);
+                return;
+            }
+            bulkExtra = {};
             if (resp && resp.success) {
                 // The message survives the reload (filters + scroll too).
                 if (window.sprintBacklogReload) { window.sprintBacklogReload(resp.message); }
@@ -2399,6 +2462,7 @@ HTML;
         var name     = row ? (row.getAttribute('data-item-name') || '') : '';
         var btn      = form.querySelector('.sprint-backlog-assign-btn');
         if (itemId <= 0 || sprintId <= 0) { return; }
+        var extra = {};
 
         var doAssign = function(readyChecks) {
             if (btn) { btn.disabled = true; }
@@ -2410,8 +2474,17 @@ HTML;
                     _glpi_csrf_token: tok && tok.token ? tok.token : ''
                 };
                 if (readyChecks && readyChecks.length) { data.ready = readyChecks; }
+                Object.keys(extra).forEach(function(k) { data[k] = extra[k]; });
                 return jQuery.ajax({ url: "{$assignUrl}", type: 'POST', dataType: 'json', data: data });
             }).done(function(resp) {
+                // Capacity review / credit confirmation: answer, then assign again.
+                if (window.sprintAssignGuard && window.sprintAssignGuard(resp, function(more) {
+                    Object.keys(more).forEach(function(k) { extra[k] = more[k]; });
+                    doAssign(readyChecks);
+                })) {
+                    if (btn) { btn.disabled = false; }
+                    return;
+                }
                 if (!resp || !resp.success) {
                     notify('error', (resp && resp.message) || "{$msgAssignFailed}");
                     if (btn) { btn.disabled = false; }

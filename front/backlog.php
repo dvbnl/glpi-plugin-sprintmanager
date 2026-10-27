@@ -18,6 +18,8 @@ Html::header(
     'backlog'
 );
 
+// Labels of the in-page dialogs (capacity review, reason, credits).
+GlpiPlugin\Sprint\SprintI18n::render();
 GlpiPlugin\Sprint\SprintOverview::navStart('backlog');
 GlpiPlugin\Sprint\Backlog::showBacklog();
 GlpiPlugin\Sprint\SprintOverview::navEnd();

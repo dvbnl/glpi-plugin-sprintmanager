@@ -13,6 +13,10 @@ class SprintAgility extends CommonGLPI
 
     public const IMPROVEMENTS_TABLE = 'glpi_plugin_sprint_sprintimprovements';
     public const FOLLOWUPS_TABLE    = 'glpi_plugin_sprint_sprintimprovementfollowups';
+    public const VOTES_TABLE        = 'glpi_plugin_sprint_sprintimprovementvotes';
+
+    /** How many top-voted retro inputs become actions once voting closes. */
+    public const RETRO_TOP_ACTIONS = 3;
 
     public static function getTypeName($nb = 0): string
     {
@@ -1491,14 +1495,116 @@ HTML;
                 $votedIds[(int)$vote['plugin_sprint_sprintimprovements_id']] = true;
             }
         }
+        $uid = (int)Session::getLoginUserID();
         foreach ($rows as &$row) {
             $row['voted_by_me'] = isset($votedIds[(int)$row['id']]);
+            // Nobody votes on their own input.
+            $row['is_mine']     = $row['category'] !== 'action' && $uid > 0 && (int)$row['users_id'] === $uid;
             $row['owner_name']  = ((int)($row['is_anonymous'] ?? 0) === 1 && $row['category'] !== 'action')
                 ? __('Anonymous', 'sprint')
                 : (((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : '');
         }
         unset($row);
         return array_values($rows);
+    }
+
+    /** Whether the 1.3.1 retro flow column (top-3 actions, carried input) exists. */
+    public static function hasRetroFlow(): bool
+    {
+        global $DB;
+        static $has = null;
+        return $has ??= ($DB->tableExists(self::IMPROVEMENTS_TABLE)
+            && $DB->fieldExists(self::IMPROVEMENTS_TABLE, 'source_improvements_id'));
+    }
+
+    /** Ids of the retro input rows (everything but actions) of a sprint. */
+    private static function inputIds(int $sprintId): array
+    {
+        $ids = [];
+        foreach (self::rows(self::IMPROVEMENTS_TABLE, [
+            'plugin_sprint_sprints_id' => $sprintId, ['NOT' => ['category' => 'action']],
+        ] + self::ownActionCriteria()) as $row) {
+            $ids[] = (int)$row['id'];
+        }
+        return $ids;
+    }
+
+    /** Dot-votes one member has spent on a sprint's retro input. */
+    public static function votesUsed(int $sprintId, int $uid): int
+    {
+        $ids = self::inputIds($sprintId);
+        if (!$ids || $uid <= 0) return 0;
+        return countElementsInTable(self::VOTES_TABLE, ['users_id' => $uid, 'plugin_sprint_sprintimprovements_id' => $ids]);
+    }
+
+    /** Whether voting closed for this sprint: its top themes became actions. */
+    public static function inputsHandled(int $sprintId): bool
+    {
+        return self::hasRetroFlow()
+            && countElementsInTable(self::IMPROVEMENTS_TABLE, ['plugin_sprint_sprints_id' => $sprintId, 'status' => 'promoted']) > 0;
+    }
+
+    /**
+     * Voting closed: the top-voted input (at most RETRO_TOP_ACTIONS, votes
+     * needed) becomes an action without owner yet, to be assigned in the
+     * "Decide actions" phase; the input row is marked promoted. The rest
+     * stays open and returns in the next retrospective. Runs once per sprint.
+     *
+     * @return int number of actions created
+     */
+    public static function promoteTopVotedInputs(int $sprintId, int $meetingId): int
+    {
+        global $DB;
+        if ($sprintId <= 0 || !self::hasRetroFlow() || self::inputsHandled($sprintId)) return 0;
+        $rows = self::rows(self::IMPROVEMENTS_TABLE, [
+            'plugin_sprint_sprints_id' => $sprintId, ['NOT' => ['category' => 'action']],
+            'status' => 'open', 'votes' => ['>', 0],
+        ] + self::ownActionCriteria(), ['votes DESC', 'date_creation ASC', 'id ASC']);
+        $now = $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s');
+        $n = 0;
+        foreach (array_slice($rows, 0, self::RETRO_TOP_ACTIONS) as $row) {
+            $ok = $DB->insert(self::IMPROVEMENTS_TABLE, [
+                'plugin_sprint_sprints_id' => $sprintId, 'category' => 'action',
+                'description' => (string)$row['description'], 'users_id' => 0, 'due_date' => null,
+                'status' => 'open', 'votes' => 0, 'carry_to_next' => 1, 'is_anonymous' => 0,
+                'plugin_sprint_sprintmeetings_id' => $meetingId, 'source_improvements_id' => (int)$row['id'],
+                'date_creation' => $now, 'date_mod' => $now,
+            ]);
+            if (!$ok) continue;
+            $DB->update(self::IMPROVEMENTS_TABLE, ['status' => 'promoted', 'date_mod' => $now], ['id' => (int)$row['id']]);
+            $n++;
+        }
+        return $n;
+    }
+
+    /**
+     * Input of an earlier retrospective that never became an action and was
+     * not carried over yet: offered in the next retrospective, one click
+     * adds it to that retrospective's list.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function getUnhandledInputs(int $sprintId): array
+    {
+        if ($sprintId <= 0 || !self::hasRetroFlow() || !SprintItem::sprintEntityAccessible($sprintId)) return [];
+        $out = [];
+        foreach (self::rows(self::IMPROVEMENTS_TABLE, [
+            'plugin_sprint_sprints_id' => $sprintId, ['NOT' => ['category' => 'action']], 'status' => 'open',
+        ] + self::ownActionCriteria(), ['votes DESC', 'date_creation ASC', 'id ASC']) as $row) {
+            $row['owner_name'] = ((int)($row['is_anonymous'] ?? 0) === 1)
+                ? __('Anonymous', 'sprint')
+                : (((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : '');
+            $out[] = $row;
+        }
+        return $out;
+    }
+
+    /** Sprints whose unhandled retro input may be carried into $sprint's retrospective. */
+    private static function carrySourceSprintIds(array $sprint): array
+    {
+        $ids = array_keys(self::getEarlierSeriesSprints($sprint));
+        foreach (array_keys(self::resolvePredecessor($sprint)['choices']) as $cid) $ids[] = (int)$cid;
+        return array_values(array_unique($ids));
     }
 
     /** @return array<string,string> */
@@ -1520,7 +1626,10 @@ HTML;
         return $html;
     }
 
-    /** @return bool|int true/false, or the new row id for 'improvement' */
+    /**
+     * @return bool|int|array true/false, the new row id for 'improvement', or a
+     *                        JSON-ready array (success, message, extras)
+     */
     public static function handle(array $input)
     {
         global $DB;
@@ -1540,8 +1649,12 @@ HTML;
         $isScrumMaster = Config::isCurrentUserScrumMaster($sprintId) && Sprint::canUpdate();
         // Retro input and voting are open to every sprint member; the rest
         // stays Scrum-Master-only.
-        if (in_array($action, ['improvement', 'improvement_vote'], true)) {
+        if (in_array($action, ['improvement', 'improvement_vote', 'improvement_carry'], true)) {
             if (!$isScrumMaster && !self::isCurrentUserMember($sprintId)) return false;
+        } elseif ($action === 'improvement_assign') {
+            // Same driver rule as the guided meeting: Scrum Master or facilitator.
+            if (!$isScrumMaster && !(self::isCurrentUserMember($sprintId)
+                && self::isCurrentUserMeetingFacilitator($sprintId, (int)($input['meeting_id'] ?? 0)))) return false;
         } elseif (!$isScrumMaster) {
             return false;
         }
@@ -1597,23 +1710,85 @@ HTML;
             case 'availability_delete':
                 return $DB->delete('glpi_plugin_sprint_sprintavailabilities', ['id' => (int)($input['id'] ?? 0), 'plugin_sprint_sprints_id' => $sprintId]);
             case 'improvement_vote':
-                // Toggle: one vote per user, second click removes it.
+                // Toggle: one vote per user per input, second click removes it.
+                // Nobody votes on their own input, everyone has a fixed number
+                // of votes, and voting closes once the top themes are actions.
                 $id = (int)($input['id'] ?? 0);
-                $rows = self::rows('glpi_plugin_sprint_sprintimprovements', ['id' => $id, 'plugin_sprint_sprints_id' => $sprintId]);
+                $rows = self::rows(self::IMPROVEMENTS_TABLE, ['id' => $id, 'plugin_sprint_sprints_id' => $sprintId]);
                 $row = $rows ? reset($rows) : null;
-                if (!$row) return false;
-                $uid = (int)Session::getLoginUserID();
-                $existing = self::rows('glpi_plugin_sprint_sprintimprovementvotes', [
+                if (!$row || $row['category'] === 'action') return false;
+                $uid   = (int)Session::getLoginUserID();
+                $limit = Config::getRetroVotesPerMember();
+                if ($row['status'] !== 'open' || self::inputsHandled($sprintId)) {
+                    return ['success' => false, 'message' => __('Voting is closed: the top themes are actions now.', 'sprint')];
+                }
+                $existing = self::rows(self::VOTES_TABLE, [
                     'plugin_sprint_sprintimprovements_id' => $id, 'users_id' => $uid,
                 ]);
                 if ($existing) {
-                    $DB->delete('glpi_plugin_sprint_sprintimprovementvotes', ['id' => (int)reset($existing)['id']]);
-                    return $DB->update('glpi_plugin_sprint_sprintimprovements', ['votes' => max(0, (int)$row['votes'] - 1), 'date_mod' => $now], ['id' => $id]);
+                    $DB->delete(self::VOTES_TABLE, ['id' => (int)reset($existing)['id']]);
+                    $DB->update(self::IMPROVEMENTS_TABLE, ['votes' => max(0, (int)$row['votes'] - 1), 'date_mod' => $now], ['id' => $id]);
+                    return ['success' => true, 'voted' => false, 'votes_left' => max(0, $limit - self::votesUsed($sprintId, $uid))];
                 }
-                $DB->insert('glpi_plugin_sprint_sprintimprovementvotes', [
+                if ((int)$row['users_id'] === $uid) {
+                    return ['success' => false, 'message' => __('You cannot vote on your own input.', 'sprint')];
+                }
+                if (self::votesUsed($sprintId, $uid) >= $limit) {
+                    return ['success' => false, 'message' => sprintf(
+                        _n('Your %d vote is used. Remove it first to vote on something else.', 'All %d of your votes are used. Remove one first to vote on something else.', $limit, 'sprint'),
+                        $limit
+                    )];
+                }
+                $DB->insert(self::VOTES_TABLE, [
                     'plugin_sprint_sprintimprovements_id' => $id, 'users_id' => $uid, 'date_creation' => $now,
                 ]);
-                return $DB->update('glpi_plugin_sprint_sprintimprovements', ['votes' => (int)$row['votes'] + 1, 'date_mod' => $now], ['id' => $id]);
+                $DB->update(self::IMPROVEMENTS_TABLE, ['votes' => (int)$row['votes'] + 1, 'date_mod' => $now], ['id' => $id]);
+                return ['success' => true, 'voted' => true, 'votes_left' => max(0, $limit - self::votesUsed($sprintId, $uid))];
+            case 'improvement_carry':
+                // Unhandled input of an earlier retrospective joins this one:
+                // a copy in this sprint, the original marked carried.
+                if (!self::hasRetroFlow()) return false;
+                $id  = (int)($input['id'] ?? 0);
+                $src = self::rows(self::IMPROVEMENTS_TABLE, ['id' => $id, 'status' => 'open', ['NOT' => ['category' => 'action']]]);
+                $src = $src ? reset($src) : null;
+                $carrySprint = new Sprint();
+                if (!$src || !$carrySprint->getFromDB($sprintId)) return false;
+                $srcSprintId = (int)$src['plugin_sprint_sprints_id'];
+                if (!in_array($srcSprintId, self::carrySourceSprintIds($carrySprint->fields), true)
+                    || !SprintItem::sprintEntityAccessible($srcSprintId)) return false;
+                $copy = [
+                    'plugin_sprint_sprints_id' => $sprintId, 'category' => (string)$src['category'],
+                    'description' => (string)$src['description'], 'users_id' => (int)$src['users_id'],
+                    'due_date' => null, 'status' => 'open', 'votes' => 0, 'carry_to_next' => 1,
+                    'is_anonymous' => (int)($src['is_anonymous'] ?? 0), 'source_improvements_id' => $id,
+                    'date_creation' => $now, 'date_mod' => $now,
+                ];
+                $meetingId = (int)($input['meeting_id'] ?? 0);
+                if ($meetingId > 0 && countElementsInTable(SprintMeeting::getTable(), ['id' => $meetingId, 'plugin_sprint_sprints_id' => $sprintId]) > 0) {
+                    $copy['plugin_sprint_sprintmeetings_id'] = $meetingId;
+                }
+                if (!$DB->insert(self::IMPROVEMENTS_TABLE, $copy)) return false;
+                $newId = (int)$DB->insertId();
+                $DB->update(self::IMPROVEMENTS_TABLE, ['status' => 'carried', 'date_mod' => $now], ['id' => $id]);
+                $copyUid = (int)Session::getLoginUserID();
+                return ['success' => true, 'id' => $newId, 'row' => [
+                    'id' => $newId, 'category' => (string)$src['category'], 'description' => plugin_sprint_text((string)$src['description']),
+                    'owner_name' => (int)($src['is_anonymous'] ?? 0) === 1 ? __('Anonymous', 'sprint')
+                        : (((int)$src['users_id'] > 0) ? SprintCache::userName((int)$src['users_id']) : ''),
+                    'votes' => 0, 'status' => 'open', 'is_mine' => (int)$src['users_id'] === $copyUid,
+                ]];
+            case 'improvement_assign':
+                // Owner and due date of an action made from a top-voted theme.
+                $id  = (int)($input['id'] ?? 0);
+                $act = self::rows(self::IMPROVEMENTS_TABLE, ['id' => $id, 'plugin_sprint_sprints_id' => $sprintId, 'category' => 'action']);
+                if (!$act) return false;
+                $owner = (int)($input['users_id'] ?? 0);
+                if ($owner > 0 && !countElementsInTable(SprintMember::getTable(), ['plugin_sprint_sprints_id' => $sprintId, 'users_id' => $owner])) return false;
+                $due = (string)($input['due_date'] ?? '');
+                $ok = $DB->update(self::IMPROVEMENTS_TABLE, [
+                    'users_id' => $owner, 'due_date' => preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $due) ? $due : null, 'date_mod' => $now,
+                ], ['id' => $id]);
+                return $ok ? ['success' => true, 'owner_name' => $owner > 0 ? SprintCache::userName($owner) : ''] : false;
             case 'epic':
                 $name = trim((string)($input['name'] ?? ''));
                 if ($name === '') return false;

@@ -11,12 +11,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     return;
 }
 $result = GlpiPlugin\Sprint\SprintAgility::handle($input);
-$ok     = (bool)$result;
-
+// An array answer carries its own outcome and extras (votes left, the
+// carried row, a specific refusal).
+$extra  = is_array($result) ? $result : [];
+$ok     = is_array($result) ? (bool)($result['success'] ?? false) : (bool)$result;
 // AJAX submits get JSON back so the tab can patch in place.
 if (!empty($input['_ajax'])) {
     header('Content-Type: application/json');
-    echo json_encode([
+    echo json_encode($extra + [
         'success' => $ok,
         'id'      => is_int($result) ? $result : 0,
         'message' => $ok ? __('Saved', 'sprint') : __('Could not save agility settings', 'sprint'),

@@ -12,26 +12,55 @@
 } %}
 
 {% macro imp_row(row, categories, opts) %}
-<div class="sprint-imp-item d-flex flex-wrap align-items-center gap-2"
+{# Retro input after voting: promoted rows became an action, the rest is
+   greyed out and returns in the next retrospective. #}
+{% set is_input = row.category != 'action' %}
+{% set promoted = is_input and row.status == 'promoted' %}
+{% set unhandled = is_input and opts.handled|default(false) and row.status == 'open' %}
+<div class="sprint-imp-item d-flex flex-wrap align-items-center gap-2{{ promoted ? ' sprint-imp-promoted' : '' }}{{ unhandled ? ' sprint-imp-unhandled' : '' }}"
      data-improvement-id="{{ row.id }}"
      data-category="{{ row.category }}"
      data-votes="{{ row.votes }}"
-     data-status="{{ row.status }}">
+     data-status="{{ row.status }}"
+     data-mine="{{ row.is_mine|default(false) ? 1 : 0 }}">
     <span class="badge bg-blue-lt sprint-imp-cat">{{ categories[row.category]|default(row.category) }}</span>
     <span class="sprint-imp-desc flex-grow-1">{{ row.description|nl2br }}</span>
     {% if opts.show_owner|default(false) %}
     <span class="sprint-imp-owner text-muted sprint-small"><i class="fas fa-user me-1"></i>{{ row.owner_name|default('') != '' ? row.owner_name : '—' }}</span>
     {% if row.due_date %}<span class="sprint-imp-due text-muted sprint-small"><i class="far fa-calendar me-1"></i>{{ row.due_date }}</span>{% endif %}
     {% endif %}
-    {% if opts.show_vote_btn|default(false) and opts.can_vote|default(false) %}
+    {% if opts.owner_picker|default(false) and row.category == 'action' and row.users_id == 0 %}
+    <span class="sprint-imp-assign d-flex flex-wrap align-items-center gap-1">
+        <select class="form-select form-select-sm w-auto sprint-imp-assign-owner" aria-label="{{ __('Owner', 'sprint') }}">
+            <option value="0">— {{ __('Owner', 'sprint') }} —</option>
+            {% for uid, uname in opts.member_options|default({}) %}
+            {% if uid > 0 %}<option value="{{ uid }}">{{ uname }}</option>{% endif %}
+            {% endfor %}
+        </select>
+        <input type="date" class="form-control form-control-sm w-auto sprint-imp-assign-due" aria-label="{{ __('Due date', 'sprint') }}">
+        <button type="button" class="btn btn-sm btn-outline-primary" data-sprint-action="meeting-imp-assign" title="{{ __('Set owner', 'sprint') }}">
+            <i class="fas fa-user-check"></i>
+        </button>
+    </span>
+    {% endif %}
+    {% if opts.show_vote_btn|default(false) and opts.can_vote|default(false) and not opts.handled|default(false) and row.status == 'open' %}
+    {% if row.is_mine|default(false) %}
+    <span class="badge bg-secondary-lt sprint-imp-votepill" title="{{ __('Your own input: no vote', 'sprint') }}"><i class="far fa-thumbs-up me-1"></i><span class="sprint-imp-votes">{{ row.votes }}</span></span>
+    {% else %}
     <button type="button" class="btn btn-sm btn-link sprint-imp-vote-btn{{ row.voted_by_me|default(false) ? '' : ' text-muted' }}"
             data-sprint-action="meeting-imp-vote"
             title="{{ row.voted_by_me|default(false) ? __('Remove my vote', 'sprint') : __('Vote', 'sprint') }}">
         <i class="{{ row.voted_by_me|default(false) ? 'fas' : 'far' }} fa-thumbs-up"></i>
         <span class="sprint-imp-votes">{{ row.votes }}</span>
     </button>
-    {% elseif opts.show_votes|default(false) %}
+    {% endif %}
+    {% elseif opts.show_votes|default(false) or opts.show_vote_btn|default(false) %}
     <span class="badge bg-secondary-lt sprint-imp-votepill"><i class="far fa-thumbs-up me-1"></i><span class="sprint-imp-votes">{{ row.votes }}</span></span>
+    {% endif %}
+    {% if promoted %}
+    <span class="badge bg-green-lt sprint-imp-flow" title="{{ __('Became an action in this retrospective', 'sprint') }}"><i class="fas fa-list-check me-1"></i>{{ __('Action', 'sprint') }}</span>
+    {% elseif unhandled %}
+    <span class="badge bg-secondary-lt sprint-imp-flow" title="{{ __('Not handled now: it returns in the next retrospective', 'sprint') }}"><i class="fas fa-rotate-right me-1"></i>{{ __('Next retrospective', 'sprint') }}</span>
     {% endif %}
     {% if opts.show_status|default(false) %}
     <span class="badge sprint-imp-statuspill {{ row.status == 'done' ? 'bg-green-lt' : 'bg-yellow-lt' }}">
@@ -67,6 +96,12 @@
      data-lbl-done="{{ __('Done', 'sprint') }}"
      data-lbl-vote="{{ __('Vote', 'sprint') }}"
      data-lbl-unvote="{{ __('Remove my vote', 'sprint') }}"
+     data-votes-per-member="{{ guided.votes_per_member|default(3) }}"
+     data-votes-used="{{ guided.votes_used|default(0) }}"
+     data-inputs-handled="{{ guided.inputs_handled|default(false) ? 1 : 0 }}"
+     data-lbl-votes-left="{{ __('%1$s of %2$s votes left', 'sprint') }}"
+     data-lbl-own-input="{{ __('Your own input: no vote', 'sprint') }}"
+     data-lbl-owner="{{ __('Owner', 'sprint') }}"
      data-lbl-note-dirty="{{ __('Not saved', 'sprint') }}"
      data-lbl-note-saving="{{ __('Saving…', 'sprint') }}"
      data-lbl-note-saved="{{ __('Saved', 'sprint') }}"
@@ -270,6 +305,30 @@
                         </div>
                     </div>
                     {% endif %}
+                    {% if guided.prev_inputs|default([])|length > 0 %}
+                    <details class="sprint-imp-prev mb-2" open>
+                        <summary class="fw-bold sprint-small">
+                            <i class="fas fa-rotate-right me-1"></i>{{ __('Unhandled input from the previous retrospective', 'sprint') }}
+                            <span class="badge bg-secondary-lt ms-1 sprint-imp-prev-count">{{ guided.prev_inputs|length }}</span>
+                        </summary>
+                        <div class="text-muted sprint-small mb-1">{{ __('Input that did not become an action last time. Add it to this retrospective with one click, or leave it and it disappears.', 'sprint') }}</div>
+                        <div class="sprint-imp-list sprint-imp-prev-list">
+                            {% for row in guided.prev_inputs %}
+                            <div class="sprint-imp-item d-flex flex-wrap align-items-center gap-2 sprint-imp-unhandled" data-prev-improvement-id="{{ row.id }}">
+                                <span class="badge bg-blue-lt sprint-imp-cat">{{ guided.improvement_categories[row.category]|default(row.category) }}</span>
+                                <span class="sprint-imp-desc flex-grow-1">{{ row.description|nl2br }}</span>
+                                <span class="sprint-imp-owner text-muted sprint-small"><i class="fas fa-user me-1"></i>{{ row.owner_name != '' ? row.owner_name : '—' }}</span>
+                                <span class="badge bg-secondary-lt sprint-imp-votepill"><i class="far fa-thumbs-up me-1"></i>{{ row.votes }}</span>
+                                {% if guided.can_contribute %}
+                                <button type="button" class="btn btn-sm btn-outline-primary" data-sprint-action="meeting-imp-carry" title="{{ __('Add to this retrospective', 'sprint') }}" aria-label="{{ __('Add to this retrospective', 'sprint') }}">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
                     <div class="sprint-imp-list" data-imp-list data-imp-categories="start,stop,continue" data-imp-owner="1">
                         {% for row in guided.improvements|default([])|filter(r => r.category != 'action') %}
                             {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_owner: true}) }}
@@ -282,9 +341,20 @@
 
                 {% elseif block == 'improvement_vote' %}
                 <div class="sprint-phase-block">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2 sprint-small">
+                        {% if guided.inputs_handled|default(false) %}
+                        <span class="badge bg-green-lt"><i class="fas fa-lock me-1"></i>{{ __('Voting closed', 'sprint') }}</span>
+                        <span class="text-muted">{{ __('The top themes became actions. The rest is greyed out and returns in the next retrospective.', 'sprint') }}</span>
+                        {% else %}
+                        {% if guided.can_contribute %}
+                        <span class="badge bg-blue-lt sprint-imp-votes-left" aria-live="polite">{{ __('%1$s of %2$s votes left', 'sprint')|format(max(0, guided.votes_per_member - guided.votes_used), guided.votes_per_member) }}</span>
+                        {% endif %}
+                        <span class="text-muted">{{ __('Nobody votes on their own input. When this phase closes, the %d most voted themes become actions.', 'sprint')|format(guided.top_actions|default(3)) }}</span>
+                        {% endif %}
+                    </div>
                     <div class="sprint-imp-list" data-imp-list data-imp-categories="start,stop,continue" data-imp-sort="votes" data-imp-vote-btn="1">
                         {% for row in guided.improvements|default([])|filter(r => r.category != 'action') %}
-                            {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_vote_btn: true, can_vote: guided.can_contribute}) }}
+                            {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_vote_btn: true, can_vote: guided.can_contribute, handled: guided.inputs_handled|default(false)}) }}
                         {% endfor %}
                         <div class="text-muted fst-italic sprint-imp-empty"{% if guided.improvements|default([])|filter(r => r.category != 'action')|length > 0 %} style="display:none;"{% endif %}>
                             {{ __('No input collected yet.', 'sprint') }}
@@ -320,7 +390,7 @@
                     {% endif %}
                     <div class="sprint-imp-list" data-imp-list data-imp-categories="action" data-imp-owner="1" data-imp-status="1" data-imp-toggle-btn="1">
                         {% for row in guided.improvements|default([])|filter(r => r.category == 'action') %}
-                            {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_owner: true, show_status: true, show_toggle: true, can_toggle: guided.can_toggle_actions}) }}
+                            {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_owner: true, show_status: true, show_toggle: true, can_toggle: guided.can_toggle_actions, owner_picker: guided.can_toggle_actions, member_options: guided.member_options|default(member_options)}) }}
                         {% endfor %}
                         <div class="text-muted fst-italic sprint-imp-empty"{% if guided.improvements|default([])|filter(r => r.category == 'action')|length > 0 %} style="display:none;"{% endif %}>
                             {{ __('No actions defined yet.', 'sprint') }}
@@ -335,7 +405,7 @@
                             <div class="fw-bold mb-1"><i class="far fa-thumbs-up me-1"></i>{{ __('Top voted themes', 'sprint') }}</div>
                             <div class="sprint-imp-list" data-imp-list data-imp-categories="start,stop,continue" data-imp-sort="votes" data-imp-votes="1">
                                 {% for row in guided.improvements|default([])|filter(r => r.category != 'action') %}
-                                    {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_votes: true}) }}
+                                    {{ imp.imp_row(row, guided.improvement_categories|default({}), {show_votes: true, handled: guided.inputs_handled|default(false)}) }}
                                 {% endfor %}
                                 <div class="text-muted fst-italic sprint-imp-empty"{% if guided.improvements|default([])|filter(r => r.category != 'action')|length > 0 %} style="display:none;"{% endif %}>
                                     {{ __('No input collected yet.', 'sprint') }}

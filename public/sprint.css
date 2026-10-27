@@ -1153,6 +1153,22 @@ table.tab_cadre_fixe.sprint-themed {
 .sprint-imp-item .sprint-imp-vote-btn {
     text-decoration: none;
 }
+/* Retro input after voting: promoted rows became an action, the rest is
+   greyed out and returns in the next retrospective. */
+.sprint-imp-item.sprint-imp-promoted {
+    border-left: 3px solid var(--tblr-green, #198754);
+    padding-left: 7px;
+}
+.sprint-imp-item.sprint-imp-unhandled {
+    opacity: 0.55;
+}
+.sprint-imp-item.sprint-imp-unhandled:hover,
+.sprint-imp-item.sprint-imp-unhandled:focus-within {
+    opacity: 0.85;
+}
+.sprint-imp-prev > summary {
+    cursor: pointer;
+}
 
 /* Sprint-tab planning line (Backlog::showAddToBacklogButton) */
 .sprint-plan-chip {

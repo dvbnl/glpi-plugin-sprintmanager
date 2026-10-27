@@ -70,6 +70,14 @@ $update = [
     'plugin_sprint_sprints_id' => $sprintId,
     'proposed_sprints_id'      => 0,
 ];
+// Capacity above the maximum per item and credits past the customer's
+// agreement: the Scrum Master decides in a dialog, then the request returns.
+$guard = GlpiPlugin\Sprint\SprintAssignGuard::check([$item->fields], $sprintId, (string)$sprint->fields['name'], $_POST);
+if ($guard !== null) {
+    echo json_encode($guard);
+    return;
+}
+$update += GlpiPlugin\Sprint\SprintAssignGuard::capacityUpdate($item->fields, $_POST);
 if ($dor) {
     $confirmed = array_values(array_intersect($dor, (array)($_POST['ready'] ?? [])));
     if (!$isFastlane && count($confirmed) < count($dor)) {

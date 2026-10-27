@@ -775,6 +775,7 @@
             }
 
             var btn = form.querySelector('.sprint-backlog-assign-btn');
+            var extra = {};
 
             var doAssign = function(readyChecks) {
             if (btn) { btn.disabled = true; }
@@ -789,12 +790,21 @@
                     _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                 };
                 if (readyChecks && readyChecks.length) { data.ready = readyChecks; }
+                Object.keys(extra).forEach(function(k) { data[k] = extra[k]; });
                 return window.jQuery.ajax({
                     url: ajaxBase + 'assigntosprint.php',
                     type: 'POST', dataType: 'json',
                     data: data
                 });
             }).done(function(resp) {
+                // Capacity review / credit confirmation first, then again.
+                if (window.sprintAssignGuard(resp, function(more) {
+                    Object.keys(more).forEach(function(k) { extra[k] = more[k]; });
+                    doAssign(readyChecks);
+                })) {
+                    if (btn) { btn.disabled = false; }
+                    return;
+                }
                 if (resp && resp.success) {
                     window.sprintNotify(resp.message || window.sprintT('assigned', 'Assigned'), 'success');
                     var row = form.closest('tr.sprint-backlog-row');
@@ -1037,6 +1047,8 @@
             if (target === phase) { return; }
             el.disabled = true;
             navPost(root, 'set_phase', { phase: target }).done(function(resp) {
+                // Voting closed: the top themes became actions, rendered server-side.
+                if (resp && resp.success && resp.promoted > 0) { window.location.reload(); return; }
                 applySession(root, resp, true);
             }).always(function() { el.disabled = false; });
 
@@ -1047,6 +1059,7 @@
             var idx = parseInt(card.getAttribute('data-phase-index'), 10) || 0;
             if (idx === (parseInt(root.getAttribute('data-current-phase'), 10) || 0)) { return; }
             navPost(root, 'set_phase', { phase: idx }).done(function(resp) {
+                if (resp && resp.success && resp.promoted > 0) { window.location.reload(); return; }
                 applySession(root, resp, false);
             });
 
@@ -1055,6 +1068,7 @@
             var endMeeting = function() {
                 el.disabled = true;
                 navPost(root, 'end_meeting').done(function(resp) {
+                    if (resp && resp.success && resp.promoted > 0) { window.location.reload(); return; }
                     applySession(root, resp, false);
                 }).always(function() { el.disabled = false; });
             };
@@ -1293,6 +1307,7 @@
         item.setAttribute('data-category', row.category);
         item.setAttribute('data-votes', String(row.votes || 0));
         item.setAttribute('data-status', row.status || 'open');
+        item.setAttribute('data-mine', row.is_mine ? '1' : '0');
 
         var cat = document.createElement('span');
         cat.className = 'badge bg-blue-lt sprint-imp-cat';
@@ -1319,7 +1334,9 @@
             }
         }
 
-        if (d.impVoteBtn === '1' && root.getAttribute('data-can-contribute') === '1') {
+        var canVoteHere = d.impVoteBtn === '1' && root.getAttribute('data-can-contribute') === '1'
+            && root.getAttribute('data-inputs-handled') !== '1' && !row.is_mine;
+        if (canVoteHere) {
             var voteBtn = document.createElement('button');
             voteBtn.type = 'button';
             voteBtn.className = 'btn btn-sm btn-link sprint-imp-vote-btn text-muted';
@@ -1332,9 +1349,12 @@
             votes.textContent = String(row.votes || 0);
             voteBtn.appendChild(votes);
             item.appendChild(voteBtn);
-        } else if (d.impVotes === '1') {
+        } else if (d.impVotes === '1' || d.impVoteBtn === '1') {
             var pill = document.createElement('span');
             pill.className = 'badge bg-secondary-lt sprint-imp-votepill';
+            if (row.is_mine && d.impVoteBtn === '1') {
+                pill.title = root.getAttribute('data-lbl-own-input') || window.sprintT('ownInput', 'Your own input: no vote');
+            }
             pill.innerHTML = '<i class="far fa-thumbs-up me-1"></i>';
             var votes2 = document.createElement('span');
             votes2.className = 'sprint-imp-votes';
@@ -1451,7 +1471,9 @@
                     owner_name: ownerName,
                     due_date: dueInput ? dueInput.value : '',
                     votes: 0,
-                    status: 'open'
+                    status: 'open',
+                    // Retro input is owned by its contributor: no vote on it.
+                    is_mine: category !== 'action'
                 });
                 if (descInput) { descInput.value = ''; }
                 if (dueInput) { dueInput.value = ''; }
@@ -1472,7 +1494,17 @@
                     }
                     return;
                 }
+                var nowVoted = (typeof resp.voted === 'boolean') ? resp.voted : !wasVoted;
+                wasVoted = !nowVoted;
                 var delta = wasVoted ? -1 : 1;
+                if (typeof resp.votes_left === 'number') {
+                    var perMember = parseInt(root.getAttribute('data-votes-per-member'), 10) || 0;
+                    root.setAttribute('data-votes-used', String(Math.max(0, perMember - resp.votes_left)));
+                    root.querySelectorAll('.sprint-imp-votes-left').forEach(function(c) {
+                        c.textContent = (root.getAttribute('data-lbl-votes-left') || window.sprintT('votesLeft', '%1$s of %2$s votes left'))
+                            .replace('%1$s', String(resp.votes_left)).replace('%2$s', String(perMember));
+                    });
+                }
                 root.querySelectorAll('[data-improvement-id="' + impId + '"]').forEach(function(r) {
                     var votes = Math.max(0, (parseInt(r.getAttribute('data-votes'), 10) || 0) + delta);
                     r.setAttribute('data-votes', String(votes));
@@ -1492,6 +1524,80 @@
                 });
                 resortVoteLists(root);
             }).always(function() { el.disabled = false; });
+
+        } else if (action === 'meeting-imp-carry') {
+            // Unhandled input of the previous retrospective joins this one.
+            var prevRow = el.closest('[data-prev-improvement-id]');
+            if (!prevRow) { return; }
+            var prevId = parseInt(prevRow.getAttribute('data-prev-improvement-id'), 10) || 0;
+            el.disabled = true;
+            impPost(root, {
+                action: 'improvement_carry',
+                id: prevId,
+                meeting_id: parseInt(root.getAttribute('data-meeting-id'), 10) || 0
+            }).done(function(resp) {
+                if (!resp || !resp.success || !resp.row) {
+                    if (window.glpi_toast_error) {
+                        window.glpi_toast_error((resp && resp.message) || window.sprintT('saveFailed', 'Could not save'));
+                    }
+                    el.disabled = false;
+                    return;
+                }
+                insertImpRow(root, resp.row);
+                var box = prevRow.closest('.sprint-imp-prev');
+                if (prevRow.parentNode) { prevRow.parentNode.removeChild(prevRow); }
+                if (box) {
+                    var left = box.querySelectorAll('[data-prev-improvement-id]').length;
+                    var count = box.querySelector('.sprint-imp-prev-count');
+                    if (count) { count.textContent = String(left); }
+                    if (left === 0) { box.style.display = 'none'; }
+                }
+                if (window.glpi_toast_info) { window.glpi_toast_info(window.sprintT('carried', 'Added to this retrospective')); }
+            }).fail(function() { el.disabled = false; });
+
+        } else if (action === 'meeting-imp-assign') {
+            // Owner and due date for an action made from a top-voted theme.
+            var aRow = el.closest('[data-improvement-id]');
+            var aBox = el.closest('.sprint-imp-assign');
+            if (!aRow || !aBox) { return; }
+            var ownerSelect = aBox.querySelector('.sprint-imp-assign-owner');
+            var dueField    = aBox.querySelector('.sprint-imp-assign-due');
+            var ownerId     = ownerSelect ? (parseInt(ownerSelect.value, 10) || 0) : 0;
+            if (ownerId <= 0) { if (ownerSelect) { ownerSelect.focus(); } return; }
+            var aId = parseInt(aRow.getAttribute('data-improvement-id'), 10) || 0;
+            el.disabled = true;
+            impPost(root, {
+                action: 'improvement_assign',
+                id: aId,
+                users_id: ownerId,
+                due_date: dueField ? dueField.value : '',
+                meeting_id: parseInt(root.getAttribute('data-meeting-id'), 10) || 0
+            }).done(function(resp) {
+                if (!resp || !resp.success) {
+                    if (window.glpi_toast_error) {
+                        window.glpi_toast_error((resp && resp.message) || window.sprintT('updateFailed', 'Could not update'));
+                    }
+                    el.disabled = false;
+                    return;
+                }
+                var ownerLabel = resp.owner_name || (ownerSelect ? ownerSelect.options[ownerSelect.selectedIndex].text : '');
+                root.querySelectorAll('[data-improvement-id="' + aId + '"]').forEach(function(r) {
+                    var o = r.querySelector('.sprint-imp-owner');
+                    if (o) {
+                        o.innerHTML = '<i class="fas fa-user me-1"></i>';
+                        o.appendChild(document.createTextNode(ownerLabel || '—'));
+                    }
+                    if (dueField && dueField.value && !r.querySelector('.sprint-imp-due')) {
+                        var dueEl = document.createElement('span');
+                        dueEl.className = 'sprint-imp-due text-muted sprint-small';
+                        dueEl.innerHTML = '<i class="far fa-calendar me-1"></i>';
+                        dueEl.appendChild(document.createTextNode(dueField.value));
+                        if (o && o.parentNode) { o.parentNode.insertBefore(dueEl, o.nextSibling); }
+                    }
+                    var picker = r.querySelector('.sprint-imp-assign');
+                    if (picker && picker.parentNode) { picker.parentNode.removeChild(picker); }
+                });
+            }).fail(function() { el.disabled = false; });
 
         } else if (action === 'meeting-imp-toggle') {
             var row = el.closest('[data-improvement-id]');
@@ -2134,8 +2240,10 @@
     };
 
     var seq = 0;
-    window.sprintConfirm = function(msg, onOk, opts) {
-        opts = opts || {};
+
+    // In-page dialog with a custom body. opts.validate() (optional) says
+    // whether OK is allowed; opts.onOk(box) runs on confirm.
+    function openDialog(opts) {
         var back = document.activeElement;
         var id = 'sprint-confirm-' + (++seq);
 
@@ -2145,12 +2253,13 @@
             + 'display:flex;align-items:center;justify-content:center;padding:16px;';
 
         var box = document.createElement('div');
-        box.setAttribute('role', 'alertdialog');
+        box.setAttribute('role', opts.body ? 'dialog' : 'alertdialog');
         box.setAttribute('aria-modal', 'true');
         box.setAttribute('aria-labelledby', id + '-title');
         box.setAttribute('aria-describedby', id + '-msg');
         box.style.cssText = 'background:var(--tblr-bg-surface,#fff);color:var(--tblr-body-color,#212529);'
-            + 'border:1px solid var(--tblr-border-color,#dee2e6);border-radius:8px;width:100%;max-width:480px;'
+            + 'border:1px solid var(--tblr-border-color,#dee2e6);border-radius:8px;width:100%;max-width:' + (opts.wide ? '640px' : '480px') + ';'
+            + 'max-height:calc(100vh - 32px);overflow:auto;'
             + 'padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.25);';
 
         var title = document.createElement('div');
@@ -2162,7 +2271,7 @@
         text.id = id + '-msg';
         text.className = 'mb-3';
         text.style.whiteSpace = 'pre-line';
-        text.textContent = msg;
+        text.textContent = opts.message || '';
 
         var actions = document.createElement('div');
         actions.className = 'd-flex justify-content-end gap-2';
@@ -2178,16 +2287,20 @@
         actions.appendChild(ok);
 
         box.appendChild(title);
-        box.appendChild(text);
+        if (opts.message) { box.appendChild(text); }
+        if (opts.body) { box.appendChild(opts.body); }
         box.appendChild(actions);
         overlay.appendChild(box);
         document.body.appendChild(overlay);
 
+        function refresh() {
+            ok.disabled = typeof opts.validate === 'function' ? !opts.validate(box) : false;
+        }
         function close(confirmed) {
             document.removeEventListener('keydown', onKey, true);
             if (overlay.parentNode) { overlay.parentNode.removeChild(overlay); }
             if (back && document.contains(back) && typeof back.focus === 'function') { back.focus(); }
-            if (confirmed && typeof onOk === 'function') { onOk(); }
+            if (confirmed && typeof opts.onOk === 'function') { opts.onOk(box); }
             if (!confirmed && typeof opts.onCancel === 'function') { opts.onCancel(); }
         }
         function onKey(e) {
@@ -2195,18 +2308,147 @@
                 e.preventDefault();
                 e.stopPropagation();
                 close(false);
-            } else if (e.key === 'Tab') {
+            } else if (e.key === 'Tab' && !opts.body) {
                 // Two buttons: keep focus inside the dialog.
                 e.preventDefault();
                 (document.activeElement === ok ? cancel : ok).focus();
             }
         }
         document.addEventListener('keydown', onKey, true);
+        box.addEventListener('input', refresh);
+        box.addEventListener('change', refresh);
         cancel.addEventListener('click', function() { close(false); });
-        ok.addEventListener('click', function() { close(true); });
+        ok.addEventListener('click', function() { if (!ok.disabled) { close(true); } });
         overlay.addEventListener('click', function(e) { if (e.target === overlay) { close(false); } });
+        refresh();
+        var first = opts.body ? opts.body.querySelector('textarea, input, select') : null;
         // Destructive questions start on Cancel, so Enter never deletes by accident.
-        (opts.danger ? cancel : ok).focus();
+        (first || (opts.danger ? cancel : ok)).focus();
+    }
+
+    window.sprintConfirm = function(msg, onOk, opts) {
+        opts = opts || {};
+        openDialog({
+            title: opts.title, message: msg, danger: !!opts.danger,
+            okLabel: opts.okLabel, cancelLabel: opts.cancelLabel,
+            onOk: onOk, onCancel: opts.onCancel
+        });
+    };
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) { node.className = className; }
+        if (text != null) { node.textContent = String(text); }
+        return node;
+    }
+
+    /**
+     * Reason dialog for a capacity above the maximum per item (reply
+     * `needs_justification` of ajax/updateitemquick.php). onOk(reason).
+     */
+    window.sprintCapacityJustify = function(resp, onOk) {
+        var body = el('div');
+        var label = el('label', 'form-label fw-bold', window.sprintT('reasonLabel', 'Reason'));
+        var area = el('textarea', 'form-control');
+        area.rows = 3;
+        area.maxLength = 2000;
+        area.placeholder = window.sprintT('reasonPlaceholder', 'Why does this item need more than the maximum?');
+        area.value = resp && resp.justification ? String(resp.justification) : '';
+        label.appendChild(area);
+        body.appendChild(label);
+        openDialog({
+            title: window.sprintT('reasonTitle', 'Reason needed'),
+            message: resp && resp.message ? resp.message : '',
+            body: body,
+            okLabel: window.sprintT('save', 'Save'),
+            validate: function() { return area.value.trim() !== ''; },
+            onOk: function() { onOk(area.value.trim()); }
+        });
+    };
+
+    /**
+     * Scrum Master review of items above the maximum capacity per item
+     * (reply `needs_cap_review`): approve the planner's reason as it is or
+     * lower the capacity inline. onOk({itemId: capacity}).
+     */
+    function capacityReviewDialog(resp, onOk) {
+        var body = el('div');
+        var inputs = {};
+        (resp.items || []).forEach(function(item) {
+            var card = el('div', 'border rounded p-2 mb-2');
+            var head = el('div', 'd-flex flex-wrap align-items-center gap-2 mb-1');
+            head.appendChild(el('span', 'fw-bold flex-grow-1', item.name || ('#' + item.id)));
+            if (item.owner) { head.appendChild(el('span', 'text-muted sprint-small', item.owner)); }
+            head.appendChild(el('span', 'badge bg-yellow-lt', item.capacity + '% (+' + item.over + '%)'));
+            card.appendChild(head);
+            var reason = el('div', 'sprint-small mb-2');
+            reason.style.whiteSpace = 'pre-line';
+            if (item.justification) {
+                reason.appendChild(el('span', 'fw-bold', window.sprintT('reasonLabel', 'Reason') + ': '));
+                reason.appendChild(document.createTextNode(item.justification));
+            } else {
+                reason.className += ' text-muted fst-italic';
+                reason.textContent = window.sprintT('noReason', 'No reason given');
+            }
+            card.appendChild(reason);
+            var row = el('div', 'd-flex align-items-center gap-2');
+            var lbl = el('label', 'form-label mb-0 sprint-small', window.sprintT('capacityLabel', 'Capacity (%)'));
+            var inp = el('input', 'form-control form-control-sm');
+            inp.type = 'number';
+            inp.min = '0.5';
+            inp.max = String(parseFloat(item.capacity) || 100);
+            inp.step = '0.5';
+            inp.style.maxWidth = '110px';
+            inp.value = item.capacity;
+            inp.id = 'sprint-capreview-' + item.id;
+            lbl.htmlFor = inp.id;
+            row.appendChild(lbl);
+            row.appendChild(inp);
+            row.appendChild(el('span', 'text-muted sprint-small', window.sprintT('capLowerHint', 'Keep the value to approve it, or lower it')));
+            card.appendChild(row);
+            body.appendChild(card);
+            inputs[item.id] = inp;
+        });
+        openDialog({
+            title: window.sprintT('capReviewTitle', 'Capacity above the maximum'),
+            message: resp.message || '',
+            body: body,
+            wide: true,
+            okLabel: window.sprintT('approveAssign', 'Approve and assign'),
+            validate: function() {
+                return Object.keys(inputs).every(function(id) {
+                    var v = parseFloat(inputs[id].value);
+                    return v > 0 && v <= (parseFloat(inputs[id].max) || 100);
+                });
+            },
+            onOk: function() {
+                var decisions = {};
+                Object.keys(inputs).forEach(function(id) { decisions[id] = inputs[id].value; });
+                onOk(decisions);
+            }
+        });
+    }
+
+    /**
+     * The questions an assign endpoint may answer with instead of assigning:
+     * a capacity review (`needs_cap_review`) or a credit confirmation
+     * (`needs_credit_confirm`). Opens the dialog and, on OK, calls
+     * retry(extraPostData). Returns true when the reply was such a question.
+     */
+    window.sprintAssignGuard = function(resp, retry) {
+        if (!resp || resp.success) { return false; }
+        if (resp.needs_cap_review) {
+            capacityReviewDialog(resp, function(decisions) { retry({ cap_capacity: decisions }); });
+            return true;
+        }
+        if (resp.needs_credit_confirm) {
+            window.sprintConfirm(resp.message || '', function() { retry({ confirm_credits: 1 }); }, {
+                title: window.sprintT('creditTitle', 'Credits past the agreement'),
+                okLabel: window.sprintT('assignAnyway', 'Assign anyway')
+            });
+            return true;
+        }
+        return false;
     };
 })();
 /* === end terminology === */

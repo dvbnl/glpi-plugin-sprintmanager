@@ -51,6 +51,27 @@ $assigned = 0;
 $skipped  = 0;
 $sprintCache = [];
 
+// Per target sprint: the Scrum Master's capacity decisions and the credit
+// confirmation, asked before anything moves (same dialogs as a single assign).
+$bySprint = [];
+foreach ($ready as $row) {
+    $sid = (int)($row['proposed_sprints_id'] ?? 0);
+    if ($sid > 0 && GlpiPlugin\Sprint\SprintItem::currentUserIsScrumMasterOf($sid)) {
+        $bySprint[$sid][] = $row;
+    }
+}
+foreach ($bySprint as $sid => $rows) {
+    $sp = new GlpiPlugin\Sprint\Sprint();
+    if (!$sp->getFromDB($sid) || !GlpiPlugin\Sprint\SprintItem::sprintEntityAccessible($sid)) {
+        continue;
+    }
+    $guard = GlpiPlugin\Sprint\SprintAssignGuard::check($rows, $sid, (string)$sp->fields['name'], $_POST);
+    if ($guard !== null) {
+        echo json_encode($guard);
+        return;
+    }
+}
+
 foreach ($ready as $row) {
     $id       = (int)$row['id'];
     $sprintId = (int)($row['proposed_sprints_id'] ?? 0);
@@ -92,6 +113,7 @@ foreach ($ready as $row) {
     if ($readyChecks !== null) {
         $update['ready_checks'] = $readyChecks;
     }
+    $update += GlpiPlugin\Sprint\SprintAssignGuard::capacityUpdate($one->fields, $_POST);
     if ($one->update($update)) {
         GlpiPlugin\Sprint\SprintItem::purgeBacklogCoupling(
             (string)($one->fields['itemtype'] ?? ''),

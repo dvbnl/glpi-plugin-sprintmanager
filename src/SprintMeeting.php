@@ -583,6 +583,15 @@ class SprintMeeting extends CommonDBTM
 
             $guided['improvements']           = SprintAgility::getImprovementsForSprint($sprintId);
             $guided['improvement_categories'] = SprintAgility::improvementCategories();
+            // Dot-voting: a fixed number of votes per member, none on your own
+            // input. Once voting closed the top themes are actions and the
+            // remaining input is greyed out (it returns in the next retro).
+            $guided['votes_per_member'] = Config::getRetroVotesPerMember();
+            $guided['votes_used']       = SprintAgility::votesUsed($sprintId, $uid);
+            $guided['inputs_handled']   = SprintAgility::inputsHandled($sprintId);
+            $guided['top_actions']      = SprintAgility::RETRO_TOP_ACTIONS;
+            $guided['prev_inputs']      = $predecessor ? SprintAgility::getUnhandledInputs((int)$predecessor['id']) : [];
+            $guided['member_options']   = $memberOptions;
         }
 
         return $guided;

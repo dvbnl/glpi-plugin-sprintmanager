@@ -36,6 +36,23 @@ final class SprintI18n
             'showLess'            => __('Show fewer tags', 'sprint'),
             // %d = number of tags folded away
             'showMore'            => __('Show %d more tags', 'sprint'),
+            'save'                => __('Save'),
+            // Maximum capacity per item: the planner's reason and the Scrum
+            // Master's review on assignment.
+            'reasonTitle'         => __('Reason needed', 'sprint'),
+            'reasonLabel'         => __('Reason', 'sprint'),
+            'reasonPlaceholder'   => __('Why does this item need more than the maximum?', 'sprint'),
+            'noReason'            => __('No reason given', 'sprint'),
+            'capReviewTitle'      => __('Capacity above the maximum', 'sprint'),
+            'capacityLabel'       => __('Capacity (%)', 'sprint'),
+            'capLowerHint'        => __('Keep the value to approve it, or lower it', 'sprint'),
+            'approveAssign'       => __('Approve and assign', 'sprint'),
+            'creditTitle'         => __('Credits past the agreement', 'sprint'),
+            'assignAnyway'        => __('Assign anyway', 'sprint'),
+            // Retrospective voting and the carried-over input
+            'votesLeft'           => __('%1$s of %2$s votes left', 'sprint'),
+            'ownInput'            => __('Your own input: no vote', 'sprint'),
+            'carried'             => __('Added to this retrospective', 'sprint'),
         ];
     }
 

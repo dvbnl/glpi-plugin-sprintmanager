@@ -125,8 +125,24 @@ if (!$meeting->update($update, $logged)) {
 }
 
 $meeting->getFromDB($meetingId);
+
+// Retrospective: once the facilitator moves past "Cluster & vote" (or ends
+// the meeting), the top-voted themes become actions, once per sprint.
+$promoted = 0;
+if ($meetingType === GlpiPlugin\Sprint\SprintMeeting::TYPE_RETROSPECTIVE
+    && in_array($action, ['set_phase', 'end_meeting'], true)) {
+    $voteIndex = array_search('vote', array_column($phases, 'key'), true);
+    $current   = (int)($meeting->fields['current_phase'] ?? 0);
+    if ($voteIndex !== false && ($action === 'end_meeting' || $current > (int)$voteIndex)) {
+        $promoted = GlpiPlugin\Sprint\SprintAgility::promoteTopVotedInputs($sprintId, $meetingId);
+    }
+}
+
 echo json_encode([
     'success'             => true,
+    // > 0 makes the browser reload: the new actions and the greyed-out
+    // remaining input are rendered server-side.
+    'promoted'            => $promoted,
     // Echoed so the notes autosave can ignore responses to older saves.
     'seq'                 => (int)($_POST['seq'] ?? 0),
     'phase_key'           => (string)($_POST['phase_key'] ?? ''),

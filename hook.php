@@ -89,6 +89,7 @@ function plugin_sprint_install(): bool
             `users_id`                 INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owner/Assignee',
             `sort_order`               INT NOT NULL DEFAULT 0,
             `capacity`                 DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Capacity usage in %',
+            `capacity_justification`   TEXT COMMENT 'Why this item needs more than the configured maximum capacity per item',
             `note`                     TEXT COMMENT 'Standup note',
             `date_creation`            TIMESTAMP NULL DEFAULT NULL,
             `date_mod`                 TIMESTAMP NULL DEFAULT NULL,
@@ -197,6 +198,9 @@ function plugin_sprint_install(): bool
             ['after' => 'plugin_sprint_sprintcustomers_id']
         );
         $migration->dropField('glpi_plugin_sprint_sprintitems', 'capacity_actual');
+        // Reason an item is allowed above the configured maximum capacity per
+        // item (plugin setting); the Scrum Master reviews it on assignment.
+        $migration->addField('glpi_plugin_sprint_sprintitems', 'capacity_justification', 'text', ['after' => 'capacity']);
         // The catalogue entry the credits were taken from, 0 = entered by hand.
         $migration->addField(
             'glpi_plugin_sprint_sprintitems',
@@ -470,10 +474,12 @@ function plugin_sprint_install(): bool
             `is_anonymous` TINYINT NOT NULL DEFAULT 0,
             `origin_improvements_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Legacy carry-over copy: id of the original action, 0 = this row is the action itself',
             `plugin_sprint_sprintmeetings_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Retrospective in which the action was agreed, 0 = unknown',
+            `source_improvements_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Row this one was derived from: the retro input an action was made of, or the earlier input carried into this retrospective',
             `date_creation` TIMESTAMP NULL DEFAULT NULL,
             `date_mod` TIMESTAMP NULL DEFAULT NULL,
             PRIMARY KEY (`id`), KEY `sprint_status` (`plugin_sprint_sprints_id`,`status`), KEY `owner` (`users_id`),
-            KEY `origin_improvements_id` (`origin_improvements_id`), KEY `plugin_sprint_sprintmeetings_id` (`plugin_sprint_sprintmeetings_id`)
+            KEY `origin_improvements_id` (`origin_improvements_id`), KEY `plugin_sprint_sprintmeetings_id` (`plugin_sprint_sprintmeetings_id`),
+            KEY `source_improvements_id` (`source_improvements_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
         // One follow-up note per improvement action per retrospective, so the
         // discussion history of an action stays readable across sprints.
@@ -529,6 +535,10 @@ function plugin_sprint_install(): bool
         $migration->addField($impTable, 'plugin_sprint_sprintmeetings_id', 'integer', ['value' => 0, 'after' => 'origin_improvements_id']);
         $migration->addKey($impTable, 'origin_improvements_id');
         $migration->addKey($impTable, 'plugin_sprint_sprintmeetings_id');
+        // Top-voted retro input becomes an action, the rest is carried into
+        // the next retrospective: both keep a link to the row they came from.
+        $migration->addField($impTable, 'source_improvements_id', 'integer', ['value' => 0, 'after' => 'plugin_sprint_sprintmeetings_id']);
+        $migration->addKey($impTable, 'source_improvements_id');
         $migration->migrationOneTable($impTable);
         if ($linkLegacyCopies) {
             GlpiPlugin\Sprint\SprintAgility::linkLegacyCarryCopies();

@@ -43,6 +43,10 @@ function plugin_sprint_backlog_plan_fields(array $post): array
             $out[$key] = in_array($key, ['capacity', 'credits'], true) ? (float)$post[$key] : (int)$post[$key];
         }
     }
+    // Reason for an estimate above the maximum capacity per item.
+    if (array_key_exists('capacity_justification', $post)) {
+        $out['capacity_justification'] = (string)$post['capacity_justification'];
+    }
     // Tag checkboxes come with a hidden empty `_tags` so "none ticked" still posts.
     if (array_key_exists('_tags', $post)) {
         $out['_tags'] = is_array($post['_tags']) ? array_values(array_filter($post['_tags'], 'strlen')) : [];
@@ -239,12 +243,23 @@ if (isset($_POST['assign_to_sprint'])) {
         $update['ready_checks'] = json_encode($confirmed);
     }
 
+    // The planning-line dialog renders the capacity review and the credit
+    // question up front; a stale dialog is caught here and sent back.
+    $sprintRow = new GlpiPlugin\Sprint\Sprint();
+    $sprintRow->getFromDB($sprintId);
+    $guard = $canAssign && $dorOk
+        ? GlpiPlugin\Sprint\SprintAssignGuard::check([$item->fields], $sprintId, (string)($sprintRow->fields['name'] ?? ''), $_POST)
+        : null;
+    $update += GlpiPlugin\Sprint\SprintAssignGuard::capacityUpdate($item->fields, $_POST);
+
     if (!$canAssign) {
         Session::addMessageAfterRedirect(
             __('Only the Scrum Master of the selected sprint can assign items to it.', 'sprint'),
             false,
             ERROR
         );
+    } elseif ($guard !== null) {
+        Session::addMessageAfterRedirect((string)$guard['message'], false, WARNING);
     } elseif (!$dorOk) {
         Session::addMessageAfterRedirect(
             __('Definition of Ready incomplete. Confirm every check to assign this item.', 'sprint'),

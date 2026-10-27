@@ -161,6 +161,14 @@ if (!$confirmOverflow && !$isFastlane && !$capacityGuarded) {
     }
 }
 
+// Maximum capacity per item: above it the planner gives a reason once (the
+// client opens the reason dialog on `needs_justification`).
+$justify = GlpiPlugin\Sprint\SprintItem::capacityJustificationGate($item->fields, $update, $_POST);
+if ($justify !== null) {
+    echo json_encode($justify);
+    return;
+}
+
 $beforeLogId = $meetingId > 0
     ? GlpiPlugin\Sprint\SprintAudit::snapshotMaxLogId()
     : 0;

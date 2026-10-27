@@ -1037,6 +1037,10 @@ class SprintItem extends CommonDBTM
             }
             echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
             echo "</td></tr>";
+            $justification = self::capacityJustificationField('');
+            if ($justification !== '') {
+                echo "<tr class='tab_bg_1'><td>" . __('Reason above the maximum', 'sprint') . "</td><td colspan='5'>{$justification}</td></tr>";
+            }
 
             echo "</table>";
             Html::closeForm();
@@ -2426,7 +2430,7 @@ jQuery(function() {
         var isFastlane = parseInt(row.data('is-fastlane'), 10) === 1;
         var linkedType = String(row.attr('data-linked-itemtype') || '');
 
-        modal.removeData('qe-snapshot qe-request-reason qe-carry-split qe-allow-close');
+        modal.removeData('qe-snapshot qe-request-reason qe-carry-split qe-allow-close qe-cap-justification');
         clearError(modal);
         showDiscard(modal, false);
         modal.find('.sprint-qe-pending').hide().empty();
@@ -2724,6 +2728,7 @@ jQuery(function() {
                     ? modal.find('select[name=users_id]').val() : undefined,
                 story_points: modal.find('input[name=story_points]').val(),
                 capacity: modal.find('select[name=capacity]').val(),
+                capacity_justification: modal.data('qe-cap-justification') || undefined,
                 plugin_sprint_sprintcustomers_id: field('select[name=plugin_sprint_sprintcustomers_id]'),
                 credits: field('input[name=credits]'),
                 plugin_sprint_sprintcreditproducts_id: field('select[name=plugin_sprint_sprintcreditproducts_id]'),
@@ -2764,6 +2769,17 @@ jQuery(function() {
             showError(modal, L('networkError'), true);
         }
         function onResp(resp) {
+            if (resp && resp.needs_justification && window.sprintCapacityJustify) {
+                // Above the maximum capacity per item: the reason is asked
+                // once and travels with the next save.
+                done();
+                window.sprintCapacityJustify(resp, function(reason) {
+                    modal.data('qe-cap-justification', reason);
+                    busy(btn, true);
+                    runSave(false).done(onResp).fail(onFail);
+                });
+                return;
+            }
             if (resp && resp.needs_confirm) {
                 // A necessary confirmation: the server message names the
                 // member and the overflow.
@@ -3680,6 +3696,9 @@ JS;
         if (!$this->validateCapacity($input)) {
             return false;
         }
+        if (!$this->validateCapacityLimit($input)) {
+            return false;
+        }
         if (!self::validateNoDuplicateLink($input)) {
             return false;
         }
@@ -3951,6 +3970,9 @@ JS;
             return false;
         }
         if (!$this->validateCapacity($input, (int)($input['id'] ?? 0))) {
+            return false;
+        }
+        if (!$this->validateCapacityLimit($input)) {
             return false;
         }
         if (!self::validateNoDuplicateLink($validationInput, (int)($input['id'] ?? 0))) {
@@ -4425,6 +4447,7 @@ JS;
                 'users_id'                 => $ownerId,
                 // The carried share; 0 without a split, to be re-estimated.
                 'capacity'                 => $capacity,
+                'capacity_justification'   => (string)($source->fields['capacity_justification'] ?? ''),
                 'credits'                  => $credits,
                 'plugin_sprint_sprintcreditproducts_id' => (int)($source->fields['plugin_sprint_sprintcreditproducts_id'] ?? 0),
                 'is_fastlane'              => (int)($source->fields['is_fastlane'] ?? 0),
@@ -4578,6 +4601,9 @@ JS;
         if (isset($input['users_id']))    $input['users_id']    = (int)$input['users_id'];
         if (isset($input['story_points'])) $input['story_points'] = max(0, (int)$input['story_points']);
         if (isset($input['capacity']))    $input['capacity']    = SprintMember::normalizeCapacity($input['capacity']);
+        if (isset($input['capacity_justification'])) {
+            $input['capacity_justification'] = mb_substr(trim((string)$input['capacity_justification']), 0, 2000);
+        }
         // An empty customer field means "not sent" (a disabled picker or a
         // selection that never loaded), never "no customer": only an explicit
         // 0 detaches. Validity is judged in validateCustomer().
@@ -4621,6 +4647,147 @@ JS;
      * @param int   $excludeId  Item ID to exclude from calculation (for updates)
      * @return bool
      */
+    /** Whether the 1.3.1 column for the reason above the item maximum exists. */
+    public static function hasCapacityJustification(): bool
+    {
+        global $DB;
+        static $has = null;
+        return $has ??= $DB->fieldExists(self::getTable(), 'capacity_justification');
+    }
+
+    /**
+     * The configured maximum capacity per regular item, or 0 when the limit
+     * is off or the schema predates it.
+     */
+    public static function itemCapacityLimit(): float
+    {
+        return self::hasCapacityJustification() ? Config::getItemCapacityLimit() : 0.0;
+    }
+
+    /** Whether this row sits above the maximum capacity per item. */
+    public static function isAboveCapacityLimit(array $row): bool
+    {
+        $limit = self::itemCapacityLimit();
+        return $limit > 0
+            && (int)($row['is_fastlane'] ?? 0) !== 1
+            && (float)($row['capacity'] ?? 0) > $limit;
+    }
+
+    /**
+     * The sentence shown when an item goes above the maximum capacity per
+     * item: the maximum, the advice to spread the work and the extra share
+     * that needs a reason.
+     */
+    public static function capacityLimitMessage(float $limit, float $capacity): string
+    {
+        return sprintf(
+            __('%1$s%% is the maximum capacity per item. Spreading the work over several items is recommended for a better distribution through the sprint. Give a reason for the extra %2$s%%.', 'sprint'),
+            SprintMember::formatCapacity($limit),
+            SprintMember::formatCapacity(max(0.0, $capacity - $limit))
+        );
+    }
+
+    /**
+     * Above the maximum capacity per item the planner gives a reason; the
+     * Scrum Master's review on assignment (`_capacity_reviewed`) and fastlane
+     * items pass. Back under the maximum the reason is cleared.
+     */
+    private function validateCapacityLimit(array &$input): bool
+    {
+        if (!empty($input['_capacity_reviewed'])) {
+            unset($input['_capacity_reviewed']);
+            return true;
+        }
+        // Server-side bookkeeping (carry-over, split) moves what was planned.
+        if (self::$skipAssignGuard || self::$skipCreditGuard) {
+            return true;
+        }
+        $limit = self::itemCapacityLimit();
+        if ($limit <= 0 || !array_key_exists('capacity', $input)) {
+            return true;
+        }
+        $isFastlane = (int)($input['is_fastlane'] ?? $this->fields['is_fastlane'] ?? 0) === 1;
+        $capacity   = (float)$input['capacity'];
+        if ($isFastlane || $capacity <= $limit) {
+            if (trim((string)($this->fields['capacity_justification'] ?? '')) !== '') {
+                $input['capacity_justification'] = '';
+            }
+            return true;
+        }
+        $reason = trim((string)($input['capacity_justification'] ?? $this->fields['capacity_justification'] ?? ''));
+        if ($reason !== '') {
+            return true;
+        }
+        Session::addMessageAfterRedirect(self::capacityLimitMessage($limit, $capacity), false, ERROR);
+        return false;
+    }
+
+    /**
+     * AJAX gate for the quick edits: when the posted capacity goes above the
+     * maximum per item without a reason, the reply that opens the reason
+     * dialog. A posted reason is merged into $update. Null = nothing to ask.
+     *
+     * @param array<string,mixed> $stored the item as stored
+     * @param array<string,mixed> $update the pending update (by reference)
+     * @param array<string,mixed> $post   the request
+     * @return array<string,mixed>|null
+     */
+    public static function capacityJustificationGate(array $stored, array &$update, array $post): ?array
+    {
+        $limit = self::itemCapacityLimit();
+        if ($limit <= 0) {
+            return null;
+        }
+        $posted = array_key_exists('capacity_justification', $post) ? trim((string)$post['capacity_justification']) : null;
+        if ($posted !== null && $posted !== '') {
+            $update['capacity_justification'] = $posted;
+            return null;
+        }
+        if (!array_key_exists('capacity', $update)) {
+            return null;
+        }
+        $isFastlane = (int)($update['is_fastlane'] ?? $stored['is_fastlane'] ?? 0) === 1;
+        $capacity   = SprintMember::normalizeCapacity($update['capacity']);
+        if ($isFastlane || $capacity <= $limit) {
+            return null;
+        }
+        $old    = (float)($stored['capacity'] ?? 0);
+        $reason = trim((string)($stored['capacity_justification'] ?? ''));
+        // A reason on file covers the value it was given for; a new value
+        // above the maximum is asked about again.
+        if ($reason !== '' && abs($capacity - $old) < 0.01) {
+            return null;
+        }
+        return [
+            'success'             => false,
+            'needs_justification' => true,
+            'limit'               => SprintMember::formatCapacity($limit),
+            'capacity'            => SprintMember::formatCapacity($capacity),
+            'over'                => SprintMember::formatCapacity($capacity - $limit),
+            'justification'       => plugin_sprint_text($reason),
+            'message'             => self::capacityLimitMessage($limit, $capacity),
+        ];
+    }
+
+    /**
+     * The reason field of the plain forms (item form, planning line): one
+     * textarea, shown whenever the limit is on so the no-JS path stays whole.
+     */
+    public static function capacityJustificationField(string $value, string $id = ''): string
+    {
+        $limit = self::itemCapacityLimit();
+        if ($limit <= 0) {
+            return '';
+        }
+        $id = $id !== '' ? $id : 'sprint-capjust-' . mt_rand();
+        return "<textarea name='capacity_justification' id='" . htmlescape($id) . "' class='form-control sprint-capjust-input' rows='2' maxlength='2000'"
+            . " aria-describedby='" . htmlescape($id) . "-help' placeholder='" . __s('Why does this item need more than the maximum?', 'sprint') . "'>"
+            . htmlescape($value) . "</textarea>"
+            . "<div class='form-text sprint-small text-muted' id='" . htmlescape($id) . "-help'>"
+            . htmlescape(sprintf(__('Only needed above %s%% capacity. The Scrum Master reviews it when the item is assigned to the sprint.', 'sprint'), SprintMember::formatCapacity($limit)))
+            . "</div>";
+    }
+
     private function validateCapacity(array $input, int $excludeId = 0): bool
     {
         // Fastlane items distribute capacity via SprintFastlaneMember, so the
@@ -4912,6 +5079,10 @@ JS;
                 'value' => $this->fields['users_id'] ?? 0,
             ]);
             echo "</td></tr>";
+            $justification = self::capacityJustificationField((string)($this->fields['capacity_justification'] ?? ''));
+            if ($justification !== '') {
+                echo "<tr class='tab_bg_1'><td>" . __('Reason above the maximum', 'sprint') . "</td><td colspan='3'>{$justification}</td></tr>";
+            }
         }
 
         if (SprintCustomer::canUseCredits()) {

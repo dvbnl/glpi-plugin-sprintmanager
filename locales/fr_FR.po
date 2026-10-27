@@ -7893,3 +7893,170 @@ msgstr "Limite WIP : Revue"
 #: templates/sprinttemplate.form.html.twig:38
 msgid "WIP limit: Dependency"
 msgstr "Limite WIP : Dépendance"
+
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "%1$s has %2$s credits for %3$s. With these items the planned total comes to %4$s credits (%5$s over)."
+msgstr "%1$s dispose de %2$s crédits pour %3$s. Avec ces éléments, le total planifié atteint %4$s crédits (%5$s de trop)."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "%1$s has %2$s credits for %3$s. With this item the planned total comes to %4$s credits (%5$s over)."
+msgstr "%1$s dispose de %2$s crédits pour %3$s. Avec cet élément, le total planifié atteint %4$s crédits (%5$s de trop)."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "%1$s of %2$s votes left"
+msgstr "%1$s vote(s) sur %2$s restant(s)"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "%1$s%% is the maximum capacity per item. Spreading the work over several items is recommended for a better distribution through the sprint. Give a reason for the extra %2$s%%."
+msgstr "%1$s %% est la capacité maximale par élément. Répartir le travail sur plusieurs éléments est recommandé pour une meilleure distribution sur le sprint. Justifiez les %2$s %% supplémentaires."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "%s%% is the maximum capacity per item. Approve the reason or lower the capacity."
+msgstr "%s %% est la capacité maximale par élément. Approuvez la justification ou réduisez la capacité."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Add to this retrospective"
+msgstr "Ajouter à cette rétrospective"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Added to this retrospective"
+msgstr "Ajouté à cette rétrospective"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Approve and assign"
+msgstr "Approuver et affecter"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Assign anyway"
+msgstr "Affecter quand même"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Assign anyway?"
+msgstr "Affecter quand même ?"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Became an action in this retrospective"
+msgstr "Devenu une action dans cette rétrospective"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Capacity above the maximum"
+msgstr "Capacité au-dessus du maximum"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Credits past the agreement"
+msgstr "Crédits au-delà de l'accord"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Dot-votes every member may spend in the Cluster & vote phase. Nobody can vote on their own input. The top three themes become actions, the rest returns in the next retrospective."
+msgstr "Nombre de votes que chaque membre peut utiliser dans la phase Regrouper et voter. Personne ne vote sur sa propre contribution. Les trois thèmes les plus votés deviennent des actions, le reste revient à la prochaine rétrospective."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "How the team votes on its retrospective input."
+msgstr "Comment l'équipe vote sur les contributions de la rétrospective."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Input that did not become an action last time. Add it to this retrospective with one click, or leave it and it disappears."
+msgstr "Contributions qui ne sont pas devenues des actions la dernière fois. Ajoutez-les à cette rétrospective en un clic, sinon elles disparaissent."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Keep the value to approve it, or lower it"
+msgstr "Conservez la valeur pour l'approuver, ou réduisez-la"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Maximum capacity per item"
+msgstr "Capacité maximale par élément"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Maximum capacity per item (%)"
+msgstr "Capacité maximale par élément (%)"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Next retrospective"
+msgstr "Prochaine rétrospective"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "No reason given"
+msgstr "Aucune justification"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Nobody votes on their own input. When this phase closes, the %d most voted themes become actions."
+msgstr "Personne ne vote sur sa propre contribution. À la fin de cette phase, les %d thèmes les plus votés deviennent des actions."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Not handled now: it returns in the next retrospective"
+msgstr "Non traité maintenant : revient à la prochaine rétrospective"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Only needed above %s%% capacity. The Scrum Master reviews it when the item is assigned to the sprint."
+msgstr "Nécessaire uniquement au-delà de %s %% de capacité. Le Scrum Master l'examine lors de l'affectation au sprint."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Reason above the maximum"
+msgstr "Justification au-dessus du maximum"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Reason needed"
+msgstr "Justification requise"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Retrospective"
+msgstr "Rétrospective"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Set owner"
+msgstr "Définir le responsable"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "The percentage one regular item may claim without a reason, for example 10, 15 or 18."
+msgstr "Le pourcentage qu'un élément ordinaire peut réclamer sans justification, par exemple 10, 15 ou 18."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "The top themes became actions. The rest is greyed out and returns in the next retrospective."
+msgstr "Les thèmes les plus votés sont devenus des actions. Le reste est grisé et revient à la prochaine rétrospective."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Unhandled input from the previous retrospective"
+msgstr "Contributions non traitées de la rétrospective précédente"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Votes per member"
+msgstr "Votes par membre"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Voting closed"
+msgstr "Vote clos"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Voting is closed: the top themes are actions now."
+msgstr "Le vote est clos : les thèmes les plus votés sont désormais des actions."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Warn when a customer runs past its credits for the sprint"
+msgstr "Avertir lorsqu'un client dépasse ses crédits pour le sprint"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "When enabled, an item above the percentage below needs a reason from the planner, and the Scrum Master approves or lowers it when the item is assigned to the sprint. Spreading work over several items is recommended for a better distribution through the sprint. Fastlane items are exempt."
+msgstr "Si activé, un élément au-dessus du pourcentage ci-dessous nécessite une justification du planificateur, et le Scrum Master l'approuve ou le réduit lors de l'affectation au sprint. Répartir le travail sur plusieurs éléments est recommandé pour une meilleure distribution sur le sprint. Les éléments fastlane sont exemptés."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "When enabled, assigning an item whose credits push the customer past the credits agreed for that sprint asks the Scrum Master to confirm first."
+msgstr "Si activé, l'affectation d'un élément dont les crédits font dépasser au client les crédits convenus pour ce sprint demande d'abord la confirmation du Scrum Master."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Why does this item need more than the maximum?"
+msgstr "Pourquoi cet élément a-t-il besoin de plus que le maximum ?"
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "You cannot vote on your own input."
+msgstr "Vous ne pouvez pas voter sur votre propre contribution."
+
+#: src/SprintAssignGuard.php src/SprintAgility.php
+msgid "Your own input: no vote"
+msgstr "Votre contribution : pas de vote"
+
+#: src/SprintAgility.php
+msgid "Your %d vote is used. Remove it first to vote on something else."
+msgid_plural "All %d of your votes are used. Remove one first to vote on something else."
+msgstr[0] "Votre %d vote est utilisé. Retirez-le d'abord pour voter sur autre chose."
+msgstr[1] "Vos %d votes sont tous utilisés. Retirez-en un d'abord pour voter sur autre chose."

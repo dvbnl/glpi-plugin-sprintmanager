@@ -57,6 +57,19 @@ class Config extends CommonDBTM
     const CFG_DEFINITION_READY = 'definition_ready';
     const CFG_DEFINITION_DONE  = 'definition_done';
 
+    /** Maximum capacity %% one regular item may claim. Above it the planner
+     *  gives a reason and the Scrum Master reviews the item on assignment.
+     *  Default off, 10 %% when enabled. */
+    const CFG_ITEM_CAP_LIMIT   = 'item_capacity_limit_enabled';
+    const CFG_ITEM_CAP_PERCENT = 'item_capacity_limit_percent';
+
+    /** Warn the Scrum Master when assigning an item pushes its customer past
+     *  the credits agreed for that sprint. Default on. */
+    const CFG_CREDIT_OVERRUN_WARN = 'credit_overrun_warning';
+
+    /** Dot-votes every member gets in the retrospective. Default 3. */
+    const CFG_RETRO_VOTES = 'retro_votes_per_member';
+
     public static function getTypeName($nb = 0): string
     {
         return __('SprintManager', 'sprint');
@@ -86,6 +99,10 @@ class Config extends CommonDBTM
             self::CFG_CREDIT_MANAGERS       => '{}',
             self::CFG_DEFINITION_READY      => '',
             self::CFG_DEFINITION_DONE       => '',
+            self::CFG_ITEM_CAP_LIMIT        => 0,
+            self::CFG_ITEM_CAP_PERCENT      => 10,
+            self::CFG_CREDIT_OVERRUN_WARN   => 1,
+            self::CFG_RETRO_VOTES           => 3,
         ];
         $stored = GlpiConfig::getConfigurationValues(self::CONTEXT);
         return array_merge($defaults, $stored);
@@ -176,6 +193,32 @@ class Config extends CommonDBTM
     {
         $cfg = self::getConfig();
         return (int)($cfg[self::CFG_BACKLOG_AUTO_CLEANUP] ?? 1) === 1;
+    }
+
+    /**
+     * Maximum capacity %% per regular item, 0 when the limit is off.
+     */
+    public static function getItemCapacityLimit(): float
+    {
+        $cfg = self::getConfig();
+        if ((int)($cfg[self::CFG_ITEM_CAP_LIMIT] ?? 0) !== 1) {
+            return 0.0;
+        }
+        return (float)max(1, min(100, (int)($cfg[self::CFG_ITEM_CAP_PERCENT] ?? 10)));
+    }
+
+    /** Whether assigning an item warns when its customer runs past the sprint's credits. */
+    public static function isCreditOverrunWarning(): bool
+    {
+        $cfg = self::getConfig();
+        return (int)($cfg[self::CFG_CREDIT_OVERRUN_WARN] ?? 1) === 1;
+    }
+
+    /** Dot-votes per member in a retrospective. */
+    public static function getRetroVotesPerMember(): int
+    {
+        $cfg = self::getConfig();
+        return max(1, min(20, (int)($cfg[self::CFG_RETRO_VOTES] ?? 3)));
     }
 
     /**
@@ -302,6 +345,10 @@ class Config extends CommonDBTM
             self::CFG_BACKLOG_AGING_DAYS    => static fn($v) => max(0, min(365, (int)$v)),
             self::CFG_DEFINITION_READY      => static fn($v) => implode("\n", SprintAgility::checklist((string)$v)),
             self::CFG_DEFINITION_DONE       => static fn($v) => implode("\n", SprintAgility::checklist((string)$v)),
+            self::CFG_ITEM_CAP_LIMIT        => static fn($v) => (int)(bool)$v,
+            self::CFG_ITEM_CAP_PERCENT      => static fn($v) => max(1, min(100, (int)$v)),
+            self::CFG_CREDIT_OVERRUN_WARN   => static fn($v) => (int)(bool)$v,
+            self::CFG_RETRO_VOTES           => static fn($v) => max(1, min(20, (int)$v)),
         ];
         $values = [];
         foreach ($normalize as $key => $fn) {
@@ -324,6 +371,7 @@ class Config extends CommonDBTM
         return [
             'planning' => [__('Planning & rights', 'sprint'), 'fas fa-user-shield'],
             'quality'  => [__('Quality', 'sprint'), 'fas fa-clipboard-check'],
+            'retro'    => [__('Retrospective', 'sprint'), 'fas fa-lightbulb'],
             'backlog'  => [__('Backlog', 'sprint'), 'fas fa-layer-group'],
             'tags'     => [__('Tags & categories', 'sprint'), 'fas fa-tags'],
             'credits'  => [__('Credits', 'sprint'), 'fas fa-coins'],
@@ -444,7 +492,31 @@ class Config extends CommonDBTM
         self::switchRow($cfg, self::CFG_CAPACITY_TO_POINTS, $canedit,
             __('Convert backlog capacity to story points on sprint assignment', 'sprint'),
             __('When enabled, assigning a backlog item with an estimated capacity % to a sprint automatically sets its story points to that capacity (1% = 1 story point). An explicitly estimated item keeps its own story points.', 'sprint'));
+        self::switchRow($cfg, self::CFG_ITEM_CAP_LIMIT, $canedit,
+            __('Maximum capacity per item', 'sprint'),
+            __('When enabled, an item above the percentage below needs a reason from the planner, and the Scrum Master approves or lowers it when the item is assigned to the sprint. Spreading work over several items is recommended for a better distribution through the sprint. Fastlane items are exempt.', 'sprint'));
+        $id = 'sprint-cfg-' . self::CFG_ITEM_CAP_PERCENT;
+        self::row($id, __('Maximum capacity per item (%)', 'sprint'),
+            __('The percentage one regular item may claim without a reason, for example 10, 15 or 18.', 'sprint'),
+            "<input type='number' min='1' max='100' step='1' class='form-control' style='max-width:120px;' id='{$id}' aria-describedby='{$id}-help' "
+            . "name='" . self::CFG_ITEM_CAP_PERCENT . "' value='" . (int)$cfg[self::CFG_ITEM_CAP_PERCENT] . "'"
+            . ($canedit ? '' : ' readonly') . ">");
+        self::switchRow($cfg, self::CFG_CREDIT_OVERRUN_WARN, $canedit,
+            __('Warn when a customer runs past its credits for the sprint', 'sprint'),
+            __('When enabled, assigning an item whose credits push the customer past the credits agreed for that sprint asks the Scrum Master to confirm first.', 'sprint'));
         self::closeForm($canedit, 'planning');
+        self::closeSection();
+
+        // Retrospective
+        self::openSection('retro', __('How the team votes on its retrospective input.', 'sprint'));
+        self::openForm($canedit, 'retro');
+        $id = 'sprint-cfg-' . self::CFG_RETRO_VOTES;
+        self::row($id, __('Votes per member', 'sprint'),
+            __('Dot-votes every member may spend in the Cluster & vote phase. Nobody can vote on their own input. The top three themes become actions, the rest returns in the next retrospective.', 'sprint'),
+            "<input type='number' min='1' max='20' step='1' class='form-control' style='max-width:120px;' id='{$id}' aria-describedby='{$id}-help' "
+            . "name='" . self::CFG_RETRO_VOTES . "' value='" . (int)$cfg[self::CFG_RETRO_VOTES] . "'"
+            . ($canedit ? '' : ' readonly') . ">");
+        self::closeForm($canedit, 'retro');
         self::closeSection();
 
         // Quality
