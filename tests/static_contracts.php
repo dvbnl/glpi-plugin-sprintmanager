@@ -155,8 +155,8 @@ foreach ([
     }
 }
 
-if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.3.1")) {
-    fwrite(STDERR, "Version was not advanced to 1.3.1\n");
+if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.3.2")) {
+    fwrite(STDERR, "Version was not advanced to 1.3.2\n");
     exit(1);
 }
 $endpoint = file_get_contents($root . '/front/sprintagility.form.php');

@@ -2,13 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.1] - 2026-10-19
+## [1.3.2] - 2026-10-27
 
 ### Added
 - **Maximum capacity per item** (setting, off by default, 10 % when on, any percentage such as 10, 15 or 18). Above it the planner gives a reason in the item form, the backlog edit dialog, the planning line and the quick edit (a dialog asks for it once, with the advice to spread the work over several items). When the item is assigned to a sprint, the Scrum Master gets one review per item above the maximum: approve the reason as it is or lower the capacity inline, on every path (backlog row, bulk kick-off, planning line). Fastlane items are exempt. New column `capacity_justification` on sprint items.
 - **Credits past the agreement.** Assigning an item whose credits push its customer past the credits agreed for that sprint (retainer, else the cap) asks the Scrum Master to confirm first, naming the customer, the agreed volume, the planned total and the overrun. Setting *Warn when a customer runs past its credits for the sprint*, on by default.
 - **Retrospective dot-voting rules.** Every member gets a fixed number of votes (setting *Votes per member*, default 3, shown as *x of y votes left*), and nobody can vote on their own input.
 - **Top themes become actions, the rest returns.** When the facilitator moves past *Cluster & vote* (or ends the retrospective), the three most voted inputs automatically become actions without owner, and the *Decide actions* phase offers an inline owner and due date for them. The remaining input is greyed out and marked *Next retrospective*. The next retrospective of the series lists it under *Unhandled input from the previous retrospective* in the *Collect input* phase, where one click adds it to that retrospective. Input left there disappears after that retrospective. New column `source_improvements_id` on improvements.
+
+### Fixed
+- The two columns added after 1.3.1 shipped (`capacity_justification` on sprint items, `source_improvements_id` on improvements) are created by the upgrade to 1.3.2. Instances that installed the 1.3.1 development build after 20 October and never saw an update prompt get them now.
+
+## [1.3.1] - 2026-10-19
+
+### Added
 - **Carry over from the item itself.** A *Carry over to sprint* card under the sprint item form, and a *Sprint planning* line with a *Quick edit* on the Sprints tab of a linked Ticket / Change / Problem / Project task, so an item from an older sprint — typically a ticket reopened after its sprint was completed — is picked up in a new sprint without opening an old meeting. The tab shows the item's latest sprint (and says so when that sprint is closed), its status, owner, adhoc flag and tags.
 - **Carry-over needs the Scrum Master's approval.** On every path (item form, linked-item quick edit, sprint quick edit, meeting) the Scrum Master of the *target* sprint carries over at once. Anyone else files a *Carry over* request with a reason, which lands in that sprint's Requests tab.
 - **Adhoc and tags from the quick edits.** Everyone who may edit an item in a sprint can now tick *Adhoc* in the quick-edit dialogs and on the item form. For anyone but the Scrum Master the change becomes an *Adhoc* approval request. The meeting quick-edit dialog gains the tag picker, and the linked-item quick edit offers both.

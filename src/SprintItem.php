@@ -4647,7 +4647,7 @@ JS;
      * @param int   $excludeId  Item ID to exclude from calculation (for updates)
      * @return bool
      */
-    /** Whether the 1.3.1 column for the reason above the item maximum exists. */
+    /** Whether the 1.3.2 column for the reason above the item maximum exists. */
     public static function hasCapacityJustification(): bool
     {
         global $DB;

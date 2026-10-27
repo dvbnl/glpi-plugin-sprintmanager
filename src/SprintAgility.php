@@ -1508,7 +1508,7 @@ HTML;
         return array_values($rows);
     }
 
-    /** Whether the 1.3.1 retro flow column (top-3 actions, carried input) exists. */
+    /** Whether the 1.3.2 retro flow column (top-3 actions, carried input) exists. */
     public static function hasRetroFlow(): bool
     {
         global $DB;

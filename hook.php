@@ -198,7 +198,7 @@ function plugin_sprint_install(): bool
             ['after' => 'plugin_sprint_sprintcustomers_id']
         );
         $migration->dropField('glpi_plugin_sprint_sprintitems', 'capacity_actual');
-        // Reason an item is allowed above the configured maximum capacity per
+        // 1.3.2: reason an item is allowed above the configured maximum capacity per
         // item (plugin setting); the Scrum Master reviews it on assignment.
         $migration->addField('glpi_plugin_sprint_sprintitems', 'capacity_justification', 'text', ['after' => 'capacity']);
         // The catalogue entry the credits were taken from, 0 = entered by hand.
@@ -535,7 +535,7 @@ function plugin_sprint_install(): bool
         $migration->addField($impTable, 'plugin_sprint_sprintmeetings_id', 'integer', ['value' => 0, 'after' => 'origin_improvements_id']);
         $migration->addKey($impTable, 'origin_improvements_id');
         $migration->addKey($impTable, 'plugin_sprint_sprintmeetings_id');
-        // Top-voted retro input becomes an action, the rest is carried into
+        // 1.3.2: top-voted retro input becomes an action, the rest is carried into
         // the next retrospective: both keep a link to the row they came from.
         $migration->addField($impTable, 'source_improvements_id', 'integer', ['value' => 0, 'after' => 'plugin_sprint_sprintmeetings_id']);
         $migration->addKey($impTable, 'source_improvements_id');
