@@ -7988,3 +7988,7 @@ msgid "Your %d vote is used. Remove it first to vote on something else."
 msgid_plural "All %d of your votes are used. Remove one first to vote on something else."
 msgstr[0] "Seu %d voto já foi usado. Remova-o primeiro para votar em outra coisa."
 msgstr[1] "Todos os seus %d votos foram usados. Remova um primeiro para votar em outra coisa."
+
+#: src/SprintItem.php:313
+msgid "Scheduled"
+msgstr "Agendado"

@@ -54,6 +54,7 @@ class SprintBoard extends CommonGLPI
     {
         return [
             SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_SCHEDULED   => '#087990',
             SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
             SprintItem::STATUS_REVIEW      => '#6f42c1',
             SprintItem::STATUS_DEPENDENCY  => '#20c997',

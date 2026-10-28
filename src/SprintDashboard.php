@@ -272,6 +272,7 @@ class SprintDashboard extends CommonGLPI
         $stats = [
             'total_items'      => count($items),
             'todo_items'       => 0,
+            'scheduled_items'  => 0,
             'in_progress'      => 0,
             'review_items'     => 0,
             'dependency_items' => 0,
@@ -282,6 +283,7 @@ class SprintDashboard extends CommonGLPI
             // Allocated capacity (%) per status — drives the progress bar so a
             // single heavy item weighs more than a trivial one. See {@see renderStatsAndProgress()}.
             'todo_cap'         => 0,
+            'scheduled_cap'    => 0,
             'in_progress_cap'  => 0,
             'review_cap'       => 0,
             'dependency_cap'   => 0,
@@ -308,6 +310,10 @@ class SprintDashboard extends CommonGLPI
                 case SprintItem::STATUS_TODO:
                     $stats['todo_items']++;
                     $stats['todo_cap'] += $capWeight;
+                    break;
+                case SprintItem::STATUS_SCHEDULED:
+                    $stats['scheduled_items']++;
+                    $stats['scheduled_cap'] += $capWeight;
                     break;
                 case SprintItem::STATUS_IN_PROGRESS:
                     $stats['in_progress']++;
@@ -348,7 +354,7 @@ class SprintDashboard extends CommonGLPI
     private static function renderStatsAndProgress(array $stats): void
     {
         $weightTotal = (float)($stats['done_cap'] + $stats['in_progress_cap'] + $stats['review_cap']
-            + $stats['dependency_cap'] + $stats['blocked_cap'] + $stats['todo_cap']);
+            + $stats['dependency_cap'] + $stats['blocked_cap'] + $stats['todo_cap'] + $stats['scheduled_cap']);
         $weightedPct = $weightTotal > 0 ? (int)round($stats['done_cap'] / $weightTotal * 100) : 0;
         $itemsPct    = $stats['total_items'] > 0 ? (int)round($stats['done_items'] / $stats['total_items'] * 100) : 0;
 
@@ -362,6 +368,7 @@ class SprintDashboard extends CommonGLPI
         $more = [
             ['label' => __('Total Items', 'sprint'),  'value' => (string)$stats['total_items'],     'icon' => 'fas fa-list-ul',      'accent' => '#6c757d'],
             ['label' => __('To Do', 'sprint'),        'value' => (string)$stats['todo_items'],      'icon' => 'fas fa-circle',       'accent' => '#6c757d'],
+            ['label' => __('Scheduled', 'sprint'),    'value' => (string)$stats['scheduled_items'], 'icon' => 'fas fa-calendar-check', 'accent' => '#087990'],
             ['label' => __('In Progress', 'sprint'),  'value' => (string)$stats['in_progress'],     'icon' => 'fas fa-circle-notch', 'accent' => '#0d6efd'],
             ['label' => __('In Review', 'sprint'),    'value' => (string)$stats['review_items'],    'icon' => 'fas fa-search',       'accent' => '#6f42c1'],
             ['label' => __('Dependency', 'sprint'),   'value' => (string)$stats['dependency_items'],'icon' => 'fas fa-link',         'accent' => '#20c997'],
@@ -426,6 +433,7 @@ class SprintDashboard extends CommonGLPI
             'review'     => (float)($stats['review_cap'] ?? 0),
             'dependency' => (float)($stats['dependency_cap'] ?? 0),
             'blocked'    => (float)($stats['blocked_cap'] ?? 0),
+            'scheduled'  => (float)($stats['scheduled_cap'] ?? 0),
             'todo'       => (float)($stats['todo_cap'] ?? 0),
         ];
         $total = max(array_sum($weights), 1);
@@ -434,6 +442,7 @@ class SprintDashboard extends CommonGLPI
         $reviewPct     = round(($weights['review'] / $total) * 100, 1);
         $dependencyPct = round(($weights['dependency'] / $total) * 100, 1);
         $blockedPct    = round(($weights['blocked'] / $total) * 100, 1);
+        $scheduledPct  = round(($weights['scheduled'] / $total) * 100, 1);
         $todoPct       = round(($weights['todo'] / $total) * 100, 1);
 
         echo "<div style='margin:0 0 24px;'>";
@@ -445,6 +454,7 @@ class SprintDashboard extends CommonGLPI
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#6f42c1;margin-right:4px;vertical-align:middle;'></span>" . __('In Review', 'sprint') . " {$reviewPct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#20c997;margin-right:4px;vertical-align:middle;'></span>" . __('Dependency', 'sprint') . " {$dependencyPct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc3545;margin-right:4px;vertical-align:middle;'></span>" . __('Blocked', 'sprint') . " {$blockedPct}%</span>";
+        echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#087990;margin-right:4px;vertical-align:middle;'></span>" . __('Scheduled', 'sprint') . " {$scheduledPct}%</span>";
         echo "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#d5d8dc;margin-right:4px;vertical-align:middle;'></span>" . __('To Do', 'sprint') . " {$todoPct}%</span>";
         echo "</div>";
         // min-width keeps a tiny (e.g. single unestimated item) slice visible.
@@ -455,6 +465,7 @@ class SprintDashboard extends CommonGLPI
         if ($reviewPct > 0)     echo "<div style='width:{$reviewPct}%;{$segStyle}background:#6f42c1;' title='" . __('In Review', 'sprint') . "'></div>";
         if ($dependencyPct > 0) echo "<div style='width:{$dependencyPct}%;{$segStyle}background:#20c997;' title='" . __('Dependency', 'sprint') . "'></div>";
         if ($blockedPct > 0)    echo "<div style='width:{$blockedPct}%;{$segStyle}background:#dc3545;' title='" . __('Blocked', 'sprint') . "'></div>";
+        if ($scheduledPct > 0)  echo "<div style='width:{$scheduledPct}%;{$segStyle}background:#087990;' title='" . __('Scheduled', 'sprint') . "'></div>";
         if ($todoPct > 0)       echo "<div style='width:{$todoPct}%;{$segStyle}background:#d5d8dc;' title='" . __('To Do', 'sprint') . "'></div>";
         echo "</div>";
         echo "<details class='sprint-measure-help sprint-small'>";
@@ -725,6 +736,7 @@ class SprintDashboard extends CommonGLPI
         $statuses = SprintItem::getAllStatuses();
         $statusBgColors = [
             SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_SCHEDULED   => '#087990',
             SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
             SprintItem::STATUS_REVIEW      => '#6f42c1',
             SprintItem::STATUS_DEPENDENCY  => '#20c997',
@@ -927,6 +939,7 @@ class SprintDashboard extends CommonGLPI
         $statuses = SprintItem::getAllStatuses();
         $statusBgColors = [
             SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_SCHEDULED   => '#087990',
             SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
             SprintItem::STATUS_REVIEW      => '#6f42c1',
             SprintItem::STATUS_DEPENDENCY  => '#20c997',
@@ -1114,6 +1127,7 @@ class SprintDashboard extends CommonGLPI
             // Inline bg color so badges stay readable when the plugin's CSS vars aren't resolved.
             $statusBgColors = [
                 SprintItem::STATUS_TODO        => '#6c757d',
+                SprintItem::STATUS_SCHEDULED   => '#087990',
                 SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
                 SprintItem::STATUS_REVIEW      => '#6f42c1',
                 SprintItem::STATUS_DEPENDENCY  => '#20c997',

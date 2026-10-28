@@ -1179,6 +1179,7 @@ class SprintOverview extends CommonGLPI
             SprintItem::STATUS_DEPENDENCY  => '#20c997',
             SprintItem::STATUS_BLOCKED     => '#dc3545',
             SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_SCHEDULED   => '#087990',
         ];
     }
 

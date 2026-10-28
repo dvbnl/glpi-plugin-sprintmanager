@@ -86,6 +86,7 @@ class SprintItem extends CommonDBTM
     }
 
     const STATUS_TODO        = 'todo';
+    const STATUS_SCHEDULED   = 'scheduled';
     const STATUS_IN_PROGRESS = 'in_progress';
     const STATUS_REVIEW      = 'review';
     const STATUS_DONE        = 'done';
@@ -310,6 +311,7 @@ class SprintItem extends CommonDBTM
     {
         return [
             self::STATUS_TODO        => __('To Do', 'sprint'),
+            self::STATUS_SCHEDULED   => __('Scheduled', 'sprint'),
             self::STATUS_IN_PROGRESS => __('In Progress', 'sprint'),
             self::STATUS_REVIEW      => __('In Review', 'sprint'),
             self::STATUS_DEPENDENCY  => __('Dependency', 'sprint'),
@@ -2131,7 +2133,7 @@ JS;
             'adhocBadgeHtml' => self::renderAdhocBadge(true),
             'pendingBadgeHtml' => SprintRequest::renderPendingBadge(),
             'statusColors'   => [
-                'todo' => '#6c757d', 'in_progress' => '#0d6efd', 'review' => '#6f42c1',
+                'todo' => '#6c757d', 'scheduled' => '#087990', 'in_progress' => '#0d6efd', 'review' => '#6f42c1',
                 'dependency' => '#20c997', 'done' => '#198754', 'blocked' => '#dc3545',
             ],
             'types' => [

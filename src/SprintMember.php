@@ -769,6 +769,7 @@ class SprintMember extends CommonDBRelation
             if (!isset($counts[$uid])) {
                 $counts[$uid] = [
                     SprintItem::STATUS_TODO        => 0,
+                    SprintItem::STATUS_SCHEDULED   => 0,
                     SprintItem::STATUS_IN_PROGRESS => 0,
                     SprintItem::STATUS_REVIEW      => 0,
                     SprintItem::STATUS_DEPENDENCY  => 0,
@@ -871,6 +872,7 @@ class SprintMember extends CommonDBRelation
             [SprintItem::STATUS_IN_PROGRESS, __('In Progress', 'sprint'), '#0d6efd', 'fas fa-circle-notch'],
             [SprintItem::STATUS_REVIEW,      __('In Review', 'sprint'),   '#6f42c1', 'fas fa-search'],
             [SprintItem::STATUS_DEPENDENCY,  __('Dependency', 'sprint'),  '#20c997', 'fas fa-link'],
+            [SprintItem::STATUS_SCHEDULED,   __('Scheduled', 'sprint'),   '#087990', 'fas fa-calendar-check'],
             [SprintItem::STATUS_BLOCKED,     __('Blocked', 'sprint'),     '#dc3545', 'fas fa-hand-paper'],
             [SprintItem::STATUS_TODO,        __('To Do', 'sprint'),       '#d5d8dc', 'fas fa-list-ul'],
         ];

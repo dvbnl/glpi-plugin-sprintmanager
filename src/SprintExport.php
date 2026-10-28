@@ -405,6 +405,7 @@ class SprintExport extends CommonGLPI
             [__('In Progress', 'sprint'),  $stats['in_progress'],  '#0d6efd'],
             [__('In Review', 'sprint'),    $stats['review_items'], '#6f42c1'],
             [__('Blocked', 'sprint'),      $stats['blocked_items'],'#dc3545'],
+            [__('Scheduled', 'sprint'),    $stats['scheduled_items'], '#087990'],
             [__('To Do', 'sprint'),        $stats['todo_items'],   '#adb5bd'],
             [__('Story Points', 'sprint'), $stats['done_points'] . ' / ' . $stats['total_points'], '#d68a00'],
         ];
@@ -427,6 +428,7 @@ class SprintExport extends CommonGLPI
             [SprintItem::STATUS_IN_PROGRESS, __('In Progress', 'sprint'), '#0d6efd', $stats['in_progress'],  (int)$stats['in_progress_cap']],
             [SprintItem::STATUS_REVIEW,      __('In Review', 'sprint'),   '#6f42c1', $stats['review_items'], (int)$stats['review_cap']],
             [SprintItem::STATUS_BLOCKED,     __('Blocked', 'sprint'),     '#dc3545', $stats['blocked_items'],(int)$stats['blocked_cap']],
+            [SprintItem::STATUS_SCHEDULED,   __('Scheduled', 'sprint'),   '#087990', $stats['scheduled_items'], (int)$stats['scheduled_cap']],
             [SprintItem::STATUS_TODO,        __('To Do', 'sprint'),       '#d5d8dc', $stats['todo_items'],   (int)$stats['todo_cap']],
         ];
 
@@ -457,6 +459,7 @@ class SprintExport extends CommonGLPI
         $stats = [
             'total_items'   => 0,
             'todo_items'    => 0,
+            'scheduled_items' => 0,
             'in_progress'   => 0,
             'review_items'  => 0,
             'done_items'    => 0,
@@ -466,6 +469,7 @@ class SprintExport extends CommonGLPI
             'fastlane_items' => 0,
             // Allocated capacity (%) per status — drives the progress bar weight.
             'todo_cap'      => 0,
+            'scheduled_cap' => 0,
             'in_progress_cap' => 0,
             'review_cap'    => 0,
             'done_cap'      => 0,
@@ -483,6 +487,7 @@ class SprintExport extends CommonGLPI
             }
             switch ($row['status']) {
                 case SprintItem::STATUS_TODO:        $stats['todo_items']++; $stats['todo_cap'] += $cap; break;
+                case SprintItem::STATUS_SCHEDULED:   $stats['scheduled_items']++; $stats['scheduled_cap'] += $cap; break;
                 case SprintItem::STATUS_IN_PROGRESS: $stats['in_progress']++; $stats['in_progress_cap'] += $cap; break;
                 case SprintItem::STATUS_REVIEW:      $stats['review_items']++; $stats['review_cap'] += $cap; break;
                 case SprintItem::STATUS_DONE:
@@ -610,6 +615,7 @@ class SprintExport extends CommonGLPI
         $statuses = SprintItem::getAllStatuses();
         $statusBgColors = [
             SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_SCHEDULED   => '#087990',
             SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
             SprintItem::STATUS_REVIEW      => '#6f42c1',
             SprintItem::STATUS_DEPENDENCY  => '#20c997',
@@ -752,6 +758,7 @@ class SprintExport extends CommonGLPI
         $statuses = SprintItem::getAllStatuses();
         $statusBgColors = [
             SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_SCHEDULED   => '#087990',
             SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
             SprintItem::STATUS_REVIEW      => '#6f42c1',
             SprintItem::STATUS_DEPENDENCY  => '#20c997',
@@ -941,6 +948,7 @@ class SprintExport extends CommonGLPI
 
         $statusBgColors = [
             SprintItem::STATUS_TODO        => '#6c757d',
+            SprintItem::STATUS_SCHEDULED   => '#087990',
             SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
             SprintItem::STATUS_REVIEW      => '#6f42c1',
             SprintItem::STATUS_DEPENDENCY  => '#20c997',

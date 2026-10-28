@@ -16,6 +16,7 @@
     --sprint-dependency: #20c997;
     --sprint-blocked: #dc3545;
     --sprint-todo: #6c757d;
+    --sprint-scheduled: #087990;       /* 5.06:1 on #fff */
     --sprint-radius: 8px;
     --sprint-radius-sm: 6px;
     --sprint-radius-pill: 20px;
@@ -219,6 +220,7 @@ tr.sprint-adhoc > td {
 }
 
 .sprint-status-todo        { background-color: #6c757d !important; background-color: var(--sprint-todo) !important; }
+.sprint-status-scheduled   { background-color: #087990 !important; background-color: var(--sprint-scheduled) !important; }
 .sprint-status-in-progress { background-color: #0d6efd !important; background-color: var(--sprint-progress) !important; }
 .sprint-status-review      { background-color: #6f42c1 !important; background-color: var(--sprint-review) !important; }
 .sprint-status-dependency  { background-color: #0f7d63 !important; background-color: var(--sprint-dependency-strong) !important; }
