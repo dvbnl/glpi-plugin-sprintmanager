@@ -70,82 +70,111 @@ class SprintTemplateMember extends CommonDBRelation
         $roles   = SprintMember::getAllRoles();
 
         if ($canedit) {
-            echo "<div class='center'>";
-            echo "<form method='post' action='" . static::getFormURL() . "'>";
+            // A card with the labels above the fields. Field names, the hidden
+            // template id and the submit name are what the form handler reads.
+            $rand = mt_rand();
+            echo "<div class='card mb-3 sprint-member-card'><div class='card-body'>";
+            echo SprintUi::cardHeader('fas fa-user-plus', __('Add a default team member', 'sprint'));
+            echo "<form method='post' action='" . static::getFormURL() . "' class='sprint-member-form'>";
             echo Html::hidden('plugin_sprint_sprinttemplates_id', ['value' => $ID]);
+            echo "<div class='row g-2 align-items-end'>";
 
-            echo "<table class='tab_cadre_fixe sprint-themed'>";
-            echo "<tr class='tab_bg_2'><th colspan='6'>" .
-                __('Add a default team member', 'sprint') . "</th></tr>";
+            echo "<div class='col-12 col-md-6 col-xl-4' role='group' aria-labelledby='sprint-tmpl-member-user-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-tmpl-member-user-label-{$rand}'>" . __s('User') . "</div>";
+            User::dropdown(['name' => 'users_id', 'right' => 'all', 'width' => '100%']);
+            echo "</div>";
 
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('User') . "</td>";
-            echo "<td>";
-            User::dropdown(['name' => 'users_id', 'right' => 'all']);
-            echo "</td>";
-            echo "<td>" . __('Role', 'sprint') . "</td>";
-            echo "<td>";
-            Dropdown::showFromArray('role', $roles, ['value' => SprintMember::ROLE_DEVELOPER]);
-            echo "</td>";
-            echo "<td><label for='sprint-tmpl-member-capacity'>" . __('Set capacity (%)', 'sprint') . "</label></td>";
-            echo "<td>";
+            echo "<div class='col-12 col-md-6 col-xl-3' role='group' aria-labelledby='sprint-tmpl-member-role-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-tmpl-member-role-label-{$rand}'>" . __s('Role', 'sprint') . "</div>";
+            Dropdown::showFromArray('role', $roles, [
+                'value'      => SprintMember::ROLE_DEVELOPER,
+                'aria_label' => __('Role', 'sprint'),
+                'width'      => '100%',
+            ]);
+            echo "</div>";
+
+            echo "<div class='col-6 col-md-3 col-xl-2'>";
+            echo "<label class='form-label' for='sprint-tmpl-member-capacity'>" . __s('Set capacity (%)', 'sprint') . "</label>";
             echo SprintMember::capacityInput('capacity_percent', 100, [
                 'id'       => 'sprint-tmpl-member-capacity',
                 'required' => true,
             ]);
-            echo "</td></tr>";
-
-            echo "<tr class='tab_bg_1'><td colspan='6' class='center'>";
-            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
-            echo "</td></tr>";
-            echo "</table>";
-            Html::closeForm();
             echo "</div>";
+
+            echo "<div class='col-12 col-md-auto'>";
+            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
+            echo "</div>";
+
+            echo "</div>";
+            Html::closeForm();
+            echo "</div></div>";
         }
 
         $member  = new self();
         $members = $member->find(['plugin_sprint_sprinttemplates_id' => $ID], ['role ASC']);
 
-        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
-        echo "<tr class='tab_bg_2'>";
-        echo "<th>" . __('User') . "</th>";
-        echo "<th>" . __('Role', 'sprint') . "</th>";
-        echo "<th>" . __('Capacity', 'sprint') . "</th>";
+        echo "<div class='card mb-3 sprint-member-card'><div class='card-body'>";
+        echo SprintUi::cardHeader('fas fa-users', __('Default team members', 'sprint'));
+        echo "<div class='table-responsive'><table class='table table-vcenter mb-0 sprint-member-table'>";
+        echo "<thead><tr>";
+        echo "<th scope='col'>" . __s('User') . "</th>";
+        echo "<th scope='col'>" . __s('Role', 'sprint') . "</th>";
+        echo "<th scope='col' class='text-end'>" . __s('Capacity', 'sprint') . "</th>";
         if ($canedit) {
-            echo "<th>" . __('Actions') . "</th>";
+            echo "<th scope='col' class='text-end'>" . __s('Actions') . "</th>";
         }
-        echo "</tr>";
+        echo "</tr></thead><tbody>";
 
         if (count($members) === 0) {
             $cols = $canedit ? 4 : 3;
-            echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
-                __('No default members', 'sprint') . "</td></tr>";
+            echo "<tr><td colspan='{$cols}' class='text-center text-muted py-3'>" .
+                __s('No default members', 'sprint') . "</td></tr>";
         }
 
         foreach ($members as $row) {
-            $roleName = $roles[$row['role']] ?? $row['role'];
-            echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user'></i> " . htmlescape(SprintCache::userName($row['users_id'])) . "</td>";
-            echo "<td>" . $roleName . "</td>";
-            echo "<td class='center'>" . SprintMember::formatCapacity($row['capacity_percent']) . "%</td>";
+            $roleName   = $roles[$row['role']] ?? $row['role'];
+            $memberName = SprintCache::userName($row['users_id']);
+            echo "<tr>";
+            echo "<td><i class='fas fa-user text-muted me-2' aria-hidden='true'></i>" . htmlescape($memberName) . "</td>";
+            echo "<td>" . htmlescape((string)$roleName) . "</td>";
+            echo "<td class='text-end'>" . SprintMember::formatCapacity($row['capacity_percent']) . "%</td>";
             if ($canedit) {
-                echo "<td class='center'>";
-                echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline;'>";
-                echo Html::hidden('id', ['value' => $row['id']]);
-                echo Html::submit(__('Delete'), [
-                    'name'    => 'purge',
-                    'class'   => 'btn btn-sm btn-outline-danger',
-                    'confirm' => __('Remove this member?', 'sprint'),
-                ]);
-                Html::closeForm();
+                echo "<td class='text-end sprint-row-actions'>";
+                echo self::deleteButton(
+                    static::getFormURL(),
+                    (int)$row['id'],
+                    $memberName,
+                    sprintf(__('Remove %s from this template?', 'sprint'), $memberName)
+                );
                 echo "</td>";
             }
             echo "</tr>";
         }
 
-        echo "</table></div>";
+        echo "</tbody></table></div></div></div>";
 
         self::showFixedLeave($template, $canedit);
+    }
+
+    /**
+     * Delete as an icon button in its own purge form. js/sprint.js asks first
+     * (data-sprint-confirm) and then submits this same form, so the server
+     * path stays the plain purge POST.
+     *
+     * @param string $name     what is deleted, for the accessible label
+     * @param string $question the confirmation question
+     */
+    private static function deleteButton(string $formUrl, int $id, string $name, string $question): string
+    {
+        return "<form method='post' action='" . htmlescape($formUrl) . "' class='d-inline-block'>"
+            . Html::hidden('id', ['value' => $id])
+            . "<button type='submit' name='purge' value='1' class='btn btn-sm btn-outline-danger' "
+            . "title='" . __s('Delete') . "' "
+            . "aria-label='" . __s('Delete') . ': ' . htmlescape($name) . "' "
+            . "data-sprint-confirm='" . htmlescape($question) . "' data-sprint-danger='1' "
+            . "data-sprint-confirm-ok='" . __s('Delete') . "'>"
+            . SprintIcon::html(SprintIcon::DELETE) . "</button>"
+            . Html::closeForm(false);
     }
 
     /**
@@ -159,27 +188,40 @@ class SprintTemplateMember extends CommonDBRelation
         $formUrl  = SprintTemplateAvailability::getFormURL();
 
         if ($canedit) {
-            echo "<div class='center'>";
-            echo "<form method='post' action='" . $formUrl . "'>";
+            $rand = mt_rand();
+            echo "<div class='card mb-3 sprint-member-card'><div class='card-body'>";
+            echo SprintUi::cardHeader('fas fa-calendar-plus', __('Add fixed leave (weekly)', 'sprint'));
+            echo "<form method='post' action='" . $formUrl . "' class='sprint-member-form'>";
             echo Html::hidden('plugin_sprint_sprinttemplates_id', ['value' => $ID]);
-            echo "<table class='tab_cadre_fixe sprint-themed'>";
-            echo "<tr class='tab_bg_2'><th colspan='8'>" . __('Add fixed leave (weekly)', 'sprint') . "</th></tr>";
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('User') . "</td><td>";
-            User::dropdown(['name' => 'users_id', 'right' => 'all']);
-            echo "</td><td>" . __('Weekday', 'sprint') . "</td><td>";
-            Dropdown::showFromArray('weekday', $weekdays, ['value' => 5]);
-            echo "</td><td>" . __('Availability %', 'sprint') . "</td><td>";
-            echo "<input type='number' min='0' max='100' step='.5' value='0' class='form-control' name='availability_percent'>";
-            echo "</td><td>" . __('Reason', 'sprint') . "</td><td>";
-            echo "<input class='form-control' name='comment' placeholder='" . htmlescape(__('Reason', 'sprint')) . "'>";
-            echo "</td></tr>";
-            echo "<tr class='tab_bg_1'><td colspan='8' class='center'>";
-            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
-            echo "</td></tr>";
-            echo "</table>";
-            Html::closeForm();
+            echo "<div class='row g-2 align-items-end'>";
+
+            echo "<div class='col-12 col-md-6 col-xl-3' role='group' aria-labelledby='sprint-tmpl-leave-user-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-tmpl-leave-user-label-{$rand}'>" . __s('User') . "</div>";
+            User::dropdown(['name' => 'users_id', 'right' => 'all', 'width' => '100%']);
             echo "</div>";
+
+            echo "<div class='col-6 col-md-3 col-xl-2' role='group' aria-labelledby='sprint-tmpl-leave-day-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-tmpl-leave-day-label-{$rand}'>" . __s('Weekday', 'sprint') . "</div>";
+            Dropdown::showFromArray('weekday', $weekdays, ['value' => 5, 'width' => '100%']);
+            echo "</div>";
+
+            echo "<div class='col-6 col-md-3 col-xl-2'>";
+            echo "<label class='form-label' for='sprint-tmpl-leave-pct-{$rand}'>" . __s('Availability %', 'sprint') . "</label>";
+            echo "<input type='number' min='0' max='100' step='.5' value='0' class='form-control' name='availability_percent' id='sprint-tmpl-leave-pct-{$rand}'>";
+            echo "</div>";
+
+            echo "<div class='col-12 col-md-9 col-xl'>";
+            echo "<label class='form-label' for='sprint-tmpl-leave-reason-{$rand}'>" . __s('Reason', 'sprint') . "</label>";
+            echo "<input class='form-control' name='comment' id='sprint-tmpl-leave-reason-{$rand}'>";
+            echo "</div>";
+
+            echo "<div class='col-12 col-xl-auto'>";
+            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
+            echo "</div>";
+
+            echo "</div>";
+            Html::closeForm();
+            echo "</div></div>";
         }
 
         $rows = (new SprintTemplateAvailability())->find(
@@ -187,44 +229,47 @@ class SprintTemplateMember extends CommonDBRelation
             ['users_id ASC', 'weekday ASC']
         );
 
-        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
-        echo "<tr class='tab_bg_2'><th colspan='5'>" . __('Fixed leave', 'sprint') . "</th></tr>";
-        echo "<tr class='tab_bg_2'>";
-        echo "<th>" . __('User') . "</th>";
-        echo "<th>" . __('Weekday', 'sprint') . "</th>";
-        echo "<th>" . __('Availability %', 'sprint') . "</th>";
-        echo "<th>" . __('Reason', 'sprint') . "</th>";
+        echo "<div class='card mb-3 sprint-member-card'><div class='card-body'>";
+        echo SprintUi::cardHeader('fas fa-user-clock', __('Fixed leave', 'sprint'));
+        echo "<div class='table-responsive'><table class='table table-vcenter mb-0 sprint-member-table'>";
+        echo "<thead><tr>";
+        echo "<th scope='col'>" . __s('User') . "</th>";
+        echo "<th scope='col'>" . __s('Weekday', 'sprint') . "</th>";
+        echo "<th scope='col' class='text-end'>" . __s('Availability %', 'sprint') . "</th>";
+        echo "<th scope='col'>" . __s('Reason', 'sprint') . "</th>";
         if ($canedit) {
-            echo "<th>" . __('Actions') . "</th>";
+            echo "<th scope='col' class='text-end'>" . __s('Actions') . "</th>";
         }
-        echo "</tr>";
+        echo "</tr></thead><tbody>";
 
         if (count($rows) === 0) {
             $cols = $canedit ? 5 : 4;
-            echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
-                __('No fixed leave', 'sprint') . "</td></tr>";
+            echo "<tr><td colspan='{$cols}' class='text-center text-muted py-3'>" .
+                __s('No fixed leave', 'sprint') . "</td></tr>";
         }
 
         foreach ($rows as $row) {
-            echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user-clock'></i> " . htmlescape(SprintCache::userName($row['users_id'])) . "</td>";
-            echo "<td>" . htmlescape($weekdays[(int)$row['weekday']] ?? (string)$row['weekday']) . "</td>";
-            echo "<td class='center'>" . SprintMember::formatCapacity($row['availability_percent']) . "%</td>";
+            $memberName = SprintCache::userName($row['users_id']);
+            $weekday    = (string)($weekdays[(int)$row['weekday']] ?? $row['weekday']);
+            echo "<tr>";
+            echo "<td><i class='fas fa-user-clock text-muted me-2' aria-hidden='true'></i>" . htmlescape($memberName) . "</td>";
+            echo "<td>" . htmlescape($weekday) . "</td>";
+            echo "<td class='text-end'>" . SprintMember::formatCapacity($row['availability_percent']) . "%</td>";
             echo "<td>" . htmlescape((string)$row['comment']) . "</td>";
             if ($canedit) {
-                echo "<td class='center'>";
-                echo "<form method='post' action='" . $formUrl . "' style='display:inline;'>";
-                echo Html::hidden('id', ['value' => $row['id']]);
-                echo Html::submit(__('Delete'), [
-                    'name'  => 'purge',
-                    'class' => 'btn btn-sm btn-outline-danger',
-                ]);
-                Html::closeForm();
+                echo "<td class='text-end sprint-row-actions'>";
+                echo self::deleteButton(
+                    $formUrl,
+                    (int)$row['id'],
+                    $memberName . ' · ' . $weekday,
+                    // 1: member name, 2: weekday
+                    sprintf(__('Remove the fixed leave of %1$s on %2$s?', 'sprint'), $memberName, $weekday)
+                );
                 echo "</td>";
             }
             echo "</tr>";
         }
 
-        echo "</table></div>";
+        echo "</tbody></table></div></div></div>";
     }
 }

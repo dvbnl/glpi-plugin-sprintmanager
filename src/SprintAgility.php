@@ -437,7 +437,6 @@ class SprintAgility extends CommonGLPI
     {
         $savedMsg = addslashes(__('Saved', 'sprint'));
         $errMsg   = addslashes(__('Could not save agility settings', 'sprint'));
-        $tokenUrl = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
         echo <<<HTML
 <script>
 (function(){
@@ -450,9 +449,12 @@ class SprintAgility extends CommonGLPI
         }
     }
 
+    // The active GLPI tab in place, or the page when there is none.
     function reloadWholeTab() {
-        if (typeof window.reloadTab === 'function') { window.reloadTab(); }
-        else { window.location.reload(); }
+        window.sprintUi.refresh();
+    }
+    function notify(msg, level) {
+        if (typeof window.sprintNotify === 'function') { window.sprintNotify(msg, level); }
     }
 
     // New 0-vote row lands before older 0-vote rows, after voted ones.
@@ -475,7 +477,7 @@ class SprintAgility extends CommonGLPI
         var \$votes = jQuery('<td>').append(jQuery('<span>').addClass('sprint-imp-votes').text('0')).appendTo(\$tr);
         \$votes.append(' ').append(miniForm(\$form, newId, 'improvement_vote')
             .append(jQuery("<button class='btn btn-sm btn-link sprint-imp-vote text-muted'>")
-                .attr('title', lbl('vote')).append("<i class='far fa-thumbs-up'></i>")));
+                .attr('title', lbl('vote')).append("<i class='far fa-thumbs-up' aria-hidden='true'></i>")));
         var \$status = jQuery('<td>').append(
             jQuery('<span>').addClass('sprint-imp-status')
                 .attr({'data-status': 'open', 'data-lbl-open': lbl('open'), 'data-lbl-done': lbl('done')})
@@ -484,7 +486,7 @@ class SprintAgility extends CommonGLPI
         if (parseInt(\$form.data('can-toggle'), 10) === 1) {
             \$status.append(' ').append(miniForm(\$form, newId, 'improvement_toggle')
                 .append(jQuery("<button class='btn btn-sm btn-outline-success'>")
-                    .attr('title', lbl('toggle')).append("<i class='fas fa-check'></i>")));
+                    .attr('title', lbl('toggle')).append("<i class='fas fa-check' aria-hidden='true'></i>")));
         }
         var \$anchor = null;
         \$table.find('tr').each(function(){
@@ -509,16 +511,13 @@ class SprintAgility extends CommonGLPI
         var action = String(\$form.find("input[name='action']").val() || '');
         setEnabled(\$form, false);
 
-        jQuery.ajax({ url: "{$tokenUrl}", type: 'GET', dataType: 'json', cache: false })
-        .then(function(tok){
-            var data = \$form.serializeArray().filter(function(p){ return p.name !== '_glpi_csrf_token'; });
-            data.push({ name: '_glpi_csrf_token', value: tok && tok.token ? tok.token : '' });
-            data.push({ name: '_ajax', value: 1 });
-            return jQuery.ajax({ url: \$form.attr('action'), type: 'POST', dataType: 'json', data: jQuery.param(data) });
-        })
+        // Fresh CSRF token per submit (sprintUi.post swaps the form's own).
+        var data = \$form.serializeArray();
+        data.push({ name: '_ajax', value: 1 });
+        window.sprintUi.post(\$form.attr('action'), data, { silent: true })
         .done(function(resp){
             if (!resp || !resp.success) {
-                if (window.glpi_toast_error) { window.glpi_toast_error((resp && resp.message) || '{$errMsg}'); }
+                notify((resp && resp.message) || '{$errMsg}', 'error');
                 setEnabled(\$form, true);
                 return;
             }
@@ -560,13 +559,13 @@ class SprintAgility extends CommonGLPI
                     break;
                 }
                 default: {
-                    if (window.glpi_toast_info) { window.glpi_toast_info('{$savedMsg}'); }
+                    notify('{$savedMsg}', 'success');
                     reloadWholeTab();
                 }
             }
         })
         .fail(function(){
-            if (window.glpi_toast_error) { window.glpi_toast_error('{$errMsg}'); }
+            notify('{$errMsg}', 'error');
             setEnabled(\$form, true);
         });
     });
@@ -592,7 +591,7 @@ HTML;
         $cls = 'sprint-collapsible' . ($startOpen ? '' : ' sprint-collapsed');
         echo "<div class='{$cls}' data-sprint-collapse-key='" . htmlescape($key) . "'>";
         echo "<div class='sprint-collapsible-header'>";
-        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron'></i>";
+        echo "<i class='fas fa-chevron-down sprint-collapsible-chevron' aria-hidden='true'></i>";
         echo "<i class='{$icon}'></i><span>" . htmlescape($title) . "</span>";
         if ($description !== '') {
             echo "<i class='fas fa-circle-info text-muted' title='" . htmlescape($description) . "'></i>";
@@ -1312,7 +1311,7 @@ HTML;
             echo '</select></td></tr>';
         }
         echo '</tbody></table></div>';
-        if ($edit) echo "<div class='mt-3'><button class='btn btn-primary'><i class='fas fa-save me-1'></i>" . __('Save') . '</button></div>';
+        if ($edit) echo "<div class='mt-3'><button class='btn btn-primary'><i class='fas fa-save me-1' aria-hidden='true'></i>" . __('Save') . '</button></div>';
         Html::closeForm(); self::endCard();
     }
 
@@ -1347,7 +1346,7 @@ HTML;
             foreach (self::improvementCategories() as $value => $label) {
                 echo "<option value='" . htmlescape($value) . "'" . ($value === 'action' ? ' selected' : '') . '>' . htmlescape($label) . '</option>';
             }
-            echo "</select></div><div class='col-md-4'><input required class='form-control' name='description' placeholder='" . htmlescape(__('Improvement or action', 'sprint')) . "'></div><div class='col-md-2'><input type='date' class='form-control' name='due_date'></div><div class='col-md-2'><select class='form-select' name='users_id'>" . self::memberOptions($id) . "</select></div><div class='col-md-1 pt-2'><label title='" . htmlescape(__('Anonymous', 'sprint')) . "'><input type='checkbox' name='is_anonymous' value='1'> <i class='fas fa-user-secret'></i></label></div><div class='col-md-1'><button class='btn btn-primary'><i class='fas fa-plus'></i></button></div>";
+            echo "</select></div><div class='col-md-4'><input required class='form-control' name='description' placeholder='" . htmlescape(__('Improvement or action', 'sprint')) . "'></div><div class='col-md-2'><input type='date' class='form-control' name='due_date'></div><div class='col-md-2'><select class='form-select' name='users_id'>" . self::memberOptions($id) . "</select></div><div class='col-md-1 pt-2'><label title='" . htmlescape(__('Anonymous', 'sprint')) . "'><input type='checkbox' name='is_anonymous' value='1'> <i class='fas fa-user-secret' aria-hidden='true'></i></label></div><div class='col-md-1'><button class='btn btn-primary'><i class='fas fa-plus' aria-hidden='true'></i></button></div>";
             Html::closeForm();
         }
         echo "<div class='table-responsive'><table class='table table-sm'><thead><tr><th>" . __('Type', 'sprint') . "</th><th>" . __('Improvement', 'sprint') . "</th><th>" . __('Owner', 'sprint') . "</th><th>" . __('Due date', 'sprint') . "</th><th>" . __('Votes', 'sprint') . "</th><th>" . __('Status') . '</th></tr></thead><tbody>';
@@ -1363,17 +1362,17 @@ HTML;
             }
             echo "</td><td><span class='sprint-imp-status' data-status='" . htmlescape($row['status']) . "' data-lbl-open='" . htmlescape(__('Open', 'sprint')) . "' data-lbl-done='" . htmlescape(__('Done', 'sprint')) . "'>" . htmlescape($row['status'] === 'done' ? __('Done', 'sprint') : __('Open', 'sprint')) . '</span>';
             if ($edit) {
-                echo " <form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'improvement_toggle']) . "<button class='btn btn-sm btn-outline-success' title='" . __('Toggle done', 'sprint') . "'><i class='fas fa-check'></i></button>"; Html::closeForm();
+                echo " <form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'improvement_toggle']) . "<button class='btn btn-sm btn-outline-success' title='" . __('Toggle done', 'sprint') . "'><i class='fas fa-check' aria-hidden='true'></i></button>"; Html::closeForm();
             }
             echo '</td></tr>';
         }
         foreach ($carried as $row) {
             echo "<tr data-improvement-id='" . (int)$row['id'] . "'><td><span class=\"badge bg-blue-lt\">" . htmlescape(self::improvementCategories()['action']) . '</span></td><td>' . nl2br(htmlescape($row['description']))
-                . "<div class='text-muted sprint-small'><i class='fas fa-share me-1'></i>" . htmlescape(sprintf(__('Still open from %s', 'sprint'), $row['source_sprint_name'])) . '</div></td><td>'
+                . "<div class='text-muted sprint-small'><i class='fas fa-share me-1' aria-hidden='true'></i>" . htmlescape(sprintf(__('Still open from %s', 'sprint'), $row['source_sprint_name'])) . '</div></td><td>'
                 . htmlescape((int)$row['users_id'] > 0 ? SprintCache::userName((int)$row['users_id']) : '') . '</td><td>' . htmlescape((string)$row['due_date']) . "</td><td><span class='text-muted'>—</span></td>";
             echo "<td><span class='sprint-imp-status' data-status='open' data-lbl-open='" . htmlescape(__('Open', 'sprint')) . "' data-lbl-done='" . htmlescape(__('Done', 'sprint')) . "'>" . htmlescape(__('Open', 'sprint')) . '</span>';
             if ($edit) {
-                echo " <form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'improvement_toggle']) . "<button class='btn btn-sm btn-outline-success' title='" . __('Toggle done', 'sprint') . "'><i class='fas fa-check'></i></button>"; Html::closeForm();
+                echo " <form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'improvement_toggle']) . "<button class='btn btn-sm btn-outline-success' title='" . __('Toggle done', 'sprint') . "'><i class='fas fa-check' aria-hidden='true'></i></button>"; Html::closeForm();
             }
             echo '</td></tr>';
         }
@@ -1397,9 +1396,9 @@ HTML;
         if ($edit) {
             $pctHelp = __('The percentage the member IS still available during this period (0% = fully absent)', 'sprint');
             echo "<form method='post' action='" . htmlescape($form) . "' class='row g-2 mb-1'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('action', ['value' => 'availability']) . Html::hidden('_tab', ['value' => 'members']);
-            echo "<div class='col-md-3'><select class='form-select' name='users_id'>" . self::memberOptions($id) . "</select></div><div class='col-md-2'><input required type='date' class='form-control' name='date_start'></div><div class='col-md-2'><input required type='date' class='form-control' name='date_end'></div><div class='col-md-2'><input type='number' min='0' max='100' step='.5' value='0' class='form-control' name='availability_percent' title='" . htmlescape($pctHelp) . "'></div><div class='col-md-2'><input class='form-control' name='comment' placeholder='" . htmlescape(__('Reason', 'sprint')) . "'></div><div class='col-md-1'><button class='btn btn-primary'><i class='fas fa-plus'></i></button></div>";
+            echo "<div class='col-md-3'><select class='form-select' name='users_id'>" . self::memberOptions($id) . "</select></div><div class='col-md-2'><input required type='date' class='form-control' name='date_start'></div><div class='col-md-2'><input required type='date' class='form-control' name='date_end'></div><div class='col-md-2'><input type='number' min='0' max='100' step='.5' value='0' class='form-control' name='availability_percent' title='" . htmlescape($pctHelp) . "'></div><div class='col-md-2'><input class='form-control' name='comment' placeholder='" . htmlescape(__('Reason', 'sprint')) . "'></div><div class='col-md-1'><button class='btn btn-primary'><i class='fas fa-plus' aria-hidden='true'></i></button></div>";
             Html::closeForm();
-            echo "<div class='text-muted sprint-small mb-3'><i class='fas fa-circle-info me-1'></i>" . htmlescape($pctHelp) . '</div>';
+            echo "<div class='text-muted sprint-small mb-3'><i class='fas fa-circle-info me-1' aria-hidden='true'></i>" . htmlescape($pctHelp) . '</div>';
         }
         if (!$rows) {
             echo "<div class='text-muted'>" . __('No availability exceptions', 'sprint') . '</div>';
@@ -1415,13 +1414,13 @@ HTML;
                 ? $row['date_start']
                 : $row['date_start'] . ' – ' . $row['date_end'];
             $pct = SprintMember::formatCapacity($row['availability_percent']);
-            echo '<tr><td><i class="fas fa-user-clock me-1"></i>' . htmlescape(SprintCache::userName((int)$row['users_id'])) . '</td>';
+            echo '<tr><td><i class="fas fa-user-clock me-1" aria-hidden="true"></i>' . htmlescape(SprintCache::userName((int)$row['users_id'])) . '</td>';
             echo '<td>' . htmlescape($period) . '</td>';
             echo "<td><span class='badge " . ((float)$row['availability_percent'] <= 0 ? 'bg-red-lt' : 'bg-yellow-lt') . "'>" . $pct . '%</span></td>';
             echo '<td>' . htmlescape((string)$row['comment']) . '</td>';
             if ($edit) {
                 echo '<td>';
-                echo "<form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'availability_delete']) . Html::hidden('_tab', ['value' => 'members']) . "<button class='btn btn-sm btn-link p-0 text-danger' title='" . __('Delete') . "'><i class='fas fa-times'></i></button>";
+                echo "<form method='post' action='" . htmlescape($form) . "' class='d-inline'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'availability_delete']) . Html::hidden('_tab', ['value' => 'members']) . "<button class='btn btn-sm btn-link p-0 text-danger' title='" . __('Delete') . "'><i class='fas fa-times' aria-hidden='true'></i></button>";
                 Html::closeForm();
                 echo '</td>';
             }
@@ -1443,7 +1442,7 @@ HTML;
         );
         if ($edit) {
             echo "<form method='post' action='" . htmlescape($form) . "' class='row g-2 mb-3'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('action', ['value' => 'epic']);
-            echo "<div class='col-md-6'><input required class='form-control' name='name' placeholder='" . htmlescape(__('Epic or theme name', 'sprint')) . "'></div><div class='col-md-2'><input type='color' class='form-control form-control-color' name='color' value='#0d6efd'></div><div class='col-md-3'><input type='date' class='form-control' name='target_date'></div><div class='col-md-1'><button class='btn btn-primary'><i class='fas fa-plus'></i></button></div>";
+            echo "<div class='col-md-6'><input required class='form-control' name='name' placeholder='" . htmlescape(__('Epic or theme name', 'sprint')) . "'></div><div class='col-md-2'><input type='color' class='form-control form-control-color' name='color' value='#0d6efd'></div><div class='col-md-3'><input type='date' class='form-control' name='target_date'></div><div class='col-md-1'><button class='btn btn-primary'><i class='fas fa-plus' aria-hidden='true'></i></button></div>";
             Html::closeForm();
         }
         foreach ($rows as $epic) {
@@ -1452,7 +1451,7 @@ HTML;
             $pct = count($epicItems) ? (int)round(100 * $done / count($epicItems)) : 0;
             $points = array_sum(array_map(fn($r) => (int)($r['story_points'] ?? 0), $epicItems));
             echo "<div class='mb-2'><div class='d-flex justify-content-between'><strong><span style='color:" . htmlescape($epic['color']) . "'>●</span> " . htmlescape($epic['name']) . (!empty($epic['target_date']) ? " <small class='text-muted'>· " . htmlescape(substr($epic['target_date'], 0, 10)) . '</small>' : '') . "</strong><span>{$done}/" . count($epicItems) . " · {$points} SP · {$pct}%</span></div><div class='progress progress-sm'><div class='progress-bar' style='width:{$pct}%;background:" . htmlescape($epic['color']) . "'></div></div></div>";
-            if ($edit && count($epicItems) === 0) { echo "<form method='post' action='" . htmlescape($form) . "' class='mb-2'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $epic['id']]) . Html::hidden('action', ['value' => 'epic_delete']) . "<button class='btn btn-sm btn-link text-danger p-0'><i class='fas fa-trash me-1'></i>" . __('Delete empty epic', 'sprint') . '</button>'; Html::closeForm(); }
+            if ($edit && count($epicItems) === 0) { echo "<form method='post' action='" . htmlescape($form) . "' class='mb-2'>" . Html::hidden('sprint_id', ['value' => $id]) . Html::hidden('id', ['value' => $epic['id']]) . Html::hidden('action', ['value' => 'epic_delete']) . "<button class='btn btn-sm btn-link text-danger p-0'><i class='fas fa-trash me-1' aria-hidden='true'></i>" . __('Delete empty epic', 'sprint') . '</button>'; Html::closeForm(); }
         }
         self::endCard();
     }
@@ -1472,7 +1471,7 @@ HTML;
         foreach (array_slice($rows, 0, 10) as $row) {
             $message = htmlescape($row['message']);
             if (!empty($row['url'])) $message = "<a href='" . htmlescape($row['url']) . "'>{$message}</a>";
-            echo "<div class='alert alert-info py-2 mb-2 d-flex justify-content-between sprint-signal-row'><span><i class='fas fa-circle-info me-2'></i>{$message}</span><form method='post' action='" . htmlescape($form) . "'>" . Html::hidden('sprint_id', ['value' => $sprintId]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'signal_read']) . "<button class='btn btn-sm btn-link' title='" . __('Mark as read', 'sprint') . "'><i class='fas fa-check'></i></button>"; Html::closeForm(); echo '</div>';
+            echo "<div class='alert alert-info py-2 mb-2 d-flex justify-content-between sprint-signal-row'><span><i class='fas fa-circle-info me-2' aria-hidden='true'></i>{$message}</span><form method='post' action='" . htmlescape($form) . "'>" . Html::hidden('sprint_id', ['value' => $sprintId]) . Html::hidden('id', ['value' => $row['id']]) . Html::hidden('action', ['value' => 'signal_read']) . "<button class='btn btn-sm btn-link' title='" . __('Mark as read', 'sprint') . "'><i class='fas fa-check' aria-hidden='true'></i></button>"; Html::closeForm(); echo '</div>';
         }
         self::endCard();
     }

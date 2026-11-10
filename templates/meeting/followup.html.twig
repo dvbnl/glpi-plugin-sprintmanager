@@ -14,7 +14,7 @@
 <div class="sprint-phase-block sprint-fu">
     <div class="sprint-fu-context sprint-small mb-2">
         {% if fu.predecessor_name|default('') != '' %}
-        <span class="text-muted"><i class="fas fa-link me-1"></i>{{ __('Previous sprint in this series:', 'sprint') }}</span>
+        <span class="text-muted"><i class="fas fa-link me-1" aria-hidden="true"></i>{{ __('Previous sprint in this series:', 'sprint') }}</span>
         <a href="{{ fu.predecessor_url }}">{{ fu.predecessor_name }}</a>
         {% if fu.manual %}<span class="badge bg-secondary-lt ms-1">{{ __('Chosen manually', 'sprint') }}</span>{% endif %}
         {% endif %}
@@ -22,11 +22,11 @@
 
     {% if fu.predecessor_name|default('') == '' %}
     <div class="alert alert-info py-2 mb-2">
-        <i class="fas fa-circle-info me-1"></i>{{ __('No earlier sprint of this team was found (same entity, same template and at least one shared team member), so there are no earlier actions to follow up.', 'sprint') }}
+        <i class="fas fa-circle-info me-1" aria-hidden="true"></i>{{ __('No earlier sprint of this team was found (same entity, same template and at least one shared team member), so there are no earlier actions to follow up.', 'sprint') }}
     </div>
     {% elseif fu.ambiguous %}
     <div class="alert alert-warning py-2 mb-2">
-        <i class="fas fa-triangle-exclamation me-1"></i>{{ __('Several sprints of this series ran at the same time. Check that the right previous sprint is selected.', 'sprint') }}
+        <i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>{{ __('Several sprints of this series ran at the same time. Check that the right previous sprint is selected.', 'sprint') }}
     </div>
     {% endif %}
 
@@ -50,7 +50,7 @@
     {% if (group == 'previous' and fu.predecessor_name|default('') != '') or rows|length > 0 %}
     <div class="sprint-fu-group mb-3" data-fu-group="{{ group }}">
         <div class="fw-bold mb-2">
-            <i class="fas {{ group == 'previous' ? 'fa-list-check' : 'fa-hourglass-half' }} me-1"></i>{{ group_title }}
+            <i class="fas {{ group == 'previous' ? 'fa-list-check' : 'fa-hourglass-half' }} me-1" aria-hidden="true"></i>{{ group_title }}
             <span class="badge bg-secondary-lt ms-1">{{ rows|length }}</span>
         </div>
         {% for row in rows %}
@@ -65,17 +65,17 @@
                     <button type="button" class="btn btn-sm btn-outline-success sprint-imp-toggle-btn"
                             data-sprint-action="meeting-imp-toggle" title="{{ __('Toggle done', 'sprint') }}"
                             aria-label="{{ __('Toggle done', 'sprint') }}">
-                        <i class="fas fa-check"></i>
+                        <i class="fas fa-check" aria-hidden="true"></i>
                     </button>
                     {% endif %}
                 </div>
                 <div class="d-flex flex-wrap gap-3 mt-1 sprint-small text-muted">
-                    <span><i class="fas fa-flag me-1"></i>{{ __('Agreed in', 'sprint') }}
+                    <span><i class="fas fa-flag me-1" aria-hidden="true"></i>{{ __('Agreed in', 'sprint') }}
                         <a href="{{ row.source_sprint_url }}">{{ row.source_sprint_name }}</a>{% if row.source_meeting_url %} · <a href="{{ row.source_meeting_url }}">{{ row.source_meeting_name }}</a>{% endif %}
                     </span>
-                    <span><i class="fas fa-user me-1"></i>{{ row.owner_name != '' ? row.owner_name : __('No owner', 'sprint') }}</span>
-                    <span{% if row.is_overdue %} class="text-danger"{% endif %}><i class="far fa-calendar me-1"></i>{{ row.due_date != '' ? row.due_date : __('No due date', 'sprint') }}</span>
-                    {% if row.last_update != '' %}<span><i class="fas fa-clock-rotate-left me-1"></i>{{ __('Last update', 'sprint') }}: {{ row.last_update }}</span>{% endif %}
+                    <span><i class="fas fa-user me-1" aria-hidden="true"></i>{{ row.owner_name != '' ? row.owner_name : __('No owner', 'sprint') }}</span>
+                    <span{% if row.is_overdue %} class="text-danger"{% endif %}><i class="far fa-calendar me-1" aria-hidden="true"></i>{{ row.due_date != '' ? row.due_date : __('No due date', 'sprint') }}</span>
+                    {% if row.last_update != '' %}<span><i class="fas fa-clock-rotate-left me-1" aria-hidden="true"></i>{{ __('Last update', 'sprint') }}: {{ row.last_update }}</span>{% endif %}
                 </div>
 
                 {% if row.history|length > 0 %}
@@ -116,7 +116,7 @@
                     </div>
                     <div class="d-flex align-items-center gap-2 mt-2">
                         <button type="button" class="btn btn-sm btn-outline-primary" data-sprint-action="meeting-fu-save">
-                            <i class="fas fa-save me-1"></i>{{ __('Save follow-up', 'sprint') }}
+                            <i class="fas fa-save me-1" aria-hidden="true"></i>{{ __('Save follow-up', 'sprint') }}
                         </button>
                         <span class="sprint-fu-status sprint-small" role="status" aria-live="polite"></span>
                     </div>
@@ -137,6 +137,6 @@
     {% endfor %}
 
     <div class="sprint-small text-muted">
-        <i class="fas fa-circle-info me-1"></i>{{ __('New actions of this retrospective are recorded in the “Decide actions” phase and are followed up in the next retrospective.', 'sprint') }}
+        <i class="fas fa-circle-info me-1" aria-hidden="true"></i>{{ __('New actions of this retrospective are recorded in the “Decide actions” phase and are followed up in the next retrospective.', 'sprint') }}
     </div>
 </div>

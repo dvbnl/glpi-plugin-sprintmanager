@@ -1,30 +1,14 @@
 {# Sprint items tables (Fastlane + Regular): included directly for
-   kickoff/standup and inside the review rail's walkthrough phase. #}
+   kickoff/standup and inside the review rail's walkthrough phase.
 
-{% set fastlane_items = sprint_items|filter(si => si.is_fastlane) %}
-{% set regular_items  = sprint_items|filter(si => not si.is_fastlane) %}
+   Both tables are built from the three macros below. Macros do not see the
+   including template's context, so everything they need is passed in. #}
 
-{% set status_bg = {
-    'todo':        '#6c757d',
-    'scheduled':   '#087990',
-    'in_progress': '#0d6efd',
-    'review':      '#6f42c1',
-    'done':        '#198754',
-    'blocked':     '#dc3545',
-} %}
-
-{# === Fastlane section (collapsible, same pattern as the dashboard) === #}
-{% if fastlane_items|length > 0 %}
-<div class="sprint-collapsible mt-2 mb-0" data-sprint-collapse-key="meeting-fastlane-{{ item.fields['id'] }}" style="border-bottom:2px solid #fd7e14;">
-    <div class="sprint-collapsible-header">
-        <i class="fas fa-chevron-down sprint-collapsible-chevron"></i>
-        <i class="fas fa-bolt" style="color:#fd7e14;"></i>
-        <span>{{ __('Fastlane', 'sprint') }}</span>
-        <span class="badge bg-warning text-dark">{{ fastlane_items|length }}</span>
-    </div>
-    <div class="sprint-collapsible-body">
-    <div id="sprint-filter-fastlane" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
-         data-target="sprint-review-fastlane"
+{# Filter bar above one table. `id` is the bar's element id, `target` the
+   class of the table it filters (js/sprint.js reads data-target). #}
+{% macro filter_bar(id, target, item_statuses, member_options, defined_tags) %}
+    <div id="{{ id }}" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
+         data-target="{{ target }}"
          role="search" aria-label="{{ __('Filter items', 'sprint') }}"
          data-sf-all-one="{{ _n('%s item', '%s items', 1, 'sprint') }}"
          data-sf-all-many="{{ _n('%s item', '%s items', 2, 'sprint') }}"
@@ -37,10 +21,10 @@
         <div class="d-flex align-items-center gap-1 text-muted sprint-small" aria-hidden="true">
             <i class="fas fa-filter"></i><span>{{ __('Filter', 'sprint') }}</span>
         </div>
-        <input type="search" class="form-control form-control-sm sf-text" style="max-width:220px;"
+        <input type="search" class="form-control form-control-sm sf-text sprint-mw-220"
                placeholder="{{ __('Search name...', 'sprint') }}"
                aria-label="{{ __('Search name', 'sprint') }}" data-sf-label="{{ __('Search', 'sprint') }}">
-        <select class="form-select form-select-sm sf-status" style="max-width:180px;"
+        <select class="form-select form-select-sm sf-status sprint-mw-180"
                 aria-label="{{ __('Status') }}" data-sf-label="{{ __('Status') }}">
             <option value="">{{ __('All statuses', 'sprint') }}</option>
             <option value="__not_done__">{{ __('Not done', 'sprint') }}</option>
@@ -48,7 +32,7 @@
             <option value="{{ key }}">{{ label }}</option>
             {% endfor %}
         </select>
-        <select class="form-select form-select-sm sf-owner" style="max-width:220px;"
+        <select class="form-select form-select-sm sf-owner sprint-mw-220"
                 aria-label="{{ __('Owner', 'sprint') }}" data-sf-label="{{ __('Owner', 'sprint') }}">
             <option value="">{{ __('All owners', 'sprint') }}</option>
             <option value="__unassigned__">{{ __('Unassigned only', 'sprint') }}</option>
@@ -59,7 +43,7 @@
             {% endfor %}
         </select>
         {% if defined_tags|default([])|length > 0 %}
-        <select class="form-select form-select-sm sf-tag" style="max-width:180px;"
+        <select class="form-select form-select-sm sf-tag sprint-mw-180"
                 aria-label="{{ __('Tag', 'sprint') }}" data-sf-label="{{ __('Tag', 'sprint') }}">
             <option value="">{{ __('All tags', 'sprint') }}</option>
             {% for t in defined_tags %}
@@ -71,27 +55,47 @@
         <button type="button" class="btn btn-sm btn-outline-secondary sf-reset" data-sprint-action="filter-reset">
             <i class="fas fa-times me-1" aria-hidden="true"></i>{{ __('Reset filters', 'sprint') }}
         </button>
+        {# js/sprint.js toggles this inline display value, so it stays inline. #}
         <div class="sf-chips d-flex flex-wrap gap-1 w-100" style="display:none !important;" aria-label="{{ __('Active filters', 'sprint') }}"></div>
     </div>
-    <div>
-        <table class="table table-striped table-hover mb-0 sprint-review-table sprint-review-fastlane">
-            <thead class="table-light">
+{% endmacro %}
+
+{# Column heads. "Linked item" and "Waiting on" fold under the name below
+   992px (.sprint-review-col-fold / .sprint-review-fold in css). #}
+{% macro items_thead() %}
+            <thead>
                 <tr>
-                    <th style="width:40px;">{{ __('Type') }}</th>
-                    <th class="sprint-sortable" data-sort-type="name" data-sprint-action="sort" style="cursor:pointer;">{{ __('Name') }} <i class="fas fa-sort text-muted"></i></th>
-                    <th>{{ __('Linked item', 'sprint') }}</th>
-                    <th class="sprint-sortable" data-sort-type="status" data-sprint-action="sort" style="cursor:pointer;">{{ __('Status') }} <i class="fas fa-sort text-muted"></i></th>
-                    <th class="sprint-sortable" data-sort-type="owner" data-sprint-action="sort" style="cursor:pointer;">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
-                    <th style="min-width:160px;">{{ __('Waiting on', 'sprint') }}</th>
-                    <th style="min-width:220px;">{{ __('Note', 'sprint') }}</th>
-                    <th style="width:80px;"></th>
+                    <th class="sprint-review-col-type">{{ __('Type') }}</th>
+                    <th class="sprint-sortable" data-sort-type="name" data-sprint-action="sort">{{ __('Name') }} <i class="fas fa-sort text-muted" aria-hidden="true"></i></th>
+                    <th class="sprint-review-col-fold">{{ __('Linked item', 'sprint') }}</th>
+                    <th class="sprint-sortable" data-sort-type="status" data-sprint-action="sort">{{ __('Status') }} <i class="fas fa-sort text-muted" aria-hidden="true"></i></th>
+                    <th class="sprint-sortable" data-sort-type="owner" data-sprint-action="sort">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted" aria-hidden="true"></i></th>
+                    <th class="sprint-review-col-fold sprint-review-col-deps">{{ __('Waiting on', 'sprint') }}</th>
+                    <th class="sprint-review-col-note">{{ __('Note', 'sprint') }}</th>
+                    <th class="sprint-review-actions"><span class="visually-hidden">{{ __('Actions') }}</span></th>
                 </tr>
             </thead>
-            <tbody>
-                {% for si in fastlane_items %}
+{% endmacro %}
+
+{# One item row. The fastlane variant differs in the bolt before the name,
+   the owner cell (allocations instead of one owner), two extra data
+   attributes and the "Manage fastlane members" entry in the more menu. #}
+{% macro item_row(si, is_fastlane, item_statuses, member_options, move_target_sprints, is_scrum_master) %}
                 {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
                 {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
-                {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
+                {% set targets = move_target_sprints|default({}) %}
+                {% set itype = si.itemtype|default('') %}
+                {% set type_meta = {
+                    'Ticket':      {'icon': 'fa-ticket-alt',         'tone': 'ticket',  'label': __('Ticket')},
+                    'Change':      {'icon': 'fa-exchange-alt',       'tone': 'change',  'label': __('Change')},
+                    'Problem':     {'icon': 'fa-exclamation-circle', 'tone': 'problem', 'label': __('Problem')},
+                    'ProjectTask': {'icon': 'fa-tasks',              'tone': 'task',    'label': __('Project task')},
+                } %}
+                {% set tm = type_meta[itype] is defined ? type_meta[itype] : {'icon': 'fa-clipboard-list', 'tone': 'manual', 'label': __('Manual', 'sprint')} %}
+                {% set has_deps = si.deps_open is defined and si.deps_open_count > 0 %}
+                {% set deps_html %}{% if has_deps %}{% for d in si.deps_open %}<div><i class="fas fa-link sprint-dep-icon" aria-hidden="true"></i>
+                                    {{ d.name }} <span class="text-muted">({{ d.capacity }}%)</span>
+                                </div>{% endfor %}{% else %}<span class="text-muted fst-italic">{{ __('None', 'sprint') }}</span>{% endif %}{% endset %}
                 <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}{% if si.review_unclosed %} sprint-review-unclosed{% endif %}{% if si.is_adhoc %} sprint-adhoc{% endif %}"
                     data-item-id="{{ si.id }}"
                     data-item-name="{{ si.name }}"
@@ -106,7 +110,7 @@
                     data-customer-name="{{ si.customer_name|default('') }}"
                     data-credit-product-id="{{ si.credit_product_id|default(0) }}"
                     data-credits="{{ si.credits|default('0') }}"
-                    data-is-fastlane="1"
+                    data-is-fastlane="{{ is_fastlane ? '1' : '0' }}"
                     data-is-adhoc="{{ si.is_adhoc ? '1' : '0' }}"
                     data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"
                     data-note="{{ si.note }}"
@@ -115,57 +119,53 @@
                     data-category-name="{{ si.category_name|default('') }}"
                     data-done-checks="{{ si.done_checks|default('') }}"
                     data-epic-id="{{ si.epic_id|default(0) }}"
-                    data-linked-itemtype="{{ si.itemtype }}"
+                    data-linked-itemtype="{{ si.itemtype }}"{% if is_fastlane %}
                     data-fastlane-url="{{ si.fastlane_url }}"
-                    data-fastlane-allocations="{{ si.fastlane_allocations|default([])|json_encode|e('html_attr') }}">
-                    <td class="text-center" style="white-space:nowrap;">
-                        {% if si.itemtype == 'Ticket' %}
-                            <i class="fas fa-ticket-alt" style="color:#0d6efd;" title="{{ __('Ticket') }}"></i>
-                        {% elseif si.itemtype == 'Change' %}
-                            <i class="fas fa-exchange-alt" style="color:#6f42c1;" title="{{ __('Change') }}"></i>
-                        {% elseif si.itemtype == 'Problem' %}
-                            <i class="fas fa-exclamation-circle" style="color:#dc3545;" title="{{ __('Problem') }}"></i>
-                        {% elseif si.itemtype == 'ProjectTask' %}
-                            <i class="fas fa-tasks" style="color:#fd7e14;" title="{{ __('Project task') }}"></i>
-                        {% else %}
-                            <i class="fas fa-clipboard-list" style="color:#6c757d;" title="{{ __('Manual', 'sprint') }}"></i>
-                        {% endif %}
+                    data-fastlane-allocations="{{ si.fastlane_allocations|default([])|json_encode|e('html_attr') }}"{% endif %}>
+                    <td class="text-center sprint-nowrap">
+                        <i class="fas {{ tm.icon }} sprint-type-icon sprint-type-{{ tm.tone }}" title="{{ tm.label }}" aria-hidden="true"></i><span class="visually-hidden">{{ tm.label }}</span>
                     </td>
-                    <td>
-                        <i class="fas fa-bolt" style="color:#fd7e14;margin-right:4px;"></i>
+                    <td class="sprint-review-name">
+                        {% if is_fastlane %}<i class="fas fa-bolt sprint-fastlane-icon me-1" aria-hidden="true"></i><span class="visually-hidden">{{ __('Fastlane', 'sprint') }}</span>{% endif %}
                         <a href="{{ si.url }}">{{ si.name }}</a>{{ si.project_suffix_html|default('')|raw }}
-                        {% if si.is_adhoc %}<span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>{% endif %}
+                        {% if si.is_adhoc %}<span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint') }}"><i class="fas fa-plus-circle" aria-hidden="true"></i> {{ __('Adhoc', 'sprint') }}</span>{% endif %}
                         {{ si.category_pill_html|default('')|raw }}
                         {{ si.tags_pills_html|default('')|raw }}
+                        {# Narrow screens: the two folded columns repeat here.
+                           Same classes as the cells, so the shared dialogs
+                           keep both copies in sync. #}
+                        <div class="sprint-review-fold">
+                            <div class="sprint-review-fold-line"><span class="sprint-review-fold-label">{{ __('Linked item', 'sprint') }}</span><span class="sprint-review-linked">{{ si.linked_display|raw }}</span></div>
+                            <div class="sprint-review-fold-line"><span class="sprint-review-fold-label">{{ __('Waiting on', 'sprint') }}</span><div class="sprint-review-deps">{{ deps_html }}</div></div>
+                        </div>
                     </td>
-                    <td class="sprint-review-linked">{{ si.linked_display|raw }}</td>
+                    <td class="sprint-review-linked sprint-review-col-fold">{{ si.linked_display|raw }}</td>
                     <td>
-                        <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
-                            {{ status_label }}
-                        </span>
+                        <span class="sprint-badge sprint-review-status sprint-status-{{ si.status|replace({'_': '-'}) }}">{{ status_label }}</span>
                         {% if si.review_unclosed %}
                         <span class="sprint-review-unclosed-badge" title="{{ __('The linked ticket/change is not closed/solved yet', 'sprint') }}">
-                            <i class="fas fa-exclamation-triangle"></i> {{ __('Linked item open', 'sprint') }}
+                            <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> {{ __('Linked item open', 'sprint') }}
                         </span>
                         {% endif %}
                         {% if si.newly_blocked %}
                         <span class="sprint-newly-blocked-badge" title="{{ __('Became blocked since the previous meeting', 'sprint') }}">
-                            <i class="fas fa-exclamation-triangle"></i> {{ __('Newly blocked', 'sprint') }}
+                            <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> {{ __('Newly blocked', 'sprint') }}
                         </span>
                         {% endif %}
                     </td>
                     <td class="sprint-review-owner">
+                        {% if is_fastlane %}
                         {% if si.fastlane_allocations is defined and si.fastlane_allocations|length > 0 %}
-                            <div style="display:flex;flex-direction:column;gap:2px;">
+                            <div class="sprint-fl-allocs">
                                 {% for alloc in si.fastlane_allocations %}
-                                    <div style="font-size:0.88em;line-height:1.3;">
-                                        <i class="fas fa-bolt text-warning me-1" style="font-size:0.78em;"></i>{{ alloc.name }}
+                                    <div class="sprint-fl-alloc">
+                                        <i class="fas fa-bolt text-warning me-1" aria-hidden="true"></i>{{ alloc.name }}
                                         <span class="text-muted">({{ alloc.capacity }}%)</span>
                                     </div>
                                 {% endfor %}
                                 {% if si.fastlane_total is defined and si.fastlane_total > 0 %}
-                                    <div class="text-muted" style="font-size:0.78em;margin-top:2px;">
-                                        {{ __('Total', 'sprint') }}: <strong style="color:#fd7e14;">{{ si.fastlane_total }}%</strong>
+                                    <div class="text-muted sprint-fl-total">
+                                        {{ __('Total', 'sprint') }}: <strong>{{ si.fastlane_total }}%</strong>
                                     </div>
                                 {% endif %}
                             </div>
@@ -175,73 +175,123 @@
                                 <i class="fas fa-cog text-muted" aria-hidden="true"></i>
                             </a>
                         {% endif %}
-                    </td>
-                    <td class="sprint-review-deps" style="font-size:0.85em;line-height:1.3;">
-                        {% if si.deps_open is defined and si.deps_open_count > 0 %}
-                            {% for d in si.deps_open %}
-                                <div><i class="fas fa-link" style="color:#20c997;font-size:0.75em;"></i>
-                                    {{ d.name }} <span class="text-muted">({{ d.capacity }}%)</span>
-                                </div>
-                            {% endfor %}
                         {% else %}
-                            <span class="text-muted fst-italic">{{ __('None', 'sprint') }}</span>
+                        {% if owner_name != '' %}
+                            <i class="fas fa-user text-muted me-1" aria-hidden="true"></i>{{ owner_name }}
+                        {% else %}
+                            <span class="text-muted fst-italic">{{ __('Unassigned', 'sprint') }}</span>
+                        {% endif %}
                         {% endif %}
                     </td>
-                    <td class="sprint-review-note" style="max-width:360px;">
+                    <td class="sprint-review-deps sprint-review-col-fold">{{ deps_html }}</td>
+                    <td class="sprint-review-note">
                         <div class="sprint-note-display">{{ si.note }}</div>
                     </td>
-                    <td class="text-center" style="white-space:nowrap;">
+                    {# Sticky on the right. At most one filled button (mark
+                       done), quick edit next to it, the rest in the more
+                       menu with back to backlog last. #}
+                    <td class="sprint-review-actions text-center">
+                        {% if is_scrum_master and si.status != 'done' %}
                         <button type="button"
-                                class="btn btn-sm btn-outline-primary sprint-quick-edit-btn me-1"
+                                class="btn btn-sm btn-success sprint-mark-done-btn me-1"
+                                title="{{ __('Mark as done', 'sprint') }}"
+                                aria-label="{{ __('Mark as done', 'sprint') }}: {{ si.name }}"
+                                data-item-id="{{ si.id }}">
+                            <i class="fas fa-check" aria-hidden="true"></i>
+                        </button>
+                        {% endif %}
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary sprint-quick-edit-btn me-1"
                                 title="{{ __('Quick edit', 'sprint') }}"
                                 aria-label="{{ __('Quick edit', 'sprint') }}: {{ si.name }}"
                                 aria-haspopup="dialog"
                                 data-item-id="{{ si.id }}">
                             <i class="fas fa-pen" aria-hidden="true"></i>
                         </button>
-                        <a href="{{ si.fastlane_url }}"
-                           class="btn btn-sm btn-outline-warning me-1"
-                           title="{{ __('Manage fastlane members', 'sprint') }}"
-                           aria-label="{{ __('Manage fastlane members', 'sprint') }}: {{ si.name }}">
-                            <i class="fas fa-users" aria-hidden="true"></i>
-                        </a>
-                        {% if move_target_sprints is defined and move_target_sprints|length > 0 %}
-                        <div class="dropdown d-inline-block me-1">
+                        {# The menu always holds at least the backlog entry. #}
+                        <div class="dropdown d-inline-block">
                             <button type="button"
-                                    class="btn btn-sm btn-outline-success dropdown-toggle"
+                                    class="btn btn-sm btn-outline-secondary sprint-row-more-btn"
                                     data-bs-toggle="dropdown"
+                                    data-bs-popper-config='{"strategy":"fixed"}'
                                     aria-expanded="false"
-                                    title="{{ __('Carry over to another sprint', 'sprint') }}"
-                                    aria-label="{{ __('Carry over to another sprint', 'sprint') }}: {{ si.name }}">
-                                <i class="fas fa-forward" aria-hidden="true"></i>
+                                    title="{{ __('More actions', 'sprint') }}"
+                                    aria-label="{{ __('More actions', 'sprint') }}: {{ si.name }}">
+                                <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end">
+                                {% if is_fastlane %}
+                                <li>
+                                    <a href="{{ si.fastlane_url }}" class="dropdown-item">
+                                        <i class="fas fa-users text-muted me-1" aria-hidden="true"></i>{{ __('Manage fastlane members', 'sprint') }}
+                                    </a>
+                                </li>
+                                {% endif %}
+                                {% if targets|length > 0 %}
                                 <li><h6 class="dropdown-header">{{ __('Carry over to sprint', 'sprint') }}</h6></li>
-                                {% for target_id, target_label in move_target_sprints %}
+                                {% for target_id, target_label in targets %}
                                 <li>
                                     <a href="#" class="dropdown-item sprint-carry-over-btn"
                                        data-item-id="{{ si.id }}"
                                        data-sprint-id="{{ target_id }}"
                                        data-sprint-label="{{ target_label }}">
-                                        <i class="fas fa-forward text-muted me-1"></i>{{ target_label }}
+                                        <i class="fas fa-forward text-muted me-1" aria-hidden="true"></i>{{ target_label }}
                                     </a>
                                 </li>
                                 {% endfor %}
+                                {% endif %}
+                                {% if is_fastlane or targets|length > 0 %}
+                                <li><hr class="dropdown-divider"></li>
+                                {% endif %}
+                                {% if si.itemtype %}
+                                <li>
+                                    <button type="button"
+                                            class="dropdown-item sprint-backlog-btn"
+                                            aria-haspopup="dialog"
+                                            data-backlog-id="{{ si.id }}">
+                                        <i class="fas fa-inbox text-muted me-1" aria-hidden="true"></i>{{ __('Back to backlog', 'sprint') }}
+                                    </button>
+                                </li>
+                                {% else %}
+                                {# A manual item has no ticket to return: say so instead of hiding the action. #}
+                                <li>
+                                    <span class="dropdown-item disabled" aria-disabled="true">
+                                        <i class="fas fa-inbox me-1" aria-hidden="true"></i>{{ __('Back to backlog', 'sprint') }}
+                                    </span>
+                                    <div class="dropdown-item-text sprint-small text-muted sprint-menu-hint">{{ __('Manual items cannot be sent back to the backlog — they stay in their sprint.', 'sprint') }}</div>
+                                </li>
+                                {% endif %}
                             </ul>
                         </div>
-                        {% endif %}
-                        {% if si.itemtype %}
-                        <button type="button"
-                                class="btn btn-sm btn-outline-warning sprint-backlog-btn"
-                                title="{{ __('Back to backlog', 'sprint') }}"
-                                aria-label="{{ __('Back to backlog', 'sprint') }}: {{ si.name }}"
-                                aria-haspopup="dialog"
-                                data-backlog-id="{{ si.id }}">
-                            <i class="fas fa-undo" aria-hidden="true"></i>
-                        </button>
-                        {% endif %}
-                    </td>
+                                            </td>
                 </tr>
+{% endmacro %}
+
+{% import _self as mt %}
+
+{% set fastlane_items = sprint_items|filter(si => si.is_fastlane) %}
+{% set regular_items  = sprint_items|filter(si => not si.is_fastlane) %}
+{% set row_targets    = move_target_sprints is defined ? move_target_sprints : {} %}
+{% set row_is_sm      = is_scrum_master|default(false) %}
+{% set bar_tags       = defined_tags|default([]) %}
+
+{# === Fastlane section (collapsible, same pattern as the dashboard) === #}
+{% if fastlane_items|length > 0 %}
+<div class="sprint-collapsible sprint-fastlane-section mt-2 mb-0" data-sprint-collapse-key="meeting-fastlane-{{ item.fields['id'] }}">
+    <div class="sprint-collapsible-header">
+        <i class="fas fa-chevron-down sprint-collapsible-chevron" aria-hidden="true"></i>
+        <i class="fas fa-bolt sprint-fastlane-icon" aria-hidden="true"></i>
+        <span>{{ __('Fastlane', 'sprint') }}</span>
+        <span class="sprint-chip sprint-chip-orange">{{ fastlane_items|length }}</span>
+    </div>
+    <div class="sprint-collapsible-body">
+    {{ mt.filter_bar('sprint-filter-fastlane', 'sprint-review-fastlane', item_statuses, member_options, bar_tags) }}
+    <div class="sprint-review-scroll">
+        <table class="table table-striped table-hover mb-0 sprint-review-table sprint-review-fastlane">
+            {{ mt.items_thead() }}
+            <tbody>
+                {% for si in fastlane_items %}
+                {{ mt.item_row(si, true, item_statuses, member_options, row_targets, row_is_sm) }}
                 {% endfor %}
             </tbody>
         </table>
@@ -253,210 +303,27 @@
 {# === Regular sprint items section (collapsible) === #}
 <div class="sprint-collapsible {{ fastlane_items|length > 0 ? 'mt-3' : 'mt-2' }} mb-2" data-sprint-collapse-key="meeting-items-{{ item.fields['id'] }}">
     <div class="sprint-collapsible-header">
-        <i class="fas fa-chevron-down sprint-collapsible-chevron"></i>
-        <i class="fas fa-clipboard-list"></i>
+        <i class="fas fa-chevron-down sprint-collapsible-chevron" aria-hidden="true"></i>
+        <i class="fas fa-clipboard-list" aria-hidden="true"></i>
         <span>{{ __('Sprint Items Review', 'sprint') }}</span>
         <span class="badge bg-secondary">{{ regular_items|length }}</span>
     </div>
     <div class="sprint-collapsible-body">
     {% if regular_items|length > 0 %}
-    <div id="sprint-filter-regular" class="sprint-filter-bar d-flex flex-wrap align-items-center gap-2 p-2 mb-2"
-         data-target="sprint-review-regular"
-         role="search" aria-label="{{ __('Filter items', 'sprint') }}"
-         data-sf-all-one="{{ _n('%s item', '%s items', 1, 'sprint') }}"
-         data-sf-all-many="{{ _n('%s item', '%s items', 2, 'sprint') }}"
-         data-sf-of-one="{{ _n('%1$s of %2$s item', '%1$s of %2$s items', 1, 'sprint') }}"
-         data-sf-of-many="{{ _n('%1$s of %2$s item', '%1$s of %2$s items', 2, 'sprint') }}"
-         data-sf-empty="{{ __('No items match these filters.', 'sprint') }}"
-         data-sf-empty-hint="{{ __('The list has items, but the active filters hide all of them.', 'sprint') }}"
-         data-sf-reset-label="{{ __('Reset filters', 'sprint') }}"
-         data-sf-remove="{{ __('Remove filter: %s', 'sprint') }}">
-        <div class="d-flex align-items-center gap-1 text-muted sprint-small" aria-hidden="true">
-            <i class="fas fa-filter"></i><span>{{ __('Filter', 'sprint') }}</span>
-        </div>
-        <input type="search" class="form-control form-control-sm sf-text" style="max-width:220px;"
-               placeholder="{{ __('Search name...', 'sprint') }}"
-               aria-label="{{ __('Search name', 'sprint') }}" data-sf-label="{{ __('Search', 'sprint') }}">
-        <select class="form-select form-select-sm sf-status" style="max-width:180px;"
-                aria-label="{{ __('Status') }}" data-sf-label="{{ __('Status') }}">
-            <option value="">{{ __('All statuses', 'sprint') }}</option>
-            <option value="__not_done__">{{ __('Not done', 'sprint') }}</option>
-            {% for key, label in item_statuses %}
-            <option value="{{ key }}">{{ label }}</option>
-            {% endfor %}
-        </select>
-        <select class="form-select form-select-sm sf-owner" style="max-width:220px;"
-                aria-label="{{ __('Owner', 'sprint') }}" data-sf-label="{{ __('Owner', 'sprint') }}">
-            <option value="">{{ __('All owners', 'sprint') }}</option>
-            <option value="__unassigned__">{{ __('Unassigned only', 'sprint') }}</option>
-            {% for uid, uname in member_options %}
-            {% if uid > 0 %}
-            <option value="{{ uid }}">{{ uname }}</option>
-            {% endif %}
-            {% endfor %}
-        </select>
-        {% if defined_tags|default([])|length > 0 %}
-        <select class="form-select form-select-sm sf-tag" style="max-width:180px;"
-                aria-label="{{ __('Tag', 'sprint') }}" data-sf-label="{{ __('Tag', 'sprint') }}">
-            <option value="">{{ __('All tags', 'sprint') }}</option>
-            {% for t in defined_tags %}
-            <option value="{{ t|lower }}">{{ t }}</option>
-            {% endfor %}
-        </select>
-        {% endif %}
-        <span class="sf-summary text-muted sprint-small ms-auto" aria-live="polite"></span>
-        <button type="button" class="btn btn-sm btn-outline-secondary sf-reset" data-sprint-action="filter-reset">
-            <i class="fas fa-times me-1" aria-hidden="true"></i>{{ __('Reset filters', 'sprint') }}
-        </button>
-        <div class="sf-chips d-flex flex-wrap gap-1 w-100" style="display:none !important;" aria-label="{{ __('Active filters', 'sprint') }}"></div>
-    </div>
-    <div>
+    {{ mt.filter_bar('sprint-filter-regular', 'sprint-review-regular', item_statuses, member_options, bar_tags) }}
+    <div class="sprint-review-scroll">
         <table class="table table-striped table-hover mb-0 sprint-review-table sprint-review-regular">
-            <thead class="table-light">
-                <tr>
-                    <th style="width:40px;">{{ __('Type') }}</th>
-                    <th class="sprint-sortable" data-sort-type="name" data-sprint-action="sort" style="cursor:pointer;">{{ __('Name') }} <i class="fas fa-sort text-muted"></i></th>
-                    <th>{{ __('Linked item', 'sprint') }}</th>
-                    <th class="sprint-sortable" data-sort-type="status" data-sprint-action="sort" style="cursor:pointer;">{{ __('Status') }} <i class="fas fa-sort text-muted"></i></th>
-                    <th class="sprint-sortable" data-sort-type="owner" data-sprint-action="sort" style="cursor:pointer;">{{ __('Owner', 'sprint') }} <i class="fas fa-sort text-muted"></i></th>
-                    <th style="min-width:160px;">{{ __('Waiting on', 'sprint') }}</th>
-                    <th style="min-width:220px;">{{ __('Note', 'sprint') }}</th>
-                    <th style="width:80px;"></th>
-                </tr>
-            </thead>
+            {{ mt.items_thead() }}
             <tbody>
                 {% for si in regular_items %}
-                {% set owner_name = member_options[si.users_id] is defined ? member_options[si.users_id] : '' %}
-                {% set status_label = item_statuses[si.status] is defined ? item_statuses[si.status] : si.status %}
-                {% set status_color = status_bg[si.status] is defined ? status_bg[si.status] : '#6c757d' %}
-                <tr class="sprint-review-row sprint-filterable-row{% if si.newly_blocked %} sprint-newly-blocked{% endif %}{% if si.review_unclosed %} sprint-review-unclosed{% endif %}{% if si.is_adhoc %} sprint-adhoc{% endif %}"
-                    data-item-id="{{ si.id }}"
-                    data-item-name="{{ si.name }}"
-                    data-item-status="{{ si.status }}"
-                    data-item-status-label="{{ status_label }}"
-                    data-item-priority="{{ si.priority }}"
-                    data-users-id="{{ si.users_id }}"
-                    data-owner-name="{{ owner_name }}"
-                    data-story-points="{{ si.story_points }}"
-                    data-capacity="{{ si.capacity }}"
-                    data-customer-id="{{ si.customer_id|default(0) }}"
-                    data-customer-name="{{ si.customer_name|default('') }}"
-                    data-credit-product-id="{{ si.credit_product_id|default(0) }}"
-                    data-credits="{{ si.credits|default('0') }}"
-                    data-is-fastlane="0"
-                    data-is-adhoc="{{ si.is_adhoc ? '1' : '0' }}"
-                    data-newly-blocked="{{ si.newly_blocked ? '1' : '0' }}"
-                    data-item-tags="{{ si.tags_blob|default('|') }}"
-                    data-category-id="{{ si.category_id|default(0) }}"
-                    data-category-name="{{ si.category_name|default('') }}"
-                    data-done-checks="{{ si.done_checks|default('') }}"
-                    data-epic-id="{{ si.epic_id|default(0) }}"
-                    data-linked-itemtype="{{ si.itemtype }}"
-                    data-note="{{ si.note }}">
-                    <td class="text-center" style="white-space:nowrap;">
-                        {% if si.itemtype == 'Ticket' %}
-                            <i class="fas fa-ticket-alt" style="color:#0d6efd;" title="{{ __('Ticket') }}"></i>
-                        {% elseif si.itemtype == 'Change' %}
-                            <i class="fas fa-exchange-alt" style="color:#6f42c1;" title="{{ __('Change') }}"></i>
-                        {% elseif si.itemtype == 'Problem' %}
-                            <i class="fas fa-exclamation-circle" style="color:#dc3545;" title="{{ __('Problem') }}"></i>
-                        {% elseif si.itemtype == 'ProjectTask' %}
-                            <i class="fas fa-tasks" style="color:#fd7e14;" title="{{ __('Project task') }}"></i>
-                        {% else %}
-                            <i class="fas fa-clipboard-list" style="color:#6c757d;" title="{{ __('Manual', 'sprint') }}"></i>
-                        {% endif %}
-                    </td>
-                    <td><a href="{{ si.url }}">{{ si.name }}</a>{{ si.project_suffix_html|default('')|raw }}{% if si.is_adhoc %} <span class="sprint-adhoc-badge" title="{{ __('Added to the sprint after kick-off', 'sprint') }}"><i class="fas fa-plus-circle"></i> {{ __('Adhoc', 'sprint') }}</span>{% endif %}{{ si.category_pill_html|default('')|raw }}{{ si.tags_pills_html|default('')|raw }}</td>
-                    <td class="sprint-review-linked">{{ si.linked_display|raw }}</td>
-                    <td>
-                        <span class="sprint-badge sprint-review-status" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600;color:#fff;background-color:{{ status_color }};">
-                            {{ status_label }}
-                        </span>
-                        {% if si.review_unclosed %}
-                        <span class="sprint-review-unclosed-badge" title="{{ __('The linked ticket/change is not closed/solved yet', 'sprint') }}">
-                            <i class="fas fa-exclamation-triangle"></i> {{ __('Linked item open', 'sprint') }}
-                        </span>
-                        {% endif %}
-                        {% if si.newly_blocked %}
-                        <span class="sprint-newly-blocked-badge" title="{{ __('Became blocked since the previous meeting', 'sprint') }}">
-                            <i class="fas fa-exclamation-triangle"></i> {{ __('Newly blocked', 'sprint') }}
-                        </span>
-                        {% endif %}
-                    </td>
-                    <td class="sprint-review-owner">
-                        {% if owner_name != '' %}
-                            <i class="fas fa-user text-muted me-1"></i>{{ owner_name }}
-                        {% else %}
-                            <span class="text-muted fst-italic">{{ __('Unassigned', 'sprint') }}</span>
-                        {% endif %}
-                    </td>
-                    <td class="sprint-review-deps" style="font-size:0.85em;line-height:1.3;">
-                        {% if si.deps_open is defined and si.deps_open_count > 0 %}
-                            {% for d in si.deps_open %}
-                                <div><i class="fas fa-link" style="color:#20c997;font-size:0.75em;"></i>
-                                    {{ d.name }} <span class="text-muted">({{ d.capacity }}%)</span>
-                                </div>
-                            {% endfor %}
-                        {% else %}
-                            <span class="text-muted fst-italic">{{ __('None', 'sprint') }}</span>
-                        {% endif %}
-                    </td>
-                    <td class="sprint-review-note" style="max-width:360px;">
-                        <div class="sprint-note-display">{{ si.note }}</div>
-                    </td>
-                    <td class="text-center" style="white-space:nowrap;">
-                        <button type="button"
-                                class="btn btn-sm btn-outline-primary sprint-quick-edit-btn me-1"
-                                title="{{ __('Quick edit', 'sprint') }}"
-                                aria-label="{{ __('Quick edit', 'sprint') }}: {{ si.name }}"
-                                aria-haspopup="dialog"
-                                data-item-id="{{ si.id }}">
-                            <i class="fas fa-pen" aria-hidden="true"></i>
-                        </button>
-                        {% if move_target_sprints is defined and move_target_sprints|length > 0 %}
-                        <div class="dropdown d-inline-block me-1">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-success dropdown-toggle"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false"
-                                    title="{{ __('Carry over to another sprint', 'sprint') }}"
-                                    aria-label="{{ __('Carry over to another sprint', 'sprint') }}: {{ si.name }}">
-                                <i class="fas fa-forward" aria-hidden="true"></i>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li><h6 class="dropdown-header">{{ __('Carry over to sprint', 'sprint') }}</h6></li>
-                                {% for target_id, target_label in move_target_sprints %}
-                                <li>
-                                    <a href="#" class="dropdown-item sprint-carry-over-btn"
-                                       data-item-id="{{ si.id }}"
-                                       data-sprint-id="{{ target_id }}"
-                                       data-sprint-label="{{ target_label }}">
-                                        <i class="fas fa-forward text-muted me-1"></i>{{ target_label }}
-                                    </a>
-                                </li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        {% endif %}
-                        {% if si.itemtype %}
-                        <button type="button"
-                                class="btn btn-sm btn-outline-warning sprint-backlog-btn"
-                                title="{{ __('Back to backlog', 'sprint') }}"
-                                aria-label="{{ __('Back to backlog', 'sprint') }}: {{ si.name }}"
-                                aria-haspopup="dialog"
-                                data-backlog-id="{{ si.id }}">
-                            <i class="fas fa-undo" aria-hidden="true"></i>
-                        </button>
-                        {% endif %}
-                    </td>
-                </tr>
+                {{ mt.item_row(si, false, item_statuses, member_options, row_targets, row_is_sm) }}
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% else %}
     <div class="text-center text-muted py-3">
-        <i class="fas fa-inbox" style="font-size:1.5em;" aria-hidden="true"></i><br>
+        <i class="fas fa-inbox sprint-empty-icon" aria-hidden="true"></i><br>
         <span class="fw-bold">{{ __('No items in this sprint', 'sprint') }}</span><br>
         <span class="sprint-small">{{ __("Plan items from the backlog or add them on the sprint's Items tab.", 'sprint') }}</span>
     </div>

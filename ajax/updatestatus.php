@@ -60,6 +60,31 @@ $isScrumMaster = GlpiPlugin\Sprint\SprintItem::currentUserIsScrumMasterOf(
     (int)($item->fields['plugin_sprint_sprints_id'] ?? 0)
 );
 $dodOverride = $isScrumMaster && (int)($_POST['dod_override'] ?? 0) === 1;
+
+// "Linked item still open" facts for Review/Done, resolved once: the DoD
+// question carries them along so the client can ask both in one dialog.
+$confirmLinkedOpen = (int)($_POST['confirm_linked_open'] ?? 0) === 1;
+$linkedOpen = null;
+if (
+    !$confirmLinkedOpen
+    && in_array($newStatus, [
+        GlpiPlugin\Sprint\SprintItem::STATUS_REVIEW,
+        GlpiPlugin\Sprint\SprintItem::STATUS_DONE,
+    ], true)
+    && GlpiPlugin\Sprint\SprintItem::isLinkedItemOpenForRow(array_merge($item->fields, ['status' => $newStatus]))
+) {
+    $itemtype   = (string)($item->fields['itemtype'] ?? '');
+    $itemsId    = (int)($item->fields['items_id'] ?? 0);
+    $linkedOpen = ['linked_name' => '', 'linked_url' => ''];
+    if ($itemtype !== '' && $itemsId > 0 && class_exists($itemtype)) {
+        $linked = new $itemtype();
+        if ($linked->getFromDB($itemsId)) {
+            $linkedOpen['linked_name'] = (string)($linked->fields['name'] ?? '');
+        }
+        $linkedOpen['linked_url'] = $itemtype::getFormURLWithID($itemsId);
+    }
+}
+
 if ($dod && in_array($newStatus, [
     GlpiPlugin\Sprint\SprintItem::STATUS_REVIEW,
     GlpiPlugin\Sprint\SprintItem::STATUS_DONE,
@@ -76,6 +101,11 @@ if ($dod && in_array($newStatus, [
             'dod'          => array_values($dod),
             'checked'      => array_values(array_intersect($dod, $doneChecks ?? $current)),
             'can_override' => $isScrumMaster,
+            // Answering the checklist also answers this one (the client
+            // retries with confirm_linked_open=1).
+            'linked_open'  => $linkedOpen !== null,
+            'linked_name'  => $linkedOpen['linked_name'] ?? '',
+            'linked_url'   => $linkedOpen['linked_url'] ?? '',
         ]);
         return;
     }
@@ -87,36 +117,15 @@ if (!$policy['ok']) {
     return;
 }
 $overrideNotice = !empty($policy['overridden']) ? (string)$policy['message'] : '';
-$confirmLinkedOpen = (int)($_POST['confirm_linked_open'] ?? 0) === 1;
-if (
-    !$confirmLinkedOpen
-    && in_array($newStatus, [
-        GlpiPlugin\Sprint\SprintItem::STATUS_REVIEW,
-        GlpiPlugin\Sprint\SprintItem::STATUS_DONE,
-    ], true)
-) {
-    $checkRow = array_merge($item->fields, ['status' => $newStatus]);
-    if (GlpiPlugin\Sprint\SprintItem::isLinkedItemOpenForRow($checkRow)) {
-        $itemtype   = (string)($item->fields['itemtype'] ?? '');
-        $itemsId    = (int)($item->fields['items_id'] ?? 0);
-        $linkedName = '';
-        $linkedUrl  = '';
-        if ($itemtype !== '' && $itemsId > 0 && class_exists($itemtype)) {
-            $linked = new $itemtype();
-            if ($linked->getFromDB($itemsId)) {
-                $linkedName = (string)($linked->fields['name'] ?? '');
-            }
-            $linkedUrl = $itemtype::getFormURLWithID($itemsId);
-        }
-        echo json_encode([
-            'success'       => false,
-            'needs_confirm' => true,
-            'linked_name'   => $linkedName,
-            'linked_url'    => $linkedUrl,
-            'message'       => __('The linked ticket/change is not closed/solved yet', 'sprint'),
-        ]);
-        return;
-    }
+if ($linkedOpen !== null) {
+    echo json_encode([
+        'success'       => false,
+        'needs_confirm' => true,
+        'linked_name'   => $linkedOpen['linked_name'],
+        'linked_url'    => $linkedOpen['linked_url'],
+        'message'       => __('The linked ticket/change is not closed/solved yet', 'sprint'),
+    ]);
+    return;
 }
 
 $update = [

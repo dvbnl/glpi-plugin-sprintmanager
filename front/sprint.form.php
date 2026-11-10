@@ -52,7 +52,12 @@ if (isset($_POST['add'])) {
     );
 
     $ID = $_GET['id'] ?? 0;
-    $sprint->display(['id' => $ID]);
+    // Close-out screen: decide per open item, then complete the sprint.
+    if (!empty($_GET['closeout']) && (int)$ID > 0 && $sprint->can((int)$ID, READ)) {
+        GlpiPlugin\Sprint\SprintCloseout::show($sprint);
+    } else {
+        $sprint->display(['id' => $ID]);
+    }
 
     Html::footer();
 }

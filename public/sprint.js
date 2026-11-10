@@ -79,20 +79,6 @@
 
 
     /**
-     * Get CSRF token for AJAX requests
-     */
-    function getAjaxCsrfToken() {
-        // GLPI stores the token in a meta tag or hidden field
-        var tokenField = document.querySelector('input[name="_glpi_csrf_token"]');
-        if (tokenField) {
-            return tokenField.value;
-        }
-        // Fallback: check meta tag
-        var meta = document.querySelector('meta[name="glpi_csrf_token"]');
-        return meta ? meta.getAttribute('content') : '';
-    }
-
-    /**
      * Load sprint template data and pre-fill form fields
      *
      * @param {number} templateId - The template ID
@@ -180,22 +166,13 @@
             summary.hidden = false;
         }
 
-        // Fresh one-shot token: spending the form's own token here would
-        // break the later form submit on GLPI 11.
-        $.ajax({ url: ajaxBase + 'csrftoken.php', type: 'GET', dataType: 'json' })
-            .always(function(tok) {
-                var token = (tok && tok.token) ? tok.token : getAjaxCsrfToken();
-                $.ajax({
-                    url: ajaxBase + 'gettemplate.php',
-                    type: 'POST',
-                    dataType: 'json',
-                    data: { id: templateId, _glpi_csrf_token: token },
-                    success: function(response) {
-                        if (response && response.success && response.data) { render(response.data); } else { fail(); }
-                    },
-                    error: fail
-                });
-            });
+        // Fresh one-shot token (sprintUi.post): spending the form's own token
+        // here would break the later form submit on GLPI 11.
+        window.sprintUi.post(ajaxBase + 'gettemplate.php', { id: templateId }, { silent: true })
+            .done(function(response) {
+                if (response && response.success && response.data) { render(response.data); } else { fail(); }
+            })
+            .fail(fail);
     };
 
 })();
@@ -780,23 +757,10 @@
             var doAssign = function(readyChecks) {
             if (btn) { btn.disabled = true; }
 
-            window.jQuery.ajax({
-                url: ajaxBase + 'csrftoken.php',
-                type: 'GET', dataType: 'json', cache: false
-            }).then(function(tokResp) {
-                var data = {
-                    id: itemId,
-                    plugin_sprint_sprints_id: sprintId,
-                    _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
-                };
-                if (readyChecks && readyChecks.length) { data.ready = readyChecks; }
-                Object.keys(extra).forEach(function(k) { data[k] = extra[k]; });
-                return window.jQuery.ajax({
-                    url: ajaxBase + 'assigntosprint.php',
-                    type: 'POST', dataType: 'json',
-                    data: data
-                });
-            }).done(function(resp) {
+            var data = { id: itemId, plugin_sprint_sprints_id: sprintId };
+            if (readyChecks && readyChecks.length) { data.ready = readyChecks; }
+            Object.keys(extra).forEach(function(k) { data[k] = extra[k]; });
+            window.sprintUi.post(ajaxBase + 'assigntosprint.php', data).done(function(resp) {
                 // Capacity review / credit confirmation first, then again.
                 if (window.sprintAssignGuard(resp, function(more) {
                     Object.keys(more).forEach(function(k) { extra[k] = more[k]; });
@@ -813,26 +777,42 @@
                         row.style.transition = 'opacity 0.25s';
                         row.style.opacity = '0';
                         setTimeout(function() {
-                            row.parentNode && row.parentNode.removeChild(row);
-                            // If the parent <tbody>/table is now empty, drop
-                            // a placeholder row so the table doesn't look
-                            // visually broken until the next reload.
+                            // Look the table and its section up before the
+                            // row leaves the DOM.
                             var table = row.closest('table');
-                            if (table) {
-                                var dataRows = table.querySelectorAll('tr.sprint-backlog-row');
-                                if (dataRows.length === 0) {
-                                    var emptyTr = table.querySelector('tr.sprint-backlog-empty');
-                                    if (!emptyTr) {
-                                        var trEmpty = document.createElement('tr');
-                                        trEmpty.className = 'tab_bg_1 sprint-backlog-empty';
-                                        var td = document.createElement('td');
-                                        td.colSpan = rowCols;
-                                        td.className = 'center';
-                                        td.textContent = '—';
-                                        trEmpty.appendChild(td);
-                                        var tbody = table.querySelector('tbody') || table;
-                                        tbody.appendChild(trEmpty);
-                                    }
+                            var section = row.closest('.sprint-backlog-cat-section');
+                            row.parentNode && row.parentNode.removeChild(row);
+                            if (table && table.querySelectorAll('tr.sprint-backlog-row').length === 0) {
+                                // The last row is planned: say so instead of
+                                // leaving an empty table behind.
+                                if (section) { section.classList.add('is-all-planned'); }
+                                var emptyTr = table.querySelector('tr.sprint-backlog-empty-row, tr.sprint-backlog-empty');
+                                if (emptyTr) {
+                                    emptyTr.style.removeProperty('display');
+                                } else {
+                                    var trEmpty = document.createElement('tr');
+                                    trEmpty.className = 'tab_bg_1 sprint-backlog-empty';
+                                    var td = document.createElement('td');
+                                    td.colSpan = rowCols;
+                                    td.className = 'center text-muted sprint-backlog-all-planned';
+                                    var icon = document.createElement('i');
+                                    icon.className = 'fas fa-circle-check me-1';
+                                    icon.setAttribute('aria-hidden', 'true');
+                                    td.appendChild(icon);
+                                    td.appendChild(document.createTextNode(
+                                        window.sprintT('categoryAllPlanned', 'Everything in this category is planned')
+                                    ));
+                                    trEmpty.appendChild(td);
+                                    (table.querySelector('tbody') || table).appendChild(trEmpty);
+                                }
+                            }
+                            // Counter (and capacity sum) in the section head.
+                            if (typeof window.sprintBacklogRefreshSections === 'function') {
+                                window.sprintBacklogRefreshSections();
+                            } else if (section) {
+                                var counter = section.querySelector('.sprint-backlog-cat-count');
+                                if (counter) {
+                                    counter.textContent = String(section.querySelectorAll('tr.sprint-backlog-row').length);
                                 }
                             }
                         }, 260);
@@ -842,7 +822,7 @@
                     if (btn) { btn.disabled = false; }
                 }
             }).fail(function() {
-                window.sprintNotify(window.sprintT('networkError', 'Network error'), 'error');
+                // sprintUi.post already showed the network error.
                 if (btn) { btn.disabled = false; }
             });
             };
@@ -897,28 +877,17 @@
         }
     }
 
-    function fetchToken() {
-        return window.jQuery.ajax({
-            url: pluginRoot() + 'ajax/csrftoken.php',
-            type: 'GET', dataType: 'json', cache: false
-        });
-    }
-
     function phasePost(root, action, extra) {
-        return fetchToken().then(function(tok) {
-            var data = {
-                action: action,
-                meeting_id: parseInt(root.getAttribute('data-meeting-id'), 10) || 0,
-                _glpi_csrf_token: tok && tok.token ? tok.token : ''
-            };
-            if (extra) {
-                for (var k in extra) { data[k] = extra[k]; }
-            }
-            return window.jQuery.ajax({
-                url: pluginRoot() + 'ajax/meetingphase.php',
-                type: 'POST', dataType: 'json', data: data
-            });
-        });
+        var data = {
+            action: action,
+            meeting_id: parseInt(root.getAttribute('data-meeting-id'), 10) || 0
+        };
+        if (extra) {
+            for (var k in extra) { data[k] = extra[k]; }
+        }
+        // A note autosave reports its own failure next to the note.
+        return window.sprintUi.post(pluginRoot() + 'ajax/meetingphase.php', data,
+            { silent: action === 'save_phase_note' });
     }
 
     function applySession(root, resp, scroll) {
@@ -1048,7 +1017,7 @@
             el.disabled = true;
             navPost(root, 'set_phase', { phase: target }).done(function(resp) {
                 // Voting closed: the top themes became actions, rendered server-side.
-                if (resp && resp.success && resp.promoted > 0) { window.location.reload(); return; }
+                if (resp && resp.success && resp.promoted > 0) { window.sprintUi.refresh(); return; }
                 applySession(root, resp, true);
             }).always(function() { el.disabled = false; });
 
@@ -1059,7 +1028,7 @@
             var idx = parseInt(card.getAttribute('data-phase-index'), 10) || 0;
             if (idx === (parseInt(root.getAttribute('data-current-phase'), 10) || 0)) { return; }
             navPost(root, 'set_phase', { phase: idx }).done(function(resp) {
-                if (resp && resp.success && resp.promoted > 0) { window.location.reload(); return; }
+                if (resp && resp.success && resp.promoted > 0) { window.sprintUi.refresh(); return; }
                 applySession(root, resp, false);
             });
 
@@ -1068,7 +1037,7 @@
             var endMeeting = function() {
                 el.disabled = true;
                 navPost(root, 'end_meeting').done(function(resp) {
-                    if (resp && resp.success && resp.promoted > 0) { window.location.reload(); return; }
+                    if (resp && resp.success && resp.promoted > 0) { window.sprintUi.refresh(); return; }
                     applySession(root, resp, false);
                 }).always(function() { el.disabled = false; });
             };
@@ -1280,15 +1249,9 @@
     // ---- Improvements (collect / vote / actions / summary) ----------------
 
     function impPost(root, data) {
-        return fetchToken().then(function(tok) {
-            data.sprint_id = parseInt(root.getAttribute('data-sprint-id'), 10) || 0;
-            data._ajax = 1;
-            data._glpi_csrf_token = tok && tok.token ? tok.token : '';
-            return window.jQuery.ajax({
-                url: pluginRoot() + 'front/sprintagility.form.php',
-                type: 'POST', dataType: 'json', data: data
-            });
-        });
+        data.sprint_id = parseInt(root.getAttribute('data-sprint-id'), 10) || 0;
+        data._ajax = 1;
+        return window.sprintUi.post(pluginRoot() + 'front/sprintagility.form.php', data);
     }
 
     function catLabels(root) {
@@ -1723,7 +1686,7 @@
             el.disabled = true;
             navPost(root, 'set_prev_sprint', { prev_sprint_id: parseInt(sel.value, 10) || 0 }).done(function(resp) {
                 if (resp && resp.success) {
-                    window.location.reload();
+                    window.sprintUi.refresh();
                     return;
                 }
                 if (window.glpi_toast_error) {
@@ -1736,23 +1699,32 @@
 
     // ---- Boot -------------------------------------------------------------
 
+    // Runs once per rail element: the first paint, and again for the fresh
+    // copy a tab reload (sprintUi.refresh) puts in its place.
+    var railTicker = null;
     function bootRail() {
         var root = rail();
-        if (!root) { return; }
+        if (!root || root.__sprintRailBooted) { return; }
+        root.__sprintRailBooted = true;
         recalcOffset(root);
         syncUI(root);
         tick(root);
         restoreNoteDrafts(root);
-        setInterval(function() {
-            var r = rail();
-            if (r) { tick(r); }
-        }, 1000);
+        if (!railTicker) {
+            railTicker = setInterval(function() {
+                var r = rail();
+                if (r) { tick(r); }
+            }, 1000);
+        }
     }
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', bootRail);
     } else {
         bootRail();
+    }
+    if (window.jQuery) {
+        window.jQuery(document).ajaxComplete(function() { setTimeout(bootRail, 0); });
     }
 })();
 
@@ -2204,6 +2176,7 @@
  * GLPI's toasts otherwise; level info|success|warning|error.
  * window.sprintConfirm(msg, onOk, opts): in-page confirmation dialog instead
  * of the browser confirm(); opts.danger styles the OK button as destructive.
+ * window.sprintPrompt(opts, onOk): the same dialog with one text field.
  * window.sprintReducedMotion(): true when the user asked for less motion.
  */
 (function() {
@@ -2315,6 +2288,9 @@
             }
         }
         document.addEventListener('keydown', onKey, true);
+        // On top of an open Bootstrap modal: its focus trap listens on
+        // document and would pull the focus back out of this dialog.
+        overlay.addEventListener('focusin', function(e) { e.stopPropagation(); });
         box.addEventListener('input', refresh);
         box.addEventListener('change', refresh);
         cancel.addEventListener('click', function() { close(false); });
@@ -2363,6 +2339,36 @@
             okLabel: window.sprintT('save', 'Save'),
             validate: function() { return area.value.trim() !== ''; },
             onOk: function() { onOk(area.value.trim()); }
+        });
+    };
+
+    /**
+     * Small dialog with one text field instead of the browser's own prompt:
+     * window.sprintPrompt({title, message, label, placeholder, value, okLabel,
+     * danger, required, maxLength}, onOk). onOk(text) gets the trimmed text
+     * ('' is allowed unless required). Dismissing never calls back.
+     */
+    window.sprintPrompt = function(opts, onOk) {
+        opts = opts || {};
+        var body = el('div');
+        var label = el('label', 'form-label fw-bold d-block', opts.label || window.sprintT('reasonLabel', 'Reason'));
+        var area = el('textarea', 'form-control mt-1');
+        area.rows = opts.rows || 3;
+        area.maxLength = opts.maxLength || 2000;
+        area.placeholder = opts.placeholder || '';
+        area.value = opts.value || '';
+        label.appendChild(area);
+        body.appendChild(label);
+        openDialog({
+            title: opts.title,
+            message: opts.message || '',
+            body: body,
+            danger: !!opts.danger,
+            okLabel: opts.okLabel,
+            cancelLabel: opts.cancelLabel,
+            validate: function() { return !opts.required || area.value.trim() !== ''; },
+            onOk: function() { onOk(area.value.trim()); },
+            onCancel: opts.onCancel
         });
     };
 
@@ -2452,3 +2458,567 @@
     };
 })();
 /* === end terminology === */
+
+/* === ui-helpers: sprintUi.post / refresh / flash === */
+/**
+ * window.sprintUi is shared with the dialog helpers that
+ * SprintItem::renderUiHelpersScript() prints (toast, busy, reload): whichever
+ * runs first creates the object, the other one adds to it.
+ *
+ * sprintUi.post(url, data, opts): POST with a fresh one-shot CSRF token
+ *   (ajax/csrftoken.php). data is an object, a serializeArray() list or a
+ *   query string. Returns a jQuery promise: resolves with the parsed reply,
+ *   rejects on a network / HTTP error after the standard error toast
+ *   (opts.silent skips the toast, opts.dataType overrides 'json').
+ * sprintUi.refresh(): reloads the active GLPI tab in place (reloadTab), or
+ *   the page when there is none.
+ * sprintUi.flash(rows, kind): short theme-aware row highlight, kind
+ *   'success' | 'warning' (css: .sprint-row-flash-*).
+ * button[data-sprint-confirm]: a submit button that asks first (see below).
+ */
+(function() {
+    'use strict';
+
+    var ui = window.sprintUi = window.sprintUi || {};
+
+    function pluginRoot() {
+        return ((window.CFG_GLPI && window.CFG_GLPI.root_doc) ? window.CFG_GLPI.root_doc : '') + '/plugins/sprint/';
+    }
+
+    // Minimal stand-ins for pages without the dialog helpers.
+    if (typeof ui.toast !== 'function') {
+        ui.toast = function(msg, level) {
+            msg = String(msg == null ? '' : msg);
+            if (msg === '') { return; }
+            var fn = { success: 'glpi_toast_info', info: 'glpi_toast_info', warning: 'glpi_toast_warning', error: 'glpi_toast_error' }[level] || 'glpi_toast_info';
+            if (typeof window[fn] === 'function') { window[fn](msg); return; }
+            if (typeof window.sprintBacklogNotify === 'function') {
+                window.sprintBacklogNotify(level === 'error' ? 'danger' : (level || 'info'), msg);
+            }
+        };
+    }
+    if (typeof ui.busy !== 'function') {
+        ui.busy = function(btn, on) {
+            var el = btn && btn.jquery ? btn[0] : btn;
+            if (!el) { return; }
+            el.disabled = !!on;
+            if (on) { el.setAttribute('aria-busy', 'true'); } else { el.removeAttribute('aria-busy'); }
+        };
+    }
+    if (typeof ui.reload !== 'function') {
+        ui.reload = function() { window.location.reload(); };
+    }
+
+    ui.post = function(url, data, opts) {
+        opts = opts || {};
+        var jq = window.jQuery;
+        var d = jq.Deferred();
+        jq.ajax({ url: pluginRoot() + 'ajax/csrftoken.php', type: 'GET', dataType: 'json', cache: false })
+            .then(function(tok) {
+                var token = tok && tok.token ? tok.token : '';
+                var payload;
+                if (typeof data === 'string') {
+                    payload = data + (data ? '&' : '') + '_glpi_csrf_token=' + encodeURIComponent(token);
+                } else if (Array.isArray(data)) {
+                    payload = data.filter(function(p) { return p && p.name !== '_glpi_csrf_token'; });
+                    payload.push({ name: '_glpi_csrf_token', value: token });
+                } else {
+                    // Plain copy: keys with an undefined value still travel
+                    // (as empty), exactly as with a direct jQuery.ajax call.
+                    payload = {};
+                    Object.keys(data || {}).forEach(function(k) { payload[k] = data[k]; });
+                    payload._glpi_csrf_token = token;
+                }
+                return jq.ajax({ url: url, type: 'POST', dataType: opts.dataType || 'json', data: payload });
+            })
+            .done(function(resp) { d.resolve(resp); })
+            .fail(function(xhr) {
+                if (!opts.silent) {
+                    window.sprintNotify(window.sprintT('networkError', 'Network error'), 'error');
+                }
+                d.reject(xhr);
+            });
+        return d.promise();
+    };
+
+    ui.refresh = function() {
+        var jq = window.jQuery;
+        if (typeof window.reloadTab === 'function' && jq && jq('main #tabspanel .nav-item .nav-link.active').length) {
+            window.reloadTab('');
+            return;
+        }
+        ui.reload();
+    };
+
+    /**
+     * Submit buttons that ask first: <button type="submit" data-sprint-confirm="question"
+     * [data-sprint-danger] [data-sprint-confirm-ok="label"]>. On OK the row
+     * fades and the button's own form is submitted with the button's
+     * name/value, so the server path is the plain form POST.
+     */
+    document.addEventListener('click', function(e) {
+        var btn = e.target && e.target.closest ? e.target.closest('button[data-sprint-confirm]') : null;
+        if (!btn || !btn.form || typeof window.sprintConfirm !== 'function') { return; }
+        e.preventDefault();
+        e.stopPropagation();
+        window.sprintConfirm(btn.getAttribute('data-sprint-confirm') || '', function() {
+            var row = btn.closest('tr');
+            if (row) { row.classList.add('sprint-row-leaving'); }
+            if (btn.name) {
+                var hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = btn.name;
+                hidden.value = btn.value || '1';
+                btn.form.appendChild(hidden);
+            }
+            btn.disabled = true;
+            btn.form.submit();
+        }, {
+            danger: btn.hasAttribute('data-sprint-danger'),
+            okLabel: btn.getAttribute('data-sprint-confirm-ok') || undefined
+        });
+    }, true);
+
+    ui.flash = function(rows, kind) {
+        var cls = 'sprint-row-flash-' + (kind === 'warning' ? 'warning' : 'success');
+        var list = rows && rows.jquery ? rows.get() : (rows && rows.nodeType ? [rows] : (rows || []));
+        Array.prototype.forEach.call(list, function(el) {
+            if (!el || !el.classList) { return; }
+            el.classList.remove('sprint-row-flash-success', 'sprint-row-flash-warning');
+            // Restart the animation when the same row flashes twice.
+            void el.offsetWidth;
+            el.classList.add(cls);
+            setTimeout(function() { el.classList.remove(cls); }, 1300);
+        });
+    };
+})();
+/* === end ui-helpers === */
+
+/* === part: charts === */
+
+/* === charts ================================================================
+ * Shared behaviour of the charts built with SprintChart (PHP):
+ *  - window.sprintChartTooltip(el, x, y): the one tooltip, fed by `data-tip`
+ *    ("Title\nlabel\tvalue\tcolour" per row, see SprintChart::tipAttr()).
+ *    Shown on hover and on keyboard focus of any element carrying data-tip.
+ *  - legend isolate: a `button.sprint-chart-legend-item[data-series]` mutes
+ *    every other `.sprint-chart-series` inside the closest
+ *    `[data-chart-scope]`. Hovering a legend entry previews the same.
+ *  - the credits page: Trend/Mix switch, credit flow customer and sprint pick.
+ * Everything is delegated from document, so it also covers content that
+ * arrives later (ajax tabs) and never binds twice.
+ * ========================================================================= */
+(function () {
+    'use strict';
+    if (window.__sprintChartsBound) { return; }
+    window.__sprintChartsBound = true;
+
+    // ---- Tooltip ---------------------------------------------------------
+    var tip = null;
+    var tipFor = null;
+
+    function tipNode() {
+        if (!tip) {
+            tip = document.createElement('div');
+            tip.className = 'sprint-chart-tip';
+            tip.setAttribute('role', 'tooltip');
+            tip.hidden = true;
+            document.body.appendChild(tip);
+        }
+        return tip;
+    }
+
+    function fillTip(node, text) {
+        while (node.firstChild) { node.removeChild(node.firstChild); }
+        var lines = String(text).split('\n');
+        var title = document.createElement('div');
+        title.className = 'sprint-chart-tip-title';
+        title.textContent = lines[0];
+        node.appendChild(title);
+        for (var i = 1; i < lines.length; i++) {
+            var cells = lines[i].split('\t');
+            if (!cells[0] && !cells[1]) { continue; }
+            var row = document.createElement('div');
+            row.className = 'sprint-chart-tip-row';
+            if (cells[2]) {
+                var sw = document.createElement('span');
+                sw.className = 'sprint-chart-tip-swatch';
+                sw.style.background = cells[2];
+                row.appendChild(sw);
+            }
+            var label = document.createElement('span');
+            label.className = 'sprint-chart-tip-label';
+            label.textContent = cells[0] || '';
+            row.appendChild(label);
+            if (cells[1]) {
+                var value = document.createElement('span');
+                value.className = 'sprint-chart-tip-value';
+                value.textContent = cells[1];
+                row.appendChild(value);
+            }
+            node.appendChild(row);
+        }
+    }
+
+    function placeTip(x, y) {
+        if (!tip || tip.hidden) { return; }
+        var pad = 12;
+        var w = tip.offsetWidth;
+        var h = tip.offsetHeight;
+        var vw = document.documentElement.clientWidth;
+        var vh = document.documentElement.clientHeight;
+        var left = x + 14;
+        var top = y + 14;
+        if (left + w + pad > vw) { left = x - w - 14; }
+        if (top + h + pad > vh) { top = y - h - 14; }
+        tip.style.left = Math.max(pad, left) + 'px';
+        tip.style.top = Math.max(pad, top) + 'px';
+    }
+
+    // The native title would open a second tooltip on top of ours. It stays
+    // in the markup as the no-script fallback and is parked once we take over.
+    function parkTitles(el) {
+        if (el.hasAttribute('title')) {
+            el.setAttribute('data-title', el.getAttribute('title'));
+            el.removeAttribute('title');
+        }
+        var titles = el.querySelectorAll('title');
+        for (var i = 0; i < titles.length; i++) {
+            titles[i].parentNode.removeChild(titles[i]);
+        }
+    }
+
+    function hideTip() {
+        tipFor = null;
+        if (tip) { tip.hidden = true; }
+    }
+
+    /**
+     * Show the shared tooltip for `el` (reads its data-tip) at viewport
+     * position x, y. Without x and y it is placed at the element itself.
+     */
+    window.sprintChartTooltip = function (el, x, y) {
+        var text = el && el.getAttribute ? el.getAttribute('data-tip') : '';
+        if (!text) { hideTip(); return; }
+        var node = tipNode();
+        if (tipFor !== el) {
+            parkTitles(el);
+            fillTip(node, text);
+            tipFor = el;
+        }
+        node.hidden = false;
+        if (typeof x !== 'number' || typeof y !== 'number') {
+            var r = el.getBoundingClientRect();
+            x = r.left + r.width / 2;
+            y = r.top + Math.min(r.height / 2, 24);
+        }
+        placeTip(x, y);
+    };
+    window.sprintChartTooltip.hide = hideTip;
+
+    function tipTarget(node) {
+        return node && node.closest ? node.closest('[data-tip]') : null;
+    }
+
+    document.addEventListener('mouseover', function (ev) {
+        var el = tipTarget(ev.target);
+        if (el) { window.sprintChartTooltip(el, ev.clientX, ev.clientY); }
+    });
+    document.addEventListener('mousemove', function (ev) {
+        if (tipFor && tipTarget(ev.target) === tipFor) { placeTip(ev.clientX, ev.clientY); }
+    });
+    document.addEventListener('mouseout', function (ev) {
+        if (tipFor && tipTarget(ev.relatedTarget) !== tipFor) { hideTip(); }
+    });
+    document.addEventListener('focusin', function (ev) {
+        var el = tipTarget(ev.target);
+        if (el) { window.sprintChartTooltip(el); }
+    });
+    document.addEventListener('focusout', hideTip);
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') { hideTip(); }
+    });
+    window.addEventListener('scroll', hideTip, true);
+
+    // ---- Legend isolate --------------------------------------------------
+    function scopeOf(el) {
+        return el.closest('[data-chart-scope]') || document;
+    }
+
+    function isolate(scope, key) {
+        var marks = scope.querySelectorAll('.sprint-chart-series');
+        for (var i = 0; i < marks.length; i++) {
+            marks[i].classList.remove('is-muted', 'is-isolated');
+            if (key !== null) {
+                marks[i].classList.add(marks[i].getAttribute('data-series') === key ? 'is-isolated' : 'is-muted');
+            }
+        }
+    }
+
+    function hasMarks(scope, key) {
+        var marks = scope.querySelectorAll('.sprint-chart-series');
+        for (var i = 0; i < marks.length; i++) {
+            if (marks[i].getAttribute('data-series') === key) { return true; }
+        }
+        return false;
+    }
+
+    // A pinned entry (clicked, or rendered active by the server) wins over hover.
+    function isPinned(scope) {
+        return !!scope.querySelector('.sprint-chart-legend-item.is-active');
+    }
+
+    document.addEventListener('click', function (ev) {
+        var btn = ev.target.closest ? ev.target.closest('button.sprint-chart-legend-item[data-series]') : null;
+        if (!btn) { return; }
+        var scope = scopeOf(btn);
+        var key = btn.getAttribute('data-series');
+        var on = btn.getAttribute('aria-pressed') !== 'true';
+        var all = scope.querySelectorAll('button.sprint-chart-legend-item[data-series]');
+        for (var i = 0; i < all.length; i++) {
+            all[i].classList.remove('is-active');
+            all[i].setAttribute('aria-pressed', 'false');
+        }
+        if (on) {
+            btn.classList.add('is-active');
+            btn.setAttribute('aria-pressed', 'true');
+        }
+        isolate(scope, on ? key : null);
+    });
+
+    function legendEntry(node) {
+        return node && node.closest ? node.closest('.sprint-chart-legend-item[data-series]') : null;
+    }
+    function preview(ev) {
+        var item = legendEntry(ev.target);
+        if (!item || item.classList.contains('is-static')) { return; }
+        var scope = scopeOf(item);
+        var key = item.getAttribute('data-series');
+        if (!isPinned(scope) && hasMarks(scope, key)) {
+            item.setAttribute('data-previewing', '1');
+            isolate(scope, key);
+        }
+    }
+    function endPreview(ev) {
+        var item = legendEntry(ev.target);
+        if (!item || !item.hasAttribute('data-previewing')) { return; }
+        if (ev.type === 'mouseout' && legendEntry(ev.relatedTarget) === item) { return; }
+        item.removeAttribute('data-previewing');
+        var scope = scopeOf(item);
+        if (!isPinned(scope)) { isolate(scope, null); }
+    }
+    document.addEventListener('mouseover', preview);
+    document.addEventListener('focusin', preview);
+    document.addEventListener('mouseout', endPreview);
+    document.addEventListener('focusout', endPreview);
+
+    // ---- Credits page ----------------------------------------------------
+    // Trend / Mix switch of the "Credits per sprint" card.
+    document.addEventListener('change', function (ev) {
+        var t = ev.target;
+        if (!t || !t.matches) { return; }
+        if (t.matches('input[name="sprint-credit-view"]')) {
+            var card = t.closest('.card-body') || document;
+            var views = card.querySelectorAll('.sprint-credit-view');
+            for (var i = 0; i < views.length; i++) {
+                views[i].hidden = views[i].getAttribute('data-view') !== t.value;
+            }
+        } else if (t.matches('.sprint-creditflow-pick')) {
+            var body = t.closest('.card-body') || document;
+            var customers = body.querySelectorAll('.sprint-creditflow-customer');
+            for (var c = 0; c < customers.length; c++) {
+                customers[c].hidden = customers[c].getAttribute('data-customer') !== String(t.value);
+            }
+        } else if (t.matches('.sprint-cf-mix-pick')) {
+            pickSprint(t.closest('.sprint-creditflow-block'), String(t.value));
+        }
+    });
+
+    // A column of the tag chart picks the sprint for the category split.
+    function pickSprint(block, id) {
+        if (!block) { return; }
+        var pick = block.querySelector('.sprint-cf-mix-pick');
+        if (pick) { pick.value = id; }
+        var i;
+        var rows = block.querySelectorAll('.sprint-cf-mix-sprint');
+        for (i = 0; i < rows.length; i++) {
+            rows[i].hidden = rows[i].getAttribute('data-sprint') !== id;
+        }
+        var cols = block.querySelectorAll('.sprint-cf-col');
+        for (i = 0; i < cols.length; i++) {
+            cols[i].classList.toggle('is-selected', cols[i].getAttribute('data-sprint') === id);
+        }
+    }
+    function columnPick(ev) {
+        var col = ev.target.closest ? ev.target.closest('.sprint-cf-col[role="button"]') : null;
+        if (!col) { return; }
+        if (ev.type === 'keydown') {
+            if (ev.key !== 'Enter' && ev.key !== ' ') { return; }
+            ev.preventDefault();
+        }
+        pickSprint(col.closest('.sprint-creditflow-block'), String(col.getAttribute('data-sprint')));
+    }
+    document.addEventListener('click', columnPick);
+    document.addEventListener('keydown', columnPick);
+})();
+/* === end charts === */
+
+/* === part: backlog === */
+/* === part: backlog === */
+/**
+ * Planning line on a linked item (Backlog::renderPlanAssignControls): assign
+ * through ajax/assigntosprint.php with the dialogs of the backlog row.
+ *
+ * window.sprintPlanAssign(el) starts the flow for a form or button carrying
+ * data-item-id, data-sprint-id, data-item-name, data-is-fastlane and
+ * data-needs-dor. It returns false, and does nothing, when a helper it needs
+ * is missing: the caller then keeps its plain POST to front/backlog.form.php.
+ */
+(function() {
+    'use strict';
+    if (window.__sprintPlanAssignBound) { return; }
+    window.__sprintPlanAssignBound = true;
+
+    function ajaxUrl(file) {
+        return ((window.CFG_GLPI && window.CFG_GLPI.root_doc) ? window.CFG_GLPI.root_doc : '') + '/plugins/sprint/ajax/' + file;
+    }
+
+    window.sprintPlanAssign = function(el) {
+        var ui = window.sprintUi;
+        if (!el || !window.jQuery || !ui || typeof ui.post !== 'function' || typeof ui.refresh !== 'function'
+            || typeof window.sprintAssignGuard !== 'function' || typeof window.sprintNotify !== 'function') {
+            return false;
+        }
+        var itemId = parseInt(el.getAttribute('data-item-id'), 10) || 0;
+        var sprintId = parseInt(el.getAttribute('data-sprint-id'), 10) || 0;
+        var needsDor = el.getAttribute('data-needs-dor') === '1' && el.getAttribute('data-is-fastlane') !== '1';
+        if (itemId <= 0 || sprintId <= 0 || (needsDor && typeof window.sprintDorConfirm !== 'function')) {
+            return false;
+        }
+        var btn = el.tagName === 'FORM' ? el.querySelector('button[type="submit"]') : el;
+        var extra = {};
+        function busy(on) {
+            if (!btn) { return; }
+            if (typeof ui.busy === 'function') { ui.busy(btn, on); } else { btn.disabled = !!on; }
+        }
+
+        var doAssign = function(readyChecks) {
+            busy(true);
+            var data = { id: itemId, plugin_sprint_sprints_id: sprintId };
+            if (readyChecks && readyChecks.length) { data.ready = readyChecks; }
+            Object.keys(extra).forEach(function(k) { data[k] = extra[k]; });
+            ui.post(ajaxUrl('assigntosprint.php'), data).done(function(resp) {
+                // Capacity review or credit confirmation first, then again.
+                if (window.sprintAssignGuard(resp, function(more) {
+                    Object.keys(more).forEach(function(k) { extra[k] = more[k]; });
+                    doAssign(readyChecks);
+                })) {
+                    busy(false);
+                    return;
+                }
+                if (resp && resp.success) {
+                    window.sprintNotify(resp.message || window.sprintT('assigned', 'Assigned'), 'success');
+                    // The line now shows the item in its sprint.
+                    ui.refresh();
+                } else {
+                    window.sprintNotify((resp && resp.message) || window.sprintT('assignFailed', 'Could not assign the item'), 'error');
+                    busy(false);
+                }
+            }).fail(function() {
+                // sprintUi.post already showed the network error.
+                busy(false);
+            });
+        };
+
+        if (needsDor) {
+            window.sprintDorConfirm(doAssign, el.getAttribute('data-item-name') || '');
+        } else {
+            doAssign(null);
+        }
+        return true;
+    };
+
+    // The one-click form (no questions to ask up front): take over the submit.
+    document.addEventListener('submit', function(e) {
+        var form = e.target;
+        if (!form || !form.classList || !form.classList.contains('sprint-plan-assign-form')) { return; }
+        if (window.sprintPlanAssign(form)) { e.preventDefault(); }
+    });
+})();
+/* === end part: backlog === */
+
+/* === part: overview === */
+
+/* === overview ==============================================================
+ * Category trend on the sprint overview: the metric and level pickers swap
+ * the visible pane, and the choice is remembered per browser. Delegated from
+ * document, so it binds once however often the markup arrives.
+ * ========================================================================= */
+(function () {
+    'use strict';
+    if (window.__sprintOverviewBound) { return; }
+    window.__sprintOverviewBound = true;
+
+    var KEYS = {
+        metric: 'sprint-overview-category-metric',
+        level: 'sprint-overview-category-level'
+    };
+
+    function stored(key) {
+        try { return localStorage.getItem(key); } catch (e) { return null; }
+    }
+    function store(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
+    }
+    function hasOption(select, value) {
+        for (var i = 0; i < select.options.length; i++) {
+            if (select.options[i].value === value) { return true; }
+        }
+        return false;
+    }
+
+    function apply(wrap) {
+        var metric = wrap.querySelector('.sprint-category-trend-metric');
+        if (!metric) { return; }
+        var level = wrap.querySelector('.sprint-category-trend-level');
+        var levelValue = level ? level.value : 'top';
+        var panes = wrap.querySelectorAll('.sprint-category-trend-pane');
+        for (var i = 0; i < panes.length; i++) {
+            panes[i].hidden = !(panes[i].getAttribute('data-metric') === metric.value
+                && panes[i].getAttribute('data-level') === levelValue);
+        }
+    }
+
+    function restore(wrap) {
+        if (wrap.getAttribute('data-wired')) { return; }
+        wrap.setAttribute('data-wired', '1');
+        var metric = wrap.querySelector('.sprint-category-trend-metric');
+        var level = wrap.querySelector('.sprint-category-trend-level');
+        var savedMetric = stored(KEYS.metric);
+        var savedLevel = stored(KEYS.level);
+        if (metric && savedMetric && hasOption(metric, savedMetric)) { metric.value = savedMetric; }
+        if (level && savedLevel && hasOption(level, savedLevel)) { level.value = savedLevel; }
+        apply(wrap);
+    }
+
+    function init() {
+        var wraps = document.querySelectorAll('.sprint-category-trend');
+        for (var i = 0; i < wraps.length; i++) { restore(wraps[i]); }
+    }
+
+    document.addEventListener('change', function (ev) {
+        var t = ev.target;
+        if (!t || !t.matches || !t.matches('.sprint-category-trend-metric, .sprint-category-trend-level')) { return; }
+        var wrap = t.closest('.sprint-category-trend');
+        if (!wrap) { return; }
+        store(t.matches('.sprint-category-trend-metric') ? KEYS.metric : KEYS.level, t.value);
+        apply(wrap);
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+/* === end overview === */

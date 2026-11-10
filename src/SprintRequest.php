@@ -94,25 +94,106 @@ class SprintRequest extends CommonDBTM
 
         $isMaster = SprintItem::currentUserIsScrumMasterOf($sprintId);
 
-        echo "<div class='center'>";
-        echo "<h3 style='text-align:left;'><i class='fas fa-inbox'></i> " . __('Requests', 'sprint')
-            . " <span class='badge bg-secondary'>" . count($requests) . "</span></h3>";
-        echo "<p class='text-muted' style='text-align:left;'>"
+        echo "<div class='center sprint-request-tab'>";
+        echo "<h3 class='text-start'><i class='fas fa-inbox' aria-hidden='true'></i> " . __('Requests', 'sprint')
+            . " <span class='badge bg-secondary sprint-request-count'>" . count($requests) . "</span></h3>";
+        echo "<p class='text-muted text-start'>"
             . ($isMaster
                 ? __('Requests from team members: accepting performs the action (assign to sprint / apply the capacity change).', 'sprint')
                 : __('Pending requests for this sprint — the Scrum Master accepts or rejects them. You can cancel your own requests.', 'sprint'))
             . "</p>";
 
-        if (count($requests) === 0) {
-            echo "<p class='text-muted'>" . __('No pending requests.', 'sprint') . "</p>";
-            echo "</div>";
-            return;
+        // Shown from the start when empty, and by the script once the last
+        // row was handled.
+        echo "<p class='text-muted sprint-request-empty'" . (count($requests) === 0 ? '' : ' hidden') . ">"
+            . __('No pending requests.', 'sprint') . "</p>";
+        if (count($requests) > 0) {
+            self::renderRequestsTable($requests, $isMaster, false);
         }
-
-        self::renderRequestsTable($requests, $isMaster, false);
+        self::renderOwnRejected($sprintId);
         echo "</div>";
 
         self::renderPanelScript();
+    }
+
+    /**
+     * The outcome for the requester: their own requests on this sprint that
+     * were rejected in the last two weeks, with the Scrum Master's reason.
+     */
+    private static function renderOwnRejected(int $sprintId): void
+    {
+        if (!self::ensureTable()) {
+            return;
+        }
+        $since = date('Y-m-d H:i:s', strtotime($_SESSION['glpi_currenttime'] ?? 'now') - 14 * DAY_TIMESTAMP);
+        $rows  = (new self())->find([
+            'plugin_sprint_sprints_id' => $sprintId,
+            'users_id'                 => (int)Session::getLoginUserID(),
+            'status'                   => self::STATUS_REJECTED,
+            ['date_mod' => ['>=', $since]],
+        ], ['date_mod DESC'], 10);
+        if (!$rows) {
+            return;
+        }
+        echo "<div class='sprint-request-outcomes text-start mt-3'>";
+        echo "<h4 class='sprint-request-outcomes-title'>" . SprintIcon::html(SprintIcon::REJECT, 'me-1')
+            . __('Your rejected requests', 'sprint') . "</h4>";
+        echo "<ul class='list-unstyled mb-0'>";
+        foreach ($rows as $row) {
+            $item     = new SprintItem();
+            $itemName = $item->getFromDB((int)$row['plugin_sprint_sprintitems_id'])
+                ? (string)$item->fields['name']
+                : ('#' . (int)$row['plugin_sprint_sprintitems_id']);
+            $reason   = trim((string)($row['decision_reason'] ?? ''));
+            $by       = (int)($row['users_id_validate'] ?? 0);
+            echo "<li class='sprint-request-outcome'>";
+            echo "<span class='sprint-chip sprint-chip-danger'>" . __s('Rejected', 'sprint') . "</span> "
+                . htmlescape(self::getTypeLabel((string)$row['request_type'])) . ": "
+                . "<a href='" . SprintItem::getFormURLWithID((int)$row['plugin_sprint_sprintitems_id']) . "'>"
+                . htmlescape($itemName) . "</a>"
+                . " <span class='text-muted sprint-small'>"
+                . ($by > 0 ? htmlescape(SprintCache::userName($by)) . ', ' : '')
+                . Html::convDateTime((string)$row['date_mod']) . "</span>";
+            echo "<div class='sprint-small " . ($reason !== '' ? '' : 'text-muted fst-italic') . "'>"
+                . "<i class='fas fa-comment-dots me-1' aria-hidden='true'></i>"
+                . ($reason !== '' ? htmlescape($reason) : __s('No reason given', 'sprint')) . "</div>";
+            echo "</li>";
+        }
+        echo "</ul></div>";
+    }
+
+    /** Pending requests that target a sprint (0 when there are none). */
+    public static function pendingCountForSprint(int $sprintId): int
+    {
+        if ($sprintId <= 0 || !self::ensureTable()) {
+            return 0;
+        }
+        return (int)countElementsInTable(self::getTable(), [
+            'plugin_sprint_sprints_id' => $sprintId,
+            'status'                   => self::STATUS_PENDING,
+        ]);
+    }
+
+    /**
+     * Counter chip for the sprint header bar: "3 requests", linking to the
+     * sprint's Requests tab. '' when nothing is waiting. The request script
+     * keeps the number current while requests are handled on the page.
+     */
+    public static function headerChip(int $sprintId): string
+    {
+        $count = self::pendingCountForSprint($sprintId);
+        if ($count <= 0) {
+            return '';
+        }
+        $label = sprintf(_n('%d request', '%d requests', $count, 'sprint'), $count);
+        $url   = Sprint::getFormURLWithID($sprintId) . '&forcetab=' . rawurlencode(self::class . '$1');
+        return "<a class='sprint-chip sprint-chip-lg sprint-chip-warning sprint-request-chip' href='" . htmlescape($url) . "' "
+            . "data-sprint-id='" . $sprintId . "' "
+            . "data-label-one='" . htmlescape(_n('%d request', '%d requests', 1, 'sprint')) . "' "
+            . "data-label-many='" . htmlescape(_n('%d request', '%d requests', 2, 'sprint')) . "' "
+            . "title='" . __s('Requests waiting for the Scrum Master', 'sprint') . "'>"
+            . "<i class='fas fa-inbox me-1' aria-hidden='true'></i><span class='sprint-request-chip-label'>"
+            . htmlescape($label) . "</span></a>";
     }
 
     /**
@@ -161,6 +242,13 @@ class SprintRequest extends CommonDBTM
                     . "COMMENT 'Requested adhoc flag for an adhoc request'"
                 );
             }
+            // Lazy migration: the Scrum Master's reason for a rejection.
+            if (!$DB->fieldExists($table, 'decision_reason')) {
+                $DB->doQuery(
+                    "ALTER TABLE `{$table}` ADD COLUMN `decision_reason` TEXT NULL "
+                    . "COMMENT 'Scrum Master reason for the decision, shown to the requester'"
+                );
+            }
             return $ready = true;
         }
 
@@ -176,6 +264,7 @@ class SprintRequest extends CommonDBTM
             `requested_category_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Requested backlog category for a category request',
             `requested_flag`               TINYINT NOT NULL DEFAULT 0 COMMENT 'Requested adhoc flag for an adhoc request',
             `reason`                       TEXT NULL COMMENT 'Requester motivation shown to the Scrum Master',
+            `decision_reason`              TEXT NULL COMMENT 'Scrum Master reason for the decision, shown to the requester',
             `status`                       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending | accepted | rejected | cancelled',
             `users_id_validate`            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master who handled it',
             `date_creation`                TIMESTAMP NULL DEFAULT NULL,
@@ -430,7 +519,7 @@ class SprintRequest extends CommonDBTM
                 return ['ok' => false, 'message' => __('The item is already part of this sprint.', 'sprint')];
             }
             $share = (float)$req->fields['requested_capacity'];
-            $newId = SprintItem::carryOverTo((int)$item->getID(), $sprintId, $share > 0 ? $share : null, null);
+            $newId = SprintItem::carryOverTo((int)$item->getID(), $sprintId, $share > 0 ? $share : null, null, (string)($req->fields['reason'] ?? ''));
             if ($newId <= 0) {
                 return ['ok' => false, 'message' => __('Could not carry the item over to the target sprint', 'sprint')];
             }
@@ -463,8 +552,12 @@ class SprintRequest extends CommonDBTM
         return ['ok' => true, 'message' => __('Request cancelled', 'sprint')];
     }
 
-    /** Reject a pending request (Scrum Master of the request's sprint only). */
-    public static function reject(int $requestId): array
+    /**
+     * Reject a pending request (Scrum Master of the request's sprint only).
+     * The optional reason is kept on the request and reaches the requester
+     * as a signal and in the sprint's Requests tab.
+     */
+    public static function reject(int $requestId, string $reason = ''): array
     {
         if (!self::ensureTable()) {
             return ['ok' => false, 'message' => __('Request failed', 'sprint')];
@@ -478,7 +571,25 @@ class SprintRequest extends CommonDBTM
         if ($sprintId <= 0 || !SprintItem::currentUserIsScrumMasterOf($sprintId)) {
             return ['ok' => false, 'message' => __('Only the Scrum Master of the selected sprint can handle this request.', 'sprint')];
         }
-        $req->closeAs(self::STATUS_REJECTED);
+        $reason = mb_substr(trim($reason), 0, 2000);
+        $req->closeAs(self::STATUS_REJECTED, $reason);
+
+        $requester = (int)$req->fields['users_id'];
+        if ($requester > 0 && $requester !== (int)Session::getLoginUserID()) {
+            $itemId = (int)$req->fields['plugin_sprint_sprintitems_id'];
+            $item   = new SprintItem();
+            $name   = $item->getFromDB($itemId) ? plugin_sprint_text((string)$item->fields['name']) : ('#' . $itemId);
+            $type   = self::getTypeLabel((string)$req->fields['request_type']);
+            SprintAgility::signal(
+                $sprintId,
+                $requester,
+                'request_rejected',
+                $reason !== ''
+                    ? sprintf(__('Your request "%1$s" for %2$s was rejected: %3$s', 'sprint'), $type, $name, $reason)
+                    : sprintf(__('Your request "%1$s" for %2$s was rejected.', 'sprint'), $type, $name),
+                SprintItem::getFormURLWithID($itemId)
+            );
+        }
         return ['ok' => true, 'message' => __('Request rejected', 'sprint')];
     }
 
@@ -508,14 +619,18 @@ class SprintRequest extends CommonDBTM
         }
     }
 
-    private function closeAs(string $status): void
+    private function closeAs(string $status, string $decisionReason = ''): void
     {
-        $this->update([
+        $update = [
             'id'                => (int)$this->getID(),
             'status'            => $status,
             'users_id_validate' => (int)Session::getLoginUserID(),
             'date_mod'          => $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s'),
-        ]);
+        ];
+        if ($decisionReason !== '') {
+            $update['decision_reason'] = $decisionReason;
+        }
+        $this->update($update);
         SprintAgility::resolveApprovalSignals((int)($this->fields['plugin_sprint_sprints_id'] ?? 0));
     }
 
@@ -532,12 +647,11 @@ class SprintRequest extends CommonDBTM
             return;
         }
 
-        echo "<div class='sprint-request-panel' style='margin:18px 0;border:1px solid #f1c40f;border-radius:8px;overflow:hidden;'>";
-        echo "<div style='display:flex;align-items:center;gap:8px;padding:10px 14px;"
-            . "background:color-mix(in srgb,#f1c40f 18%,var(--tblr-bg-surface,#fff));font-weight:700;'>";
-        echo "<i class='fas fa-inbox'></i>";
+        echo "<div class='sprint-request-panel'>";
+        echo "<div class='sprint-request-panel-header'>";
+        echo "<i class='fas fa-inbox' aria-hidden='true'></i>";
         echo "<span>" . __('Requests awaiting your approval', 'sprint') . "</span>";
-        echo "<span class='badge bg-warning' style='color:#212529;'>" . count($requests) . "</span>";
+        echo "<span class='sprint-chip sprint-chip-lg sprint-chip-warning sprint-request-count'>" . count($requests) . "</span>";
         echo "</div>";
 
         self::renderRequestsTable($requests, true, true);
@@ -563,7 +677,7 @@ class SprintRequest extends CommonDBTM
         $hasOwn    = count(array_filter($requests, static fn($r) => (int)$r['users_id'] === $me)) > 0;
         $showActions = $canModerate || $hasOwn;
 
-        echo "<table class='tab_cadre_fixe sprint-themed' style='margin:0;'>";
+        echo "<table class='tab_cadre_fixe sprint-themed sprint-request-table'>";
         echo "<tr class='tab_bg_2'>";
         echo "<th>" . __('Type', 'sprint') . "</th>";
         echo "<th>" . __('Item', 'sprint') . "</th>";
@@ -596,7 +710,8 @@ class SprintRequest extends CommonDBTM
             $details = self::describeChange($row, $item);
             $details = $details !== '' ? $details : '-';
 
-            echo "<tr class='tab_bg_1 sprint-request-row' data-request-id='" . (int)$row['id'] . "'>";
+            echo "<tr class='tab_bg_1 sprint-request-row' data-request-id='" . (int)$row['id'] . "' "
+                . "data-item-id='" . (int)$row['plugin_sprint_sprintitems_id'] . "' data-sprint-id='" . $sid . "'>";
             // The request is not applied yet: say so next to the type, so a
             // requester never reads the proposed value as the current one.
             echo "<td>" . htmlescape(self::getTypeLabel($type))
@@ -609,7 +724,7 @@ class SprintRequest extends CommonDBTM
             echo "<td>" . htmlescape(SprintCache::userName((int)$row['users_id'])) . "</td>";
             // Age hint so a request that has been waiting for days stands out.
             $created = (string)($row['date_creation'] ?? '');
-            echo "<td style='white-space:nowrap;'>";
+            echo "<td class='text-nowrap'>";
             if ($created !== '') {
                 echo Html::convDateTime($created);
                 $age = self::formatRequestAge($created);
@@ -626,20 +741,21 @@ class SprintRequest extends CommonDBTM
             echo "<td>" . htmlescape($details)
                 . ($reason !== ''
                     ? "<div class='text-muted sprint-small fst-italic'>"
-                        . "<i class='fas fa-comment-dots me-1'></i>" . htmlescape($reason) . "</div>"
+                        . "<i class='fas fa-comment-dots me-1' aria-hidden='true'></i>" . htmlescape($reason) . "</div>"
                     : "")
                 . "</td>";
             if ($showActions) {
-                echo "<td class='center' style='white-space:nowrap;'>";
+                echo "<td class='center text-nowrap'>";
                 if ($canModerate) {
                     echo "<button type='button' class='btn btn-sm btn-success sprint-request-accept me-1' "
                         . "data-request-id='" . (int)$row['id'] . "' title='" . __s('Accept', 'sprint') . "' "
                         . "aria-label='" . __s('Accept', 'sprint') . ': ' . htmlescape($itemName) . "'>"
-                        . "<i class='fas fa-check'></i></button>";
+                        . "<i class='fas fa-check' aria-hidden='true'></i></button>";
                     echo "<button type='button' class='btn btn-sm btn-outline-danger sprint-request-reject me-1' "
                         . "data-request-id='" . (int)$row['id'] . "' title='" . __s('Reject', 'sprint') . "' "
+                        . "aria-haspopup='dialog' data-item-name='" . htmlescape($itemName) . "' "
                         . "aria-label='" . __s('Reject', 'sprint') . ': ' . htmlescape($itemName) . "'>"
-                        . "<i class='fas fa-times'></i></button>";
+                        . SprintIcon::html(SprintIcon::REJECT) . "</button>";
                 }
                 if ((int)$row['users_id'] === $me) {
                     echo self::renderCancelButton((int)$row['id']);
@@ -657,7 +773,7 @@ class SprintRequest extends CommonDBTM
         return "<button type='button' class='btn btn-sm btn-outline-secondary sprint-request-cancel' "
             . "data-request-id='" . $requestId . "' title='" . __s('Cancel request', 'sprint') . "' "
             . "aria-label='" . __s('Cancel request', 'sprint') . "'>"
-            . "<i class='fas fa-undo'></i>" . ($withLabel ? ' ' . __s('Cancel request', 'sprint') : '') . "</button>";
+            . SprintIcon::html(SprintIcon::WITHDRAW) . ($withLabel ? ' ' . __s('Cancel request', 'sprint') : '') . "</button>";
     }
 
     /**
@@ -716,15 +832,10 @@ class SprintRequest extends CommonDBTM
         return $labels[$type] ?? $type;
     }
 
-    /**
-     * The one wording for a request that is not applied yet. Inline colours:
-     * `.text-dark` and friends flip in GLPI's dark palettes.
-     */
+    /** The one wording for a request that is not applied yet (theme-aware chip). */
     public static function renderWaitingLabel(): string
     {
-        return "<span class='sprint-request-waiting sprint-small' "
-            . "style='display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:10px;"
-            . "background:#fff3cd;color:#664d03;border:1px solid #ffe69c;font-weight:600;'>"
+        return "<span class='sprint-chip sprint-chip-warning sprint-request-waiting'>"
             . "<i class='fas fa-hourglass-half' aria-hidden='true'></i>"
             . __s('Requested — waiting for Scrum Master', 'sprint') . "</span>";
     }
@@ -801,9 +912,7 @@ class SprintRequest extends CommonDBTM
     public static function renderPendingBadge(string $detail = ''): string
     {
         $title = __('Requested — waiting for Scrum Master', 'sprint') . ($detail !== '' ? ': ' . $detail : '');
-        return " <span class='sprint-request-pending-badge sprint-small' title='" . htmlescape($title) . "' "
-            . "style='display:inline-flex;align-items:center;gap:3px;padding:0 6px;border-radius:8px;"
-            . "background:#fff3cd;color:#664d03;border:1px solid #ffe69c;font-weight:600;white-space:nowrap;'>"
+        return " <span class='sprint-chip sprint-chip-warning sprint-request-pending-badge' title='" . htmlescape($title) . "'>"
             . "<i class='fas fa-hourglass-half' aria-hidden='true'></i>" . __s('Requested', 'sprint')
             . "<span class='visually-hidden'>: " . htmlescape($title) . "</span></span>";
     }
@@ -850,9 +959,15 @@ class SprintRequest extends CommonDBTM
         $rendered = true;
 
         $handleUrl  = Plugin::getWebDir('sprint') . '/ajax/requesthandle.php';
-        $tokenUrl   = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
-        $msgFailed  = __s('Could not handle the request.', 'sprint');
-        $msgNetwork = __s('Could not reach the server. Try again.', 'sprint');
+        $i18n = json_encode([
+            'failed'       => __('Could not handle the request.', 'sprint'),
+            'network'      => __('Could not reach the server. Try again.', 'sprint'),
+            'rejectTitle'  => __('Reject request', 'sprint'),
+            'rejectIntro'  => __('The requester sees your reason with the rejected request.', 'sprint'),
+            'rejectLabel'  => __('Reason (optional)', 'sprint'),
+            'rejectHolder' => __('Why is this request rejected?', 'sprint'),
+            'rejectOk'     => __('Reject', 'sprint'),
+        ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
         SprintItem::renderUiHelpersScript();
 
@@ -862,41 +977,62 @@ class SprintRequest extends CommonDBTM
     if (typeof jQuery === 'undefined') { return; }
     if (window.__sprintRequestPanelBound) { return; }
     window.__sprintRequestPanelBound = true;
+    var T = {$i18n};
 
     function toast(msg, level) {
-        if (window.sprintUi) { window.sprintUi.toast(msg, level); return; }
-        var fn = level === 'error' ? window.glpi_toast_error : window.glpi_toast_info;
-        if (typeof fn === 'function') { fn(msg); }
+        if (window.sprintUi) { window.sprintUi.toast(msg, level); }
     }
 
-    function handle(action, btn) {
+    // Counters follow the rows: the panel / tab badge, the empty state and
+    // the chip in the sprint header bar.
+    function updateCounters(\$wrap, resp) {
+        if (\$wrap.length) {
+            var left = \$wrap.find('tr.sprint-request-row').length;
+            \$wrap.find('.sprint-request-count').text(left);
+            if (left === 0) {
+                if (\$wrap.hasClass('sprint-request-panel')) { \$wrap.remove(); }
+                else {
+                    \$wrap.find('.sprint-request-table').remove();
+                    \$wrap.find('.sprint-request-empty').prop('hidden', false);
+                }
+            }
+        }
+        if (resp && typeof resp.pending_count !== 'undefined') {
+            jQuery('.sprint-request-chip[data-sprint-id="' + resp.sprint_id + '"]').each(function(){
+                var \$chip = jQuery(this);
+                var n = parseInt(resp.pending_count, 10) || 0;
+                if (n <= 0) { \$chip.remove(); return; }
+                \$chip.find('.sprint-request-chip-label')
+                    .text(String(\$chip.attr(n === 1 ? 'data-label-one' : 'data-label-many') || '%d').replace('%d', String(n)));
+            });
+        }
+    }
+
+    function handle(action, btn, extra) {
         var \$btn = jQuery(btn);
         var reqId = parseInt(\$btn.data('request-id'), 10) || 0;
         if (reqId <= 0) { return; }
         var \$scope = \$btn.closest('td, li, .sprint-qe-pending');
+        var \$row = \$btn.closest('tr.sprint-request-row');
         var \$siblings = \$scope.find('button').not(\$btn);
         \$scope.find('.sprint-request-error').remove();
         \$siblings.prop('disabled', true);
-        if (window.sprintUi) { window.sprintUi.busy(\$btn, true, ''); } else { \$btn.prop('disabled', true); }
+        \$row.addClass('sprint-row-busy').attr('aria-busy', 'true');
+        window.sprintUi.busy(\$btn, true, '');
         function restore() {
             \$siblings.prop('disabled', false);
-            if (window.sprintUi) { window.sprintUi.busy(\$btn, false); } else { \$btn.prop('disabled', false); }
+            \$row.removeClass('sprint-row-busy').removeAttr('aria-busy');
+            window.sprintUi.busy(\$btn, false);
         }
         function fail(msg) {
             restore();
             \$scope.append(jQuery('<div class="text-danger sprint-small sprint-request-error" role="alert"></div>').text(msg));
             toast(msg, 'error');
         }
-        jQuery.ajax({ url: "{$tokenUrl}", type: 'GET', dataType: 'json', cache: false })
-        .then(function(tok){
-            return jQuery.ajax({
-                url: "{$handleUrl}", type: 'POST', dataType: 'json',
-                data: { id: reqId, request_action: action,
-                        _glpi_csrf_token: tok && tok.token ? tok.token : '' }
-            });
-        }).done(function(resp){
+        window.sprintUi.post("{$handleUrl}", jQuery.extend({ id: reqId, request_action: action }, extra || {}), { silent: true })
+        .done(function(resp){
             if (!(resp && resp.success)) {
-                fail((resp && resp.message) || "{$msgFailed}");
+                fail((resp && resp.message) || T.failed);
                 return;
             }
             toast(resp.message, 'success');
@@ -910,16 +1046,51 @@ class SprintRequest extends CommonDBTM
                     var itemId = \$box.closest('.modal').find('input[name=id]').val();
                     jQuery('[data-item-id="' + itemId + '"] .sprint-request-pending-badge').remove();
                 }
+                updateCounters(jQuery(), resp);
                 return;
             }
-            if (window.sprintUi) { window.sprintUi.reload(); } else { window.location.reload(); }
+            // A row of the requests table: it leaves, the counters follow.
+            if (\$row.length) {
+                var \$wrap = \$row.closest('.sprint-request-panel, .sprint-request-tab');
+                var itemSel = '[data-item-id="' + resp.item_id + '"]';
+                // The item itself is on this page (list row, card, meeting
+                // row): an accepted change must show there too.
+                var shown = jQuery('tr.sprint-row, tr.sprint-review-row, .sprint-kanban-card, tr.sprint-backlog-row').filter(itemSel);
+                \$row.fadeOut(200, function(){
+                    jQuery(this).remove();
+                    updateCounters(\$wrap, resp);
+                    if (!shown.length) { return; }
+                    if (action === 'accept') { window.sprintUi.refresh(); return; }
+                    if (!(parseInt(resp.item_pending, 10) > 0)) { shown.find('.sprint-request-pending-badge').remove(); }
+                });
+                return;
+            }
+            // Anywhere else (a card with its own "Cancel request"): the
+            // surrounding view is rebuilt in place.
+            window.sprintUi.refresh();
         }).fail(function(){
-            fail("{$msgNetwork}");
+            fail(T.network);
         });
     }
 
     jQuery(document).on('click', '.sprint-request-accept', function(){ handle('accept', this); });
-    jQuery(document).on('click', '.sprint-request-reject', function(){ handle('reject', this); });
+    // Rejecting asks for an optional reason first, so one stray click on
+    // the cross never decides.
+    jQuery(document).on('click', '.sprint-request-reject', function(){
+        var btn = this;
+        var name = String(jQuery(btn).attr('data-item-name') || '');
+        if (typeof window.sprintPrompt !== 'function') { handle('reject', btn); return; }
+        window.sprintPrompt({
+            title: T.rejectTitle + (name ? ': ' + name : ''),
+            message: T.rejectIntro,
+            label: T.rejectLabel,
+            placeholder: T.rejectHolder,
+            okLabel: T.rejectOk,
+            danger: true
+        }, function(reason){
+            handle('reject', btn, { decision_reason: reason });
+        });
+    });
     jQuery(document).on('click', '.sprint-request-cancel', function(){ handle('cancel', this); });
 })();
 </script>

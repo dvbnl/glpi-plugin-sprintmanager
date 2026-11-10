@@ -39,6 +39,7 @@ class SprintItem extends CommonDBTM
         $rel = new SprintFastlaneMember();
         $rel->deleteByCriteria(['plugin_sprint_sprintitems_id' => $this->getID()], 1);
 
+        SprintCreditFall::onItemPurge($this);
         SprintItemDependency::purgeForItem((int)$this->getID());
 
         if (SprintRequest::ensureTable()) {
@@ -377,7 +378,7 @@ class SprintItem extends CommonDBTM
 
         $linkedItem = SprintCache::getObject($itemtype, $itemsId);
         if ($linkedItem === null) {
-            return '<span style="color:#dc3545;"><i class="fas fa-exclamation-triangle"></i> ' .
+            return '<span style="color:#dc3545;"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> ' .
                 __('Item not found', 'sprint') . '</span>';
         }
 
@@ -553,14 +554,14 @@ class SprintItem extends CommonDBTM
         if ($credits > 0) {
             $product = $productId > 0 ? SprintCreditProduct::getFullNameFor($productId) : '';
             $out .= " <span class='sprint-credit-chip' title='" . htmlescape($product !== '' ? $product : __('Credits', 'sprint')) . "'>"
-                . "<i class='fas fa-coins'></i> " . htmlescape(SprintCustomer::formatCredits($credits)) . "</span>";
+                . "<i class='fas fa-coins' aria-hidden='true'></i> " . htmlescape(SprintCustomer::formatCredits($credits)) . "</span>";
         }
         // Credits the helpers charge on top of the item's own (see the
         // Dependencies tab); shown apart so the item figure stays what was entered.
         if ($dependencyCredits > 0) {
             $out .= " <span class='sprint-credit-chip' style='opacity:0.8;' title='"
                 . htmlescape(__('Credits on dependencies (helpers)', 'sprint')) . "'>"
-                . "<i class='fas fa-link'></i> +" . htmlescape(SprintCustomer::formatCredits($dependencyCredits)) . "</span>";
+                . "<i class='fas fa-link' aria-hidden='true'></i> +" . htmlescape(SprintCustomer::formatCredits($dependencyCredits)) . "</span>";
         }
         return $out !== '' ? $out : "<span class='text-muted'>-</span>";
     }
@@ -670,7 +671,7 @@ class SprintItem extends CommonDBTM
         }
         return " <span class='sprint-review-unclosed-badge' title='"
             . htmlescape(__('The linked ticket/change is not closed/solved yet', 'sprint')) . "'>"
-            . "<i class='fas fa-exclamation-triangle'></i> "
+            . "<i class='fas fa-exclamation-triangle' aria-hidden='true'></i> "
             . __('Linked item open', 'sprint') . "</span>";
     }
 
@@ -703,6 +704,16 @@ class SprintItem extends CommonDBTM
      * @return array{ok:bool, stayed:bool, backlog_id:int}
      */
     public static function backToBacklog(int $id, string $reason = '', bool $removeFromSprint = false): array
+    {
+        return SprintCreditFall::during(
+            SprintCreditFall::TYPE_BACKLOG,
+            0,
+            $reason,
+            static fn() => self::moveBackToBacklog($id, $reason, $removeFromSprint)
+        );
+    }
+
+    private static function moveBackToBacklog(int $id, string $reason, bool $removeFromSprint): array
     {
         $result = ['ok' => false, 'stayed' => false, 'backlog_id' => 0, 'message' => ''];
 
@@ -1085,14 +1096,14 @@ class SprintItem extends CommonDBTM
         echo "<table class='tab_cadre_fixe sprint-themed sprint-items-list-table'>";
         echo "<tr class='tab_bg_2'>";
         $sc = self::sortClickAttr('sprint-items-list-table');
-        echo "<th class='sprint-sortable' data-sort-type='name' style='cursor:pointer;' {$sc}>" . __('Name') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='name' style='cursor:pointer;' {$sc}>" . __('Name') . " <i class='fas fa-sort text-muted' aria-hidden='true'></i></th>";
         echo "<th>" . __('Linked item', 'sprint') . "</th>";
-        echo "<th class='sprint-sortable' data-sort-type='category' style='cursor:pointer;' {$sc}>" . __('Category', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
-        echo "<th class='sprint-sortable' data-sort-type='status' style='cursor:pointer;' {$sc}>" . __('Status') . " <i class='fas fa-sort text-muted'></i></th>";
-        echo "<th class='sprint-sortable' data-sort-type='priority' style='cursor:pointer;' {$sc}>" . __('Priority') . " <i class='fas fa-sort text-muted'></i></th>";
-        echo "<th class='sprint-sortable' data-sort-type='story_points' style='cursor:pointer;' {$sc}>" . __('Story Points', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
-        echo "<th class='sprint-sortable' data-sort-type='capacity' style='cursor:pointer;' {$sc}>" . __('Capacity (%)', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
-        echo "<th class='sprint-sortable' data-sort-type='owner' style='cursor:pointer;' {$sc}>" . __('Owner', 'sprint') . " <i class='fas fa-sort text-muted'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='category' style='cursor:pointer;' {$sc}>" . __('Category', 'sprint') . " <i class='fas fa-sort text-muted' aria-hidden='true'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='status' style='cursor:pointer;' {$sc}>" . __('Status') . " <i class='fas fa-sort text-muted' aria-hidden='true'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='priority' style='cursor:pointer;' {$sc}>" . __('Priority') . " <i class='fas fa-sort text-muted' aria-hidden='true'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='story_points' style='cursor:pointer;' {$sc}>" . __('Story Points', 'sprint') . " <i class='fas fa-sort text-muted' aria-hidden='true'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='capacity' style='cursor:pointer;' {$sc}>" . __('Capacity (%)', 'sprint') . " <i class='fas fa-sort text-muted' aria-hidden='true'></i></th>";
+        echo "<th class='sprint-sortable' data-sort-type='owner' style='cursor:pointer;' {$sc}>" . __('Owner', 'sprint') . " <i class='fas fa-sort text-muted' aria-hidden='true'></i></th>";
         $showCredits = SprintCustomer::canUseCredits();
         if ($showCredits) {
             echo "<th>" . __('Customer / credits', 'sprint') . "</th>";
@@ -1121,7 +1132,7 @@ class SprintItem extends CommonDBTM
             $statusLabel = $statuses[$row['status']] ?? $row['status'];
             $ownerName   = ((int)$row['users_id'] > 0) ? SprintCache::userName((int)$row['users_id']) : '';
 
-            $linkedDisplay = '<span style="color:#ccc;">-</span>';
+            $linkedDisplay = '<span class="text-muted">-</span>';
             if (!empty($row['itemtype']) && (int)$row['items_id'] > 0) {
                 $tmpItem = new self();
                 $tmpItem->fields = $row;
@@ -1148,7 +1159,7 @@ class SprintItem extends CommonDBTM
             echo "<td class='center sprint-cell-capacity'>" . SprintMember::formatCapacity($row['capacity'] ?? 0) . "%";
             echo "</td>";
             echo "<td class='sprint-cell-owner'>" . (((int)$row['users_id'] > 0) ? htmlescape(SprintCache::userName($row['users_id'])) :
-                '<span style="color:#999;">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
+                '<span class="text-muted">' . __('Unassigned', 'sprint') . '</span>') . "</td>";
             if ($showCredits) {
                 echo "<td class='sprint-cell-credits'>" . self::renderCreditCell(
                     (int)($row['plugin_sprint_sprintcustomers_id'] ?? 0),
@@ -1163,7 +1174,7 @@ class SprintItem extends CommonDBTM
                 $canDeleteRow = Session::haveRight(self::$rightname, PURGE)
                     || (self::hasOnlyOwnRight(PURGE) && $isOwn);
 
-                echo "<td class='center' style='white-space:nowrap;'>";
+                echo "<td class='center text-nowrap sprint-row-actions'>";
                 if ($canEditRow) {
                     // Quick-edit covers the full item form; the explicit "Edit"
                     // link was redundant and removed.
@@ -1171,7 +1182,7 @@ class SprintItem extends CommonDBTM
                         . "title='" . __s('Quick edit', 'sprint') . "' aria-haspopup='dialog' "
                         . "aria-label='" . __s('Quick edit', 'sprint') . ': ' . htmlescape((string)$row['name']) . "' "
                         . "data-item-id='" . (int)$row['id'] . "'>"
-                        . "<i class='fas fa-pen' aria-hidden='true'></i></button> ";
+                        . SprintIcon::html(SprintIcon::EDIT) . "</button> ";
                     // Back-to-backlog only for coupled items (manual placeholders
                     // stay to avoid duplicates). Opens the reason + keep/remove
                     // modal and posts to ajax/backtobacklog.php.
@@ -1180,17 +1191,24 @@ class SprintItem extends CommonDBTM
                             . "title='" . __s('Back to backlog', 'sprint') . "' aria-haspopup='dialog' "
                             . "aria-label='" . __s('Back to backlog', 'sprint') . ': ' . htmlescape((string)$row['name']) . "' "
                             . "data-backlog-id='" . (int)$row['id'] . "'>"
-                            . "<i class='fas fa-undo' aria-hidden='true'></i></button> ";
+                            . SprintIcon::html(SprintIcon::BACKLOG) . "</button> ";
                     }
                 }
                 if ($canDeleteRow) {
-                    echo "<form method='post' action='" . static::getFormURL() . "' style='display:inline;'>";
+                    // Destructive action last, an icon button like its
+                    // neighbours. js/sprint.js asks first (data-sprint-confirm)
+                    // and then submits this same form: the server path is
+                    // the plain purge POST, also without JavaScript.
+                    echo "<form method='post' action='" . static::getFormURL() . "' class='d-inline-block ms-2'>";
                     echo Html::hidden('id', ['value' => $row['id']]);
-                    echo Html::submit(__('Delete'), [
-                        'name'    => 'purge',
-                        'class'   => 'btn btn-sm btn-outline-danger',
-                        'confirm' => __('Confirm deletion?'),
-                    ]);
+                    echo "<button type='submit' name='purge' value='1' class='btn btn-sm btn-outline-danger sprint-item-delete-btn' "
+                        . "title='" . __s('Delete') . "' "
+                        . "aria-label='" . __s('Delete') . ': ' . htmlescape((string)$row['name']) . "' "
+                        . "data-sprint-confirm='" . htmlescape(sprintf(
+                            __('Delete "%s" from this sprint? This cannot be undone.', 'sprint'),
+                            (string)$row['name']
+                        )) . "' data-sprint-danger='1' data-sprint-confirm-ok='" . __s('Delete') . "'>"
+                        . SprintIcon::html(SprintIcon::DELETE) . "</button>";
                     Html::closeForm();
                 }
                 echo "</td>";
@@ -1215,21 +1233,34 @@ class SprintItem extends CommonDBTM
     public static function renderBackToBacklogUI(): void
     {
         $endpoint = \Plugin::getWebDir('sprint') . '/ajax/backtobacklog.php';
-        $tokenUrl = \Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
 
-        $title        = __('Back to backlog', 'sprint');
-        $lblReason    = __('Reason', 'sprint');
-        $phReason     = __('Why is this going back to the backlog?', 'sprint');
-        $errReason    = __('Please enter a reason.', 'sprint');
-        $lblChoice    = __('What should happen to the sprint item?', 'sprint');
-        $optKeep      = __('Keep it in the sprint (capacity preserved). Only the linked item returns to the backlog', 'sprint');
-        $optRemove    = __('Also remove the item from the current sprint (move the whole item to the backlog)', 'sprint');
-        $lblCancel    = __('Cancel');
+        $title        = __s('Back to backlog', 'sprint');
+        $lblReason    = __s('Reason', 'sprint');
+        $phReason     = __s('Why is this going back to the backlog?', 'sprint');
+        $errReason    = __s('Please enter a reason.', 'sprint');
+        $lblQuick     = __s('Quick reasons', 'sprint');
+        $lblChoice    = __s('What should happen to the sprint item?', 'sprint');
+        $optKeep      = __s('Keep the capacity in this sprint', 'sprint');
+        $helpKeep     = __s('Only the linked item returns to the backlog. The sprint item stays as a placeholder, so its capacity keeps counting.', 'sprint');
+        $optRemove    = __s('Remove from this sprint', 'sprint');
+        $helpRemove   = __s('The whole item moves to the backlog and its capacity is released.', 'sprint');
+        $lblCancel    = __s('Cancel');
         $movedLabel   = __s('Moved to backlog', 'sprint');
         $lblClose     = __s('Close');
         $lblWorking   = __s('Saving…', 'sprint');
         $msgNetwork   = __s('Could not reach the server. Your input is still here — try again.', 'sprint');
         $msgFailed    = __s('Could not move item back to backlog', 'sprint');
+        $icon         = SprintIcon::BACKLOG;
+
+        // Quick reasons (Config): one click fills the reason field.
+        $chips = '';
+        foreach (Config::getBacklogReasons() as $quick) {
+            $chips .= "<button type='button' class='btn btn-sm btn-outline-secondary sprint-reason-chip' aria-pressed='false' "
+                . "data-reason='" . htmlescape($quick) . "'>" . htmlescape($quick) . "</button>";
+        }
+        if ($chips !== '') {
+            $chips = "<div class='sprint-reason-chips' role='group' aria-label='{$lblQuick}'>{$chips}</div>";
+        }
 
         self::renderUiHelpersScript();
 
@@ -1238,30 +1269,33 @@ class SprintItem extends CommonDBTM
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="sprint-backlog-reason-heading"><i class="fas fa-undo me-1" aria-hidden="true"></i> {$title}</h5>
+        <h5 class="modal-title" id="sprint-backlog-reason-heading"><i class="{$icon} me-1" aria-hidden="true"></i> {$title}</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{$lblClose}"></button>
       </div>
       <div class="modal-body">
-        <div class="alert alert-danger sprint-backlog-reason-failure" role="alert" tabindex="-1" style="display:none;white-space:pre-line;"></div>
+        <div class="alert alert-danger sprint-backlog-reason-failure sprint-pre-line" role="alert" tabindex="-1" style="display:none;"></div>
         <label class="form-label fw-bold" for="sprint-backlog-reason-text">{$lblReason}</label>
+        {$chips}
         <textarea name="reason" id="sprint-backlog-reason-text" class="form-control" rows="3" placeholder="{$phReason}" data-sprint-autofocus="1" aria-describedby="sprint-backlog-reason-err"></textarea>
         <div class="text-danger sprint-small mt-1 sprint-backlog-reason-error" id="sprint-backlog-reason-err" role="alert" style="display:none;">{$errReason}</div>
         <fieldset class="mt-3">
-          <legend class="form-label fw-bold d-block" style="font-size:inherit;">{$lblChoice}</legend>
+          <legend class="form-label fw-bold d-block sprint-legend-inline">{$lblChoice}</legend>
           <div class="form-check">
-            <input class="form-check-input" type="radio" name="remove_from_sprint" id="sprint-backlog-keep" value="0" checked>
+            <input class="form-check-input" type="radio" name="remove_from_sprint" id="sprint-backlog-keep" value="0" checked aria-describedby="sprint-backlog-keep-help">
             <label class="form-check-label" for="sprint-backlog-keep">{$optKeep}</label>
+            <div class="form-text sprint-small text-muted mt-0" id="sprint-backlog-keep-help">{$helpKeep}</div>
           </div>
-          <div class="form-check">
-            <input class="form-check-input" type="radio" name="remove_from_sprint" id="sprint-backlog-remove" value="1">
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="radio" name="remove_from_sprint" id="sprint-backlog-remove" value="1" aria-describedby="sprint-backlog-remove-help">
             <label class="form-check-label" for="sprint-backlog-remove">{$optRemove}</label>
+            <div class="form-text sprint-small text-muted mt-0" id="sprint-backlog-remove-help">{$helpRemove}</div>
           </div>
         </fieldset>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$lblCancel}</button>
         <button type="button" class="btn btn-warning sprint-backlog-reason-confirm">
-          <i class="fas fa-undo me-1" aria-hidden="true"></i> {$title}
+          <i class="{$icon} me-1" aria-hidden="true"></i> {$title}
         </button>
       </div>
     </div>
@@ -1271,32 +1305,73 @@ class SprintItem extends CommonDBTM
 (function(){
     if (typeof jQuery === 'undefined') { return; }
     var endpoint = "{$endpoint}";
-    var tokenUrl = "{$tokenUrl}";
-    var \$modal;
 
+    // Live on <body>, and drop the stale copy a GLPI ajax-tab reload leaves
+    // behind ([id=…] rather than #…: an id lookup stops at the first match).
     jQuery(function(){
-        \$modal = jQuery('#sprint-backlog-reason-modal');
-        if (\$modal.length === 0) { return; }
-        \$modal = \$modal.detach().appendTo('body');
+        var all = jQuery('[id=sprint-backlog-reason-modal]');
+        if (all.length > 1) { all.slice(0, all.length - 1).remove(); }
+        var last = jQuery('[id=sprint-backlog-reason-modal]').last();
+        if (last.length && !last.parent().is('body')) { last.detach().appendTo('body'); }
     });
+
+    if (window.__sprintBacklogReasonBound) { return; }
+    window.__sprintBacklogReasonBound = true;
+
+    function M() { return jQuery('[id=sprint-backlog-reason-modal]').last(); }
+    function chipValues(\$modal) {
+        return \$modal.find('.sprint-reason-chip').map(function(){ return String(jQuery(this).attr('data-reason') || ''); }).get();
+    }
+    function syncChips(\$modal) {
+        var value = String(\$modal.find('textarea[name=reason]').val() || '').trim();
+        \$modal.find('.sprint-reason-chip').each(function(){
+            var on = value !== '' && value.indexOf(String(jQuery(this).attr('data-reason') || '')) === 0;
+            jQuery(this).toggleClass('active', on).attr('aria-pressed', on ? 'true' : 'false');
+        });
+    }
 
     jQuery(document).on('click', '.sprint-backlog-btn', function(){
         var \$btn = jQuery(this);
+        var \$modal = M();
         var itemId = parseInt(\$btn.data('backlog-id'), 10) || 0;
-        if (itemId <= 0 || !\$modal) { return; }
+        if (itemId <= 0 || !\$modal.length) { return; }
         \$modal.find('textarea[name=reason]').val('').removeClass('is-invalid').removeAttr('aria-invalid');
         \$modal.find('.sprint-backlog-reason-error, .sprint-backlog-reason-failure').hide();
         \$modal.find('input[name=remove_from_sprint][value="0"]').prop('checked', true);
+        syncChips(\$modal);
         \$modal.data('target-item', itemId);
-        \$modal.data('target-btn', \$btn);
         \$modal[0].__sprintReturnFocus = this;
         bootstrap.Modal.getOrCreateInstance(\$modal[0]).show();
+    });
+
+    // A quick reason fills the field. Text typed before stays, behind it.
+    jQuery(document).on('click', '#sprint-backlog-reason-modal .sprint-reason-chip', function(){
+        var \$modal = jQuery(this).closest('.modal');
+        var \$text  = \$modal.find('textarea[name=reason]');
+        var quick  = String(jQuery(this).attr('data-reason') || '');
+        var value  = String(\$text.val() || '').trim();
+        if (value === '' || chipValues(\$modal).indexOf(value) !== -1) {
+            value = quick;
+        } else if (value.indexOf(quick) !== 0) {
+            // Swap a leading quick reason, keep the user's own words.
+            chipValues(\$modal).forEach(function(other){
+                if (other !== '' && value.indexOf(other + ': ') === 0) { value = value.substring(other.length + 2); }
+            });
+            value = quick + ': ' + value;
+        }
+        \$text.val(value).removeClass('is-invalid').removeAttr('aria-invalid').trigger('focus');
+        \$modal.find('.sprint-backlog-reason-error').hide();
+        syncChips(\$modal);
+    });
+    jQuery(document).on('input', '#sprint-backlog-reason-modal textarea[name=reason]', function(){
+        syncChips(jQuery(this).closest('.modal'));
     });
 
     // The dialog stays open until the server answered, so a failure keeps
     // the reason and can be retried with the same button.
     jQuery(document).on('click', '.sprint-backlog-reason-confirm', function(){
         var \$confirm = jQuery(this);
+        var \$modal = \$confirm.closest('.modal');
         var \$text = \$modal.find('textarea[name=reason]');
         var reason = (\$text.val() || '').trim();
         if (reason === '') {
@@ -1307,38 +1382,31 @@ class SprintItem extends CommonDBTM
         \$text.removeClass('is-invalid').removeAttr('aria-invalid');
         \$modal.find('.sprint-backlog-reason-error, .sprint-backlog-reason-failure').hide();
         var itemId = parseInt(\$modal.data('target-item'), 10) || 0;
-        var \$btn   = \$modal.data('target-btn');
         var removeFromSprint = \$modal.find('input[name=remove_from_sprint]:checked').val() === '1';
         function failure(msg) {
-            if (window.sprintUi) { window.sprintUi.busy(\$confirm, false); } else { \$confirm.prop('disabled', false); }
+            window.sprintUi.busy(\$confirm, false);
             \$modal.find('.sprint-backlog-reason-failure').text(msg).show().trigger('focus');
         }
-        if (window.sprintUi) { window.sprintUi.busy(\$confirm, true, "{$lblWorking}"); } else { \$confirm.prop('disabled', true); }
+        window.sprintUi.busy(\$confirm, true, "{$lblWorking}");
 
-        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
-        .then(function(tok){
-            return jQuery.ajax({
-                url: endpoint, type: 'POST', dataType: 'json',
-                data: {
-                    id: itemId,
-                    reason: reason,
-                    remove_from_sprint: removeFromSprint ? 1 : 0,
-                    _glpi_csrf_token: tok && tok.token ? tok.token : ''
-                }
-            });
-        }).done(function(resp){
+        window.sprintUi.post(endpoint, {
+            id: itemId,
+            reason: reason,
+            remove_from_sprint: removeFromSprint ? 1 : 0
+        }, { silent: true }).done(function(resp){
             if (!(resp && resp.success)) {
                 failure((resp && resp.message) || "{$msgFailed}");
                 return;
             }
-            if (window.sprintUi) { window.sprintUi.busy(\$confirm, false); window.sprintUi.toast(resp.message, 'success'); }
-            else { \$confirm.prop('disabled', false); }
+            window.sprintUi.busy(\$confirm, false);
+            window.sprintUi.toast(resp.message, 'success');
             bootstrap.Modal.getOrCreateInstance(\$modal[0]).hide();
             var \$row = jQuery('tr.sprint-row[data-item-id="' + itemId + '"], tr.sprint-review-row[data-item-id="' + itemId + '"]');
             if (resp.stayed) {
                 \$row.find('.sprint-row-linked, .sprint-review-linked').html('<span class="text-muted fst-italic">{$movedLabel}</span>');
-                \$row.css('transition','background-color 0.3s').css('background-color','#fff3cd');
-                setTimeout(function(){ \$row.css('background-color',''); }, 800);
+                // The coupling is gone: nothing left to send back.
+                \$row.find('.sprint-backlog-btn').remove();
+                window.sprintUi.flash(\$row, 'warning');
             } else {
                 \$row.fadeOut(150, function(){ jQuery(this).remove(); });
             }
@@ -1428,7 +1496,7 @@ HTML;
         }
         return " <span class='sprint-adhoc-badge' title='"
             . htmlescape(__('Added to the sprint after kick-off', 'sprint')) . "'>"
-            . "<i class='fas fa-plus-circle'></i> " . __('Adhoc', 'sprint') . "</span>";
+            . "<i class='fas fa-plus-circle' aria-hidden='true'></i> " . __('Adhoc', 'sprint') . "</span>";
     }
 
     /**
@@ -1473,7 +1541,7 @@ HTML;
         }
         $tooltip = __('Waiting on', 'sprint') . ': ' . implode(', ', $parts);
         return " <span class='sprint-dep-pill' title='" . htmlescape($tooltip) . "'>"
-            . "<i class='fas fa-link'></i> " . $count . "</span>";
+            . "<i class='fas fa-link' aria-hidden='true'></i> " . $count . "</span>";
     }
 
     /**
@@ -1515,7 +1583,7 @@ HTML;
             . self::filterBarTextAttrs()
             . " style='background:var(--tblr-bg-surface-secondary,#f1f3f5);border-radius:6px;'>";
         echo "<div class='d-flex align-items-center gap-1 text-muted sprint-small' aria-hidden='true'>"
-            . "<i class='fas fa-filter'></i><span>" . __s('Filter', 'sprint') . "</span></div>";
+            . "<i class='fas fa-filter' aria-hidden='true'></i><span>" . __s('Filter', 'sprint') . "</span></div>";
 
         // Events are delegated from sprint.js (no inline handlers) so a CSP
         // without 'unsafe-inline' still leaves filter + reset functional.
@@ -1633,8 +1701,11 @@ HTML;
         echo <<<JS
 <script>
 (function() {
-    if (window.sprintUi) { return; }
-    var ui = {};
+    // js/sprint.js shares this object (sprintUi.post / refresh / flash):
+    // whichever runs first creates it, the other one adds to it.
+    var ui = window.sprintUi || {};
+    if (ui.__dialogHelpers) { return; }
+    ui.__dialogHelpers = true;
 
     var glpiFns = { info: 'glpi_toast_info', success: 'glpi_toast_info', warning: 'glpi_toast_warning', error: 'glpi_toast_error' };
     var accents = { info: '#0d6efd', success: '#198754', warning: '#b35c00', error: '#dc3545' };
@@ -2058,7 +2129,7 @@ JS;
         // --- Dependencies (immediate actions, not part of Save) ---
         echo "<details class='sprint-qe-section mb-2 sprint-qe-deps-block' data-section='deps'>";
         echo "<summary class='sprint-qe-section-summary'><span class='fw-bold'>"
-            . "<i class='fas fa-link me-1' style='color:#20c997;' aria-hidden='true'></i>" . __s('Dependencies', 'sprint') . "</span>"
+            . "<i class='fas fa-link me-1 sprint-dep-link-icon' aria-hidden='true'></i>" . __s('Dependencies', 'sprint') . "</span>"
             . " <span class='sprint-qe-sum text-muted sprint-small'></span></summary>";
         echo "<div class='sprint-qe-section-body'>";
         echo "<div class='alert py-1 sprint-small sprint-qe-dep-status mb-2' style='display:none;' role='status'></div>";
@@ -2174,6 +2245,10 @@ JS;
                 'depResolved'   => __('resolved', 'sprint'),
                 'depRemove'     => __('Remove dependency on %s', 'sprint'),
                 'depRemoveConfirm' => __('Remove the dependency on %s? Their capacity on this item is released.', 'sprint'),
+                'depRemoveTitle' => __('Remove dependency', 'sprint'),
+                'depRemoveOk'   => __('Remove', 'sprint'),
+                'overflowTitle' => __('Above the available capacity', 'sprint'),
+                'overflowOk'    => __('Save anyway', 'sprint'),
                 'depCapFor'     => __('Capacity of %s', 'sprint'),
                 'depCreditsFor' => __('Credits of %s', 'sprint'),
                 'depCredits'    => __('Credits', 'sprint'),
@@ -2232,8 +2307,16 @@ jQuery(function() {
         });
     }
     function fmtLabel(key, value) { return L(key).replace('%s', value); }
-    function token() {
-        return jq.ajax({ url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php', type: 'GET', dataType: 'json', cache: false });
+    // POST to a plugin ajax endpoint with a fresh token; every caller shows
+    // its own failure inside the dialog, so no network toast here.
+    function post(endpoint, data) {
+        return window.sprintUi.post(CFG_GLPI.root_doc + '/plugins/sprint/ajax/' + endpoint, data, { silent: true });
+    }
+    // In-page question instead of the browser's confirm().
+    function ask(msg, onOk, opts) {
+        opts = opts || {};
+        if (typeof window.sprintConfirm === 'function') { window.sprintConfirm(msg, onOk, opts); return; }
+        if (window.confirm(msg)) { onOk(); } else if (typeof opts.onCancel === 'function') { opts.onCancel(); }
     }
     function rowsFor(id) {
         return jq('tr.sprint-row[data-item-id="' + id + '"], tr.sprint-review-row[data-item-id="' + id + '"]');
@@ -2718,7 +2801,7 @@ jQuery(function() {
             var el = modal.find(sel);
             return el.length ? el.val() : undefined;
         }
-        function payload(confirmOverflow, tok) {
+        function payload(confirmOverflow) {
             var tags = modal.find('.sprint-qe-tag:checked').map(function() { return jq(this).val(); }).get();
             return {
                 id: id,
@@ -2738,7 +2821,8 @@ jQuery(function() {
                 carry_over_to_sprint_id: modal.find('select[name=carry_over_to_sprint_id]').val(),
                 carry_capacity: carrySplit.carry_capacity,
                 carry_credits: carrySplit.carry_credits,
-                carry_reason: reason,
+                // The carry-over dialog's own reason wins over the request motivation.
+                carry_reason: carrySplit.reason || reason,
                 capacity_reason: reason,
                 category_reason: reason,
                 adhoc_reason: reason,
@@ -2752,18 +2836,12 @@ jQuery(function() {
                 // jQuery drops empty arrays during form serialization.
                 _tags_json: modal.find('.sprint-qe-tags-block').length ? JSON.stringify(tags) : undefined,
                 meeting_id: C().meetingId > 0 ? C().meetingId : undefined,
-                confirm_overflow: confirmOverflow ? 1 : 0,
-                _glpi_csrf_token: tok && tok.token ? tok.token : ''
+                confirm_overflow: confirmOverflow ? 1 : 0
             };
         }
         function runSave(confirmOverflow) {
             busy(btn, true, L('saving'));
-            return token().then(function(tok) {
-                return jq.ajax({
-                    url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/updateitemquick.php',
-                    type: 'POST', dataType: 'json', data: payload(confirmOverflow, tok)
-                });
-            });
+            return post('updateitemquick.php', payload(confirmOverflow));
         }
         function done() { busy(btn, false); }
         function onFail() {
@@ -2785,11 +2863,10 @@ jQuery(function() {
             if (resp && resp.needs_confirm) {
                 // A necessary confirmation: the server message names the
                 // member and the overflow.
-                if (window.confirm(resp.message)) {
+                done();
+                ask(resp.message, function() {
                     runSave(true).done(onResp).fail(onFail);
-                } else {
-                    done();
-                }
+                }, { title: L('overflowTitle'), okLabel: L('overflowOk') });
                 return;
             }
             done();
@@ -2941,7 +3018,11 @@ jQuery(function() {
         }
 
         // Meeting review rows.
-        row.find('.sprint-review-status').text(statusLabel).css('background-color', statusColor);
+        row.find('.sprint-review-status')
+            .removeClass(function(i, c) { return (c.match(/sprint-status-\S+/g) || []).join(' '); })
+            .addClass('sprint-status-' + String(resp.status).replace(/_/g, '-'))
+            .text(statusLabel)
+            .css('background-color', statusColor);
         var reviewOwner = row.filter('.sprint-review-row').find('.sprint-review-owner');
         reviewOwner.each(function() {
             var cell = jq(this);
@@ -2990,7 +3071,7 @@ jQuery(function() {
             deps.forEach(function(d) {
                 var nm = esc(d.name);
                 html += '<div class="d-flex align-items-center gap-2 mb-1" data-dep-row="' + d.id + '">'
-                    + '<span class="flex-grow-1"><i class="fas fa-link" style="color:#20c997;" aria-hidden="true"></i> ' + nm
+                    + '<span class="flex-grow-1"><i class="fas fa-link sprint-dep-link-icon" aria-hidden="true"></i> ' + nm
                     + (d.is_resolved ? ' <span class="badge bg-secondary">' + esc(L('depResolved')) + '</span>' : '')
                     + '</span>'
                     + '<select class="form-select form-select-sm sprint-qe-dep-edit-cap sprint-qe-nodirty" data-dep-id="' + d.id + '"'
@@ -3017,18 +3098,20 @@ jQuery(function() {
 
     // Meeting view: the "Waiting on" cell follows the dialog's list.
     function syncWaitingOnCell(itemId, open) {
-        var cell = jq('tr.sprint-review-row[data-item-id="' + itemId + '"] .sprint-review-deps');
-        if (!cell.length) { return; }
-        cell.empty();
-        if (!open.length) {
-            cell.append(jq('<span class="text-muted fst-italic"></span>').text(L('none')));
-            return;
-        }
-        open.forEach(function(d) {
-            cell.append(jq('<div></div>')
-                .append(jq('<i class="fas fa-link" style="color:#20c997;font-size:0.75em;" aria-hidden="true"></i>'))
-                .append(document.createTextNode(' ' + (d.name || '') + ' '))
-                .append(jq('<span class="text-muted"></span>').text('(' + (d.capacity || 0) + '%)')));
+        // A row can show the cell twice (table cell and the fold under the
+        // name): every copy follows.
+        jq('tr.sprint-review-row[data-item-id="' + itemId + '"] .sprint-review-deps').each(function() {
+            var cell = jq(this).empty();
+            if (!open.length) {
+                cell.append(jq('<span class="text-muted fst-italic"></span>').text(L('none')));
+                return;
+            }
+            open.forEach(function(d) {
+                cell.append(jq('<div></div>')
+                    .append(jq('<i class="fas fa-link sprint-dep-icon" aria-hidden="true"></i>'))
+                    .append(document.createTextNode(' ' + (d.name || '') + ' '))
+                    .append(jq('<span class="text-muted"></span>').text('(' + (d.capacity || 0) + '%)')));
+            });
         });
     }
 
@@ -3053,29 +3136,21 @@ jQuery(function() {
         }
         function runDepAdd(confirmOverflow) {
             busy(btn, true, L('saving'));
-            return token().then(function(tok) {
-                return jq.ajax({
-                    url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/dependencyadd.php',
-                    type: 'POST', dataType: 'json',
-                    data: {
-                        plugin_sprint_sprintitems_id: itemId,
-                        users_id: userId,
-                        capacity: cap,
-                        credits: depCredits.length ? depCredits.val() : undefined,
-                        plugin_sprint_sprintcreditproducts_id: depProduct.length ? depProduct.val() : undefined,
-                        confirm_overflow: confirmOverflow ? 1 : 0,
-                        _glpi_csrf_token: tok && tok.token ? tok.token : ''
-                    }
-                });
+            return post('dependencyadd.php', {
+                plugin_sprint_sprintitems_id: itemId,
+                users_id: userId,
+                capacity: cap,
+                credits: depCredits.length ? depCredits.val() : undefined,
+                plugin_sprint_sprintcreditproducts_id: depProduct.length ? depProduct.val() : undefined,
+                confirm_overflow: confirmOverflow ? 1 : 0
             });
         }
         function onDepResp(resp) {
             if (resp && resp.needs_confirm) {
-                if (window.confirm(resp.message)) {
+                busy(btn, false);
+                ask(resp.message, function() {
                     runDepAdd(true).done(onDepResp).fail(onDepFail);
-                } else {
-                    busy(btn, false);
-                }
+                }, { title: L('overflowTitle'), okLabel: L('overflowOk') });
                 return;
             }
             busy(btn, false);
@@ -3102,14 +3177,8 @@ jQuery(function() {
         var itemId = modal.find('input[name=id]').val();
         if (depId <= 0) { return; }
         input.prop('disabled', true).attr('aria-busy', 'true');
-        token().then(function(tok) {
-            return jq.ajax({
-                url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/dependencies.php',
-                type: 'POST', dataType: 'json',
-                data: jq.extend({ action: 'update', plugin_sprint_sprintitems_id: itemId, id: depId,
-                    _glpi_csrf_token: tok && tok.token ? tok.token : '' }, data)
-            });
-        }).done(function(resp) {
+        post('dependencies.php', jq.extend({ action: 'update', plugin_sprint_sprintitems_id: itemId, id: depId }, data))
+        .done(function(resp) {
             if (resp && resp.success) {
                 if (typeof resp.credits !== 'undefined' && input.hasClass('sprint-qe-dep-edit-credits')) { input.val(resp.credits); }
                 depStatus(modal, resp.warning ? (resp.message + ' — ' + resp.warning) : resp.message, resp.warning ? 'warning' : 'success');
@@ -3138,28 +3207,23 @@ jQuery(function() {
         var itemId = modal.find('input[name=id]').val();
         if (depId <= 0) { return; }
         // Necessary confirmation, naming who is uncoupled and the effect.
-        if (!window.confirm(fmtLabel('depRemoveConfirm', String(btn.attr('data-dep-name') || '')))) { return; }
-        busy(btn, true, '');
-        token().then(function(tok) {
-            return jq.ajax({
-                url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/dependencies.php',
-                type: 'POST', dataType: 'json',
-                data: { action: 'remove', plugin_sprint_sprintitems_id: itemId, id: depId,
-                    _glpi_csrf_token: tok && tok.token ? tok.token : '' }
+        ask(fmtLabel('depRemoveConfirm', String(btn.attr('data-dep-name') || '')), function() {
+            busy(btn, true, '');
+            post('dependencies.php', { action: 'remove', plugin_sprint_sprintitems_id: itemId, id: depId })
+            .done(function(resp) {
+                busy(btn, false);
+                if (resp && resp.success) {
+                    depStatus(modal, resp.message, 'success');
+                    depChanged(modal);
+                    modal.find('.sprint-qe-dep-user').trigger('focus');
+                } else {
+                    depStatus(modal, resp && resp.message ? resp.message : L('depRemoveFailed'), 'danger');
+                }
+            }).fail(function() {
+                busy(btn, false);
+                depStatus(modal, L('networkError'), 'danger');
             });
-        }).done(function(resp) {
-            busy(btn, false);
-            if (resp && resp.success) {
-                depStatus(modal, resp.message, 'success');
-                depChanged(modal);
-                modal.find('.sprint-qe-dep-user').trigger('focus');
-            } else {
-                depStatus(modal, resp && resp.message ? resp.message : L('depRemoveFailed'), 'danger');
-            }
-        }).fail(function() {
-            busy(btn, false);
-            depStatus(modal, L('networkError'), 'danger');
-        });
+        }, { danger: true, title: L('depRemoveTitle'), okLabel: L('depRemoveOk') });
     });
 });
 </script>
@@ -3167,14 +3231,20 @@ JS;
         // Reason dialog for guarded capacity/category/adhoc edits (approval requests).
         SprintRequest::renderReasonModalUI();
         self::renderCarrySplitModalUI();
+        // Wherever items are edited they are also moved on: the DoD /
+        // linked-item questions behind window.sprintStatusChange().
+        self::renderStatusGateUI();
     }
 
     /**
-     * "How does the work split?" dialog behind a carry-over, once per page:
-     * window.sprintCarrySplit({capacity, credits, sprintLabel}, callback) asks
-     * what stays and what moves on — both always add up to the original — and
-     * calls back with {carry_capacity, carry_credits}. Nothing to split means
-     * no dialog.
+     * The one carry-over dialog, once per page:
+     * window.sprintCarrySplit({capacity, credits, sprintLabel[, reason]}, callback)
+     * asks what stays and what moves on (both always add up to the original)
+     * and, always, for an optional reason. It calls back with
+     * {carry_capacity, carry_credits, reason}. With nothing to split only the
+     * reason is asked and the callback gets {reason} (no carry_* keys, so the
+     * server makes a plain copy). Dismissing the dialog never calls back.
+     * Without the dialog markup on the page it calls back with {} at once.
      */
     public static function renderCarrySplitModalUI(): void
     {
@@ -3186,6 +3256,12 @@ JS;
 
         $title     = __s('Carry over: split the work', 'sprint');
         $intro     = __s('Carrying over to %s. What was done stays in this sprint and the rest moves on. Both always add up to the original.', 'sprint');
+        $introPlain = __s('Carrying over to %s.', 'sprint') . ' '
+            . __s('A fresh copy is created in the target sprint. The original stays in this sprint.', 'sprint');
+        $titlePlain = __s('Carry over to sprint', 'sprint');
+        $lblReason = __s('Reason (optional)', 'sprint');
+        $phReason  = __s('Why does this move on? It shows up in the retrospective.', 'sprint');
+        $iconCarry = SprintIcon::CARRYOVER;
         $lblCap    = __s('Capacity (%)', 'sprint');
         $lblCred   = __s('Credits', 'sprint');
         $lblStay   = __s('Stays in this sprint', 'sprint');
@@ -3201,13 +3277,13 @@ JS;
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="sprint-carry-split-heading"><i class="fas fa-forward text-success me-1" aria-hidden="true"></i> {$title}</h5>
+        <h5 class="modal-title" id="sprint-carry-split-heading"><i class="{$iconCarry} text-success me-1" aria-hidden="true"></i> <span class="sprint-carry-split-title" data-text="{$title}" data-text-plain="{$titlePlain}">{$title}</span></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{$lblClose}"></button>
       </div>
       <div class="modal-body">
-        <p class="sprint-small text-muted sprint-carry-split-intro" data-text="{$intro}"></p>
+        <p class="sprint-small text-muted sprint-carry-split-intro" data-text="{$intro}" data-text-plain="{$introPlain}"></p>
         <fieldset class="sprint-carry-split-row mb-3" data-kind="capacity" data-step="0.5">
-          <legend class="form-label fw-bold" style="font-size:inherit;">{$lblCap} <span class="text-muted fw-normal">· {$lblTotal}: <span class="sprint-carry-split-total"></span>%</span></legend>
+          <legend class="form-label fw-bold sprint-legend-inline">{$lblCap} <span class="text-muted fw-normal">· {$lblTotal}: <span class="sprint-carry-split-total"></span>%</span></legend>
           <div class="row g-2">
             <div class="col-6"><label class="form-label sprint-small mb-1" for="sprint-carry-cap-stay">{$lblStay}</label>
               <input type="number" min="0" step="0.5" id="sprint-carry-cap-stay" class="form-control sprint-carry-split-stay"></div>
@@ -3215,8 +3291,8 @@ JS;
               <input type="number" min="0" step="0.5" id="sprint-carry-cap-carry" class="form-control sprint-carry-split-carry" data-sprint-autofocus="1"></div>
           </div>
         </fieldset>
-        <fieldset class="sprint-carry-split-row" data-kind="credits" data-step="0.25">
-          <legend class="form-label fw-bold" style="font-size:inherit;">{$lblCred} <span class="text-muted fw-normal">· {$lblTotal}: <span class="sprint-carry-split-total"></span></span></legend>
+        <fieldset class="sprint-carry-split-row mb-3" data-kind="credits" data-step="0.25">
+          <legend class="form-label fw-bold sprint-legend-inline">{$lblCred} <span class="text-muted fw-normal">· {$lblTotal}: <span class="sprint-carry-split-total"></span></span></legend>
           <div class="row g-2">
             <div class="col-6"><label class="form-label sprint-small mb-1" for="sprint-carry-cred-stay">{$lblStay}</label>
               <input type="number" min="0" step="0.25" id="sprint-carry-cred-stay" class="form-control sprint-carry-split-stay"></div>
@@ -3224,11 +3300,15 @@ JS;
               <input type="number" min="0" step="0.25" id="sprint-carry-cred-carry" class="form-control sprint-carry-split-carry" data-sprint-autofocus="1"></div>
           </div>
         </fieldset>
+        <div class="sprint-carry-split-reason">
+          <label class="form-label fw-bold" for="sprint-carry-reason">{$lblReason}</label>
+          <textarea id="sprint-carry-reason" name="carry_reason" class="form-control" rows="2" maxlength="1000" placeholder="{$phReason}" data-sprint-autofocus="1"></textarea>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$lblCancel}</button>
         <button type="button" class="btn btn-primary sprint-carry-split-confirm">
-          <i class="fas fa-forward me-1" aria-hidden="true"></i> {$lblCarry}
+          <i class="{$iconCarry} me-1" aria-hidden="true"></i> {$lblCarry}
         </button>
       </div>
     </div>
@@ -3263,13 +3343,19 @@ JS;
 
     window.sprintCarrySplit = function(opts, callback){
         var m = jQuery('[id=sprint-carry-split-modal]').last();
+        opts = opts || {};
         var totals = { capacity: parseFloat(opts.capacity) || 0, credits: parseFloat(opts.credits) || 0 };
-        if (!m.length || (totals.capacity <= 0 && totals.credits <= 0)) {
+        if (!m.length) {
             callback({});
             return;
         }
+        // Nothing to split: the dialog still asks for the reason.
+        var splits = totals.capacity > 0 || totals.credits > 0;
         var intro = m.find('.sprint-carry-split-intro');
-        intro.text(String(intro.attr('data-text')).replace('%s', opts.sprintLabel || ''));
+        intro.text(String(intro.attr(splits ? 'data-text' : 'data-text-plain')).replace('%s', opts.sprintLabel || ''));
+        var heading = m.find('.sprint-carry-split-title');
+        heading.text(String(heading.attr(splits ? 'data-text' : 'data-text-plain')));
+        m.find('textarea[name=carry_reason]').val(opts.reason || '');
         m.find('.sprint-carry-split-row').each(function(){
             var row   = jQuery(this);
             var total = totals[row.attr('data-kind')];
@@ -3280,12 +3366,17 @@ JS;
             row.find('.sprint-carry-split-carry').val('0');
         });
         m.data('cb', callback);
+        m[0].__sprintReturnFocus = document.activeElement;
         bootstrap.Modal.getOrCreateInstance(m[0]).show();
-        setTimeout(function(){ m.find('.sprint-carry-split-row:visible .sprint-carry-split-carry').first().trigger('focus').trigger('select'); }, 200);
+        setTimeout(function(){
+            var first = m.find('.sprint-carry-split-row:visible .sprint-carry-split-carry').first();
+            if (first.length) { first.trigger('focus').trigger('select'); }
+            else { m.find('textarea[name=carry_reason]').trigger('focus'); }
+        }, 200);
     };
 
     // Either half drives the other, so the pair always sums to the total.
-    jQuery(document).on('input change', '#sprint-carry-split-modal input', function(e){
+    jQuery(document).on('input change', '#sprint-carry-split-modal .sprint-carry-split-row input', function(e){
         var input = jQuery(this);
         var row   = input.closest('.sprint-carry-split-row');
         var total = parseFloat(row.data('total')) || 0;
@@ -3308,13 +3399,293 @@ JS;
             if ((parseFloat(row.data('total')) || 0) <= 0) { return; }
             out['carry_' + row.attr('data-kind')] = clamp(row, parseFloat(row.find('.sprint-carry-split-carry').val()));
         });
-        // The other half of a split is 0, never "not sent".
-        if (out.carry_capacity === undefined) { out.carry_capacity = 0; }
-        if (out.carry_credits === undefined) { out.carry_credits = 0; }
+        // The other half of a split is 0, never "not sent". Without any
+        // split nothing is sent and the server makes a plain copy.
+        if (out.carry_capacity !== undefined || out.carry_credits !== undefined) {
+            if (out.carry_capacity === undefined) { out.carry_capacity = 0; }
+            if (out.carry_credits === undefined) { out.carry_credits = 0; }
+        }
+        out.reason = String(m.find('textarea[name=carry_reason]').val() || '').trim();
         var cb = m.data('cb');
         m.removeData('cb');
         bootstrap.Modal.getOrCreateInstance(m[0]).hide();
         if (typeof cb === 'function') { cb(out); }
+    });
+})();
+</script>
+HTML;
+    }
+
+    /**
+     * The questions behind a status change to Review / Done, once per page
+     * and shared by the board, the meeting rows and anything else that moves
+     * an item on: the Definition of Done checklist (with the Scrum Master's
+     * overrule button) and "the linked item is still open". When both apply
+     * the checklist dialog asks them together.
+     *
+     * window.sprintStatusChange(itemId, status, opts) posts to
+     * ajax/updatestatus.php, opens the dialog(s) the server asks for and
+     * returns a jQuery promise:
+     *  - resolved with the server reply once the status is saved (no toast:
+     *    the caller reports success, opts.notify = true lets the helper do it);
+     *  - rejected with {success:false, cancelled:true} when the user
+     *    dismissed a dialog: nothing saved, nothing shown;
+     *  - rejected with {success:false, message[, network:true]} when the
+     *    server refused or could not be reached. The message is toasted
+     *    unless opts.silent is set.
+     *
+     * Safe to call anywhere markup may be printed (tab content, a meeting
+     * form): the dialogs move themselves to <body>.
+     */
+    public static function renderStatusGateUI(): void
+    {
+        static $rendered = false;
+        if ($rendered) {
+            return;
+        }
+        $rendered = true;
+
+        $endpoint = \Plugin::getWebDir('sprint') . '/ajax/updatestatus.php';
+
+        $ttlLinkedOpen  = __s('Linked item open', 'sprint');
+        $msgLinkedOpen  = __s('The linked ticket/change is not closed/solved yet', 'sprint');
+        $msgLinkedBoth  = __s('Confirming moves the item on while the linked item is still open.', 'sprint');
+        $btnOpenLinked  = __s('Open linked item', 'sprint');
+        $btnContinue    = __s('Continue anyway', 'sprint');
+        $btnCancel      = __s('Cancel');
+        $btnClose       = __s('Close');
+        $ttlDod         = __s('Definition of Done', 'sprint');
+        $msgDod         = __s('Confirm every check before moving this item on.', 'sprint');
+        $btnDod         = __s('Confirm', 'sprint');
+        $btnDodOverride = __s('Overrule as Scrum Master', 'sprint');
+        $msgDodOverride = __s('As Scrum Master you can move this item on without completing every check. The skipped checks are recorded in the history.', 'sprint');
+
+        $i18n = json_encode([
+            'failed'  => __('Could not change the status — you can only move your own items.', 'sprint'),
+            'network' => __('Could not reach the server. Try again.', 'sprint'),
+        ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+
+        self::renderUiHelpersScript();
+
+        echo <<<HTML
+<div class="modal fade sprint-dialog" id="sprint-dod-modal" tabindex="-1" aria-hidden="true" aria-labelledby="sprint-dod-modal-title">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="sprint-dod-modal-title"><i class="fas fa-list-check me-2" aria-hidden="true"></i>{$ttlDod}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{$btnClose}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted sprint-small mb-2">{$msgDod}</p>
+        <div class="sprint-dod-list"></div>
+        <div class="alert alert-warning py-2 mt-3 mb-0 sprint-dod-linked" role="note" style="display:none">
+          <div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>{$msgLinkedOpen}</div>
+          <div class="fw-bold sprint-lo-name"></div>
+          <a href="#" target="_blank" rel="noopener" class="sprint-lo-open"><i class="fas fa-external-link-alt me-1" aria-hidden="true"></i>{$btnOpenLinked}</a>
+          <div class="sprint-small mt-1">{$msgLinkedBoth}</div>
+        </div>
+        <p class="text-muted sprint-small mt-2 mb-0 sprint-dod-override-hint" style="display:none">
+          <i class="fas fa-hat-wizard me-1" aria-hidden="true"></i>{$msgDodOverride}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$btnCancel}</button>
+        <button type="button" class="btn btn-warning sprint-dod-override" style="display:none">
+          <i class="fas fa-hat-wizard me-1" aria-hidden="true"></i>{$btnDodOverride}</button>
+        <button type="button" class="btn btn-success sprint-dod-go" disabled>{$btnDod}</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade sprint-dialog" id="sprint-linkedopen-modal" tabindex="-1" aria-hidden="true" aria-labelledby="sprint-linkedopen-modal-title">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="sprint-linkedopen-modal-title"><i class="fas fa-exclamation-triangle text-warning me-2" aria-hidden="true"></i>{$ttlLinkedOpen}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{$btnClose}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">{$msgLinkedOpen}</p>
+        <p class="sprint-lo-name fw-bold mb-0"></p>
+      </div>
+      <div class="modal-footer">
+        <a href="#" target="_blank" rel="noopener" class="btn btn-outline-primary sprint-lo-open">
+          <i class="fas fa-external-link-alt me-1" aria-hidden="true"></i>{$btnOpenLinked}</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{$btnCancel}</button>
+        <button type="button" class="btn btn-warning sprint-lo-continue">{$btnContinue}</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+    if (typeof jQuery === 'undefined') { return; }
+    var T = {$i18n};
+    var endpoint = "{$endpoint}";
+    var IDS = ['sprint-dod-modal', 'sprint-linkedopen-modal'];
+
+    // Live on <body> (above any open dialog); drop the stale copies a GLPI
+    // ajax-tab reload leaves behind, never one that is showing.
+    jQuery(function(){
+        IDS.forEach(function(id){
+            var all = jQuery('[id=' + id + ']');
+            if (all.length > 1) { all.slice(0, all.length - 1).not('.show').remove(); }
+            var last = jQuery('[id=' + id + ']').last();
+            if (last.length && !last.parent().is('body')) { last.detach().appendTo('body'); }
+        });
+    });
+
+    if (window.__sprintStatusGateBound) { return; }
+    window.__sprintStatusGateBound = true;
+
+    function M(id) { return jQuery('[id=' + id + ']').last(); }
+    function notify(msg, level) {
+        if (typeof window.sprintNotify === 'function') { window.sprintNotify(msg, level); }
+        else if (window.sprintUi) { window.sprintUi.toast(msg, level); }
+    }
+
+    // The change waiting on a dialog, and how many answered dialogs still
+    // have to report "hidden" (so that event is not read as a dismissal,
+    // even when the next question opens before the first dialog is gone).
+    var pending = null;
+    var answered = 0;
+
+    function park(ctx) {
+        if (pending && pending !== ctx) { pending.d.reject({ success: false, cancelled: true }); }
+        pending = ctx;
+    }
+    function refuse(ctx, resp, network) {
+        var out = (resp && typeof resp === 'object') ? resp : { success: false };
+        if (network) { out = { success: false, network: true, message: T.network }; }
+        if (!out.message || out.message === 'Update failed') { out.message = T.failed; }
+        if (!ctx.opts.silent) { notify(out.message, 'error'); }
+        ctx.d.reject(out);
+    }
+    function refreshGo(m) {
+        m.find('.sprint-dod-go').prop('disabled', m.find('.sprint-dod-check:not(:checked)').length > 0);
+    }
+    function fillLinked(box, resp) {
+        box.find('.sprint-lo-name').text(resp.linked_name || '');
+        box.find('.sprint-lo-open').attr('href', resp.linked_url || '#').toggle(!!resp.linked_url);
+    }
+
+    function openDod(ctx, resp) {
+        var m = M('sprint-dod-modal');
+        if (!m.length) { return false; }
+        park(ctx);
+        var list = m.find('.sprint-dod-list').empty();
+        (resp.dod || []).forEach(function(check, i){
+            var id = 'sprint-dod-check-' + i;
+            list.append(jQuery('<div class="form-check"></div>')
+                .append(jQuery('<input type="checkbox" class="form-check-input sprint-dod-check">')
+                    .attr('id', id).val(check).prop('checked', (resp.checked || []).indexOf(check) !== -1))
+                .append(jQuery('<label class="form-check-label"></label>').attr('for', id).text(check)));
+        });
+        // Scrum Master only: the overrule button and its hint.
+        m.find('.sprint-dod-override, .sprint-dod-override-hint').toggle(!!resp.can_override);
+        // Linked item still open as well: one dialog asks both.
+        ctx.linkedAsked = !!resp.linked_open;
+        var box = m.find('.sprint-dod-linked').toggle(ctx.linkedAsked);
+        fillLinked(box, resp);
+        refreshGo(m);
+        bootstrap.Modal.getOrCreateInstance(m[0]).show();
+        return true;
+    }
+    function openLinked(ctx, resp) {
+        var m = M('sprint-linkedopen-modal');
+        if (!m.length) { return false; }
+        park(ctx);
+        fillLinked(m, resp);
+        bootstrap.Modal.getOrCreateInstance(m[0]).show();
+        return true;
+    }
+
+    function send(ctx) {
+        var data = {
+            id: ctx.id, status: ctx.status,
+            confirm_linked_open: ctx.confirmOpen ? 1 : 0,
+            dod_override: ctx.override ? 1 : 0
+        };
+        if (ctx.done && ctx.done.length) { data.done = ctx.done; }
+        window.sprintUi.post(endpoint, data, { silent: true }).done(function(resp){
+            if (resp && resp.needs_dod) {
+                if (!openDod(ctx, resp)) { refuse(ctx, resp); }
+                return;
+            }
+            if (resp && resp.needs_confirm) {
+                if (!openLinked(ctx, resp)) { refuse(ctx, resp); }
+                return;
+            }
+            if (resp && resp.success) {
+                if (ctx.opts.notify) { notify(resp.message || '', resp.dod_overridden ? 'warning' : 'success'); }
+                ctx.d.resolve(resp);
+                return;
+            }
+            refuse(ctx, resp);
+        }).fail(function(){
+            refuse(ctx, null, true);
+        });
+    }
+
+    window.sprintStatusChange = function(itemId, status, opts) {
+        opts = opts || {};
+        var ctx = {
+            id: itemId, status: status, opts: opts, d: jQuery.Deferred(),
+            done: opts.done || null,
+            override: !!opts.dodOverride,
+            confirmOpen: !!opts.confirmLinkedOpen,
+            linkedAsked: false
+        };
+        if (!window.sprintUi || typeof window.sprintUi.post !== 'function') {
+            refuse(ctx, null, true);
+        } else {
+            send(ctx);
+        }
+        return ctx.d.promise();
+    };
+
+    // An answer closes its dialog and retries the change with it.
+    function answer(btn, change) {
+        var m = jQuery(btn).closest('.modal');
+        var ctx = pending;
+        pending = null;
+        answered++;
+        bootstrap.Modal.getOrCreateInstance(m[0]).hide();
+        if (!ctx) { return; }
+        change(ctx, m);
+        send(ctx);
+    }
+    function dodAnswer(override) {
+        return function(ctx, m) {
+            ctx.done = m.find('.sprint-dod-check:checked').map(function(){ return this.value; }).get();
+            ctx.override = override;
+            if (ctx.linkedAsked) { ctx.confirmOpen = true; }
+        };
+    }
+
+    jQuery(document).on('change', '#sprint-dod-modal .sprint-dod-check', function(){
+        refreshGo(jQuery(this).closest('.modal'));
+    });
+    // Every check confirmed.
+    jQuery(document).on('click', '#sprint-dod-modal .sprint-dod-go', function(){
+        if (this.disabled) { return; }
+        answer(this, dodAnswer(false));
+    });
+    // Scrum Master overrule: whatever was ticked plus the override flag.
+    jQuery(document).on('click', '#sprint-dod-modal .sprint-dod-override', function(){
+        answer(this, dodAnswer(true));
+    });
+    // "Continue anyway" on the linked item.
+    jQuery(document).on('click', '#sprint-linkedopen-modal .sprint-lo-continue', function(){
+        answer(this, function(ctx){ ctx.confirmOpen = true; });
+    });
+    // Dismissed without an answer (Cancel, X, Escape, backdrop): nothing changes.
+    jQuery(document).on('hidden.bs.modal', '#sprint-dod-modal, #sprint-linkedopen-modal', function(){
+        if (answered > 0) { answered--; return; }
+        if (pending) {
+            var ctx = pending;
+            pending = null;
+            ctx.d.reject({ success: false, cancelled: true });
+        }
     });
 })();
 </script>
@@ -3578,16 +3949,9 @@ jQuery(function() {
         m.find('.sprint-lqe-error').hide();
         showDiscard(m, false);
 
-        jq.ajax({
-            url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
-            type: 'GET', dataType: 'json', cache: false
-        }).then(function(tokResp) {
-            payload._glpi_csrf_token = tokResp && tokResp.token ? tokResp.token : '';
-            return jq.ajax({
-                url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/updatelinkedquick.php',
-                type: 'POST', dataType: 'json', data: payload
-            });
-        }).done(function(resp) {
+        window.sprintUi.post(
+            CFG_GLPI.root_doc + '/plugins/sprint/ajax/updatelinkedquick.php', payload, { silent: true }
+        ).done(function(resp) {
             busy(btn, false);
             if (resp && resp.success) {
                 // Push the new state back onto the triggering button so a
@@ -4083,6 +4447,7 @@ JS;
     public function post_updateItem($history = true)
     {
         SprintCustomer::invalidateCaches();
+        SprintCreditFall::onItemUpdate($this);
         SprintMember::invalidateUsedCapacity();
         if (!empty($this->input['_dod_override_note'])) {
             \Log::history((int)$this->getID(), self::class, [0, '', (string)$this->input['_dod_override_note']]);
@@ -4355,7 +4720,17 @@ JS;
      * copy starts unowned at 0 and is re-estimated. Fastlane capacity lives
      * on SprintFastlaneMember and is never split here.
      */
-    public static function carryOverTo(int $sourceItemId, int $targetSprintId, ?float $carryCapacity = null, ?float $carryCredits = null): int
+    public static function carryOverTo(int $sourceItemId, int $targetSprintId, ?float $carryCapacity = null, ?float $carryCredits = null, string $reason = ''): int
+    {
+        return (int)SprintCreditFall::during(
+            SprintCreditFall::TYPE_CARRYOVER,
+            $targetSprintId,
+            $reason,
+            static fn() => self::copyToSprint($sourceItemId, $targetSprintId, $carryCapacity, $carryCredits)
+        );
+    }
+
+    private static function copyToSprint(int $sourceItemId, int $targetSprintId, ?float $carryCapacity, ?float $carryCredits): int
     {
         if ($sourceItemId <= 0 || $targetSprintId <= 0) {
             return 0;
@@ -4531,7 +4906,7 @@ JS;
             ];
         }
 
-        $newId = self::carryOverTo($itemId, $targetSprintId, $carryCapacity, $carryCredits);
+        $newId = self::carryOverTo($itemId, $targetSprintId, $carryCapacity, $carryCredits, $reason);
         if ($newId <= 0) {
             return $fail(__('Could not carry the item over to the target sprint', 'sprint'));
         }
@@ -4938,7 +5313,7 @@ JS;
                 if ($reqSprintId > 0 && !self::currentUserIsScrumMasterOf($reqSprintId)) {
                     $isOwnReq = (int)($pendingReq['users_id'] ?? 0) === (int)Session::getLoginUserID();
                     echo "<div class='alert alert-warning d-flex align-items-center gap-2' style='margin-bottom:10px;'>"
-                        . "<i class='fas fa-lock'></i>"
+                        . "<i class='fas fa-lock' aria-hidden='true'></i>"
                         . "<span class='flex-grow-1'>" . htmlescape(__('This item is locked while a request is pending Scrum Master approval.', 'sprint')) . "</span>"
                         . ($isOwnReq ? SprintRequest::renderCancelButton((int)$pendingReq['id'], true) : '')
                         . "</div>";
@@ -4956,7 +5331,7 @@ JS;
             $sprintUrl = Sprint::getFormURLWithID($sprintId) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintItem$1');
             echo "<div style='margin-bottom:10px;'>";
             echo "<a href='$sprintUrl' class='btn btn-outline-secondary'>";
-            echo "<i class='fas fa-arrow-left me-1'></i> " . __('Back to Sprint', 'sprint');
+            echo "<i class='fas fa-arrow-left me-1' aria-hidden='true'></i> " . __('Back to Sprint', 'sprint');
             echo "</a></div>";
         }
 
@@ -5011,7 +5386,7 @@ JS;
             echo "<span class='text-muted'>" . __('Added to the sprint after kick-off (highlights the item)', 'sprint') . "</span>";
             echo "</label>";
             if (!self::currentUserIsScrumMasterOf($sprintId)) {
-                echo "<div class='text-muted sprint-small'><i class='fas fa-user-shield me-1'></i>"
+                echo "<div class='text-muted sprint-small'><i class='fas fa-user-shield me-1' aria-hidden='true'></i>"
                     . htmlescape(__('Adhoc changes are sent to the Scrum Master for approval.', 'sprint')) . "</div>";
             }
             echo "</td></tr>";
@@ -5115,7 +5490,7 @@ JS;
         echo "<td>" . __('Sprint') . "</td><td>";
         Sprint::dropdown(['name' => 'plugin_sprint_sprints_id', 'value' => $sprintId]);
         if (!$isFastlane) {
-            echo "<div class='text-muted sprint-small'><i class='fas fa-info-circle me-1'></i>"
+            echo "<div class='text-muted sprint-small'><i class='fas fa-info-circle me-1' aria-hidden='true'></i>"
                 . htmlescape(__('Picking a sprint you are not Scrum Master of creates an approval request.', 'sprint'))
                 . "</div>";
         }
@@ -5128,13 +5503,13 @@ JS;
         if (!empty($categoryOptions)) {
             $currentCategory = (int)($this->fields['plugin_sprint_sprintcategories_id'] ?? 0);
             echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-folder me-1'></i>" . __('Category', 'sprint') . "</td><td colspan='3'>";
+            echo "<td><i class='fas fa-folder me-1' aria-hidden='true'></i>" . __('Category', 'sprint') . "</td><td colspan='3'>";
             echo "<select name='plugin_sprint_sprintcategories_id' class='form-select' style='max-width:340px;display:inline-block;'>";
             echo "<option value='0'>" . __('No category', 'sprint') . "</option>";
             echo SprintCategory::dropdownOptionsPreserving($currentCategory);
             echo "</select>";
             if ($sprintId > 0 && !self::currentUserIsScrumMasterOf($sprintId)) {
-                echo "<div class='text-muted sprint-small'><i class='fas fa-user-shield me-1'></i>"
+                echo "<div class='text-muted sprint-small'><i class='fas fa-user-shield me-1' aria-hidden='true'></i>"
                     . htmlescape(__('Category changes are sent to the Scrum Master for approval.', 'sprint'))
                     . "</div>";
             }
@@ -5169,7 +5544,7 @@ JS;
         $dod = Config::getDefinitionDone();
         if (!empty($dod)) {
             $checkedDod = array_flip(SprintAgility::checklist((string)($this->fields['done_checks'] ?? '')));
-            echo "<tr class='tab_bg_1'><td><i class='fas fa-list-check me-1'></i>" . __('Definition of Done', 'sprint') . "</td>";
+            echo "<tr class='tab_bg_1'><td><i class='fas fa-list-check me-1' aria-hidden='true'></i>" . __('Definition of Done', 'sprint') . "</td>";
             echo "<td colspan='3'>";
             echo "<input type='hidden' name='_dod' value=''>";
             foreach ($dod as $check) {
@@ -5195,9 +5570,10 @@ JS;
      * "Carry over to sprint" card under the item form and in the planning
      * line on a linked Ticket/Change/Problem/Project task: the way to pick an
      * item up again in a new sprint without opening an old meeting (e.g. a
-     * ticket reopened after its sprint was completed). Posts to
-     * front/sprintitem.form.php; the target sprint's Scrum Master carries
-     * over at once, anyone else files a request.
+     * ticket reopened after its sprint was completed). The button opens the
+     * shared carry-over dialog (window.sprintCarrySplit) and posts to
+     * ajax/carryover.php with the reason; the target sprint's Scrum Master
+     * carries over at once, anyone else files a request.
      */
     public static function renderCarryOverCard(self $item, string $redirect = ''): void
     {
@@ -5225,9 +5601,9 @@ JS;
             $pending = $row;
         }
 
-        echo "<div class='card mt-3 sprint-carry-card' style='max-width:980px;margin:12px auto;'>";
+        echo "<div class='card mt-3 sprint-carry-card'>";
         echo "<div class='card-body'>";
-        echo "<h4 class='card-title mb-1'><i class='fas fa-forward text-success me-1'></i>"
+        echo "<h4 class='card-title mb-1'>" . SprintIcon::html(SprintIcon::CARRYOVER, 'text-success me-1')
             . __('Carry over to sprint', 'sprint') . "</h4>";
         echo "<p class='text-muted sprint-small mb-2'>"
             . htmlescape(__('A fresh copy is created in the target sprint. The original stays in this sprint.', 'sprint'))
@@ -5238,7 +5614,7 @@ JS;
             $label  = $target->getFromDB((int)$pending['plugin_sprint_sprints_id'])
                 ? (string)$target->fields['name'] : ('#' . (int)$pending['plugin_sprint_sprints_id']);
             echo "<div class='d-flex flex-wrap align-items-center gap-2'>";
-            echo "<span class='badge bg-warning' style='color:#212529;'><i class='fas fa-hourglass-half me-1'></i>"
+            echo "<span class='sprint-chip sprint-chip-lg sprint-chip-warning'><i class='fas fa-hourglass-half me-1' aria-hidden='true'></i>"
                 . htmlescape(sprintf(__('Requested — waiting for the Scrum Master of %s', 'sprint'), $label)) . "</span>";
             if ((int)$pending['users_id'] === (int)Session::getLoginUserID()) {
                 echo SprintRequest::renderCancelButton((int)$pending['id'], true);
@@ -5254,7 +5630,17 @@ JS;
             return;
         }
 
-        echo "<form method='post' action='" . self::getFormURL() . "' class='d-flex flex-wrap align-items-end gap-2'>";
+        // The button opens the shared carry-over dialog (split + reason) and
+        // posts to ajax/carryover.php, like every other carry-over. The form
+        // itself still posts to front/sprintitem.form.php when that dialog
+        // is not available.
+        $isFastlane = (int)($item->fields['is_fastlane'] ?? 0) === 1;
+        $capacity   = $isFastlane ? 0 : (float)($item->fields['capacity'] ?? 0);
+        $credits    = SprintCustomer::canUseCredits() ? (float)($item->fields['credits'] ?? 0) : 0;
+        echo "<form method='post' action='" . self::getFormURL() . "' class='d-flex flex-wrap align-items-end gap-2 sprint-carry-form' "
+            . "data-item-id='{$itemId}' data-capacity='" . htmlescape((string)$capacity) . "' "
+            . "data-credits='" . htmlescape((string)$credits) . "' data-follow='" . ($redirect === '' ? 1 : 0) . "' "
+            . "data-item-url='" . htmlescape(self::getFormURL()) . "'>";
         echo Html::hidden('id', ['value' => $itemId]);
         if ($redirect !== '') {
             echo Html::hidden('_redirect', ['value' => $redirect]);
@@ -5266,16 +5652,89 @@ JS;
             echo "<option value='" . (int)$tid . "'>" . htmlescape((string)$tlabel) . "</option>";
         }
         echo "</select></div>";
-        echo "<div class='flex-grow-1' style='min-width:220px;'><label class='form-label' for='sprint-carry-reason-{$itemId}'>"
-            . __('Reason', 'sprint') . "</label>";
-        echo "<input type='text' class='form-control' name='carry_reason' id='sprint-carry-reason-{$itemId}' "
-            . "placeholder='" . __s('e.g. the ticket was reopened', 'sprint') . "'></div>";
-        echo "<button type='submit' name='carry_over_item' value='1' class='btn btn-success'>"
-            . "<i class='fas fa-forward me-1'></i>" . __('Carry over', 'sprint') . "</button>";
+        echo "<button type='submit' name='carry_over_item' value='1' class='btn btn-success sprint-carry-submit'>"
+            . SprintIcon::html(SprintIcon::CARRYOVER, 'me-1') . __('Carry over', 'sprint') . "</button>";
         Html::closeForm();
-        echo "<div class='form-text sprint-small text-muted'><i class='fas fa-user-shield me-1'></i>"
+        echo "<div class='form-text sprint-small text-muted'><i class='fas fa-user-shield me-1' aria-hidden='true'></i>"
             . htmlescape(__('Carry-overs into a sprint you are not Scrum Master of are sent to that sprint\'s Scrum Master for approval.', 'sprint'))
             . "</div>";
         echo "</div></div>";
+
+        self::renderCarrySplitModalUI();
+        self::renderCarryCardScript();
+    }
+
+    /** One-time JS for the carry-over card ({@see renderCarryOverCard()}). */
+    private static function renderCarryCardScript(): void
+    {
+        static $rendered = false;
+        if ($rendered) {
+            return;
+        }
+        $rendered = true;
+
+        $endpoint = \Plugin::getWebDir('sprint') . '/ajax/carryover.php';
+        $i18n = json_encode([
+            'working' => __('Saving…', 'sprint'),
+            'failed'  => __('Could not carry the item over to the target sprint', 'sprint'),
+        ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+
+        echo <<<HTML
+<script>
+(function(){
+    if (typeof jQuery === 'undefined') { return; }
+    if (window.__sprintCarryCardBound) { return; }
+    window.__sprintCarryCardBound = true;
+    var T = {$i18n};
+    var endpoint = "{$endpoint}";
+
+    jQuery(document).on('click', 'form.sprint-carry-form .sprint-carry-submit', function(e){
+        var ui = window.sprintUi;
+        // Without the shared dialog or the AJAX helper: the plain form POST.
+        if (typeof window.sprintCarrySplit !== 'function' || !ui || typeof ui.post !== 'function') { return; }
+        e.preventDefault();
+        var \$btn  = jQuery(this);
+        var \$form = \$btn.closest('form');
+        var \$sel  = \$form.find('select[name=carry_over_to_sprint_id]');
+        var target = parseInt(\$sel.val(), 10) || 0;
+        if (target <= 0) {
+            \$sel.addClass('is-invalid').trigger('focus');
+            return;
+        }
+        \$sel.removeClass('is-invalid');
+        window.sprintCarrySplit({
+            capacity: parseFloat(\$form.attr('data-capacity')) || 0,
+            credits: parseFloat(\$form.attr('data-credits')) || 0,
+            sprintLabel: \$sel.find('option:selected').text()
+        }, function(split){
+            split = split || {};
+            ui.busy(\$btn, true, T.working);
+            ui.post(endpoint, {
+                id: \$form.attr('data-item-id'),
+                plugin_sprint_sprints_id: target,
+                carry_capacity: split.carry_capacity,
+                carry_credits: split.carry_credits,
+                reason: split.reason || ''
+            }).done(function(resp){
+                if (!(resp && resp.success)) {
+                    ui.busy(\$btn, false);
+                    ui.toast((resp && resp.message) || T.failed, 'error');
+                    return;
+                }
+                ui.toast(resp.message, resp.requested ? 'warning' : 'success');
+                // On the item's own form the copy is where the work goes on.
+                if (!resp.requested && parseInt(resp.new_id, 10) > 0 && \$form.attr('data-follow') === '1') {
+                    window.location.href = \$form.attr('data-item-url') + '?id=' + encodeURIComponent(resp.new_id);
+                    return;
+                }
+                ui.refresh();
+            }).fail(function(){
+                ui.busy(\$btn, false);
+            });
+        });
+    });
+})();
+</script>
+HTML;
     }
 }

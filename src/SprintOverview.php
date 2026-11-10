@@ -83,6 +83,11 @@ class SprintOverview extends CommonGLPI
                 'url'   => SprintCredits::getSearchURL(),
                 'icon'  => SprintCredits::getIcon(),
             ];
+            $items['creditfall'] = [
+                'label' => SprintCreditFall::getTypeName(2),
+                'url'   => SprintCreditFall::getSearchURL(),
+                'icon'  => SprintCreditFall::getIcon(),
+            ];
             $items['catalogue'] = [
                 'label' => __('Catalogue', 'sprint'),
                 'url'   => SprintCreditProduct::getSearchURL(),
@@ -169,8 +174,8 @@ class SprintOverview extends CommonGLPI
     }
 
     /**
-     * Daily work first (live sprints), then about four key figures with the
-     * rest on demand, then the analysis zone with the trend charts.
+     * Daily work first (live sprints), then four key figures with the rest
+     * as a compact row, then the analysis zone with the trend charts.
      */
     private static function renderStatisticsBody(string $period): void
     {
@@ -206,7 +211,7 @@ class SprintOverview extends CommonGLPI
 
         $chart = self::trimToChartWindow($data);
         if ($chart['dropped'] > 0) {
-            echo "<div class='text-muted sprint-small mb-2'><i class='fas fa-info-circle me-1'></i>"
+            echo "<div class='text-muted sprint-small mb-2'><i class='fas fa-info-circle me-1' aria-hidden='true'></i>"
                 . sprintf(
                     __('Charts show the last %1$d of %2$d sprints in this period. The tiles cover all of them.', 'sprint'),
                     self::CHART_SPRINTS,
@@ -221,10 +226,10 @@ class SprintOverview extends CommonGLPI
             function () use ($chart, $data) {
                 self::renderGroupedBars(
                     $chart['labels'],
-                    [['label' => __('Completed points', 'sprint'), 'color' => '#0d6efd', 'values' => $chart['series']['pts_done']]],
+                    [['label' => __('Completed points', 'sprint'), 'color' => SprintChart::metricColor('completed'), 'values' => $chart['series']['pts_done']]],
                     [
                         'label'  => __('Predictability %', 'sprint'),
-                        'color'  => '#20c997',
+                        'color'  => SprintChart::seriesColor(2),
                         'values' => $chart['series']['predictability'],
                         'suffix' => '%',
                         'max'    => 100,
@@ -232,9 +237,10 @@ class SprintOverview extends CommonGLPI
                     [
                         'label' => sprintf(__('Avg points: %s', 'sprint'), number_format($data['avg_velocity'], 1)),
                         'value' => $data['avg_velocity'],
-                        'color' => '#0d6efd',
+                        'color' => SprintChart::metricColor('completed'),
                     ],
-                    $chart['links']
+                    $chart['links'],
+                    __('Velocity trend', 'sprint')
                 );
             }
         );
@@ -245,10 +251,10 @@ class SprintOverview extends CommonGLPI
             __('Story points taken into the sprint against the points actually completed.', 'sprint'),
             function () use ($chart) {
                 self::renderGroupedBars($chart['labels'], [
-                    ['label' => __('Planned points', 'sprint'), 'color' => '#adb5bd', 'values' => $chart['series']['pts_planned']],
-                    ['label' => __('Completed points', 'sprint'), 'color' => '#198754', 'values' => $chart['series']['pts_done']],
-                    ['label' => __('Carry-over items', 'sprint'), 'color' => '#dc3545', 'values' => $chart['series']['carryover']],
-                ], null, null, $chart['links']);
+                    ['label' => __('Planned points', 'sprint'), 'color' => SprintChart::metricColor('planned'), 'values' => $chart['series']['pts_planned']],
+                    ['label' => __('Completed points', 'sprint'), 'color' => SprintChart::metricColor('completed'), 'values' => $chart['series']['pts_done']],
+                    ['label' => __('Carry-over items', 'sprint'), 'color' => SprintChart::metricColor('carryover'), 'values' => $chart['series']['carryover']],
+                ], null, null, $chart['links'], __('Planned vs. delivered', 'sprint'));
             }
         );
 
@@ -264,18 +270,19 @@ class SprintOverview extends CommonGLPI
                 self::renderGroupedBars(
                     $chart['labels'],
                     [
-                        ['label' => __('Completed fastlane items', 'sprint'), 'color' => '#fd7e14', 'values' => $chart['series']['fl_done']],
-                        ['label' => __('Adhoc items', 'sprint'), 'color' => '#d63384', 'values' => $chart['series']['adhoc']],
+                        ['label' => __('Completed fastlane items', 'sprint'), 'color' => SprintChart::metricColor('fastlane'), 'values' => $chart['series']['fl_done']],
+                        ['label' => __('Adhoc items', 'sprint'), 'color' => SprintChart::metricColor('adhoc'), 'values' => $chart['series']['adhoc']],
                     ],
                     [
                         'label'  => __('Fastlane capacity %', 'sprint'),
-                        'color'  => '#fd7e14',
+                        'color'  => SprintChart::metricColor('fastlane'),
                         'values' => $chart['series']['fl_cap'],
                         'suffix' => '%',
-                        'max'    => max(20, (int)ceil(max(array_merge([0], $chart['series']['fl_cap'])) / 20) * 20),
+                        'max'    => max(25, (int)ceil(max(array_merge([0], $chart['series']['fl_cap'])) / 25) * 25),
                     ],
                     null,
-                    $chart['links']
+                    $chart['links'],
+                    __('Fastlane & adhoc', 'sprint')
                 );
             }
         );
@@ -402,7 +409,7 @@ class SprintOverview extends CommonGLPI
                         : '';
 
                     $indent = $row['level'] > 0
-                        ? "<i class='fas fa-turn-up fa-rotate-90 text-muted me-1' style='margin-left:18px;font-size:0.8em;'></i>"
+                        ? "<i class='fas fa-turn-up fa-rotate-90 text-muted me-1' style='margin-left:18px;font-size:0.8em;' aria-hidden='true'></i>"
                         : '';
                     $label = htmlescape($row['label']);
                     if ($url !== '') {
@@ -545,7 +552,7 @@ class SprintOverview extends CommonGLPI
                 foreach ($rows as $row) {
                     $share = $teamTotal > 0 ? (int)round(100 * $row['total'] / $teamTotal) : 0;
                     echo "<tr>";
-                    echo "<td><i class='fas fa-user text-muted me-2' style='font-size:0.85em;'></i>" . htmlescape($row['label']) . "</td>";
+                    echo "<td><i class='fas fa-user text-muted me-2' style='font-size:0.85em;' aria-hidden='true'></i>" . htmlescape($row['label']) . "</td>";
                     echo "<td>" . $distribution($row['top'], $row['sub'], $row['total']) . "</td>";
                     echo "<td class='text-end'>{$share}%</td>";
                     echo "<td class='text-end'>" . (int)$row['pts_done'] . " / " . (int)$row['pts_planned'] . "</td>";
@@ -568,13 +575,13 @@ class SprintOverview extends CommonGLPI
         );
     }
 
-    /** Colour + glyph for a load drift verdict; the glyph is what carries it under CVD. */
+    /** Tone class + glyph for a load drift verdict; the glyph is what carries it under CVD. */
     private static function driftStyle(string $direction): array
     {
         return match ($direction) {
-            'improving' => ['#198754', '↓', __('Improving', 'sprint')],
-            'worsening' => ['#dc3545', '↑', __('Worsening', 'sprint')],
-            default     => ['#6c757d', '→', __('Stable', 'sprint')],
+            'improving' => ['is-good', '↓', __('Improving', 'sprint')],
+            'worsening' => ['is-bad', '↑', __('Worsening', 'sprint')],
+            default     => ['is-flat', '→', __('Stable', 'sprint')],
         };
     }
 
@@ -595,7 +602,11 @@ class SprintOverview extends CommonGLPI
                 $labels = $trend['labels'] ?? [];
                 $team   = $trend['team'] ?? [];
                 if (count(array_filter($team, static fn($v) => $v !== null)) < 2) {
-                    echo "<div class='text-muted py-3'>" . __('Not enough sprints in this period to show a trend.', 'sprint') . "</div>";
+                    echo SprintChart::emptyState(
+                        'fas fa-chart-line',
+                        __('Not enough sprints in this period to show a trend.', 'sprint'),
+                        __('A trend needs at least two completed sprints with team members. Choose a longer period.', 'sprint')
+                    );
                     return;
                 }
 
@@ -604,10 +615,10 @@ class SprintOverview extends CommonGLPI
                 $team   = array_slice($team, -self::CHART_SPRINTS);
                 $over   = array_slice($trend['over'] ?? [], -self::CHART_SPRINTS);
 
-                [$color, $glyph, $verdict] = self::driftStyle((string)($trend['direction'] ?? 'stable'));
+                [$tone, $glyph, $verdict] = self::driftStyle((string)($trend['direction'] ?? 'stable'));
                 echo "<div class='d-flex align-items-baseline gap-2 mb-3'>";
-                echo "<span style='font-size:1.75rem;font-weight:600;color:" . $color . ";'>" . $glyph . "</span>";
-                echo "<span style='font-size:1.5rem;font-weight:600;'>" . htmlescape(self::formatDrift((float)($trend['drift'] ?? 0))) . "</span>";
+                echo "<span class='sprint-drift-glyph sprint-delta " . $tone . "' aria-hidden='true'>" . $glyph . "</span>";
+                echo "<span class='sprint-drift-value'>" . htmlescape(self::formatDrift((float)($trend['drift'] ?? 0))) . "</span>";
                 echo "<span class='text-muted'>" . htmlescape(sprintf(
                     __('%1$s — modelled change in team load over this period (%2$s)', 'sprint'),
                     $verdict,
@@ -620,148 +631,174 @@ class SprintOverview extends CommonGLPI
         );
     }
 
-    /** Single-series load line; $over feeds the per-point tooltip. */
+    /** Team load per sprint as one line; $over feeds the per-sprint tooltip. */
     private static function renderLoadLine(array $labels, array $values, array $over = []): void
     {
-        $n = count($labels);
+        $labels = array_values($labels);
+        $values = array_values($values);
+        $over   = array_values($over);
+        $n      = count($labels);
         if ($n === 0) {
+            echo self::chartEmptyState('fas fa-chart-line');
             return;
         }
 
-        $tilted = $n > 8;
-        $width = 900; $height = $tilted ? 300 : 260;
-        $padL = 44; $padR = 20; $padT = 18; $padB = $tilted ? 86 : 46;
-        $plotW = $width - $padL - $padR;
-        $plotH = $height - $padT - $padB;
+        $num   = [SprintChart::class, 'num'];
+        $w     = 900;
+        $padL  = 52;
+        $padR  = 24;
+        $padT  = 22;
+        $slot  = ($w - $padL - $padR) / $n;
+        $axis  = SprintChart::axisLabels($labels, $slot);
+        $yB    = $padT + 200;
+        $h     = (int)ceil($yB + $axis['height'] + 8);
+        $xAt   = static fn(int $i): float => $padL + $slot * ($i + 0.5);
+        $color = SprintChart::seriesColor(0);
+        $pct   = static fn(float $v): string => number_format($v, 1, ',', '') . '%';
 
-        $peak     = max(100.0, max(array_map(static fn($v) => (float)$v, array_filter($values, static fn($v) => $v !== null)) ?: [0.0]));
-        $tickStep = max(25, (int)ceil($peak / 4 / 25) * 25);
-        $yMax     = $tickStep * 4;
-
-        $slot = $plotW / max(1, $n);
-        $fmt  = fn(float $v) => number_format($v, 2, '.', '');
-        $yAt  = fn(float $v) => $padT + $plotH - ($plotH * ($v / $yMax));
-        $halo = "paint-order:stroke;stroke:var(--tblr-bg-surface,#fff);stroke-width:3.5px;stroke-linejoin:round;";
-        $grid = "var(--tblr-border-color,#e9ecef)";
-        $ink  = "var(--tblr-secondary,#6c757d)";
-
-        echo "<div style='overflow-x:auto;'>";
-        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' role='img' "
-            . "style='width:100%;height:auto;min-width:520px;font-family:sans-serif;font-size:11px;'>";
-
-        for ($t = 0; $t <= 4; $t++) {
-            $value = (int)round($yMax * $t / 4);
-            $y     = $fmt($yAt($value));
-            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($padL + $plotW) . "' y2='{$y}' stroke='{$grid}' stroke-width='1' />";
-            echo "<text x='" . ($padL - 6) . "' y='" . $fmt($yAt($value) + 3) . "' text-anchor='end' fill='{$ink}'>{$value}%</text>";
+        // A % axis stays on multiples of 25, so 100% sits on a round tick.
+        $filled = array_map('floatval', array_filter($values, static fn($v) => $v !== null));
+        $peak   = max(100.0, $filled ? max($filled) : 0.0);
+        $step   = $peak <= 150 ? 25.0 : ($peak <= 300 ? 50.0 : 100.0);
+        $scale  = ['max' => ceil($peak / $step) * $step, 'step' => $step, 'ticks' => []];
+        for ($tick = 0.0; $tick <= $scale['max']; $tick += $step) {
+            $scale['ticks'][] = $tick;
         }
-
-        $refY = $fmt($yAt(100.0));
-        echo "<line x1='{$padL}' y1='{$refY}' x2='" . ($padL + $plotW) . "' y2='{$refY}' stroke='#dc3545' "
-            . "stroke-width='1.2' stroke-dasharray='5,4' opacity='0.7' />";
+        $yAt    = static fn(float $v): float => SprintChart::yAt($v, $scale, $padT, $yB);
 
         $points = [];
-        for ($i = 0; $i < $n; $i++) {
-            $cx = $padL + ($slot * $i) + ($slot / 2);
-            if ($values[$i] !== null) {
-                $points[$i] = ['x' => $cx, 'y' => $yAt((float)$values[$i]), 'v' => (float)$values[$i]];
+        foreach ($values as $i => $value) {
+            if ($value !== null && $i < $n) {
+                $points[$i] = ['x' => $xAt($i), 'y' => $yAt((float)$value), 'v' => (float)$value];
             }
+        }
+        $first = array_key_first($points);
+        $last  = array_key_last($points);
 
-            $label  = mb_strlen($labels[$i]) > 16 ? (mb_substr($labels[$i], 0, 15) . '…') : $labels[$i];
-            $labelX = $fmt($cx);
-            $labelY = $padT + $plotH + ($tilted ? 14 : 16);
-            $rotate = $tilted ? " transform='rotate(-35 {$labelX} {$labelY})'" : '';
-            echo "<text x='{$labelX}' y='{$labelY}' text-anchor='" . ($tilted ? 'end' : 'middle') . "' fill='{$ink}'{$rotate}>"
-                . htmlescape($label) . "<title>" . htmlescape($labels[$i]) . "</title></text>";
+        echo "<div data-chart-scope>";
+        echo "<div class='sprint-chart-box'>";
+        echo SprintChart::svgOpen($last === null
+            ? __('Average team load per sprint.', 'sprint')
+            : sprintf(
+                __('Average team load per sprint. Latest sprint %1$s: %2$s.', 'sprint'),
+                $labels[$last],
+                $pct($points[$last]['v'])
+            ), $w, $h, 'sprint-overview-chart');
+        echo SprintChart::yAxis($scale, $padL, $w - $padR, $padT, $yB, static fn(float $v): string => (int)round($v) . '%');
+        for ($i = 0; $i < $n; $i++) {
+            echo SprintChart::axisLabel($axis, $i, $xAt($i), $yB);
         }
 
-        // Nulls break the polyline into segments instead of bridging the gap.
-        $segment = [];
-        $flush   = function () use (&$segment, $fmt) {
-            if (count($segment) > 1) {
-                echo "<polyline points='" . implode(' ', $segment) . "' fill='none' stroke='#0d6efd' "
-                    . "stroke-width='2' stroke-linejoin='round' stroke-linecap='round' />";
+        $refY = $num($yAt(100.0));
+        echo "<line class='sprint-chart-limit' x1='{$padL}' y1='{$refY}' x2='" . ($w - $padR) . "' y2='{$refY}'/>";
+
+        // A sprint without a load breaks the line instead of bridging the gap.
+        $path = '';
+        $prev = null;
+        foreach ($points as $i => $point) {
+            $path .= ($prev === null || $prev !== $i - 1 ? 'M' : 'L') . $num($point['x']) . ',' . $num($point['y']) . ' ';
+            $prev  = $i;
+        }
+        echo "<g class='sprint-chart-series' data-series='load'>";
+        echo "<path class='sprint-chart-line' d='" . trim($path) . "' stroke='" . htmlescape($color) . "'/>";
+        foreach ($points as $i => $point) {
+            echo SprintChart::marker(0, $point['x'], $point['y'], 4.0, "class='sprint-chart-point' fill='" . htmlescape($color) . "'");
+            // Direct-label the ends only: a number on every point is noise.
+            if ($i === $first || $i === $last) {
+                echo "<text class='sprint-chart-value' x='" . $num($point['x']) . "' y='" . $num(max($point['y'] - 9, $padT + 9))
+                    . "' text-anchor='middle'>" . (int)round($point['v']) . "%</text>";
             }
-            $segment = [];
-        };
+        }
+        echo "</g>";
+
+        $tableRows = [];
         for ($i = 0; $i < $n; $i++) {
-            if (!isset($points[$i])) {
-                $flush();
+            $overCount = (int)($over[$i] ?? 0);
+            $rows      = isset($points[$i])
+                ? [[__('Average team load', 'sprint'), $pct($points[$i]['v']), $color]]
+                : [[__('No data for this period.', 'sprint'), '']];
+            if ($overCount > 0) {
+                $rows[] = [sprintf(_n('%d member over capacity', '%d members over capacity', $overCount, 'sprint'), $overCount), ''];
+            }
+            echo self::chartSlot($padL + $slot * $i, $slot, $padT, $yB, $labels[$i], $rows);
+            $tableRows[] = [$labels[$i], isset($points[$i]) ? $pct($points[$i]['v']) : '—', (string)$overCount];
+        }
+        echo "</svg></div>";
+
+        echo SprintChart::legend([
+            ['label' => __('Average team load', 'sprint'), 'color' => $color, 'mark' => 'line', 'shape' => 0],
+            ['label' => __('100% capacity', 'sprint'), 'color' => 'var(--sprint-fg-danger, #dc3545)', 'mark' => 'ref'],
+        ], false);
+        echo self::chartTable(
+            __('Average team load', 'sprint'),
+            [Sprint::getTypeName(1), __('Average team load', 'sprint'), __('Over capacity', 'sprint')],
+            $tableRows
+        );
+        echo "</div>";
+    }
+
+    /**
+     * Inline sparkline: one line with a dot on its last value and an optional
+     * dashed reference. Decorative (aria-hidden): the figure next to it carries
+     * the value. Without $yMax the line fills its own range, with $yMax it
+     * runs from 0 so several sparklines share one scale.
+     *
+     * @param array<int,float|int|null> $values a null breaks the line
+     */
+    private static function sparkline(array $values, ?float $yMax = null, ?float $reference = null): string
+    {
+        $values = array_values($values);
+        $n      = count($values);
+        $filled = array_map('floatval', array_filter($values, static fn($v) => $v !== null));
+        if ($n < 2 || count($filled) < 2) {
+            return '';
+        }
+
+        $w    = 96;
+        $h    = 26;
+        $pad  = 3;
+        $num  = [SprintChart::class, 'num'];
+        $low  = $yMax !== null ? 0.0 : min($filled);
+        $high = $yMax !== null ? max($yMax, 0.0001) : max($filled);
+        if ($high - $low < 0.0001) {
+            // A flat run draws through the middle, not along an edge.
+            $low  -= 1;
+            $high += 1;
+        }
+        $step  = $w / ($n - 1);
+        $yAt   = static fn(float $v): float => $pad + ($h - 2 * $pad) * (1 - (max($low, min($v, $high)) - $low) / ($high - $low));
+        $color = htmlescape(SprintChart::seriesColor(0));
+
+        $out = "<svg class='sprint-spark' viewBox='0 0 {$w} {$h}' width='{$w}' height='{$h}' aria-hidden='true' focusable='false'>";
+        if ($reference !== null && $reference >= $low && $reference <= $high) {
+            $refY = $num($yAt($reference));
+            $out .= "<line class='sprint-chart-limit' x1='0' y1='{$refY}' x2='{$w}' y2='{$refY}'/>";
+        }
+        $path = '';
+        $prev = null;
+        $end  = null;
+        foreach ($values as $i => $value) {
+            if ($value === null) {
                 continue;
             }
-            $segment[] = $fmt($points[$i]['x']) . ',' . $fmt($points[$i]['y']);
+            $x     = $i * $step;
+            $y     = $yAt((float)$value);
+            $path .= ($prev === null || $prev !== $i - 1 ? 'M' : 'L') . $num($x) . ',' . $num($y) . ' ';
+            $prev  = $i;
+            $end   = [$x, $y];
         }
-        $flush();
-
-        $lastIndex = array_key_last($points);
-        foreach ($points as $i => $point) {
-            $tip = $labels[$i] . ' — ' . number_format($point['v'], 1, ',', '') . '%';
-            if (($over[$i] ?? 0) > 0) {
-                $tip .= ' · ' . sprintf(
-                    _n('%d member over capacity', '%d members over capacity', (int)$over[$i], 'sprint'),
-                    (int)$over[$i]
-                );
-            }
-            // 2px surface ring so a marker on the reference line stays readable.
-            echo "<circle cx='" . $fmt($point['x']) . "' cy='" . $fmt($point['y']) . "' r='4' fill='#0d6efd' "
-                . "stroke='var(--tblr-bg-surface,#fff)' stroke-width='2'>"
-                . "<title>" . htmlescape($tip) . "</title></circle>";
-            // Direct-label the ends only — a number on every point is noise.
-            if ($i === array_key_first($points) || $i === $lastIndex) {
-                echo "<text x='" . $fmt($point['x']) . "' y='" . $fmt(max($point['y'] - 12, $padT + 10)) . "' "
-                    . "text-anchor='middle' fill='#0d6efd' font-weight='600' style='{$halo}'>"
-                    . round($point['v']) . "%</text>";
-            }
+        $out .= "<path class='sprint-chart-line sprint-spark-line' d='" . trim($path) . "' stroke='{$color}'/>";
+        if ($end !== null) {
+            $out .= "<circle cx='" . $num($end[0]) . "' cy='" . $num($end[1]) . "' r='2.2' fill='{$color}'/>";
         }
-
-        echo "</svg></div>";
+        return $out . "</svg>";
     }
 
     /** Inline sparkline for one member's per-sprint load, with the 100% line. */
     private static function renderLoadSparkline(array $values, float $yMax): void
     {
-        $n = count($values);
-        $filled = array_filter($values, static fn($v) => $v !== null);
-        if ($n < 2 || count($filled) < 2) {
-            echo "<span class='text-muted'>&mdash;</span>";
-            return;
-        }
-
-        $w = 96; $h = 26; $pad = 3;
-        $plotH = $h - ($pad * 2);
-        $step  = $w / max(1, $n - 1);
-        $fmt   = fn(float $v) => number_format($v, 2, '.', '');
-        $yAt   = fn(float $v) => $pad + $plotH - ($plotH * (min($v, $yMax) / $yMax));
-
-        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$w} {$h}' aria-hidden='true' "
-            . "style='width:{$w}px;height:{$h}px;overflow:visible;'>";
-        $refY = $fmt($yAt(100.0));
-        echo "<line x1='0' y1='{$refY}' x2='{$w}' y2='{$refY}' stroke='#dc3545' stroke-width='1' stroke-dasharray='3,3' opacity='0.55' />";
-
-        $segment = [];
-        $flush   = function () use (&$segment) {
-            if (count($segment) > 1) {
-                echo "<polyline points='" . implode(' ', $segment) . "' fill='none' stroke='#0d6efd' "
-                    . "stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round' />";
-            }
-            $segment = [];
-        };
-        $last = null;
-        foreach ($values as $i => $value) {
-            if ($value === null) {
-                $flush();
-                continue;
-            }
-            $x = $i * $step;
-            $y = $yAt((float)$value);
-            $segment[] = $fmt($x) . ',' . $fmt($y);
-            $last = [$x, $y];
-        }
-        $flush();
-        if ($last !== null) {
-            echo "<circle cx='" . $fmt($last[0]) . "' cy='" . $fmt($last[1]) . "' r='2' fill='#0d6efd' />";
-        }
-        echo "</svg>";
+        $spark = self::sparkline($values, $yMax, 100.0);
+        echo $spark !== '' ? $spark : "<span class='text-muted'>&mdash;</span>";
     }
 
     /** Allocated capacity per member, with the overflow highlighted. */
@@ -808,11 +845,11 @@ class SprintOverview extends CommonGLPI
                     echo "<span class='text-nowrap'>" . (int)$row['avg'] . "%</span>";
                     echo "</div></td>";
 
-                    [$driftColor, $driftGlyph, $driftLabel] = self::driftStyle((string)($row['direction'] ?? 'stable'));
+                    [$driftTone, $driftGlyph, $driftLabel] = self::driftStyle((string)($row['direction'] ?? 'stable'));
                     echo "<td><div class='d-flex align-items-center gap-2'>";
                     self::renderLoadSparkline($row['loads'] ?? [], $sparkMax);
                     echo "<span class='text-nowrap' title='" . htmlescape($driftLabel) . "'>"
-                        . "<span style='color:" . $driftColor . ";font-weight:600;'>" . $driftGlyph . "</span> "
+                        . "<span class='fw-bold sprint-delta " . $driftTone . "' aria-hidden='true'>" . $driftGlyph . "</span> "
                         . "<span class='text-muted'>" . htmlescape(self::formatDrift((float)($row['drift'] ?? 0))) . "</span>"
                         . "</span>";
                     echo "</div></td>";
@@ -1160,7 +1197,7 @@ class SprintOverview extends CommonGLPI
         $nextMeetings = [];
         foreach ($DB->request(['SELECT' => ['plugin_sprint_sprints_id', 'MIN' => 'date_meeting AS next_meeting'], 'FROM' => SprintMeeting::getTable(), 'WHERE' => ['plugin_sprint_sprints_id' => $sprintIds, ['date_meeting' => ['>=', date('Y-m-d H:i:s')]]], 'GROUPBY' => 'plugin_sprint_sprints_id']) as $meeting) $nextMeetings[(int)$meeting['plugin_sprint_sprints_id']] = (string)$meeting['next_meeting'];
 
-        echo "<div class='d-flex align-items-center justify-content-between mt-3 mb-2'><h3 class='m-0'><i class='fas fa-heart-pulse me-2 text-red'></i>" . __('Live sprint status', 'sprint') . "</h3><span class='text-muted sprint-small'>" . __('Kept separate from completed sprint statistics', 'sprint') . '</span></div>';
+        echo "<div class='d-flex align-items-center justify-content-between mt-3 mb-2'><h3 class='m-0'><i class='fas fa-heart-pulse me-2 text-red' aria-hidden='true'></i>" . __('Live sprint status', 'sprint') . "</h3><span class='text-muted sprint-small'>" . __('Kept separate from completed sprint statistics', 'sprint') . '</span></div>';
         echo "<div class='sprint-live-list mb-4'>";
         foreach ($sprints as $sprint) {
             $sid = (int)$sprint['id'];
@@ -1169,17 +1206,17 @@ class SprintOverview extends CommonGLPI
         echo '</div>';
     }
 
-    /** Workflow statuses in board order with the board's accent colour. */
+    /** Workflow statuses in board order with their status colour token (css/sprint.css). */
     private static function liveStatusColors(): array
     {
         return [
-            SprintItem::STATUS_DONE        => '#198754',
-            SprintItem::STATUS_IN_PROGRESS => '#0d6efd',
-            SprintItem::STATUS_REVIEW      => '#6f42c1',
-            SprintItem::STATUS_DEPENDENCY  => '#20c997',
-            SprintItem::STATUS_BLOCKED     => '#dc3545',
-            SprintItem::STATUS_TODO        => '#6c757d',
-            SprintItem::STATUS_SCHEDULED   => '#087990',
+            SprintItem::STATUS_DONE        => 'var(--sprint-done, #198754)',
+            SprintItem::STATUS_IN_PROGRESS => 'var(--sprint-progress, #0d6efd)',
+            SprintItem::STATUS_REVIEW      => 'var(--sprint-review, #6f42c1)',
+            SprintItem::STATUS_DEPENDENCY  => 'var(--sprint-dependency, #20c997)',
+            SprintItem::STATUS_BLOCKED     => 'var(--sprint-blocked, #dc3545)',
+            SprintItem::STATUS_TODO        => 'var(--sprint-todo, #6c757d)',
+            SprintItem::STATUS_SCHEDULED   => 'var(--sprint-scheduled, #087990)',
         ];
     }
 
@@ -1315,7 +1352,7 @@ class SprintOverview extends CommonGLPI
         echo "</div><div class='sprint-live-legend'>";
         foreach ($colors as $status => $color) {
             $muted = $count[$status] === 0 ? ' is-zero' : '';
-            echo "<span class='sprint-live-legend-item{$muted}'><i class='sprint-live-dot' style='background:{$color};'></i>" . htmlescape($labels[$status] ?? $status) . " <b>" . $count[$status] . "</b></span>";
+            echo "<span class='sprint-live-legend-item{$muted}'><i class='sprint-live-dot' style='background:{$color};' aria-hidden='true'></i>" . htmlescape($labels[$status] ?? $status) . " <b>" . $count[$status] . "</b></span>";
         }
         echo "</div></div></div>";
 
@@ -1345,7 +1382,7 @@ class SprintOverview extends CommonGLPI
         ];
         echo "<div class='sprint-live-facts'>";
         foreach ($facts as $fact) {
-            echo "<div class='sprint-live-fact " . $fact['tone'] . "'><i class='" . $fact['icon'] . "'></i><div><div class='sprint-live-fact-value'>" . htmlescape($fact['value']) . "</div><div class='sprint-live-fact-label'>" . htmlescape($fact['label']) . "</div></div></div>";
+            echo "<div class='sprint-live-fact " . $fact['tone'] . "'><i class='" . $fact['icon'] . "' aria-hidden='true'></i><div><div class='sprint-live-fact-value'>" . htmlescape($fact['value']) . "</div><div class='sprint-live-fact-label'>" . htmlescape($fact['label']) . "</div></div></div>";
         }
         echo "</div>";
 
@@ -1362,8 +1399,6 @@ class SprintOverview extends CommonGLPI
         $padL = 6; $padR = 30; $padT = 8; $padB = 16;
         $plotW = $w - $padL - $padR;
         $plotH = $h - $padT - $padB;
-        $ink   = 'var(--tblr-secondary,#6c757d)';
-        $grid  = 'var(--tblr-border-color,#e9ecef)';
 
         $points = $current = [];
         $scope  = 0;
@@ -1405,182 +1440,139 @@ class SprintOverview extends CommonGLPI
             $actual[$i] = $remaining;
         }
 
-        $fmt  = static fn(float $v) => number_format($v, 2, '.', '');
-        $xAt  = static fn(int $i) => $padL + $plotW * $i / max(1, $nDays - 1);
-        $yAt  = static fn(float $v) => $padT + $plotH - $plotH * min(1.0, $v / $scope);
+        $fmt   = [SprintChart::class, 'num'];
+        $xAt   = static fn(int $i) => $padL + $plotW * $i / max(1, $nDays - 1);
+        $yAt   = static fn(float $v) => $padT + $plotH - $plotH * min(1.0, $v / $scope);
+        $color = htmlescape(SprintChart::seriesColor(0));
+        $lastI = $actual ? array_key_last($actual) : null;
 
-        echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$w} {$h}' class='sprint-live-spark' role='img' aria-label='" . htmlescape(__('Burndown', 'sprint')) . "'>";
+        echo SprintChart::svgOpen($lastI === null
+            ? __('Burndown', 'sprint')
+            : sprintf(__('Burndown: %1$d of %2$d points remaining.', 'sprint'), $actual[$lastI], $scope), $w, $h, 'sprint-live-spark');
         $base = $fmt($yAt(0));
         $top  = $fmt($yAt($scope));
-        echo "<line x1='{$padL}' y1='{$base}' x2='" . ($padL + $plotW) . "' y2='{$base}' stroke='{$grid}' stroke-width='1' />";
-        echo "<line x1='{$padL}' y1='{$top}' x2='" . ($padL + $plotW) . "' y2='{$top}' stroke='{$grid}' stroke-width='1' />";
-        echo "<text x='" . ($padL + $plotW + 4) . "' y='" . $fmt($yAt($scope) + 3.5) . "' fill='{$ink}' font-size='9'>{$scope}</text>";
-        echo "<text x='" . ($padL + $plotW + 4) . "' y='" . $fmt($yAt(0) + 3.5) . "' fill='{$ink}' font-size='9'>0</text>";
+        $xEnd = $padL + $plotW;
+        echo "<line class='sprint-chart-axis' x1='{$padL}' y1='{$base}' x2='{$xEnd}' y2='{$base}'/>";
+        echo "<line class='sprint-chart-grid' x1='{$padL}' y1='{$top}' x2='{$xEnd}' y2='{$top}'/>";
+        echo "<text class='sprint-chart-label sprint-chart-label-sub' x='" . ($xEnd + 4) . "' y='" . $fmt($yAt($scope) + 3.5) . "'>{$scope}</text>";
+        echo "<text class='sprint-chart-label sprint-chart-label-sub' x='" . ($xEnd + 4) . "' y='" . $fmt($yAt(0) + 3.5) . "'>0</text>";
         // Ideal: scope to zero, a reference so it may dash.
-        echo "<line x1='" . $fmt($xAt(0)) . "' y1='{$top}' x2='" . $fmt($xAt($nDays - 1)) . "' y2='{$base}' stroke='{$ink}' stroke-width='1.2' stroke-dasharray='4,3' opacity='0.7' />";
+        echo "<line class='sprint-chart-ideal' x1='" . $fmt($xAt(0)) . "' y1='{$top}' x2='" . $fmt($xAt($nDays - 1)) . "' y2='{$base}'/>";
         if (count($actual) > 1) {
             $line = [];
             foreach ($actual as $i => $v) $line[] = $fmt($xAt($i)) . ',' . $fmt($yAt($v));
-            $lastI = array_key_last($actual);
-            $area  = $fmt($xAt(array_key_first($actual))) . ',' . $base . ' ' . implode(' ', $line) . ' ' . $fmt($xAt($lastI)) . ',' . $base;
-            echo "<polygon points='{$area}' fill='#0d6efd' opacity='0.1' />";
-            echo "<polyline points='" . implode(' ', $line) . "' fill='none' stroke='#0d6efd' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' />";
+            $area = $fmt($xAt(array_key_first($actual))) . ',' . $base . ' ' . implode(' ', $line) . ' ' . $fmt($xAt($lastI)) . ',' . $base;
+            echo "<polygon class='sprint-chart-area' points='{$area}' fill='{$color}'/>";
+            echo "<polyline class='sprint-chart-line' points='" . implode(' ', $line) . "' stroke='{$color}'/>";
         }
-        if ($actual) {
-            $lastI = array_key_last($actual);
-            $cx = $fmt($xAt($lastI));
-            $cy = $fmt($yAt($actual[$lastI]));
-            echo "<circle cx='{$cx}' cy='{$cy}' r='4' fill='#0d6efd' stroke='var(--tblr-bg-surface,#fff)' stroke-width='2'><title>" . htmlescape(Html::convDate(date('Y-m-d', $days[$lastI])) . ' — ' . sprintf(__('%d points remaining', 'sprint'), $actual[$lastI])) . "</title></circle>";
+        if ($lastI !== null) {
+            $when = Html::convDate(date('Y-m-d', $days[$lastI]));
+            $left = sprintf(__('%d points remaining', 'sprint'), $actual[$lastI]);
+            echo "<circle class='sprint-chart-point' cx='" . $fmt($xAt($lastI)) . "' cy='" . $fmt($yAt($actual[$lastI])) . "' r='4' fill='{$color}'"
+                . SprintChart::tipAttr($when, [[$left, '', SprintChart::seriesColor(0)]]) . ">"
+                . "<title>" . htmlescape($when . ' — ' . $left) . "</title></circle>";
         }
-        echo "<text x='" . $fmt($xAt(0)) . "' y='" . ($h - 4) . "' fill='{$ink}' font-size='9' text-anchor='start'>" . htmlescape(date('d/m', $days[0])) . "</text>";
-        echo "<text x='" . $fmt($xAt($nDays - 1)) . "' y='" . ($h - 4) . "' fill='{$ink}' font-size='9' text-anchor='end'>" . htmlescape(date('d/m', $days[$nDays - 1])) . "</text>";
+        echo "<text class='sprint-chart-label sprint-chart-label-sub' x='" . $fmt($xAt(0)) . "' y='" . ($h - 4) . "' text-anchor='start'>" . htmlescape(date('d/m', $days[0])) . "</text>";
+        echo "<text class='sprint-chart-label sprint-chart-label-sub' x='" . $fmt($xAt($nDays - 1)) . "' y='" . ($h - 4) . "' text-anchor='end'>" . htmlescape(date('d/m', $days[$nDays - 1])) . "</text>";
         echo "</svg>";
     }
 
-    /** KPI tiles with an optional delta against the previous period. */
+    /**
+     * Key figures in two tiers. Four main tiles carry how delivery is going:
+     * the figure, its change against the previous period and its course over
+     * the sprints. The rest is a compact row. Tiles are neutral, colour is
+     * only spent on the direction of a change.
+     */
     private static function renderTiles(array $data, array $previous, string $period): void
     {
         $showDelta = $period !== self::PERIOD_ALL && $previous['sprint_count'] > 0;
+        $series    = $data['series'] ?? [];
+        $delta     = static fn(string $key, bool $lowerIsBetter = false): string => $showDelta
+            ? self::delta((float)$data[$key], (float)($previous[$key] ?? 0), $lowerIsBetter)
+            : '';
+        $note      = static fn(string $text): string => "<div class='sprint-small text-muted'>" . htmlescape($text) . "</div>";
 
-        $tiles = [
-            [
-                'icon'  => 'fas fa-flag-checkered',
-                'color' => 'blue',
-                'value' => (string)$data['sprint_count'],
-                'label' => __('Completed sprints', 'sprint'),
-                'delta' => $showDelta ? self::delta($data['sprint_count'], $previous['sprint_count']) : '',
-            ],
-            [
-                'icon'  => 'fas fa-star',
-                'color' => 'green',
-                'value' => (string)$data['pts_done'],
-                'label' => __('Story points delivered', 'sprint'),
-                'delta' => $showDelta ? self::delta($data['pts_done'], $previous['pts_done']) : '',
-            ],
+        $main = [
             [
                 'icon'  => 'fas fa-gauge-high',
-                'color' => 'purple',
                 'value' => number_format($data['avg_velocity'], 1),
                 'label' => __('Avg velocity per sprint', 'sprint'),
-                'delta' => $showDelta ? self::delta($data['avg_velocity'], $previous['avg_velocity']) : '',
+                'delta' => $delta('avg_velocity'),
+                'spark' => $series['pts_done'] ?? [],
             ],
             [
                 'icon'  => 'fas fa-bullseye',
-                'color' => 'teal',
                 'value' => $data['predictability'] . '%',
                 'label' => __('Predictability (story points delivered / planned)', 'sprint'),
-                'delta' => $showDelta ? self::delta($data['predictability'], $previous['predictability']) : '',
+                'delta' => $delta('predictability'),
+                'spark' => $series['predictability'] ?? [],
             ],
             [
-                'icon'  => 'fas fa-list-check',
-                'color' => 'cyan',
-                'value' => $data['items_done'] . '/' . $data['items_total'],
-                'label' => __('Items done', 'sprint'),
-                'delta' => '',
-            ],
-            [
-                'icon'  => 'fas fa-wave-square',
-                'color' => 'yellow',
-                'value' => $data['consistency'] . '%',
-                'label' => __('Velocity consistency', 'sprint'),
-                'delta' => '',
-            ],
-            [
-                'icon'  => 'fas fa-bolt',
-                'color' => 'orange',
-                'value' => SprintMember::formatCapacity($data['avg_fl_cap']) . '%',
-                'label' => __('Avg fastlane capacity', 'sprint'),
-                'delta' => '',
+                'icon'  => SprintIcon::CARRYOVER,
+                'value' => (string)$data['carryover'],
+                'label' => __('Carry-over items', 'sprint'),
+                'delta' => $delta('carryover', true),
+                'spark' => $series['carryover'] ?? [],
             ],
             [
                 'icon'  => 'fas fa-plus-circle',
-                'color' => 'pink',
                 'value' => (string)$data['adhoc'],
                 'label' => __('Adhoc items', 'sprint'),
-                'delta' => $showDelta ? self::delta($data['adhoc'], $previous['adhoc'], true) : '',
+                'delta' => $delta('adhoc', true),
+                'spark' => $series['adhoc'] ?? [],
             ],
+        ];
+        $more = [
+            ['value' => (string)$data['sprint_count'], 'label' => __('Completed sprints', 'sprint'), 'delta' => $delta('sprint_count')],
+            ['value' => (string)$data['pts_done'], 'label' => __('Story points delivered', 'sprint'), 'delta' => $delta('pts_done')],
+            ['value' => $data['items_done'] . '/' . $data['items_total'], 'label' => __('Items done', 'sprint'), 'delta' => ''],
+            ['value' => $data['consistency'] . '%', 'label' => __('Velocity consistency', 'sprint'), 'delta' => ''],
+            ['value' => SprintMember::formatCapacity($data['avg_fl_cap']) . '%', 'label' => __('Avg fastlane capacity', 'sprint'), 'delta' => ''],
+            ['value' => (string)max($data['blocked'], $data['flow']['blocked_items']), 'label' => __('Blocked items', 'sprint'), 'delta' => ''],
             [
-                'icon'  => 'fas fa-arrow-right-arrow-left',
-                'color' => 'red',
-                'value' => (string)$data['carryover'],
-                'label' => __('Carry-over items', 'sprint'),
-                'delta' => $showDelta ? self::delta($data['carryover'], $previous['carryover'], true) : '',
-            ],
-            [
-                'icon'  => 'fas fa-ban',
-                'color' => 'secondary',
-                'value' => (string)max($data['blocked'], $data['flow']['blocked_items']),
-                'label' => __('Blocked items', 'sprint'),
-                'delta' => '',
-            ],
-            [
-                'icon'  => 'fas fa-stopwatch',
-                'color' => 'azure',
                 'value' => number_format($data['flow']['cycle_days'], 1),
                 'label' => __('Avg cycle time (days)', 'sprint'),
-                'delta' => $data['flow']['measured'] > 0
-                    ? "<div class='sprint-small text-muted'>" . sprintf(__('over %d items', 'sprint'), $data['flow']['measured']) . "</div>"
-                    : '',
+                'delta' => $data['flow']['measured'] > 0 ? $note(sprintf(__('over %d items', 'sprint'), $data['flow']['measured'])) : '',
             ],
+            ['value' => number_format($data['flow']['blocked_days'], 1), 'label' => __('Days spent blocked', 'sprint'), 'delta' => ''],
+            ['value' => $data['flow']['rework_pct'] . '%', 'label' => __('Rework rate', 'sprint'), 'delta' => ''],
             [
-                'icon'  => 'fas fa-hourglass-half',
-                'color' => 'indigo',
-                'value' => number_format($data['flow']['blocked_days'], 1),
-                'label' => __('Days spent blocked', 'sprint'),
-                'delta' => '',
-            ],
-            [
-                'icon'  => 'fas fa-rotate-left',
-                'color' => 'red',
-                'value' => $data['flow']['rework_pct'] . '%',
-                'label' => __('Rework rate', 'sprint'),
-                'delta' => '',
-            ],
-            [
-                'icon'  => 'fas fa-inbox',
-                'color' => 'lime',
                 'value' => number_format($data['requests']['wait_days'], 1),
                 'label' => __('Avg approval wait (days)', 'sprint'),
                 'delta' => $data['requests']['total'] > 0
-                    ? "<div class='sprint-small text-muted'>" . sprintf(
-                        __('%1$d requests, %2$d%% accepted', 'sprint'),
-                        $data['requests']['total'],
-                        $data['requests']['accepted_pct']
-                    ) . "</div>"
+                    ? $note(sprintf(__('%1$d requests, %2$d%% accepted', 'sprint'), $data['requests']['total'], $data['requests']['accepted_pct']))
                     : '',
             ],
         ];
 
-        // Four key figures up front (sprints, points, predictability, items);
-        // the order of $tiles above puts velocity third, so pick explicitly.
-        $keyIdx = [0, 1, 3, 4];
-        $key = $more = [];
-        foreach ($tiles as $i => $tile) {
-            if (in_array($i, $keyIdx, true)) {
-                $key[] = $tile;
-            } else {
-                $more[] = $tile;
-            }
-        }
-        $renderRow = static function (array $set): void {
-            echo "<div class='row g-2 mb-3'>";
-            foreach ($set as $tile) {
-                echo "<div class='col-12 col-sm-6 col-xl-3'>";
-                echo "<div class='card card-sm h-100'><div class='card-body d-flex align-items-center sprint-overview-tile'>";
-                echo "<span class='avatar bg-" . $tile['color'] . "-lt me-3' aria-hidden='true'><i class='" . $tile['icon'] . "'></i></span>";
-                echo "<div class='sprint-overview-tile-content'>";
-                echo "<div class='h3 m-0 text-nowrap'>" . htmlescape($tile['value']) . "</div>";
-                echo "<div class='text-muted sprint-small'>" . htmlescape($tile['label']) . "</div>";
-                echo $tile['delta'];
-                echo "</div></div></div></div>";
-            }
+        echo "<div class='row g-2 mb-2'>";
+        foreach ($main as $tile) {
+            echo "<div class='col-12 col-sm-6 col-xl-3'>";
+            echo "<div class='card card-sm h-100'><div class='card-body d-flex align-items-center sprint-overview-tile'>";
+            echo "<span class='avatar me-3' aria-hidden='true'>" . SprintIcon::html($tile['icon']) . "</span>";
+            echo "<div class='sprint-overview-tile-content'>";
+            echo "<div class='text-muted sprint-small'>" . htmlescape($tile['label']) . "</div>";
+            echo "<div class='sprint-overview-tile-value'>" . htmlescape($tile['value']) . "</div>";
+            echo $tile['delta'];
             echo "</div>";
-        };
-        $renderRow($key);
-        echo "<details class='sprint-overview-more-tiles mb-3'><summary>"
-            . htmlescape(sprintf(__('Show all figures (%d more)', 'sprint'), count($more))) . "</summary>";
-        $renderRow($more);
-        echo "</details>";
+            // The course over the sprints of this period, oldest left.
+            $spark = self::sparkline($tile['spark']);
+            if ($spark !== '') {
+                echo "<div class='sprint-overview-tile-spark'>{$spark}</div>";
+            }
+            echo "</div></div></div>";
+        }
+        echo "</div>";
+
+        echo "<div class='sprint-overview-figures mb-3'>";
+        foreach ($more as $tile) {
+            echo "<div class='sprint-overview-figure'>";
+            echo "<div class='sprint-overview-figure-value'>" . htmlescape($tile['value']) . "</div>";
+            echo "<div class='sprint-overview-figure-label'>" . htmlescape($tile['label']) . "</div>";
+            echo $tile['delta'];
+            echo "</div>";
+        }
+        echo "</div>";
     }
 
     /** Signed change vs. the previous period; `$lowerIsBetter` flips the colour. */
@@ -1596,8 +1588,8 @@ class SprintOverview extends CommonGLPI
         $up    = $pct > 0;
         $good  = $lowerIsBetter ? !$up : $up;
         $arrow = $up ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
-        return "<div class='sprint-small " . ($good ? 'text-success' : 'text-danger') . "'>"
-            . "<i class='fas " . $arrow . "'></i> " . sprintf('%+.0f%%', $pct)
+        return "<div class='sprint-small sprint-delta " . ($good ? 'is-good' : 'is-bad') . "'>"
+            . "<i class='fas " . $arrow . "' aria-hidden='true'></i> " . sprintf('%+.0f%%', $pct)
             . " <span class='text-muted'>" . __('vs. previous period', 'sprint') . "</span></div>";
     }
 
@@ -1608,34 +1600,33 @@ class SprintOverview extends CommonGLPI
             'fas fa-table',
             '',
             function () use ($data) {
-                echo "<div style='overflow-x:auto;'>";
-                echo "<table class='tab_cadre_fixe sprint-themed' style='margin:0;'>";
-                echo "<tr class='tab_bg_2'>";
-                echo "<th>" . Sprint::getTypeName(1) . "</th>";
-                echo "<th>" . __('Ended', 'sprint') . "</th>";
-                echo "<th>" . __('Planned points', 'sprint') . "</th>";
-                echo "<th>" . __('Completed points', 'sprint') . "</th>";
-                echo "<th>" . __('Predictability', 'sprint') . "</th>";
-                echo "<th>" . __('Items', 'sprint') . "</th>";
-                echo "<th>" . __('Fastlane', 'sprint') . "</th>";
-                echo "<th>" . __('Adhoc', 'sprint') . "</th>";
-                echo "<th>" . __('Carry-over items', 'sprint') . "</th>";
-                echo "</tr>";
+                echo "<div class='table-responsive'>";
+                echo "<table class='table table-vcenter mb-0'>";
+                echo "<thead><tr>";
+                echo "<th scope='col'>" . Sprint::getTypeName(1) . "</th>";
+                echo "<th scope='col'>" . __('Ended', 'sprint') . "</th>";
+                foreach ([
+                    __('Planned points', 'sprint'), __('Completed points', 'sprint'), __('Predictability', 'sprint'),
+                    __('Items', 'sprint'), __('Fastlane', 'sprint'), __('Adhoc', 'sprint'), __('Carry-over items', 'sprint'),
+                ] as $head) {
+                    echo "<th scope='col' class='text-end'>" . $head . "</th>";
+                }
+                echo "</tr></thead><tbody>";
                 foreach ($data['sprints'] as $row) {
-                    echo "<tr class='tab_bg_1'>";
+                    echo "<tr>";
                     echo "<td><a href='" . Sprint::getFormURLWithID((int)$row['id']) . "'>"
                         . htmlescape((string)$row['name']) . "</a></td>";
                     echo "<td>" . Html::convDate((string)($row['date_end'] ?? '')) . "</td>";
-                    echo "<td>" . (int)$row['pts_planned'] . "</td>";
-                    echo "<td>" . (int)$row['pts_done'] . "</td>";
-                    echo "<td>" . (int)$row['predictability'] . "%</td>";
-                    echo "<td>" . (int)$row['items_done'] . "/" . (int)$row['items_total'] . "</td>";
-                    echo "<td>" . (int)$row['fl_done'] . "/" . (int)$row['fl_items'] . "</td>";
-                    echo "<td>" . (int)$row['adhoc'] . "</td>";
-                    echo "<td>" . (int)$row['carryover'] . "</td>";
+                    echo "<td class='text-end'>" . (int)$row['pts_planned'] . "</td>";
+                    echo "<td class='text-end'>" . (int)$row['pts_done'] . "</td>";
+                    echo "<td class='text-end'>" . (int)$row['predictability'] . "%</td>";
+                    echo "<td class='text-end'>" . (int)$row['items_done'] . "/" . (int)$row['items_total'] . "</td>";
+                    echo "<td class='text-end'>" . (int)$row['fl_done'] . "/" . (int)$row['fl_items'] . "</td>";
+                    echo "<td class='text-end'>" . (int)$row['adhoc'] . "</td>";
+                    echo "<td class='text-end'>" . (int)$row['carryover'] . "</td>";
                     echo "</tr>";
                 }
-                echo "</table></div>";
+                echo "</tbody></table></div>";
             }
         );
     }
@@ -2221,25 +2212,30 @@ class SprintOverview extends CommonGLPI
     }
 
     /**
-     * Line chart per category over the sprints — same interaction as the
-     * team-activity chart (click a legend entry to isolate a line, hover to
-     * preview). Metric picker: capacity % (planned, and actual when that
-     * setting is on) or completed-vs-planned %.
+     * Line chart per category over the sprints. Metric picker: planned
+     * capacity % or completed-vs-planned %. Level picker: main categories or
+     * with subcategories. Every combination is one pane. The pickers (and the
+     * remembered choice) are wired page-wide in js/sprint.js, block "overview".
      */
     private static function renderCategoryTrend(array $data): void
     {
         $trend = $data['category_trend'] ?? [];
         $rows  = $trend['rows'] ?? [];
-        if (!$rows || count($trend['labels'] ?? []) === 0) {
-            return;
-        }
         self::renderCard('category-trend',
             __('Category trend', 'sprint'),
             'fas fa-chart-line',
             __('Per backlog category across the completed sprints in this period: allocated capacity % per sprint, or the completed-vs-planned share. Subcategories count towards their parent, or switch to the subcategory view to see them as separate lines. Click a legend entry to isolate a category.', 'sprint'),
             function () use ($trend, $rows) {
-                $labels  = $trend['labels'];
-                $n       = count($labels);
+                $labels = array_values($trend['labels'] ?? []);
+                $n      = count($labels);
+                if (!$rows || $n === 0) {
+                    echo SprintChart::emptyState(
+                        'fas fa-chart-line',
+                        __('No categorised work in this selection.', 'sprint'),
+                        __('Give sprint items a backlog category, or choose a longer period.', 'sprint')
+                    );
+                    return;
+                }
                 $detail  = $trend['detail'] ?? [];
                 $hasSubs = (bool)array_filter($detail, static fn($r) => !empty($r['sub']));
                 $levels  = ['top' => $rows];
@@ -2280,126 +2276,148 @@ class SprintOverview extends CommonGLPI
                 echo "<div class='sprint-category-trend'>";
                 echo "<div class='d-flex justify-content-end gap-2 mb-2'>";
                 if ($hasSubs) {
-                    echo "<select class='form-select form-select-sm sprint-category-trend-level' style='max-width:240px;'>";
+                    echo "<select class='form-select form-select-sm sprint-category-trend-level' aria-label='" . __s('Category level', 'sprint') . "'>";
                     echo "<option value='top'>" . __s('Main categories', 'sprint') . "</option>";
                     echo "<option value='sub'>" . __s('With subcategories', 'sprint') . "</option>";
                     echo "</select>";
                 }
-                echo "<select class='form-select form-select-sm sprint-category-trend-metric' style='max-width:240px;'>";
+                echo "<select class='form-select form-select-sm sprint-category-trend-metric' aria-label='" . __s('Metric', 'sprint') . "'>";
                 foreach ($metrics as $key => $label) {
                     echo "<option value='" . htmlescape($key) . "'>" . htmlescape($label) . "</option>";
                 }
                 echo "</select></div>";
                 foreach ($datasets as $set) {
-                    $yMax = $set['metric'] === 'done_pct'
-                        ? max(100.0, ceil($set['max'] / 20) * 20)
-                        : max(20.0, ceil($set['max'] / 20) * 20);
                     $visible = $set['metric'] === 'cap_planned' && $set['level'] === 'top';
-                    echo "<div class='sprint-category-trend-pane' data-metric='" . htmlescape($set['metric']) . "' data-level='" . htmlescape($set['level']) . "'"
-                        . ($visible ? '' : " style='display:none;'") . ">";
-                    self::renderCategoryLines($labels, $set['series'], (float)$yMax);
+                    echo "<div class='sprint-category-trend-pane' data-chart-scope data-metric='" . htmlescape($set['metric']) . "' data-level='" . htmlescape($set['level']) . "'"
+                        . ($visible ? '' : ' hidden') . ">";
+                    self::renderCategoryLines(
+                        $labels,
+                        $set['series'],
+                        // Completed-vs-planned always shows the 100% it is measured against.
+                        $set['metric'] === 'done_pct' ? max(100.0, (float)$set['max']) : (float)$set['max'],
+                        (string)$metrics[$set['metric']]
+                    );
                     echo "</div>";
                 }
                 echo "</div>";
-                echo "<script>(function(){var wrap=document.currentScript.previousElementSibling;if(!wrap)return;var sel=wrap.querySelector('.sprint-category-trend-metric');var lvl=wrap.querySelector('.sprint-category-trend-level');if(!sel)return;var key='sprint-overview-category-metric',lkey='sprint-overview-category-level';try{var saved=localStorage.getItem(key);if(saved&&sel.querySelector('option[value='+JSON.stringify(saved)+']'))sel.value=saved;if(lvl){var sl=localStorage.getItem(lkey);if(sl&&lvl.querySelector('option[value='+JSON.stringify(sl)+']'))lvl.value=sl;}}catch(e){}function apply(){var level=lvl?lvl.value:'top';wrap.querySelectorAll('.sprint-category-trend-pane').forEach(function(p){p.style.display=(p.getAttribute('data-metric')===sel.value&&p.getAttribute('data-level')===level)?'':'none';});}sel.addEventListener('change',function(){apply();try{localStorage.setItem(key,sel.value);}catch(e){}});if(lvl){lvl.addEventListener('change',function(){apply();try{localStorage.setItem(lkey,lvl.value);}catch(e){}});}apply();})();</script>";
             }
         );
     }
 
     /**
-     * SVG line chart, one polyline per category, y axis in %. Reuses the
-     * member-activity classes so sprint.js drives legend hover/click focus.
+     * SVG line chart, one line per category, y axis in %. Subcategories are
+     * dashed, every series has its own marker shape, and the legend isolates a
+     * line (shared charts script, scope = the surrounding `[data-chart-scope]`).
      *
      * @param array<int,string> $labels
-     * @param array<int,array{label:string,color:string,values:array<int,float|null>}> $series
+     * @param array<int,array{label:string,color:string,values:array<int,float|null>,sub?:bool}> $series
+     * @param float  $max    largest value the axis has to cover
+     * @param string $metric name of the plotted metric, for the summary and the table
      */
-    private static function renderCategoryLines(array $labels, array $series, float $yMax): void
+    private static function renderCategoryLines(array $labels, array $series, float $max, string $metric): void
     {
+        $labels = array_values($labels);
+        $series = array_values($series);
         $n      = count($labels);
-        $width  = 820;
-        $height = 240;
-        $padL   = 44;
-        $padR   = 20;
-        $padT   = 16;
-        $padB   = 40;
-        $plotW  = $width - $padL - $padR;
-        $plotH  = $height - $padT - $padB;
-        $yMax   = max(1.0, $yMax);
-        $xStep  = $n > 1 ? $plotW / ($n - 1) : 0;
-        $xAt    = fn(int $i) => $n > 1 ? $padL + $xStep * $i : $padL + $plotW / 2;
-        $yAt    = fn(float $v) => $padT + $plotH - $plotH * ($v / $yMax);
-        $fmt    = fn(float $v) => number_format($v, 2, '.', '');
+        $num    = [SprintChart::class, 'num'];
+        $w      = 900;
+        $padL   = 52;
+        $padR   = 24;
+        $padT   = 20;
+        $slot   = ($w - $padL - $padR) / max(1, $n);
+        $axis   = SprintChart::axisLabels($labels, $slot);
+        $yB     = $padT + 200;
+        $h      = (int)ceil($yB + $axis['height'] + 8);
+        $scale  = SprintChart::niceScale($max);
+        $xAt    = static fn(int $i): float => $padL + $slot * ($i + 0.5);
+        $yAt    = static fn(float $v): float => SprintChart::yAt($v, $scale, $padT, $yB);
+        $pct    = static fn(float $v): string => SprintMember::formatCapacity($v) . '%';
 
-        echo "<div class='sprint-member-activity'>";
-        echo "<div style='overflow-x:auto;'>";
-        echo "<svg class='sprint-responsive-chart' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
-            . "preserveAspectRatio='xMinYMin meet' style='width:100%;height:auto;display:block;font-family:sans-serif;font-size:11px;'>";
-        for ($t = 0; $t <= 4; $t++) {
-            $yv = $yMax * $t / 4;
-            $y  = $fmt($yAt($yv));
-            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($padL + $plotW) . "' y2='{$y}' stroke='#e9ecef' stroke-width='1' />";
-            echo "<text x='" . ($padL - 6) . "' y='" . $fmt($yAt($yv) + 3) . "' text-anchor='end' fill='#6c757d'>"
-                . SprintMember::formatCapacity($yv) . "%</text>";
-        }
-        $labelEvery = max(1, (int)ceil($n / 10));
+        echo "<div class='sprint-chart-box'>";
+        echo SprintChart::svgOpen(sprintf(
+            _n(
+                '%1$s per backlog category over %2$d sprint, one line per category.',
+                '%1$s per backlog category over %2$d sprints, one line per category.',
+                $n,
+                'sprint'
+            ),
+            $metric,
+            $n
+        ), $w, $h, 'sprint-overview-chart');
+        echo SprintChart::yAxis($scale, $padL, $w - $padR, $padT, $yB, $pct);
         for ($i = 0; $i < $n; $i++) {
-            if ($i % $labelEvery !== 0 && $i !== $n - 1) {
-                continue;
-            }
-            $label = mb_strlen($labels[$i]) > 14 ? mb_substr($labels[$i], 0, 13) . '…' : $labels[$i];
-            echo "<text x='" . $fmt($xAt($i)) . "' y='" . ($padT + $plotH + 16) . "' text-anchor='middle' fill='#6c757d'>"
-                . "<title>" . htmlescape($labels[$i]) . "</title>" . htmlescape($label) . "</text>";
+            echo SprintChart::axisLabel($axis, $i, $xAt($i), $yB);
         }
-        echo "<line x1='{$padL}' y1='{$padT}' x2='{$padL}' y2='" . ($padT + $plotH) . "' stroke='#adb5bd' stroke-width='1' />";
-        echo "<line x1='{$padL}' y1='" . ($padT + $plotH) . "' x2='" . ($padL + $plotW) . "' y2='" . ($padT + $plotH) . "' stroke='#adb5bd' stroke-width='1' />";
 
+        $tips = array_fill(0, $n, []);
         foreach ($series as $idx => $s) {
-            $color = htmlescape($s['color']);
-            $dash  = !empty($s['sub']) ? " stroke-dasharray='6 4'" : '';
+            $color = htmlescape((string)$s['color']);
             // A null (no planned points that sprint) breaks the line rather
             // than drawing a misleading zero.
-            $segments = [[]];
-            foreach ($s['values'] as $i => $v) {
-                if ($v === null) {
-                    $segments[] = [];
-                    continue;
-                }
-                $segments[count($segments) - 1][] = $fmt($xAt($i)) . ',' . $fmt($yAt(min((float)$v, $yMax)));
-            }
-            foreach ($segments as $seg) {
-                if (count($seg) < 2) {
-                    continue;
-                }
-                echo "<polyline class='sprint-activity-line' data-member-idx='" . (int)$idx . "' points='" . implode(' ', $seg) . "' "
-                    . "fill='none' stroke='{$color}' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'{$dash} />";
-            }
+            $path = '';
+            $prev = null;
             foreach ($s['values'] as $i => $v) {
                 if ($v === null) {
                     continue;
                 }
-                $title = htmlescape($s['label'] . ' — ' . $labels[$i] . ': ' . SprintMember::formatCapacity((float)$v) . '%');
-                echo "<circle class='sprint-activity-dot' data-member-idx='" . (int)$idx . "' cx='" . $fmt($xAt($i)) . "' cy='" . $fmt($yAt(min((float)$v, $yMax))) . "' r='3' fill='{$color}'>"
-                    . "<title>{$title}</title></circle>";
+                $path .= ($prev === null || $prev !== $i - 1 ? 'M' : 'L') . $num($xAt($i)) . ',' . $num($yAt((float)$v)) . ' ';
+                $prev  = $i;
             }
+            echo "<g class='sprint-chart-series' data-series='c" . (int)$idx . "'>";
+            if ($path !== '') {
+                echo "<path class='sprint-chart-line" . (!empty($s['sub']) ? ' sprint-chart-line-sub' : '') . "' d='" . trim($path) . "' stroke='{$color}'/>";
+            }
+            foreach ($s['values'] as $i => $v) {
+                if ($v === null) {
+                    continue;
+                }
+                $y = $yAt((float)$v);
+                echo SprintChart::marker($idx, $xAt($i), $y, 3.4, "class='sprint-chart-point' fill='{$color}'");
+                // Shown once this category is isolated.
+                echo "<text class='sprint-chart-value sprint-chart-pointlabel' x='" . $num($xAt($i)) . "' y='" . $num(max($y - 8, $padT + 9))
+                    . "' text-anchor='middle'>" . htmlescape($pct((float)$v)) . "</text>";
+                $tips[$i][] = ['v' => (float)$v, 'row' => [(string)$s['label'], $pct((float)$v), (string)$s['color']]];
+            }
+            echo "</g>";
+        }
+
+        for ($i = 0; $i < $n; $i++) {
+            usort($tips[$i], static fn($a, $b) => $b['v'] <=> $a['v']);
+            $rows = array_map(static fn($t) => $t['row'], $tips[$i]);
+            echo self::chartSlot($padL + $slot * $i, $slot, $padT, $yB, $labels[$i], $rows ?: [[__('No data for this period.', 'sprint'), '']]);
         }
         echo "</svg></div>";
 
-        echo "<div class='sprint-activity-legend-wrap' style='display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.9em;'>";
+        $legend = [];
         foreach ($series as $idx => $s) {
-            $nonNull = array_filter($s['values'], static fn($v) => $v !== null);
-            $avg     = $nonNull ? array_sum($nonNull) / count($nonNull) : 0;
-            echo "<div class='sprint-activity-legend' data-member-idx='" . (int)$idx . "' "
-                . "title='" . htmlescape(__('Click to isolate — hover to preview', 'sprint')) . "' "
-                . "style='display:flex;align-items:center;gap:6px;cursor:pointer;'>"
-                . (!empty($s['sub'])
-                    ? "<span style='display:inline-block;width:14px;height:0;border-top:3px dashed " . htmlescape($s['color']) . ";'></span>"
-                    : "<span style='display:inline-block;width:14px;height:3px;background:" . htmlescape($s['color']) . ";border-radius:2px;'></span>")
-                . "<span>" . htmlescape($s['label']) . " <span class='text-muted' title='" . __s('Average over the sprints shown', 'sprint') . "'>("
-                . htmlescape(sprintf(__('avg. %s%%', 'sprint'), SprintMember::formatCapacity($avg))) . ")</span></span>"
-                . "</div>";
+            $nonNull  = array_filter($s['values'], static fn($v) => $v !== null);
+            $avg      = $nonNull ? array_sum($nonNull) / count($nonNull) : 0;
+            $legend[] = [
+                'label' => (string)$s['label'],
+                'color' => (string)$s['color'],
+                'mark'  => !empty($s['sub']) ? 'ref' : 'line',
+                'shape' => $idx,
+                'key'   => 'c' . (int)$idx,
+                'value' => sprintf(__('avg. %s%%', 'sprint'), SprintMember::formatCapacity($avg)),
+                'muted' => !$nonNull,
+            ];
         }
-        echo "</div>";
-        echo "</div>";
+        echo SprintChart::legend($legend, count($series) > 1);
+
+        $head = [Sprint::getTypeName(1)];
+        foreach ($series as $s) {
+            $head[] = (string)$s['label'];
+        }
+        $rows = [];
+        for ($i = 0; $i < $n; $i++) {
+            $row = [$labels[$i]];
+            foreach ($series as $s) {
+                $v     = $s['values'][$i] ?? null;
+                $row[] = $v === null ? '—' : $pct((float)$v);
+            }
+            $rows[] = $row;
+        }
+        echo self::chartTable($metric, $head, $rows);
     }
 
     private static function workload(array $sprints, array $items, array $flByUser, array $depByUser): array
@@ -2839,12 +2857,12 @@ class SprintOverview extends CommonGLPI
     {
         self::renderCard('scope', __('Scope stability', 'sprint'), 'fas fa-arrows-left-right', __('Shows baseline scope, work added after kick-off, completed work and carry-over per sprint.', 'sprint'), function () use ($chart) {
             self::renderGroupedBars($chart['labels'], [
-                ['label' => __('Baseline items', 'sprint'), 'color' => '#6c757d', 'values' => $chart['series']['initial_scope']],
-                ['label' => __('Added after kick-off', 'sprint'), 'color' => '#d63384', 'values' => $chart['series']['adhoc']],
-                ['label' => __('Removed during sprint', 'sprint'), 'color' => '#fd7e14', 'values' => $chart['series']['removed_scope']],
-                ['label' => __('Completed items', 'sprint'), 'color' => '#198754', 'values' => array_map(static fn($row) => $row['items_done'], array_slice($chart['sprints'], -count($chart['labels'])))],
-                ['label' => __('Carry-over items', 'sprint'), 'color' => '#dc3545', 'values' => $chart['series']['carryover']],
-            ], null, null, $chart['links']);
+                ['label' => __('Baseline items', 'sprint'), 'color' => SprintChart::metricColor('planned'), 'values' => $chart['series']['initial_scope']],
+                ['label' => __('Added after kick-off', 'sprint'), 'color' => SprintChart::metricColor('adhoc'), 'values' => $chart['series']['adhoc']],
+                ['label' => __('Removed during sprint', 'sprint'), 'color' => SprintChart::seriesColor(3), 'values' => $chart['series']['removed_scope']],
+                ['label' => __('Completed items', 'sprint'), 'color' => SprintChart::metricColor('completed'), 'values' => array_map(static fn($row) => $row['items_done'], array_slice($chart['sprints'], -count($chart['labels'])))],
+                ['label' => __('Carry-over items', 'sprint'), 'color' => SprintChart::metricColor('carryover'), 'values' => $chart['series']['carryover']],
+            ], null, null, $chart['links'], __('Scope stability', 'sprint'));
         });
     }
 
@@ -2853,69 +2871,128 @@ class SprintOverview extends CommonGLPI
         self::renderCard('flow', __('Flow health', 'sprint'), 'fas fa-water', __('Compares cycle time, blocked time and rework across completed sprints.', 'sprint'), function () use ($data) {
             $chart = self::trimToChartWindow($data);
             self::renderGroupedBars($chart['labels'], [
-                ['label' => __('Cycle time (days)', 'sprint'), 'color' => '#0d6efd', 'values' => $chart['series']['cycle_days']],
-                ['label' => __('Blocked time (days)', 'sprint'), 'color' => '#dc3545', 'values' => $chart['series']['blocked_days']],
-            ], ['label' => __('Rework rate', 'sprint'), 'color' => '#fd7e14', 'values' => $chart['series']['rework_pct'], 'suffix' => '%', 'max' => 100], null, $chart['links']);
+                ['label' => __('Cycle time (days)', 'sprint'), 'color' => SprintChart::seriesColor(2), 'values' => $chart['series']['cycle_days']],
+                ['label' => __('Blocked time (days)', 'sprint'), 'color' => SprintChart::metricColor('blocked'), 'values' => $chart['series']['blocked_days']],
+            ], ['label' => __('Rework rate', 'sprint'), 'color' => SprintChart::seriesColor(3), 'values' => $chart['series']['rework_pct'], 'suffix' => '%', 'max' => max(25, (int)ceil(max(array_merge([0], $chart['series']['rework_pct'])) / 25) * 25)], null, $chart['links'], __('Flow health', 'sprint'));
         });
     }
 
+    /**
+     * Bubble per sprint: team load (x) against predictability (y). A blocked
+     * sprint is a filled bubble, a healthy one a ring, so the state reads
+     * without colour. The size is the adhoc work.
+     */
     private static function renderCapacityDelivery(array $data): void
     {
         self::renderCard('capacity-delivery', __('Capacity versus delivery', 'sprint'), 'fas fa-circle-nodes', __('Each bubble is a sprint. Position compares team load with predictability. Colour shows blocked work and size shows adhoc work.', 'sprint'), function () use ($data) {
             $loads = $data['workload_trend']['team'] ?? [];
-            if (!$loads) { echo "<div class='text-muted py-3'>" . __('No data for this period.', 'sprint') . '</div>'; return; }
-            $w = 900; $h = 320; $l = 52; $r = 24; $t = 16; $b = 56; $pw = $w - $l - $r; $ph = $h - $t - $b;
-            $xMax = max(125, (int)ceil(max(array_map(static fn($v) => (float)($v ?? 0), $loads)) / 25) * 25);
-            $okColor = '#1a9c8c'; $blockedColor = '#d63939';
-            echo "<div style='overflow-x:auto'><svg class='sprint-responsive-chart' viewBox='0 0 {$w} {$h}' role='img' style='font-size:11px;'>";
-            // Recessive horizontal grid + y labels; x labels every 25% without vertical grid.
-            for ($i = 0; $i <= 4; $i++) {
-                $y = $t + $ph - $ph * $i / 4;
-                echo "<line x1='{$l}' y1='{$y}' x2='" . ($l + $pw) . "' y2='{$y}' stroke='var(--tblr-border-color,#ddd)' stroke-opacity='.55'/>";
-                echo "<text x='" . ($l - 7) . "' y='" . ($y + 4) . "' text-anchor='end' fill='var(--tblr-secondary)'>" . (25 * $i) . "%</text>";
+            // A sprint without a measured load has no place on the x-axis.
+            $bubbles = [];
+            $table   = [];
+            foreach ($data['sprints'] as $i => $row) {
+                $load    = $loads[$i] ?? null;
+                $table[] = [
+                    (string)$row['name'],
+                    $load === null ? '—' : (int)round((float)$load) . '%',
+                    (float)$row['predictability'] . '%',
+                    (string)(int)$row['blocked'],
+                    (string)(int)$row['adhoc'],
+                ];
+                if ($load !== null) {
+                    $bubbles[] = ['row' => $row, 'load' => (float)$load, 'radius' => 6 + min(16, (int)$row['adhoc'] * 2)];
+                }
             }
+            if (!$bubbles) {
+                echo SprintChart::emptyState(
+                    'fas fa-circle-nodes',
+                    __('No team load to compare yet.', 'sprint'),
+                    __('Load is measured from the capacity allocated to sprint members. Choose a longer period or clear a filter.', 'sprint')
+                );
+                return;
+            }
+
+            $num  = [SprintChart::class, 'num'];
+            $w    = 900;
+            $l    = 58;
+            $r    = 24;
+            $t    = 18;
+            $yB   = $t + 230;
+            $h    = $yB + 44;
+            $pw   = $w - $l - $r;
+            $xMax = max(125, (int)ceil(max(array_column($bubbles, 'load')) / 25) * 25);
+            $xAt  = static fn(float $v): float => $l + $pw * min($xMax, max(0.0, $v)) / $xMax;
+            // Both axes are percentages on multiples of 25.
+            $scale = ['max' => 100.0, 'step' => 25.0, 'ticks' => [0.0, 25.0, 50.0, 75.0, 100.0]];
+            $ok      = htmlescape(SprintChart::seriesColor(2));
+            $blocked = htmlescape(SprintChart::metricColor('blocked'));
+            $blockedCount = count(array_filter($bubbles, static fn($b) => (int)$b['row']['blocked'] > 0));
+
+            echo "<div data-chart-scope>";
+            echo "<div class='sprint-chart-box'>";
+            echo SprintChart::svgOpen(sprintf(
+                _n(
+                    'Team load against predictability for %1$d sprint, %2$d with blocked work.',
+                    'Team load against predictability for %1$d sprints, %2$d with blocked work.',
+                    count($bubbles),
+                    'sprint'
+                ),
+                count($bubbles),
+                $blockedCount
+            ), $w, $h, 'sprint-overview-chart');
+            echo SprintChart::yAxis($scale, $l, $w - $r, $t, $yB, static fn(float $v): string => (int)$v . '%');
             for ($pct = 0; $pct <= $xMax; $pct += 25) {
-                $x = $l + $pw * $pct / $xMax;
-                echo "<text x='{$x}' y='" . ($t + $ph + 18) . "' text-anchor='middle' fill='var(--tblr-secondary)'>{$pct}%</text>";
+                echo "<text class='sprint-chart-label' x='" . $num($xAt($pct)) . "' y='" . ($yB + 14) . "' text-anchor='middle'>{$pct}%</text>";
             }
             // Reference line: 100% load = fully committed team.
-            $x100 = $l + $pw * min(100, $xMax) / $xMax;
-            echo "<line x1='{$x100}' y1='{$t}' x2='{$x100}' y2='" . ($t + $ph) . "' stroke='var(--tblr-secondary,#888)' stroke-opacity='.5' stroke-dasharray='4,4'/>";
-            echo "<text x='" . ($x100 + 4) . "' y='" . ($t + 10) . "' fill='var(--tblr-secondary)' font-size='10'>" . htmlescape(__('100% load', 'sprint')) . "</text>";
+            $x100 = $num($xAt(100));
+            echo "<line class='sprint-chart-limit' x1='{$x100}' y1='{$t}' x2='{$x100}' y2='{$yB}'/>";
+            echo "<text class='sprint-chart-label sprint-chart-label-sub' x='" . $num($xAt(100) + 4) . "' y='" . ($t + 9) . "'>"
+                . htmlescape(__('100% load', 'sprint')) . "</text>";
+            echo "<text class='sprint-chart-label' x='" . $num($l + $pw / 2) . "' y='" . ($h - 6) . "' text-anchor='middle'>"
+                . htmlescape(__('Average team load', 'sprint')) . "</text>";
+            echo "<text class='sprint-chart-label' transform='translate(13 " . $num(($t + $yB) / 2) . ") rotate(-90)' text-anchor='middle'>"
+                . htmlescape(__('Predictability', 'sprint')) . "</text>";
 
             // Large bubbles first so small ones stay clickable on top.
-            $bubbles = [];
-            foreach ($data['sprints'] as $i => $row) {
-                $load = (float)($loads[$i] ?? 0);
-                $bubbles[] = ['row' => $row, 'load' => $load, 'radius' => 6 + min(16, (int)$row['adhoc'] * 2)];
-            }
             usort($bubbles, static fn($a, $b2) => $b2['radius'] <=> $a['radius']);
             foreach ($bubbles as $bubble) {
-                $row = $bubble['row'];
-                $predict = (float)$row['predictability'];
-                $cx = number_format($l + $pw * min($xMax, $bubble['load']) / $xMax, 1, '.', '');
-                $cy = number_format($t + $ph - $ph * min(100, $predict) / 100, 1, '.', '');
-                $radius = $bubble['radius'];
-                $blocked = (int)$row['blocked'] > 0;
-                $color = $blocked ? $blockedColor : $okColor;
-                // Blocked = filled, healthy = ring: state stays readable without color.
-                $fill = $blocked ? $color : $color . '2e';
-                $title = $row['name']
-                    . ' · ' . sprintf(__('%d%% load', 'sprint'), (int)round($bubble['load']))
-                    . ' · ' . sprintf(__('%s%% predictability', 'sprint'), $predict)
-                    . ' · ' . sprintf(__('%d blocked', 'sprint'), (int)$row['blocked'])
-                    . ' · ' . sprintf(__('%d adhoc', 'sprint'), (int)$row['adhoc']);
-                echo "<a href='" . htmlescape(Sprint::getFormURLWithID((int)$row['id'])) . "'>"
-                    . "<circle cx='{$cx}' cy='{$cy}' r='" . ($radius + 1.5) . "' fill='none' stroke='var(--tblr-bg-surface,#fff)' stroke-width='2'/>"
-                    . "<circle cx='{$cx}' cy='{$cy}' r='{$radius}' fill='{$fill}' stroke='{$color}' stroke-width='2' fill-opacity='" . ($blocked ? '.6' : '1') . "'>"
-                    . "<title>" . htmlescape($title) . "</title></circle></a>";
+                $row       = $bubble['row'];
+                $predict   = (float)$row['predictability'];
+                $cx        = $num($xAt($bubble['load']));
+                $cy        = $num(SprintChart::yAt($predict, $scale, $t, $yB));
+                $radius    = $bubble['radius'];
+                $isBlocked = (int)$row['blocked'] > 0;
+                $color     = $isBlocked ? $blocked : $ok;
+                $rows      = [
+                    [__('Average team load', 'sprint'), (int)round($bubble['load']) . '%'],
+                    [__('Predictability', 'sprint'), $predict . '%'],
+                    [__('Blocked items', 'sprint'), (string)(int)$row['blocked'], $isBlocked ? SprintChart::metricColor('blocked') : ''],
+                    [__('Adhoc items', 'sprint'), (string)(int)$row['adhoc']],
+                ];
+                $plain = $row['name'] . ': ' . implode(', ', array_map(static fn($r) => $r[0] . ' ' . $r[1], $rows));
+                echo "<a class='sprint-bubble' href='" . htmlescape(Sprint::getFormURLWithID((int)$row['id'])) . "'"
+                    . SprintChart::tipAttr((string)$row['name'], $rows) . ">"
+                    . "<title>" . htmlescape($plain) . "</title>"
+                    . "<circle class='sprint-bubble-halo' cx='{$cx}' cy='{$cy}' r='" . ($radius + 1.5) . "'/>"
+                    . "<circle cx='{$cx}' cy='{$cy}' r='{$radius}' fill='{$color}' stroke='{$color}' stroke-width='2' fill-opacity='"
+                    . ($isBlocked ? '.6' : '.16') . "'/></a>";
             }
-            echo "<text x='" . ($l + $pw / 2) . "' y='" . ($h - 6) . "' text-anchor='middle' fill='var(--tblr-secondary)'>" . htmlescape(__('Average team load', 'sprint')) . "</text><text transform='translate(13 " . ($t + $ph / 2) . ") rotate(-90)' text-anchor='middle' fill='var(--tblr-secondary)'>" . htmlescape(__('Predictability', 'sprint')) . '</text></svg></div>';
+            echo "</svg></div>";
 
-            echo "<div class='d-flex flex-wrap gap-3 mt-1 sprint-small text-muted'>";
-            echo "<span><span style='display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid {$okColor};vertical-align:-2px;'></span> " . __('No blocked work', 'sprint') . "</span>";
-            echo "<span><span style='display:inline-block;width:11px;height:11px;border-radius:50%;background:{$blockedColor};vertical-align:-2px;'></span> " . __('Blocked work', 'sprint') . "</span>";
-            echo "<span>" . __('Bubble size = adhoc items', 'sprint') . "</span>";
+            // Ring against filled is its own swatch, in the shared legend frame.
+            echo "<div class='sprint-chart-legend'>";
+            echo "<span class='sprint-chart-legend-item is-static'><span class='sprint-bubble-swatch' style='--sprint-bubble:{$ok}' aria-hidden='true'></span>"
+                . __s('No blocked work', 'sprint') . "</span>";
+            echo "<span class='sprint-chart-legend-item is-static'><span class='sprint-bubble-swatch is-filled' style='--sprint-bubble:{$blocked}' aria-hidden='true'></span>"
+                . __s('Blocked work', 'sprint') . "</span>";
+            echo "<span class='sprint-chart-legend-item is-static'>" . __s('Bubble size = adhoc items', 'sprint') . "</span>";
+            echo "</div>";
+
+            echo self::chartTable(
+                __('Capacity versus delivery', 'sprint'),
+                [Sprint::getTypeName(1), __('Average team load', 'sprint'), __('Predictability', 'sprint'), __('Blocked items', 'sprint'), __('Adhoc items', 'sprint')],
+                $table
+            );
             echo "</div>";
         });
     }
@@ -2997,6 +3074,10 @@ class SprintOverview extends CommonGLPI
                 'name'          => __('Name this filter', 'sprint'),
                 'rename'        => __('New name for this filter', 'sprint'),
                 'confirmDelete' => __('Delete this saved filter?', 'sprint'),
+                'saveTitle'     => __('Save filter', 'sprint'),
+                'renameTitle'   => __('Rename', 'sprint'),
+                'save'          => __('Save'),
+                'delete'        => __('Delete'),
             ],
         ];
         echo "<script>(function(){"
@@ -3023,9 +3104,15 @@ class SprintOverview extends CommonGLPI
             . "function write(all){try{localStorage.setItem(cfg.filtersKey,JSON.stringify(all));}catch(e){}}"
             . "function current(){if(!select)return '';var o=select.options[select.selectedIndex];return o&&o.value?o.getAttribute('data-name'):'';}"
             . "function fill(){if(!select)return;var all=read();while(select.options.length>1)select.remove(1);Object.keys(all).sort().forEach(function(name){var o=document.createElement('option');o.value=all[name];o.textContent=name;o.setAttribute('data-name',name);if(all[name]===location.href)o.selected=true;select.appendChild(o);});var has=!!current();if(ren)ren.hidden=!has;if(del)del.hidden=!has;}"
-            . "if(save)save.addEventListener('click',function(){var name=window.prompt(cfg.i18n.name);if(!name)return;var all=read();all[name]=location.href;write(all);fill();});"
-            . "if(ren)ren.addEventListener('click',function(){var old=current();if(!old)return;var name=window.prompt(cfg.i18n.rename,old);if(!name||name===old)return;var all=read();all[name]=all[old];delete all[old];write(all);fill();});"
-            . "if(del)del.addEventListener('click',function(){var old=current();if(!old||!window.confirm(cfg.i18n.confirmDelete))return;var all=read();delete all[old];write(all);fill();});"
+            // The plugin dialogs follow the theme. The browser's own are the fallback when sprint.js is missing.
+            . "function ask(title,label,value,done){var use=function(text){text=String(text||'').replace(/\\s+/g,' ').trim();if(text)done(text);};"
+            . "if(typeof window.sprintPrompt==='function'){window.sprintPrompt({title:title,label:label,value:value||'',required:true,maxLength:80,rows:1,okLabel:cfg.i18n.save},use);}"
+            . "else{use(window.prompt(label,value||''));}}"
+            . "function sure(message,done){if(typeof window.sprintConfirm==='function'){window.sprintConfirm(message,done,{danger:true,okLabel:cfg.i18n['delete']});}"
+            . "else if(window.confirm(message)){done();}}"
+            . "if(save)save.addEventListener('click',function(){ask(cfg.i18n.saveTitle,cfg.i18n.name,'',function(name){var all=read();all[name]=location.href;write(all);fill();});});"
+            . "if(ren)ren.addEventListener('click',function(){var old=current();if(!old)return;ask(cfg.i18n.renameTitle,cfg.i18n.rename,old,function(name){if(name===old)return;var all=read();all[name]=all[old];delete all[old];write(all);fill();});});"
+            . "if(del)del.addEventListener('click',function(){var old=current();if(!old)return;sure(cfg.i18n.confirmDelete,function(){var all=read();delete all[old];write(all);fill();});});"
             . "if(select)select.addEventListener('change',function(){if(this.value&&this.value!==location.href)location.href=this.value;});"
             . "fill();"
             . "})();</script>";
@@ -3053,7 +3140,7 @@ class SprintOverview extends CommonGLPI
             . "<i class='" . htmlescape($icon) . " me-2' aria-hidden='true'></i>" . htmlescape($title) . "</button></h3>";
         echo "<div class='sprint-overview-section-body' id='" . htmlescape($bodyId) . "'" . ($collapsed ? ' hidden' : '') . ">";
         if ($subtitle !== '') {
-            echo "<div class='text-muted sprint-small mb-2'>" . htmlescape($subtitle) . "</div>";
+            echo "<div class='sprint-card-hint'>" . htmlescape($subtitle) . "</div>";
         }
         $body();
         echo "</div></div></section>";
@@ -3062,142 +3149,265 @@ class SprintOverview extends CommonGLPI
         }
     }
 
+    /** One hover and focus target over a full chart slot, with its guide line. */
+    private static function chartSlot(float $x, float $width, float $yTop, float $yBottom, string $title, array $rows, string $href = ''): string
+    {
+        $num   = [SprintChart::class, 'num'];
+        $plain = $title;
+        if ($rows) {
+            $plain .= ': ' . implode(', ', array_map(static fn($r) => trim((string)$r[0] . ' ' . (string)($r[1] ?? '')), $rows));
+        }
+        $cx   = $num($x + $width / 2);
+        $rect = "<rect class='sprint-chart-hit' x='" . $num($x) . "' y='" . $num($yTop) . "' width='" . $num($width)
+            . "' height='" . $num($yBottom - $yTop) . "'";
+        $tip  = SprintChart::tipAttr($title, $rows);
+        $out  = "<g class='sprint-chart-slot'><line class='sprint-chart-guide' x1='{$cx}' y1='" . $num($yTop)
+            . "' x2='{$cx}' y2='" . $num($yBottom) . "'/>";
+        if ($href !== '') {
+            // The link is the focus target, so the slot stays one tab stop.
+            $out .= "<a href='" . htmlescape($href) . "'{$tip}><title>" . htmlescape($plain) . "</title>{$rect}/></a>";
+        } else {
+            $out .= $rect . " tabindex='0'{$tip}><title>" . htmlescape($plain) . "</title></rect>";
+        }
+        return $out . "</g>";
+    }
+
     /**
-     * Grouped bars, plus an optional line on its own scale and a dashed reference.
+     * The figures behind a chart as a table, for screen readers and for
+     * copying. The first cell of every row is its header.
+     *
+     * @param string[]            $head column headers
+     * @param array<int,string[]> $rows
+     */
+    private static function chartTable(string $caption, array $head, array $rows): string
+    {
+        $out = "<details class='sprint-chart-table'><summary>" . htmlescape(__('Show as table', 'sprint')) . "</summary>"
+            . "<div class='table-responsive'><table class='table table-sm align-middle mb-0'>"
+            . "<caption class='visually-hidden'>" . htmlescape($caption) . "</caption><thead><tr>";
+        foreach (array_values($head) as $i => $cell) {
+            $out .= "<th scope='col'" . ($i > 0 ? " class='text-end'" : '') . ">" . htmlescape((string)$cell) . "</th>";
+        }
+        $out .= "</tr></thead><tbody>";
+        foreach ($rows as $row) {
+            $out .= "<tr>";
+            foreach (array_values($row) as $i => $cell) {
+                $out .= $i === 0
+                    ? "<th scope='row' class='fw-normal'>" . htmlescape((string)$cell) . "</th>"
+                    : "<td class='text-end'>" . htmlescape((string)$cell) . "</td>";
+            }
+            $out .= "</tr>";
+        }
+        return $out . "</tbody></table></div></details>";
+    }
+
+    /** The block shown by a per-sprint chart that has no sprint to draw. */
+    private static function chartEmptyState(string $icon = 'fas fa-chart-column'): string
+    {
+        return SprintChart::emptyState(
+            $icon,
+            __('No sprints to show yet.', 'sprint'),
+            __('There is no completed sprint in this selection. Choose a longer period or clear a filter.', 'sprint')
+        );
+    }
+
+    /**
+     * Grouped bars per sprint, a dashed reference on the same scale, and an
+     * optional second measure. That second measure has its own unit, so it is
+     * not drawn over the bars: it gets its own strip below them, on the same
+     * x-axis with its own labelled scale.
      *
      * @param array<int,string> $labels
      * @param array<int,array{label:string,color:string,values:array}> $series
      * @param array{label:string,color:string,values:array,suffix:string,max:int}|null $line
      * @param array{label:string,value:float,color:string}|null $reference
+     * @param array<int,string> $links  sprint URL per slot
+     * @param string            $title  chart title for the accessible summary
      */
-    private static function renderGroupedBars(array $labels, array $series, ?array $line = null, ?array $reference = null, array $links = []): void
+    private static function renderGroupedBars(array $labels, array $series, ?array $line = null, ?array $reference = null, array $links = [], string $title = ''): void
     {
-        $n = count($labels);
+        $labels = array_values($labels);
+        $series = array_values($series);
+        $n      = count($labels);
         if ($n === 0) {
+            echo self::chartEmptyState();
             return;
         }
 
-        // Past a handful of sprints straight labels overlap, so tilt them.
-        $tilted = $n > 8;
-        $width = 900; $height = $tilted ? 300 : 260;
-        $padL = 44; $padR = 20; $padT = 18; $padB = $tilted ? 86 : 46;
-        $plotW = $width - $padL - $padR;
-        $plotH = $height - $padT - $padB;
+        $num    = [SprintChart::class, 'num'];
+        $w      = 900;
+        $padL   = 48;
+        $padR   = 20;
+        $padT   = 20;
+        // With a strip below, the bars give up some height to it.
+        $plotH  = $line !== null ? 150 : 190;
+        $slot   = ($w - $padL - $padR) / $n;
+        $axis   = SprintChart::axisLabels($labels, $slot);
+        $yB     = $padT + $plotH;
+        // Strip of the second measure: title, then its own plot.
+        $sTop   = $yB + 42;
+        $sBot   = $sTop + 40;
+        $axisY  = $line !== null ? $sBot : $yB;
+        $h      = (int)ceil($axisY + $axis['height'] + 8);
+        $xAt    = static fn(int $i): float => $padL + $slot * ($i + 0.5);
 
-        $maxLeft = 1;
+        // Counts and story points get whole steps, days keep one decimal.
+        $maxLeft  = 0.0;
+        $decimals = false;
         foreach ($series as $set) {
             foreach ($set['values'] as $value) {
-                $maxLeft = max($maxLeft, (float)$value);
+                $value    = (float)$value;
+                $maxLeft  = max($maxLeft, $value);
+                $decimals = $decimals || abs($value - round($value)) > 0.001;
             }
         }
         if ($reference !== null) {
             $maxLeft = max($maxLeft, (float)$reference['value']);
         }
-        $tickStep = max(1, (int)ceil($maxLeft / 4));
-        $yMax     = $tickStep * 4;
-        $lineMax  = $line !== null ? max(1, (int)$line['max']) : 1;
+        $scale = SprintChart::niceScale($maxLeft, 4, !$decimals);
+        $fmtV  = static fn(float $v): string => $decimals
+            ? rtrim(rtrim(number_format($v, 1, '.', ''), '0'), '.')
+            : (string)(int)round($v);
+        $yAt   = static fn(float $v): float => SprintChart::yAt($v, $scale, $padT, $yB);
 
-        $slot   = $plotW / max(1, $n);
-        $count  = count($series);
-        $barW   = min(26, ($slot * 0.7) / max(1, $count));
-        $gap    = 4;
-        $yAt     = fn(float $v) => $padT + $plotH - ($plotH * ($v / $yMax));
-        $yLineAt = fn(float $v) => $padT + $plotH - ($plotH * (min($v, $lineMax) / $lineMax));
-        $fmt     = fn(float $v) => number_format($v, 2, '.', '');
-        $halo    = "paint-order:stroke;stroke:var(--tblr-bg-surface,#fff);stroke-width:3.5px;stroke-linejoin:round;";
+        $count   = count($series);
+        $gap     = 3;
+        $barW    = max(2.0, min(26.0, ($slot * 0.72 - ($count - 1) * $gap) / max(1, $count)));
+        $groupW  = $count * $barW + ($count - 1) * $gap;
+        // A figure on every bar only while it fits the bar.
+        $labelled = $barW >= 13;
 
-        echo "<div style='overflow-x:auto;'>";
-        echo "<svg class='sprint-responsive-chart' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {$width} {$height}' "
-            . "style='min-width:520px;font-family:sans-serif;font-size:11px;'>";
+        $suffix  = $line !== null ? (string)($line['suffix'] ?? '') : '';
+        $lineMax = $line !== null ? max(1.0, (float)$line['max']) : 1.0;
+        $lineVal = static fn(int $i): float => (float)($line['values'][$i] ?? 0);
+        $lineFmt = static fn(float $v): string => round($v) . $suffix;
 
-        for ($t = 0; $t <= 4; $t++) {
-            $value = (int)round($yMax * $t / 4);
-            $y     = $fmt($yAt($value));
-            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($padL + $plotW) . "' y2='{$y}' stroke='#e9ecef' stroke-width='1' />";
-            echo "<text x='" . ($padL - 6) . "' y='" . $fmt($yAt($value) + 3) . "' text-anchor='end' fill='#6c757d'>{$value}</text>";
+        $last    = $n - 1;
+        $summary = [];
+        foreach ($series as $set) {
+            $summary[] = $set['label'] . ' ' . $fmtV((float)($set['values'][$last] ?? 0));
+        }
+        if ($line !== null) {
+            $summary[] = $line['label'] . ' ' . $lineFmt($lineVal($last));
         }
 
-        $linePoints  = [];
-        $barLabelYs  = [];
+        echo "<div data-chart-scope>";
+        echo "<div class='sprint-chart-box'>";
+        echo SprintChart::svgOpen(sprintf(
+            __('%1$s. Latest sprint %2$s: %3$s.', 'sprint'),
+            $title !== '' ? $title : (string)($series[0]['label'] ?? ''),
+            $labels[$last],
+            implode(', ', $summary)
+        ), $w, $h, 'sprint-overview-chart');
+        echo SprintChart::yAxis($scale, $padL, $w - $padR, $padT, $yB, $fmtV);
         for ($i = 0; $i < $n; $i++) {
-            $cx     = $padL + ($slot * $i) + ($slot / 2);
-            $startX = $cx - (($count * $barW + ($count - 1) * $gap) / 2);
+            echo SprintChart::axisLabel($axis, $i, $xAt($i), $axisY);
+        }
 
-            foreach ($series as $index => $set) {
+        foreach ($series as $index => $set) {
+            $color = htmlescape((string)$set['color']);
+            echo "<g class='sprint-chart-series' data-series='b" . (int)$index . "'>";
+            for ($i = 0; $i < $n; $i++) {
                 $value = (float)($set['values'][$i] ?? 0);
-                $x     = $startX + $index * ($barW + $gap);
-                $y     = $yAt($value);
-                if (!empty($links[$i])) echo "<a href='" . htmlescape($links[$i]) . "'>";
-                echo "<rect x='" . $fmt($x) . "' y='" . $fmt($y) . "' width='" . $fmt($barW) . "' "
-                    . "height='" . $fmt($plotH - ($y - $padT)) . "' rx='2' fill='" . $set['color'] . "'>"
-                    . "<title>" . htmlescape($labels[$i] . ' — ' . $set['label'] . ': ' . round($value)) . "</title></rect>";
-                if (!empty($links[$i])) echo '</a>';
-                if ($value > 0) {
-                    echo "<text x='" . $fmt($x + $barW / 2) . "' y='" . $fmt($y - 4) . "' text-anchor='middle' "
-                        . "fill='" . $set['color'] . "' font-weight='600' style='{$halo}'>" . round($value) . "</text>";
-                    $barLabelYs[$i][] = $y - 4;
+                if ($value <= 0) {
+                    continue;
+                }
+                $x = $xAt($i) - $groupW / 2 + $index * ($barW + $gap);
+                $y = $yAt($value);
+                echo "<rect x='" . $num($x) . "' y='" . $num($y) . "' width='" . $num($barW) . "' height='"
+                    . $num(max(1.0, $yB - $y)) . "' rx='2' fill='{$color}'/>";
+                if ($labelled) {
+                    echo "<text class='sprint-chart-value' x='" . $num($x + $barW / 2) . "' y='" . $num($y - 4)
+                        . "' text-anchor='middle'>" . htmlescape($fmtV($value)) . "</text>";
                 }
             }
-
-            $label   = mb_strlen($labels[$i]) > 16 ? (mb_substr($labels[$i], 0, 15) . '…') : $labels[$i];
-            $labelX  = $fmt($cx);
-            $labelY  = $padT + $plotH + ($tilted ? 14 : 16);
-            $anchor  = $tilted ? 'end' : 'middle';
-            $rotate  = $tilted ? " transform='rotate(-35 {$labelX} {$labelY})'" : '';
-            echo "<text x='{$labelX}' y='{$labelY}' text-anchor='{$anchor}' fill='#6c757d'{$rotate}>"
-                . htmlescape($label) . "<title>" . htmlescape($labels[$i]) . "</title></text>";
-
-            if ($line !== null) {
-                $linePoints[] = ['x' => $cx, 'y' => $yLineAt((float)($line['values'][$i] ?? 0)), 'v' => (float)($line['values'][$i] ?? 0)];
-            }
+            echo "</g>";
         }
 
         if ($reference !== null && (float)$reference['value'] > 0) {
-            $y = $fmt($yAt((float)$reference['value']));
-            echo "<line x1='{$padL}' y1='{$y}' x2='" . ($padL + $plotW) . "' y2='{$y}' stroke='" . $reference['color']
-                . "' stroke-width='1.2' stroke-dasharray='5,4' opacity='0.6' />";
+            $y = $num($yAt((float)$reference['value']));
+            echo "<line class='sprint-chart-refline' x1='{$padL}' y1='{$y}' x2='" . ($w - $padR) . "' y2='{$y}' stroke='"
+                . htmlescape((string)$reference['color']) . "'/>";
         }
 
-        if (!empty($linePoints)) {
-            $poly = [];
-            foreach ($linePoints as $point) {
-                $poly[] = $fmt($point['x']) . ',' . $fmt($point['y']);
-            }
-            echo "<polyline points='" . implode(' ', $poly) . "' fill='none' stroke='" . $line['color']
-                . "' stroke-width='2' stroke-linejoin='round' />";
-            foreach ($linePoints as $i => $point) {
-                echo "<circle cx='" . $fmt($point['x']) . "' cy='" . $fmt($point['y']) . "' r='2.8' fill='" . $line['color'] . "'>"
-                    . "<title>" . htmlescape($line['label'] . ': ' . round($point['v']) . $line['suffix']) . "</title></circle>";
-
-                // Above the point, unless that lands on a bar value label.
-                $labelY = $point['y'] - 8;
-                foreach ($barLabelYs[$i] ?? [] as $barLabelY) {
-                    if (abs($labelY - $barLabelY) < 12) {
-                        $labelY = min($point['y'] + 16, $padT + $plotH - 2);
-                        break;
-                    }
+        if ($line !== null) {
+            $color   = htmlescape((string)$line['color']);
+            $stripAt = static fn(float $v): float => $sBot - ($sBot - $sTop) * (max(0.0, min($v, $lineMax)) / $lineMax);
+            echo "<text class='sprint-chart-label sprint-chart-striptitle' x='{$padL}' y='" . $num($yB + 17) . "'>"
+                . htmlescape((string)$line['label']) . "</text>";
+            foreach ([0.0, $lineMax / 2, $lineMax] as $tick) {
+                $y = $stripAt($tick);
+                echo "<line class='" . ($tick === 0.0 ? 'sprint-chart-axis' : 'sprint-chart-grid') . "' x1='{$padL}' y1='"
+                    . $num($y) . "' x2='" . ($w - $padR) . "' y2='" . $num($y) . "'/>";
+                if ($tick !== $lineMax / 2) {
+                    echo "<text class='sprint-chart-label' x='" . ($padL - 8) . "' y='" . $num($y + 3.5)
+                        . "' text-anchor='end'>" . htmlescape($lineFmt($tick)) . "</text>";
                 }
-                $labelY = max($labelY, $padT + 10);
-                echo "<text x='" . $fmt($point['x']) . "' y='" . $fmt($labelY) . "' text-anchor='middle' "
-                    . "fill='" . $line['color'] . "' font-weight='600' style='{$halo}'>" . round($point['v']) . $line['suffix'] . "</text>";
             }
+            $path = '';
+            for ($i = 0; $i < $n; $i++) {
+                $path .= ($i === 0 ? 'M' : 'L') . $num($xAt($i)) . ',' . $num($stripAt($lineVal($i))) . ' ';
+            }
+            echo "<g class='sprint-chart-series' data-series='line'>";
+            if ($n > 1) {
+                echo "<path class='sprint-chart-line' d='" . trim($path) . "' stroke='{$color}'/>";
+            }
+            for ($i = 0; $i < $n; $i++) {
+                $y = $stripAt($lineVal($i));
+                echo SprintChart::marker($count, $xAt($i), $y, 3.4, "class='sprint-chart-point' fill='{$color}'");
+                // Every point while there is room, else the two ends.
+                if ($slot >= 34 || $i === 0 || $i === $last) {
+                    echo "<text class='sprint-chart-value' x='" . $num($xAt($i)) . "' y='" . $num($y - 7)
+                        . "' text-anchor='middle'>" . htmlescape($lineFmt($lineVal($i))) . "</text>";
+                }
+            }
+            echo "</g>";
         }
 
+        // One hover and focus target per sprint over the full slot, on top.
+        for ($i = 0; $i < $n; $i++) {
+            $rows = [];
+            foreach ($series as $set) {
+                $rows[] = [(string)$set['label'], $fmtV((float)($set['values'][$i] ?? 0)), (string)$set['color']];
+            }
+            if ($line !== null) {
+                $rows[] = [(string)$line['label'], $lineFmt($lineVal($i)), (string)$line['color']];
+            }
+            echo self::chartSlot($padL + $slot * $i, $slot, $padT, $axisY, $labels[$i], $rows, (string)($links[$i] ?? ''));
+        }
         echo "</svg></div>";
 
-        echo "<div class='sprint-overview-legend'>";
-        foreach ($series as $set) {
-            echo "<span><span class='sprint-overview-legend-swatch' style='background:" . $set['color'] . ";'></span> "
-                . htmlescape($set['label']) . "</span>";
+        $legend = [];
+        foreach ($series as $index => $set) {
+            $legend[] = ['label' => (string)$set['label'], 'color' => (string)$set['color'], 'mark' => 'bar', 'key' => 'b' . (int)$index];
         }
         if ($line !== null) {
-            echo "<span><span class='sprint-overview-legend-line' style='border-color:" . $line['color'] . ";'></span> "
-                . htmlescape($line['label']) . "</span>";
+            $legend[] = ['label' => (string)$line['label'], 'color' => (string)$line['color'], 'mark' => 'line', 'shape' => $count, 'key' => 'line'];
         }
         if ($reference !== null) {
-            echo "<span><span class='sprint-overview-legend-line dashed' style='border-color:" . $reference['color'] . ";'></span> "
-                . htmlescape($reference['label']) . "</span>";
+            $legend[] = ['label' => (string)$reference['label'], 'color' => (string)$reference['color'], 'mark' => 'ref'];
         }
+        // Isolating needs something to isolate from.
+        echo SprintChart::legend($legend, $count + ($line !== null ? 1 : 0) > 1);
+
+        $head = [Sprint::getTypeName(1)];
+        foreach ($series as $set) {
+            $head[] = (string)$set['label'];
+        }
+        if ($line !== null) {
+            $head[] = (string)$line['label'];
+        }
+        $rows = [];
+        for ($i = 0; $i < $n; $i++) {
+            $row = [$labels[$i]];
+            foreach ($series as $set) {
+                $row[] = $fmtV((float)($set['values'][$i] ?? 0));
+            }
+            if ($line !== null) {
+                $row[] = $lineFmt($lineVal($i));
+            }
+            $rows[] = $row;
+        }
+        echo self::chartTable($title !== '' ? $title : (string)($series[0]['label'] ?? ''), $head, $rows);
         echo "</div>";
     }
 

@@ -3633,27 +3633,9 @@ msgstr ""
 "Wordt op een item gezet zodra dit product wordt gekozen. Voor een ander "
 "aantal kies je \"Handmatige credits\". Niet gebruikt voor een map."
 
-#: src/SprintCredits.php:65
-msgid "Current balance"
-msgstr "Huidig saldo"
-
-#: src/SprintCredits.php:66
-msgid "Where every customer stands today."
-msgstr "Waar elke klant vandaag staat."
-
 #: src/SprintCredits.php:72
 msgid "History"
 msgstr "Historie"
-
-#: src/SprintCredits.php:73
-msgid ""
-"What the sprints in the chosen period claimed, what lapsed and what was "
-"booked. The totals in the balance table above are cumulative since the first "
-"sprint. These sections follow the period filter."
-msgstr ""
-"Wat de sprints in de gekozen periode claimden, wat verviel en wat er is "
-"geboekt. De totalen in de saldotabel hierboven zijn cumulatief sinds de "
-"eerste sprint. Deze onderdelen volgen het periodefilter."
 
 #: src/SprintCredits.php:81
 msgid ""
@@ -3705,211 +3687,33 @@ msgstr "Filter %s verwijderen"
 msgid "%1$s of %2$s customers · %3$s sprints in the period"
 msgstr "%1$s van %2$s klanten · %3$s sprints in de periode"
 
-#: src/SprintCredits.php:304
-msgid "What is freely available?"
-msgstr "Wat is vrij beschikbaar?"
-
-#: src/SprintCredits.php:306
-msgid ""
-"Bought credits not yet claimed by delivered or open work: free to plan new "
-"work in."
-msgstr ""
-"Gekochte credits die nog niet door opgeleverd of open werk zijn geclaimd: "
-"vrij om nieuw werk in te plannen."
-
-#: src/SprintCredits.php:309
-#, php-format
-msgid ""
-"Plus %s of retainer volume still unbooked in the planned and running "
-"sprints. It lapses if those sprints do not use it."
-msgstr ""
-"Plus %s van het volume uit de vaste afspraak dat nog niet is geboekt in de "
-"geplande en lopende sprints. Het vervalt als die sprints het niet gebruiken."
-
-#: src/SprintCredits.php:315
-#, php-format
-msgid ""
-"%d customer has open work beyond its wallet. That shortfall is not "
-"subtracted here."
-msgid_plural ""
-"%d customers have open work beyond their wallet. That shortfall is not "
-"subtracted here."
-msgstr[0] ""
-"%d klant heeft open werk dat verder gaat dan de portemonnee. Dat tekort "
-"wordt hier niet afgetrokken."
-msgstr[1] ""
-"%d klanten hebben open werk dat verder gaat dan hun portemonnee. Dat tekort "
-"wordt hier niet afgetrokken."
-
-#: src/SprintCredits.php:325
-msgid "What is reserved?"
-msgstr "Wat is gereserveerd?"
-
-#: src/SprintCredits.php:328
-msgid ""
-"Open work in planned and running sprints. It is charged once the work is "
-"done."
-msgstr ""
-"Open werk in geplande en lopende sprints. Het wordt verrekend zodra het werk "
-"klaar is."
-
-#: src/SprintCredits.php:330
-#, php-format
-msgid "%s on the retainer of those sprints"
-msgstr "%s op de vaste afspraak van die sprints"
-
-#: src/SprintCredits.php:331
-#, php-format
-msgid "%s on the bought wallet"
-msgstr "%s op de gekochte portemonnee"
-
-#: src/SprintCredits.php:332
-#, php-format
-msgid "%s waits in the backlog and is not reserved yet"
-msgstr "%s wacht op de backlog en is nog niet gereserveerd"
-
-#: src/SprintCredits.php:339
-msgid "Which customer needs attention?"
-msgstr "Welke klant vraagt aandacht?"
-
-#: src/SprintCredits.php:342
-msgid ""
-"No customer needs attention: every wallet covers its open work and no agreed "
-"volume is about to lapse."
-msgstr ""
-"Geen enkele klant vraagt aandacht: elke portemonnee dekt het open werk en er "
-"staat geen afgesproken volume op het punt te vervallen."
-
-#: src/SprintCredits.php:352
-#, php-format
-msgid "%d more in the balance table below."
-msgstr "Nog %d in de saldotabel hieronder."
-
 #: src/SprintCredits.php:380 src/SprintCredits.php:592
 msgid "overdrawn"
 msgstr "overschreden"
-
-#: src/SprintCredits.php:381
-#, php-format
-msgid "The wallet is %s below zero."
-msgstr "De portemonnee staat %s onder nul."
 
 #: src/SprintCredits.php:384
 msgid "short"
 msgstr "tekort"
 
-#: src/SprintCredits.php:385
-#, php-format
-msgid "Open work needs %s more than the wallet holds."
-msgstr "Open werk heeft %s meer nodig dan er in de portemonnee zit."
-
 #: src/SprintCredits.php:388 src/SprintCredits.php:595
 msgid "low balance"
-msgstr "laag saldo"
-
-#: src/SprintCredits.php:389
-#, php-format
-msgid "%1$s free, below the alert level of %2$s."
-msgstr "%1$s vrij, onder het waarschuwingsniveau van %2$s."
+msgstr "weinig credits"
 
 #: src/SprintCredits.php:393
 msgid "over cap"
 msgstr "boven plafond"
 
-#: src/SprintCredits.php:393
-msgid "An upcoming sprint claims more than the agreed cap."
-msgstr "Een komende sprint claimt meer dan het afgesproken plafond."
-
 #: src/SprintCredits.php:394
 msgid "will lapse"
 msgstr "vervalt"
-
-#: src/SprintCredits.php:395
-#, php-format
-msgid "%s of the agreed volume is still unbooked."
-msgstr "%s van het afgesproken volume is nog niet geboekt."
 
 #: src/SprintCredits.php:412
 msgid "Bookings"
 msgstr "Boekingen"
 
-#: src/SprintCredits.php:414
-msgid "Balance row"
-msgstr "Saldoregel"
-
-#: src/SprintCredits.php:435
-msgid "How is a balance built up?"
-msgstr "Hoe wordt een saldo opgebouwd?"
-
-#: src/SprintCredits.php:437
-msgid ""
-"A customer has two separate pots. The retainer grants a fixed volume every "
-"sprint. What that sprint does not deliver lapses when it completes and never "
-"moves to the wallet. The wallet holds the credits bought through bookings. "
-"Delivered work beyond the sprint's grant is drawn from it, and open work "
-"beyond the grant reserves part of it."
-msgstr ""
-"Een klant heeft twee aparte potten. De vaste afspraak kent elke sprint een "
-"vast volume toe. Wat die sprint niet oplevert, vervalt bij afronding en gaat "
-"nooit naar de portemonnee. De portemonnee bevat de credits die via boekingen "
-"zijn gekocht. Opgeleverd werk boven de toekenning van de sprint wordt "
-"daaruit gehaald, en open werk boven de toekenning reserveert er een deel van."
-
-#: src/SprintCredits.php:440
-msgid "No customer has bought credits yet, so there is no example to show."
-msgstr ""
-"Nog geen enkele klant heeft credits gekocht, dus er is geen voorbeeld om te "
-"tonen."
-
-#: src/SprintCredits.php:447
-msgid "Bought (bookings up to today)"
-msgstr "Gekocht (boekingen tot vandaag)"
-
-#: src/SprintCredits.php:448
-msgid "Corrections and write-offs"
-msgstr "Correcties en afschrijvingen"
-
-#: src/SprintCredits.php:449
-msgid "Drawn by delivered work beyond the grant"
-msgstr "Afgeboekt door opgeleverd werk boven de toekenning"
-
-#: src/SprintCredits.php:450
-msgid "Bought credits that expired unused"
-msgstr "Gekochte credits die ongebruikt zijn verlopen"
-
-#: src/SprintCredits.php:452
-#, php-format
-msgid "Example: %s"
-msgstr "Voorbeeld: %s"
-
-#: src/SprintCredits.php:458
-msgid "Left in the wallet today"
-msgstr "Vandaag over in de portemonnee"
-
-#: src/SprintCredits.php:460
-msgid "Reserved by open work beyond the grants"
-msgstr "Gereserveerd door open werk boven de toekenningen"
-
 #: src/SprintCredits.php:462
 msgid "Free to plan"
 msgstr "Vrij om te plannen"
-
-#: src/SprintCredits.php:466
-msgid ""
-"Some delivered work could not be covered by a valid purchase on its date. "
-"That uncovered part is subtracted from the balance as well."
-msgstr ""
-"Een deel van het geleverde werk kon niet worden gedekt door een geldige "
-"aankoop op die datum. Dat ongedekte deel wordt ook van het saldo afgetrokken."
-
-#: src/SprintCredits.php:470
-#, php-format
-msgid ""
-"Retainer, separately: %1$s granted over all sprints, %2$s delivered against "
-"it, %3$s reserved by open work and %4$s lapsed."
-msgstr ""
-"Vaste afspraak, apart: %1$s toegekend over alle sprints, %2$s daartegen "
-"geleverd, %3$s gereserveerd door open werk en %4$s vervallen."
 
 #: src/SprintCredits.php:485
 msgid ""
@@ -3926,18 +3730,6 @@ msgstr "Catalogus"
 #: src/SprintCredits.php:494
 msgid "New customer"
 msgstr "Nieuwe klant"
-
-#: src/SprintCredits.php:522
-#, php-format
-msgid ""
-"%s credits sit on items with no customer, so they count against nobody's "
-"balance."
-msgstr ""
-"%s credits staan op items zonder klant en tellen dus op niemands saldo."
-
-#: src/SprintCredits.php:533 src/SprintCredits.php:549
-msgid "Balance per customer"
-msgstr "Saldo per klant"
 
 #: src/SprintCredits.php:535
 msgid ""
@@ -4264,7 +4056,7 @@ msgstr "Contactpersoon"
 
 #: src/SprintCustomer.php:812 src/SprintCustomer.php:872
 msgid "Low-balance alert"
-msgstr "Melding bij laag saldo"
+msgstr "Melding bij weinig credits"
 
 #: src/SprintCustomer.php:814
 msgid ""
@@ -8007,3 +7799,646 @@ msgstr[1] "Al je %d stemmen zijn gebruikt. Haal er eerst een weg om op iets ande
 #: src/SprintItem.php:313
 msgid "Scheduled"
 msgstr "Geagendeerd"
+
+#: src/SprintCredits.php
+msgid "What the sprints in the chosen period claimed, what lapsed and what was booked. The totals in the customer table above are cumulative since the first sprint. These sections follow the period filter and cover completed and running sprints."
+msgstr "Wat de sprints in de gekozen periode claimden, wat verviel en wat er is geboekt. De totalen in de klantentabel hierboven zijn cumulatief sinds de eerste sprint. Deze onderdelen volgen het periodefilter en tonen afgeronde en lopende sprints."
+
+#: src/SprintCredits.php
+#, php-format
+msgid "%s credits sit on items with no customer, so they are charged to no customer."
+msgstr "%s credits staan op items zonder klant en worden dus aan geen enkele klant toegerekend."
+
+#: templates/sprintmeeting.form.html.twig
+msgid "Mark as done"
+msgstr "Gereed melden"
+
+#: templates/sprintmeeting.form.html.twig
+msgid "The Definition of Done is incomplete: %s. Mark the item as done anyway?"
+msgstr "De Definition of Done is niet compleet: %s. Het item toch gereed melden?"
+
+#: templates/sprintmeeting.form.html.twig
+msgid "Mark the item as done anyway?"
+msgstr "Het item toch gereed melden?"
+
+#: templates/sprintmeeting.form.html.twig
+msgid "Could not mark the item as done"
+msgstr "Het item kon niet gereed worden gemeld"
+
+#: src/SprintCreditFall.php
+msgid "Creditfall"
+msgstr "Creditfall"
+
+#: src/SprintCreditFall.php
+msgid "The credits a sprint started with at its kick-off against what it delivered, and where the difference went."
+msgstr "De credits waarmee een sprint bij de kick-off begon tegenover wat is opgeleverd, en waar het verschil is gebleven."
+
+#: src/SprintCreditFall.php
+msgid "No sprint is being tracked yet"
+msgstr "Er wordt nog geen sprint gevolgd"
+
+#: src/SprintCreditFall.php
+msgid "Creditfall starts counting at the kick-off of a sprint, the moment it is set to active. Sprints that started earlier have no kick-off snapshot and are not shown."
+msgstr "Creditfall begint te tellen bij de kick-off van een sprint, het moment waarop die op actief wordt gezet. Sprints die eerder zijn gestart hebben geen momentopname van de kick-off en worden niet getoond."
+
+#: src/SprintCreditFall.php
+msgid "Filter the creditfall page"
+msgstr "Creditfallpagina filteren"
+
+#: src/SprintCreditFall.php
+msgid "Carried over"
+msgstr "Doorgeschoven"
+
+#: src/SprintCreditFall.php
+msgid "Lowered or removed"
+msgstr "Verlaagd of verwijderd"
+
+#: src/SprintCreditFall.php
+msgid "Item removed"
+msgstr "Item verwijderd"
+
+#: src/SprintCreditFall.php
+msgid "Not finished"
+msgstr "Niet af"
+
+#: src/SprintCreditFall.php
+msgid "Still open"
+msgstr "Nog open"
+
+#: src/SprintCreditFall.php
+msgid "Agreed with the customer"
+msgstr "Afgesproken met de klant"
+
+#: src/SprintCreditFall.php
+msgid "At kick-off"
+msgstr "Bij kick-off"
+
+#: src/SprintCreditFall.php
+msgid "Delivered against the agreement"
+msgstr "Opgeleverd ten opzichte van de afspraak"
+
+#: src/SprintCreditFall.php
+#, php-format
+msgid "From kick-off to delivered: %s"
+msgstr "Van kick-off naar opgeleverd: %s"
+
+#: src/SprintCreditFall.php
+msgid "How the credits of this sprint ended up. Work that was not finished when the sprint closed counts as creditfall."
+msgstr "Waar de credits van deze sprint zijn gebleven. Werk dat niet af was toen de sprint werd afgerond telt als creditfall."
+
+#: src/SprintCreditFall.php
+msgid "How the credits of this sprint stand right now. Open work is not creditfall yet, it becomes creditfall when the sprint closes without it."
+msgstr "Hoe de credits van deze sprint er nu voor staan. Open werk is nog geen creditfall, het wordt creditfall als de sprint zonder dat werk wordt afgerond."
+
+#: src/SprintCreditFall.php
+#, php-format
+msgid "Kick-off %1$s, delivered %2$s, creditfall %3$s"
+msgstr "Kick-off %1$s, opgeleverd %2$s, creditfall %3$s"
+
+#: src/SprintCreditFall.php
+msgid "Agreed"
+msgstr "Afspraak"
+
+#: src/SprintCreditFall.php
+msgid "Kick-off"
+msgstr "Kick-off"
+
+#: src/SprintCreditFall.php
+#, php-format
+msgid "%s blocked"
+msgstr "%s geblokkeerd"
+
+#: src/SprintCreditFall.php
+#, php-format
+msgid "%s was added to the sprint after the kick-off, through new items or raised credits."
+msgstr "%s is na de kick-off aan de sprint toegevoegd, via nieuwe items of verhoogde credits."
+
+#: src/SprintCreditFall.php
+#, php-format
+msgid "%s is no longer in these figures, for example because an item changed customer after the kick-off."
+msgstr "%s zit niet meer in deze cijfers, bijvoorbeeld doordat een item na de kick-off van klant is gewisseld."
+
+#: src/SprintCreditFall.php
+msgid "Creditfall per customer"
+msgstr "Creditfall per klant"
+
+#: src/SprintCreditFall.php
+msgid "Per customer: what was agreed, what the sprint held at its kick-off and how those credits ended up. The percentage is the creditfall as a share of the kick-off."
+msgstr "Per klant: wat is afgesproken, wat de sprint bij de kick-off bevatte en waar die credits zijn gebleven. Het percentage is de creditfall als deel van de kick-off."
+
+#: src/SprintCreditFall.php
+msgid "This sprint held no credits at its kick-off and none were added since."
+msgstr "Deze sprint bevatte bij de kick-off geen credits en er zijn er sindsdien geen toegevoegd."
+
+#: src/SprintCreditFall.php
+msgid "Added or changed after the kick-off"
+msgstr "Toegevoegd of gewijzigd na de kick-off"
+
+#: src/SprintCreditFall.php
+msgid "Creditfall per person"
+msgstr "Creditfall per persoon"
+
+#: src/SprintCreditFall.php
+msgid "Per owner: the credits on their items at the kick-off and how they ended up. Credits that left count for the owner at that moment."
+msgstr "Per eigenaar: de credits op diens items bij de kick-off en waar ze zijn gebleven. Credits die zijn weggevallen tellen voor de eigenaar op dat moment."
+
+#: src/SprintCreditFall.php
+msgid "Items in the creditfall"
+msgstr "Items in de creditfall"
+
+#: src/SprintCreditFall.php
+msgid "Every time credits left this sprint since its kick-off, newest first, followed by the work that is still open."
+msgstr "Elke keer dat credits deze sprint verlieten sinds de kick-off, nieuwste eerst, gevolgd door het werk dat nog open staat."
+
+#: src/SprintCreditFall.php
+msgid "Nothing fell out of this sprint and no work is open."
+msgstr "Er is niets uit deze sprint gevallen en er staat geen werk open."
+
+#: src/SprintCreditFall.php
+msgid "What happened"
+msgstr "Wat is er gebeurd"
+
+#: src/SprintCreditFall.php
+msgid "Credits lowered"
+msgstr "Credits verlaagd"
+
+#: src/SprintCreditFall.php
+msgid "Creditfall per sprint"
+msgstr "Creditfall per sprint"
+
+#: src/SprintCreditFall.php
+msgid "Every tracked sprint on the same scale, oldest first. The figure on the right is the creditfall and its share of the kick-off."
+msgstr "Elke gevolgde sprint op dezelfde schaal, oudste eerst. Het getal rechts is de creditfall en het aandeel daarvan in de kick-off."
+
+msgid "Waiting for the customer"
+msgstr "Wacht op klant"
+
+msgid "Too big for this sprint"
+msgstr "Te groot voor deze sprint"
+
+msgid "Priority changed"
+msgstr "Prioriteit gewijzigd"
+
+msgid "Quick reasons for \"Back to backlog\""
+msgstr "Snelle redenen voor \"Terug naar backlog\""
+
+msgid "One reason per line, at most eight. They show as buttons above the reason field when an item goes back to the backlog. Leave empty to use the default reasons."
+msgstr "Eén reden per regel, hoogstens acht. Ze verschijnen als knoppen boven het redenveld wanneer een item terug naar de backlog gaat. Laat leeg om de standaardredenen te gebruiken."
+
+#, php-format
+msgid "Priority: %s"
+msgstr "Prioriteit: %s"
+
+#, php-format
+msgid "Delete \"%s\" from this sprint? This cannot be undone."
+msgstr "\"%s\" uit deze sprint verwijderen? Dit kan niet ongedaan worden gemaakt."
+
+msgid "Quick reasons"
+msgstr "Snelle redenen"
+
+msgid "Keep the capacity in this sprint"
+msgstr "Capaciteit in deze sprint houden"
+
+msgid "Only the linked item returns to the backlog. The sprint item stays as a placeholder, so its capacity keeps counting."
+msgstr "Alleen het gekoppelde item gaat terug naar de backlog. Het sprintitem blijft staan als plaatshouder, zodat de capaciteit blijft meetellen."
+
+msgid "Remove from this sprint"
+msgstr "Uit deze sprint halen"
+
+msgid "The whole item moves to the backlog and its capacity is released."
+msgstr "Het hele item gaat naar de backlog en de capaciteit komt vrij."
+
+msgid "Remove dependency"
+msgstr "Afhankelijkheid verwijderen"
+
+msgid "Above the available capacity"
+msgstr "Boven de beschikbare capaciteit"
+
+msgid "Save anyway"
+msgstr "Toch opslaan"
+
+#, php-format
+msgid "Carrying over to %s."
+msgstr "Doorschuiven naar %s."
+
+msgid "Reason (optional)"
+msgstr "Reden (optioneel)"
+
+msgid "Why does this move on? It shows up in the retrospective."
+msgstr "Waarom schuift dit door? Dit komt terug in de retrospective."
+
+msgid "Confirming moves the item on while the linked item is still open."
+msgstr "Met bevestigen gaat het item door terwijl het gekoppelde item nog open staat."
+
+msgid "Your rejected requests"
+msgstr "Jouw afgewezen aanvragen"
+
+msgid "Rejected"
+msgstr "Afgewezen"
+
+#, php-format
+msgid "%d request"
+msgid_plural "%d requests"
+msgstr[0] "%d aanvraag"
+msgstr[1] "%d aanvragen"
+
+msgid "Requests waiting for the Scrum Master"
+msgstr "Aanvragen die wachten op de Scrum Master"
+
+#, php-format
+msgid "Your request \"%1$s\" for %2$s was rejected: %3$s"
+msgstr "Je aanvraag \"%1$s\" voor %2$s is afgewezen: %3$s"
+
+#, php-format
+msgid "Your request \"%1$s\" for %2$s was rejected."
+msgstr "Je aanvraag \"%1$s\" voor %2$s is afgewezen."
+
+msgid "Reject request"
+msgstr "Aanvraag afwijzen"
+
+msgid "The requester sees your reason with the rejected request."
+msgstr "De aanvrager ziet je reden bij de afgewezen aanvraag."
+
+msgid "Why is this request rejected?"
+msgstr "Waarom wordt deze aanvraag afgewezen?"
+
+msgid "More actions"
+msgstr "Meer acties"
+
+#, php-format
+msgid "Stand-up %s"
+msgstr "Stand-up %s"
+
+msgid "Start stand-up"
+msgstr "Stand-up starten"
+
+msgid "Open today's stand-up"
+msgstr "Stand-up van vandaag openen"
+
+msgid "Creates a stand-up for today and opens it"
+msgstr "Maakt een stand-up voor vandaag aan en opent die"
+
+msgid "Past"
+msgstr "Geweest"
+
+msgid "No upcoming meetings"
+msgstr "Geen komende meetings"
+
+msgid "Open meeting"
+msgstr "Meeting openen"
+
+#, php-format
+msgid "Delete \"%s\""
+msgstr "\"%s\" verwijderen"
+
+#, php-format
+msgid "Delete the meeting \"%s\"? Its notes are deleted too."
+msgstr "De meeting \"%s\" verwijderen? De notities worden ook verwijderd."
+
+msgid "Start sprint"
+msgstr "Sprint starten"
+
+msgid "Complete sprint"
+msgstr "Sprint afronden"
+
+#, php-format
+msgid "Complete sprint: %s"
+msgstr "Sprint afronden: %s"
+
+#, php-format
+msgid "Starting the sprint records the scope baseline: %1$d items and %2$d story points."
+msgstr "Bij het starten wordt de scope-baseline vastgelegd: %1$d items en %2$d storypoints."
+
+msgid "The credit kick-off snapshot is taken as well. The Creditfall page counts from this moment."
+msgstr "Ook de kick-off-momentopname van de credits wordt vastgelegd. De Creditfall-pagina telt vanaf dit moment."
+
+msgid "Completing the sprint freezes its credit agreements."
+msgstr "Bij het afronden worden de creditafspraken van deze sprint bevroren."
+
+#, php-format
+msgid "%d item is not done. On the next screen you decide per item: carry over, back to backlog or leave in the sprint."
+msgid_plural "%d items are not done. On the next screen you decide per item: carry over, back to backlog or leave in the sprint."
+msgstr[0] "%d item is niet af. Op het volgende scherm kies je per item: doorschuiven, terug naar backlog of in de sprint laten."
+msgstr[1] "%d items zijn niet af. Op het volgende scherm kies je per item: doorschuiven, terug naar backlog of in de sprint laten."
+
+msgid "Review open items"
+msgstr "Open items afhandelen"
+
+msgid "All items are done."
+msgstr "Alle items zijn af."
+
+msgid "Back to the sprint"
+msgstr "Terug naar de sprint"
+
+msgid "Only the Scrum Master of this sprint can complete it."
+msgstr "Alleen de Scrum Master van deze sprint kan de sprint afronden."
+
+msgid "Only an active sprint can be completed. Start the sprint first."
+msgstr "Alleen een actieve sprint kan worden afgerond. Start de sprint eerst."
+
+msgid "This sprint is completed and has no open items."
+msgstr "Deze sprint is afgerond en heeft geen open items."
+
+msgid "This sprint is already completed. Decide per open item what happens with it."
+msgstr "Deze sprint is al afgerond. Kies per open item wat ermee gebeurt."
+
+msgid "Decide per open item what happens with it. Completing the sprint freezes its credit agreements."
+msgstr "Kies per open item wat ermee gebeurt. Bij het afronden worden de creditafspraken van deze sprint bevroren."
+
+msgid "All items are done. Nothing to carry over."
+msgstr "Alle items zijn af. Er valt niets door te trekken."
+
+msgid "No planned or active sprint available"
+msgstr "Geen geplande of actieve sprint beschikbaar"
+
+msgid "All to this sprint"
+msgstr "Alles naar deze sprint"
+
+msgid "All back to backlog"
+msgstr "Alles terug naar backlog"
+
+msgid "Leave all in the sprint"
+msgstr "Alles in de sprint laten"
+
+msgid "Reason for all items (optional)"
+msgstr "Reden voor alle items (optioneel)"
+
+msgid "Shown in the retrospective and on the Creditfall page"
+msgstr "Zichtbaar in de retrospective en op de Creditfall-pagina"
+
+msgid "What happens"
+msgstr "Wat gebeurt er"
+
+msgid "Leave"
+msgstr "Laten staan"
+
+msgid "Manual items cannot go back to the backlog."
+msgstr "Handmatige items kunnen niet terug naar de backlog."
+
+msgid "Process open items"
+msgstr "Open items verwerken"
+
+#, php-format
+msgid "Carry over: %1$d. Back to backlog: %2$d. Leave in the sprint: %3$d."
+msgstr "Doorschuiven: %1$d. Terug naar backlog: %2$d. In de sprint laten: %3$d."
+
+msgid "The moves are carried out right away."
+msgstr "De verplaatsingen worden direct uitgevoerd."
+
+msgid "After that the sprint is completed and its credit agreements are frozen."
+msgstr "Daarna wordt de sprint afgerond en worden de creditafspraken bevroren."
+
+msgid "Failed"
+msgstr "Mislukt"
+
+msgid "This item is no longer part of the sprint."
+msgstr "Dit item maakt geen deel meer uit van de sprint."
+
+msgid "This item is already done."
+msgstr "Dit item is al af."
+
+msgid "Some items could not be processed. The sprint is not completed yet."
+msgstr "Sommige items konden niet worden verwerkt. De sprint is nog niet afgerond."
+
+msgid "Some items could not be processed."
+msgstr "Sommige items konden niet worden verwerkt."
+
+msgid "The sprint could not be completed."
+msgstr "De sprint kon niet worden afgerond."
+
+msgid "Sprint completed."
+msgstr "Sprint afgerond."
+
+msgid "Open items processed."
+msgstr "Open items verwerkt."
+
+#, php-format
+msgid "%d item carried over"
+msgid_plural "%d items carried over"
+msgstr[0] "%d item doorgeschoven"
+msgstr[1] "%d items doorgeschoven"
+
+#, php-format
+msgid "%d carry-over requested from another Scrum Master"
+msgid_plural "%d carry-overs requested from another Scrum Master"
+msgstr[0] "%d keer doorschuiven aangevraagd bij een andere Scrum Master"
+msgstr[1] "%d keer doorschuiven aangevraagd bij een andere Scrum Master"
+
+#, php-format
+msgid "%d item back to backlog"
+msgid_plural "%d items back to backlog"
+msgstr[0] "%d item terug naar backlog"
+msgstr[1] "%d items terug naar backlog"
+
+#, php-format
+msgid "%d item left in the sprint"
+msgid_plural "%d items left in the sprint"
+msgstr[0] "%d item in de sprint gelaten"
+msgstr[1] "%d items in de sprint gelaten"
+
+#, php-format
+msgid "%d item failed"
+msgid_plural "%d items failed"
+msgstr[0] "%d item mislukt"
+msgstr[1] "%d items mislukt"
+
+msgid "What the completed and running sprints in the chosen period claimed, what lapsed and what was booked."
+msgstr "Wat de afgeronde en lopende sprints in de gekozen periode hebben geclaimd, wat is vervallen en wat is geboekt."
+
+#, php-format
+msgid "Period: %s"
+msgstr "Periode: %s"
+
+msgid "Cumulative since the first sprint"
+msgstr "Cumulatief sinds de eerste sprint"
+
+msgid "Show all customers again"
+msgstr "Toon weer alle klanten"
+
+#, php-format
+msgid "Show only %s on this page"
+msgstr "Toon alleen %s op deze pagina"
+
+msgid "Trend: the credits each sprint claimed, one line per customer. Filter on one customer to see the agreed volume as a dashed line. Mix: how each sprint was filled, plus the grant that lapsed unused."
+msgstr "Trend: de credits die elke sprint heeft geclaimd, één lijn per klant. Filter op één klant om de afspraak als stippellijn te zien. Mix: hoe elke sprint is gevuld, plus het toegekende volume dat ongebruikt is vervallen."
+
+msgid "There is no completed or running sprint in this period. Choose a longer period."
+msgstr "Er is geen afgeronde of lopende sprint in deze periode. Kies een langere periode."
+
+msgid "Give sprint items a customer and credits, or choose a longer period."
+msgstr "Geef sprintitems een klant en credits, of kies een langere periode."
+
+#, php-format
+msgid "Credits claimed per sprint, one line per customer. Latest sprint %1$s: %2$s credits claimed."
+msgstr "Geclaimde credits per sprint, één lijn per klant. Laatste sprint %1$s: %2$s credits geclaimd."
+
+msgid "running"
+msgstr "loopt"
+
+msgid "No credits"
+msgstr "Geen credits"
+
+msgid "Show as table"
+msgstr "Toon als tabel"
+
+msgid "Credits claimed and agreed per sprint"
+msgstr "Geclaimde en afgesproken credits per sprint"
+
+#, php-format
+msgid "+ %s lapsed"
+msgstr "+ %s vervallen"
+
+#, php-format
+msgid "Credits per catalogue folder for %1$s. %2$s credits over %3$s sprints, most of it in %4$s."
+msgstr "Credits per catalogusmap voor %1$s. %2$s credits over %3$s sprints, het meeste in %4$s."
+
+#, php-format
+msgid "Credits per tag for %1$s over %2$s sprints. The largest tag is %3$s with %4$s credits."
+msgstr "Credits per tag voor %1$s over %2$s sprints. De grootste tag is %3$s met %4$s credits."
+
+msgid "Sprint shown in the category split"
+msgstr "Sprint die in de categorieverdeling wordt getoond"
+
+#, php-format
+msgid "The color of this customer is very close to that of %s. Their lines and bars will be hard to tell apart in the charts."
+msgstr "De kleur van deze klant ligt erg dicht bij die van %s. Hun lijnen en staven zijn in de grafieken moeilijk uit elkaar te houden."
+
+msgid "The color of this customer has little contrast against a dark theme. A lighter color reads better in the charts."
+msgstr "De kleur van deze klant heeft weinig contrast op een donker thema. Een lichtere kleur is beter leesbaar in de grafieken."
+
+#, php-format
+msgid "Velocity of this sprint and the %1$d before it. This sprint: %2$d story points completed. Average of the completed sprints: %3$s."
+msgstr "Velocity van deze sprint en de %1$d ervoor. Deze sprint: %2$d storypoints voltooid. Gemiddelde van de afgeronde sprints: %3$s."
+
+#, php-format
+msgid "Velocity of this sprint and the %1$d before it. This sprint: %2$d story points completed. No completed sprint to average yet."
+msgstr "Velocity van deze sprint en de %1$d ervoor. Deze sprint: %2$d storypoints voltooid. Nog geen afgeronde sprint om een gemiddelde van te nemen."
+
+msgid "This sprint and the six before it. Bars: completed story points, fastlane items and adhoc items. The strip below shows the total fastlane capacity on its own scale."
+msgstr "Deze sprint en de zes ervoor. Staven: voltooide storypoints, fastlane-items en adhoc-items. De strook eronder toont de totale fastlane-capaciteit op een eigen schaal."
+
+msgid "Give the sprint items story points to see the burndown."
+msgstr "Geef de sprintitems storypoints om de burndown te zien."
+
+#, php-format
+msgid "Burndown: the sprint has not started yet. The scope is %d story points."
+msgstr "Burndown: de sprint is nog niet begonnen. De scope is %d storypoints."
+
+#, php-format
+msgid "Burndown: %1$d of %2$d story points remained at the end of the sprint."
+msgstr "Burndown: aan het einde van de sprint resteerden %1$d van de %2$d storypoints."
+
+#, php-format
+msgid "Burndown: %1$d of %2$d story points remaining, %3$d day to go."
+msgid_plural "Burndown: %1$d of %2$d story points remaining, %3$d days to go."
+msgstr[0] "Burndown: %1$d van de %2$d storypoints resterend, nog %3$d dag te gaan."
+msgstr[1] "Burndown: %1$d van de %2$d storypoints resterend, nog %3$d dagen te gaan."
+
+msgid "Remaining story points against the ideal line. The ideal line only falls on working days, weekends are shaded."
+msgstr "Resterende storypoints tegenover de ideale lijn. De ideale lijn daalt alleen op werkdagen, weekenden zijn gearceerd."
+
+#, php-format
+msgid "Other (%d member)"
+msgid_plural "Other (%d members)"
+msgstr[0] "Overig (%d lid)"
+msgstr[1] "Overig (%d leden)"
+
+#, php-format
+msgid "Team activity from %1$s to %2$s: %3$d logged events. Most active: %4$s."
+msgstr "Teamactiviteit van %1$s tot %2$s: %3$d gelogde gebeurtenissen. Meest actief: %4$s."
+
+msgid "No activity"
+msgstr "Geen activiteit"
+
+msgid "Hold the kick-off"
+msgstr "Kick-off houden"
+
+msgid "Start the sprint"
+msgstr "Sprint starten"
+
+msgid "No backlog flow in the last 12 weeks"
+msgstr "Geen in- of uitstroom in de laatste 12 weken"
+
+msgid "The chart fills as soon as items are added to the backlog, assigned to a sprint or resolved. Pick another category to compare."
+msgstr "De grafiek vult zich zodra items aan de backlog worden toegevoegd, aan een sprint worden toegewezen of worden opgelost. Kies een andere categorie om te vergelijken."
+
+msgid "Net change"
+msgstr "Netto verandering"
+
+#, php-format
+msgid "Backlog inflow versus outflow per week over the last %1$d weeks. %2$s came in and %3$s went out, a net change of %4$s."
+msgstr "In- en uitstroom van de backlog per week over de laatste %1$d weken. Er kwam %2$s bij en er ging %3$s af, een netto verandering van %4$s."
+
+#, php-format
+msgid "Week %1$s (%2$s to %3$s)"
+msgstr "Week %1$s (%2$s t/m %3$s)"
+
+msgid "Everything in this category is planned"
+msgstr "Alles uit deze categorie is ingepland"
+
+msgid "There is no completed sprint in this selection. Choose a longer period or clear a filter."
+msgstr "Er is geen afgeronde sprint in deze selectie. Kies een langere periode of wis een filter."
+
+#, php-format
+msgid "%1$s. Latest sprint %2$s: %3$s."
+msgstr "%1$s. Laatste sprint %2$s: %3$s."
+
+msgid "Average team load per sprint."
+msgstr "Gemiddelde teambelasting per sprint."
+
+#, php-format
+msgid "Average team load per sprint. Latest sprint %1$s: %2$s."
+msgstr "Gemiddelde teambelasting per sprint. Laatste sprint %1$s: %2$s."
+
+#, no-php-format
+msgid "100% capacity"
+msgstr "100% capaciteit"
+
+msgid "A trend needs at least two completed sprints with team members. Choose a longer period."
+msgstr "Een trend heeft minstens twee afgeronde sprints met teamleden nodig. Kies een langere periode."
+
+msgid "No categorised work in this selection."
+msgstr "Geen werk met een categorie in deze selectie."
+
+msgid "Give sprint items a backlog category, or choose a longer period."
+msgstr "Geef sprintitems een backlogcategorie, of kies een langere periode."
+
+msgid "Category level"
+msgstr "Categorieniveau"
+
+#, php-format
+msgid "%1$s per backlog category over %2$d sprint, one line per category."
+msgid_plural "%1$s per backlog category over %2$d sprints, one line per category."
+msgstr[0] "%1$s per backlogcategorie over %2$d sprint, één lijn per categorie."
+msgstr[1] "%1$s per backlogcategorie over %2$d sprints, één lijn per categorie."
+
+msgid "No team load to compare yet."
+msgstr "Nog geen teambelasting om te vergelijken."
+
+msgid "Load is measured from the capacity allocated to sprint members. Choose a longer period or clear a filter."
+msgstr "De belasting wordt gemeten uit de capaciteit die aan sprintleden is toegewezen. Kies een langere periode of wis een filter."
+
+#, php-format
+msgid "Team load against predictability for %1$d sprint, %2$d with blocked work."
+msgid_plural "Team load against predictability for %1$d sprints, %2$d with blocked work."
+msgstr[0] "Teambelasting tegenover voorspelbaarheid voor %1$d sprint, %2$d met geblokkeerd werk."
+msgstr[1] "Teambelasting tegenover voorspelbaarheid voor %1$d sprints, %2$d met geblokkeerd werk."
+
+#, php-format
+msgid "Burndown: %1$d of %2$d points remaining."
+msgstr "Burndown: %1$d van %2$d punten resterend."
+
+#, php-format
+msgid "Remove %s from this sprint?"
+msgstr "%s uit deze sprint verwijderen?"
+
+#, php-format
+msgid "Remove %s from this template?"
+msgstr "%s uit dit sjabloon verwijderen?"
+
+#, php-format
+msgid "Remove the fixed leave of %1$s on %2$s?"
+msgstr "Het vaste verlof van %1$s op %2$s verwijderen?"
+
+msgid "Default team members"
+msgstr "Standaard teamleden"

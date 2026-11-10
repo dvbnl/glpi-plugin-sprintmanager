@@ -59,7 +59,7 @@
        its walkthrough phase (templates/meeting/items_tables.html.twig). #}
     {% if is_existing and sprint_items is defined %}
 
-    <tr><td colspan="4" style="padding:0;">
+    <tr><td colspan="4" class="p-0">
 
         {% if guided is defined and guided %}
         {% include '@sprint/meeting/rail.html.twig' %}
@@ -67,14 +67,69 @@
         {% include '@sprint/meeting/items_tables.html.twig' %}
         {% endif %}
 
-        {# The quick-edit dialog, the back-to-backlog dialog and the
-           carry-over split dialog are the shared ones rendered by
+        {# The quick-edit dialog, the back-to-backlog dialog, the carry-over
+           split dialog and the status dialogs (Definition of Done, linked
+           item still open) are the shared ones rendered by
            SprintMeeting::showForm() (SprintItem::renderQuickEditUI() and
            friends), so labels, validation and feedback match the board,
-           dashboard and items tab. Only the meeting's carry-over dropdown
-           is wired here. #}
+           dashboard and items tab. Only the meeting's carry-over menu and
+           the "Mark as done" row button are wired here. #}
         <script>
         $(function() {
+            // Carry-overs done on this page: { itemId: { sprintId: label } }.
+            // Kept on window so the chips survive an in-place tab refresh.
+            window.__sprintMeetingCarried = window.__sprintMeetingCarried || {};
+            var carriedTitle = '{{ __('Carried over to %s', 'sprint')|e('js') }}';
+
+            // Persistent "→ sprint" chip on the row, and that target switched
+            // off in the menu, so nobody carries the same item over twice.
+            function markCarried(itemId, sprintId, label) {
+                $('tr.sprint-review-row[data-item-id="' + itemId + '"]').each(function() {
+                    var $row = $(this);
+                    $row.find('.sprint-carry-over-btn').filter(function() {
+                        return String($(this).attr('data-sprint-id')) === String(sprintId);
+                    }).addClass('disabled').attr({ 'aria-disabled': 'true', 'tabindex': '-1' });
+                    var has = $row.find('.sprint-carried-chip').filter(function() {
+                        return String($(this).attr('data-sprint-id')) === String(sprintId);
+                    }).length > 0;
+                    if (has) { return; }
+                    var $chip = $('<span class="sprint-chip sprint-chip-success sprint-carried-chip ms-1"></span>')
+                        .attr('data-sprint-id', sprintId)
+                        .attr('title', carriedTitle.replace('%s', label))
+                        .text('→ ' + label);
+                    var $fold = $row.find('.sprint-review-fold').first();
+                    if ($fold.length) { $fold.before($chip); return; }
+                    var $link = $row.find('td a[href*="sprintitem.form.php"]').not('.btn, .dropdown-item').first();
+                    if ($link.length) { $link.after($chip); }
+                });
+            }
+
+            // After an in-place refresh of this tab: put the item filters
+            // and the scroll position back where the Scrum Master left them.
+            (function() {
+                Object.keys(window.__sprintMeetingCarried).forEach(function(itemId) {
+                    var targets = window.__sprintMeetingCarried[itemId] || {};
+                    Object.keys(targets).forEach(function(sprintId) {
+                        markCarried(itemId, sprintId, targets[sprintId]);
+                    });
+                });
+
+                var st = window.__sprintMeetingRestore;
+                if (!st) { return; }
+                window.__sprintMeetingRestore = null;
+                Object.keys(st.bars).forEach(function(id) {
+                    var bar = document.getElementById(id);
+                    if (!bar) { return; }
+                    Object.keys(st.bars[id]).forEach(function(cls) {
+                        var el = bar.querySelector('.' + cls);
+                        if (!el || el.value === st.bars[id][cls]) { return; }
+                        el.value = st.bars[id][cls];
+                        el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+                    });
+                });
+                window.scrollTo(0, st.y);
+            })();
+
             if (window.__sprintMeetingCarryBound) { return; }
             window.__sprintMeetingCarryBound = true;
 
@@ -89,14 +144,38 @@
                     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
                 });
             }
+            // Short theme-aware flash on a row (css: .sprint-row-flash-*).
+            function flashRow($row, cls) {
+                $row.addClass(cls);
+                setTimeout(function() { $row.removeClass(cls); }, 1600);
+            }
+
+            // The status pill is coloured by its sprint-status-* class. The
+            // shared quick-edit dialog updates the row's data-item-status, so
+            // the pill follows that after every save.
+            function syncStatusPills() {
+                $('tr.sprint-review-row').each(function() {
+                    var status = String(this.getAttribute('data-item-status') || '');
+                    if (status === '') { return; }
+                    $(this).find('.sprint-review-status')
+                        .removeClass(function(i, c) { return (c.match(/sprint-status-\S+/g) || []).join(' '); })
+                        .addClass('sprint-status-' + status.replace(/_/g, '-'))
+                        .css('background-color', '');
+                });
+            }
+            $(document).ajaxSuccess(function(ev, xhr, settings) {
+                if (!settings || !/updateitemquick\.php|updatestatus\.php/.test(String(settings.url || ''))) { return; }
+                setTimeout(syncStatusPills, 60);
+            });
 
             // Carry over to another sprint: AJAX so the meeting board
             // confirms in place instead of a full page reload. The original
             // row stays — carrying over is additive. Anyone but the target
             // sprint's Scrum Master files a request, reported as such.
-            function runCarryOver($btn, itemId, sprintId, split) {
+            function runCarryOver($btn, itemId, sprintId, sprintLbl, split) {
                 var $row = $('tr.sprint-review-row[data-item-id="' + itemId + '"]');
                 $btn.addClass('disabled').attr('aria-disabled', 'true');
+                function release() { $btn.removeClass('disabled').removeAttr('aria-disabled'); }
                 $.ajax({
                     url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
                     type: 'GET', dataType: 'json', cache: false
@@ -109,60 +188,166 @@
                             plugin_sprint_sprints_id: sprintId,
                             carry_capacity: split.carry_capacity,
                             carry_credits: split.carry_credits,
+                            reason: split.reason || '',
                             _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
                         }
                     });
                 }).done(function(resp) {
+                    release();
                     if (resp && resp.success && resp.requested) {
                         var lines = (resp.requests || []).filter(function(r) { return r.own; }).map(function(r) {
                             return '• ' + esc(r.label) + (r.change ? ': ' + esc(r.change) : '');
                         });
                         toast('{{ __('Requested — waiting for Scrum Master', 'sprint')|e('js') }}' + (lines.length ? '\n' + lines.join('\n') : '\n' + resp.message), 'warning');
                         $row.find('.sprint-request-pending-badge').remove();
-                        var $link = $row.find('td a[href*="sprintitem.form.php"]').not('.btn').first();
-                        if ($link.length) {
-                            $link.after($('<span class="sprint-request-pending-badge sprint-small" style="display:inline-flex;align-items:center;gap:3px;padding:0 6px;border-radius:8px;background:#fff3cd;color:#664d03;border:1px solid #ffe69c;font-weight:600;white-space:nowrap;"></span>')
+                        $row.each(function() {
+                            var $link = $(this).find('td a[href*="sprintitem.form.php"]').not('.btn, .dropdown-item').first();
+                            if (!$link.length) { return; }
+                            $link.after($('<span class="sprint-chip sprint-chip-warning sprint-request-pending-badge ms-1"></span>')
                                 .attr('title', '{{ __('Requested — waiting for Scrum Master', 'sprint')|e('js') }}')
                                 .html('<i class="fas fa-hourglass-half" aria-hidden="true"></i>')
                                 .append(document.createTextNode(' {{ __('Requested', 'sprint')|e('js') }}')));
-                        }
+                        });
                     } else if (resp && resp.success) {
                         toast(resp.message, 'success');
-                        // Brief green flash on the source row for feedback.
-                        $row.css('transition', 'background-color 0.3s').css('background-color', '#d1e7dd');
-                        setTimeout(function() { $row.css('background-color', ''); }, 700);
+                        flashRow($row, 'sprint-row-flash-success');
+                        var carried = window.__sprintMeetingCarried;
+                        carried[itemId] = carried[itemId] || {};
+                        carried[itemId][sprintId] = sprintLbl;
+                        markCarried(itemId, sprintId, sprintLbl);
                     } else {
                         toast(resp && resp.message ? resp.message : '{{ __('Could not carry the item over to the target sprint', 'sprint')|e('js') }}', 'error');
                     }
                 }).fail(function() {
+                    release();
                     toast('{{ __('Could not reach the server. Try again.', 'sprint')|e('js') }}', 'error');
-                }).always(function() {
-                    $btn.removeClass('disabled').removeAttr('aria-disabled');
                 });
             }
+
+            // Reload this tab over AJAX so every count and badge is current,
+            // keeping the filters and the scroll position.
+            function refreshMeeting() {
+                var st = { y: window.scrollY, bars: {} };
+                $('.sprint-filter-bar[id]').each(function() {
+                    var values = {};
+                    $(this).find('.sf-text, .sf-status, .sf-owner, .sf-tag').each(function() {
+                        var cls = (this.className.match(/sf-[a-z]+/) || [])[0];
+                        if (cls) { values[cls] = this.value; }
+                    });
+                    st.bars[this.id] = values;
+                });
+                if (typeof reloadTab === 'function' && $('main #tabspanel .nav-item .nav-link.active').length) {
+                    window.__sprintMeetingRestore = st;
+                    reloadTab('');
+                } else {
+                    window.location.reload();
+                }
+            }
+
+            // Fallback when the shared status dialogs are not on the page:
+            // the server asks back when the Definition of Done is incomplete
+            // or the linked item is still open, and each needs a yes.
+            function markDoneFallback($btn, extra) {
+                var itemId = $btn.data('item-id');
+                $btn.prop('disabled', true);
+                $.ajax({
+                    url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/csrftoken.php',
+                    type: 'GET', dataType: 'json', cache: false
+                }).then(function(tokResp) {
+                    return $.ajax({
+                        url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/updatestatus.php',
+                        type: 'POST', dataType: 'json',
+                        data: $.extend({
+                            id: itemId,
+                            status: 'done',
+                            _glpi_csrf_token: tokResp && tokResp.token ? tokResp.token : ''
+                        }, extra)
+                    });
+                }).done(function(resp) {
+                    if (resp && resp.needs_dod) {
+                        var missing = (resp.dod || []).filter(function(c) { return (resp.checked || []).indexOf(c) === -1; });
+                        if (resp.can_override && confirm('{{ __('The Definition of Done is incomplete: %s. Mark the item as done anyway?', 'sprint')|e('js') }}'.replace('%s', missing.join(', ')))) {
+                            markDoneFallback($btn, $.extend({}, extra, { dod_override: 1, done: resp.checked || [] }));
+                            return;
+                        }
+                        $btn.prop('disabled', false);
+                        return;
+                    }
+                    if (resp && resp.needs_confirm) {
+                        var name = resp.linked_name ? ' (' + resp.linked_name + ')' : '';
+                        if (confirm(resp.message + name + '. ' + '{{ __('Mark the item as done anyway?', 'sprint')|e('js') }}')) {
+                            markDoneFallback($btn, $.extend({}, extra, { confirm_linked_open: 1 }));
+                            return;
+                        }
+                        $btn.prop('disabled', false);
+                        return;
+                    }
+                    if (resp && resp.success) {
+                        toast(esc(resp.message), 'success');
+                        refreshMeeting();
+                        return;
+                    }
+                    $btn.prop('disabled', false);
+                    toast(esc(resp && resp.message ? resp.message : '{{ __('Could not mark the item as done', 'sprint')|e('js') }}'), 'error');
+                }).fail(function() {
+                    $btn.prop('disabled', false);
+                    toast('{{ __('Could not reach the server. Try again.', 'sprint')|e('js') }}', 'error');
+                });
+            }
+
+            // Scrum Master only: mark an item done straight from the row.
+            // window.sprintStatusChange() shows the Definition of Done
+            // checklist and the linked-item dialog, and resolves with the
+            // server reply once the status really changed. Cancelling a
+            // dialog does not resolve, so the button is never locked here.
+            function markDone($btn) {
+                if (typeof window.sprintStatusChange !== 'function') {
+                    markDoneFallback($btn, {});
+                    return;
+                }
+                var pending = window.sprintStatusChange($btn.data('item-id'), 'done', {});
+                if (!pending || typeof pending.done !== 'function') { return; }
+                pending.done(function(resp) {
+                    if (resp && resp.success === false) {
+                        toast(esc(resp.message ? resp.message : '{{ __('Could not mark the item as done', 'sprint')|e('js') }}'), 'error');
+                        return;
+                    }
+                    if (resp && resp.message) { toast(esc(resp.message), 'success'); }
+                    refreshMeeting();
+                });
+            }
+
+            $(document).on('click', '.sprint-mark-done-btn', function(e) {
+                e.preventDefault();
+                markDone($(this));
+            });
 
             $(document).on('click', '.sprint-carry-over-btn', function(e) {
                 e.preventDefault();
                 var $btn      = $(this);
+                if ($btn.hasClass('disabled')) { return; }
                 var itemId    = $btn.data('item-id');
                 var sprintId  = $btn.data('sprint-id');
-                var sprintLbl = $btn.data('sprint-label') || '';
+                var sprintLbl = String($btn.data('sprint-label') || '');
                 var $row      = $('tr.sprint-review-row[data-item-id="' + itemId + '"]');
                 var capacity  = parseInt($row.attr('data-is-fastlane'), 10) === 1 ? 0 : (parseFloat($row.attr('data-capacity')) || 0);
                 var credits   = parseFloat($row.attr('data-credits')) || 0;
 
                 // With something to split the split dialog is the
-                // confirmation (it names the sprint and both halves);
-                // otherwise ask plainly, naming the effect.
+                // confirmation (it names the sprint, both halves and takes
+                // the reason). Otherwise ask plainly, naming the effect.
                 if (typeof window.sprintCarrySplit === 'function' && (capacity > 0 || credits > 0)) {
                     window.sprintCarrySplit({ capacity: capacity, credits: credits, sprintLabel: sprintLbl }, function(split) {
-                        runCarryOver($btn, itemId, sprintId, split || {});
+                        runCarryOver($btn, itemId, sprintId, sprintLbl, split || {});
                     });
                     return;
                 }
                 var msg = '{{ __('Carry this item over to: %s ? The original stays in the current sprint.', 'sprint')|e('js') }}'.replace('%s', sprintLbl);
-                if (confirm(msg)) {
-                    runCarryOver($btn, itemId, sprintId, {});
+                var go  = function() { runCarryOver($btn, itemId, sprintId, sprintLbl, {}); };
+                if (typeof window.sprintConfirm === 'function') {
+                    window.sprintConfirm(msg, go);
+                } else if (confirm(msg)) {
+                    go();
                 }
             });
         });

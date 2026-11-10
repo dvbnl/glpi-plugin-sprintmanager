@@ -90,6 +90,103 @@ class SprintMeeting extends CommonDBTM
         return false;
     }
 
+    /** Default length in minutes per meeting type (add form and one-click stand-up). */
+    const DEFAULT_DURATIONS = [
+        self::TYPE_KICKOFF       => 60,
+        self::TYPE_STANDUP       => 15,
+        self::TYPE_REVIEW        => 60,
+        self::TYPE_RETROSPECTIVE => 45,
+    ];
+
+    public static function getDefaultDuration(string $meetingType): int
+    {
+        return self::DEFAULT_DURATIONS[$meetingType] ?? self::DEFAULT_DURATIONS[self::TYPE_STANDUP];
+    }
+
+    /** Today (Y-m-d) on GLPI's clock, so it matches the stored meeting dates. */
+    private static function today(): string
+    {
+        return substr((string)($_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s')), 0, 10);
+    }
+
+    /** Default title for a new meeting of this type: "Stand-up dd-mm", "Sprint Review dd-mm", ... */
+    public static function getDefaultTitle(string $meetingType): string
+    {
+        $day = date('d-m', (int)strtotime(self::today()));
+        if ($meetingType === self::TYPE_STANDUP) {
+            return sprintf(__('Stand-up %s', 'sprint'), $day);
+        }
+        $types = self::getAllTypes();
+        return trim(($types[$meetingType] ?? self::getTypeName(1)) . ' ' . $day);
+    }
+
+    /** Id of today's stand-up in this sprint (the latest one), or 0. */
+    public static function getTodayStandupId(int $sprintId): int
+    {
+        if ($sprintId <= 0) {
+            return 0;
+        }
+        $today = self::today();
+        $rows  = (new self())->find(
+            [
+                'plugin_sprint_sprints_id' => $sprintId,
+                'meeting_type'             => self::TYPE_STANDUP,
+                ['date_meeting' => ['>=', $today . ' 00:00:00']],
+                ['date_meeting' => ['<=', $today . ' 23:59:59']],
+            ],
+            ['date_meeting DESC', 'id DESC'],
+            1
+        );
+        $row = reset($rows);
+        return $row ? (int)$row['id'] : 0;
+    }
+
+    /** Input for the one-click stand-up: today, 15 minutes, the current user facilitates. */
+    public static function getStandupInput(int $sprintId): array
+    {
+        return [
+            'plugin_sprint_sprints_id' => $sprintId,
+            'name'                     => self::getDefaultTitle(self::TYPE_STANDUP),
+            'meeting_type'             => self::TYPE_STANDUP,
+            'date_meeting'             => (string)($_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s')),
+            'duration_minutes'         => self::getDefaultDuration(self::TYPE_STANDUP),
+            'users_id'                 => (int)Session::getLoginUserID(),
+        ];
+    }
+
+    /**
+     * "Start stand-up" button for a sprint, as HTML. One click creates today's
+     * stand-up and opens it (POST `start_standup` to front/sprintmeeting.form.php).
+     * When today's stand-up exists it is a plain link to that meeting. Empty
+     * string when the user may not do either.
+     */
+    public static function startStandupButton(int $sprintId): string
+    {
+        if ($sprintId <= 0) {
+            return '';
+        }
+        $icon     = "<i class='fas fa-coffee me-1' aria-hidden='true'></i>";
+        $existing = self::getTodayStandupId($sprintId);
+        if ($existing > 0) {
+            if (!self::canView()) {
+                return '';
+            }
+            return "<a href='" . static::getFormURLWithID($existing) . "' class='btn btn-primary sprint-standup-btn'>"
+                . $icon . __s("Open today's stand-up", 'sprint') . "</a>";
+        }
+        // Same rights as the "Schedule a meeting" form and its handler.
+        if (!Sprint::canUpdate() || !self::canCreate()) {
+            return '';
+        }
+        return "<form method='post' action='" . static::getFormURL() . "' class='d-inline-block sprint-standup-form'>"
+            . Html::hidden('plugin_sprint_sprints_id', ['value' => $sprintId])
+            . Html::hidden('start_standup', ['value' => 1])
+            . "<button type='submit' class='btn btn-primary sprint-standup-btn' title='"
+            . __s('Creates a stand-up for today and opens it', 'sprint') . "'>"
+            . $icon . __s('Start stand-up', 'sprint') . "</button>"
+            . Html::closeForm(false);
+    }
+
     /**
      * Show meetings list + add form for a sprint
      */
@@ -98,39 +195,70 @@ class SprintMeeting extends CommonDBTM
         $ID      = $sprint->getID();
         $canedit = Sprint::canUpdate();
 
+        echo "<div class='sprint-meetings-tab'>";
+
+        // === One-click stand-up ===
+        $standupButton = self::startStandupButton((int)$ID);
+        if ($standupButton !== '') {
+            echo "<div class='d-flex flex-wrap align-items-center gap-2 mb-3'>" . $standupButton . "</div>";
+        }
+
         // === Add form ===
         if ($canedit) {
-            echo "<div class='center'>";
-            echo "<form method='post' action='" . static::getFormURL() . "'>";
+            $types    = self::getAllTypes();
+            $defaults = [];
+            foreach ($types as $typeKey => $typeLabel) {
+                $defaults[$typeKey] = [
+                    'minutes' => self::getDefaultDuration($typeKey),
+                    'title'   => self::getDefaultTitle($typeKey),
+                ];
+            }
+            $rand         = mt_rand();
+            $defaultType  = self::TYPE_STANDUP;
+            $defaultTitle = $defaults[$defaultType]['title'];
+
+            echo "<div class='card mb-3 sprint-meeting-add'>";
+            echo "<div class='card-header'><h3 class='card-title'>"
+                . "<i class='fas fa-calendar-plus me-2' aria-hidden='true'></i>"
+                . __s('Schedule a meeting', 'sprint') . "</h3></div>";
+            echo "<div class='card-body'>";
+            echo "<form method='post' action='" . static::getFormURL() . "' class='sprint-meeting-add-form' "
+                . "data-type-defaults='" . htmlspecialchars((string)json_encode($defaults), ENT_QUOTES, 'UTF-8') . "'>";
             echo Html::hidden('plugin_sprint_sprints_id', ['value' => $ID]);
+            echo "<div class='row g-2 align-items-end'>";
 
-            echo "<table class='tab_cadre_fixe sprint-themed'>";
-            echo "<tr class='tab_bg_2'><th colspan='6'>" .
-                __('Schedule a meeting', 'sprint') . "</th></tr>";
-
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('Title') . "</td>";
-            echo "<td>" . Html::input('name', ['size' => 30]) . "</td>";
-            echo "<td>" . __('Type', 'sprint') . "</td>";
-            echo "<td>";
-            Dropdown::showFromArray('meeting_type', self::getAllTypes(), [
-                'value' => self::TYPE_STANDUP,
+            // The type comes first: it sets the default title and duration.
+            echo "<div class='col-12 col-md-6 col-xl-2' role='group' aria-labelledby='sprint-meeting-type-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-meeting-type-label-{$rand}'>" . __s('Type', 'sprint') . "</div>";
+            Dropdown::showFromArray('meeting_type', $types, [
+                'value' => $defaultType,
+                'width' => '100%',
             ]);
-            echo "</td>";
-            echo "<td>" . __('Date') . "</td>";
-            echo "<td>";
+            echo "</div>";
+
+            echo "<div class='col-12 col-md-6 col-xl-3'>";
+            echo "<label class='form-label' for='sprint-meeting-title-{$rand}'>" . __s('Title') . "</label>";
+            echo "<input type='text' class='form-control' name='name' id='sprint-meeting-title-{$rand}' "
+                . "value='" . htmlspecialchars($defaultTitle, ENT_QUOTES, 'UTF-8') . "' "
+                . "data-auto='" . htmlspecialchars($defaultTitle, ENT_QUOTES, 'UTF-8') . "'>";
+            echo "</div>";
+
+            echo "<div class='col-12 col-md-6 col-xl-3' role='group' aria-labelledby='sprint-meeting-date-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-meeting-date-label-{$rand}'>" . __s('Date') . "</div>";
             Html::showDateTimeField('date_meeting', ['value' => date('Y-m-d H:i:s')]);
-            echo "</td></tr>";
+            echo "</div>";
 
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('Duration (min)', 'sprint') . "</td>";
-            echo "<td>";
+            echo "<div class='col-6 col-md-3 col-xl-1' role='group' aria-labelledby='sprint-meeting-duration-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-meeting-duration-label-{$rand}'>" . __s('Duration (min)', 'sprint') . "</div>";
             Dropdown::showNumber('duration_minutes', [
-                'value' => 15, 'min' => 5, 'max' => 240, 'step' => 5,
+                'value' => self::getDefaultDuration($defaultType), 'min' => 5, 'max' => 240, 'step' => 5,
+                'width' => '100%',
             ]);
-            echo "</td>";
-            echo "<td>" . __('Facilitator', 'sprint') . " *</td>";
-            echo "<td>";
+            echo "</div>";
+
+            echo "<div class='col-6 col-md-3 col-xl-2' role='group' aria-labelledby='sprint-meeting-facilitator-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-meeting-facilitator-label-{$rand}'>" . __s('Facilitator', 'sprint')
+                . " <span class='required'>*</span></div>";
             // Facilitator is required — no empty option
             $memberOpts = SprintMember::getSprintMemberOptions($ID);
             unset($memberOpts[0]); // remove "-----" empty option
@@ -139,24 +267,69 @@ class SprintMeeting extends CommonDBTM
                 : (int)array_key_first($memberOpts);
             Dropdown::showFromArray('users_id', $memberOpts, [
                 'value' => $defaultFacilitator,
+                'width' => '100%',
             ]);
-            echo "</td>";
-            echo "<td colspan='2'>";
-            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
-            echo "</td></tr>";
-
-            echo "</table>";
-            Html::closeForm();
             echo "</div>";
+
+            echo "<div class='col-12 col-md-auto'>";
+            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
+            echo "</div>";
+
+            echo "</div>"; // .row
+            Html::closeForm();
+            echo "</div></div>"; // .card-body, .card
         }
 
-        // === List meetings ===
+        // === List meetings: upcoming (next one first) and past ===
         $meeting  = new self();
         $meetings = $meeting->find(
             ['plugin_sprint_sprints_id' => $ID],
-            ['date_meeting DESC']
+            ['date_meeting DESC', 'id DESC']
         );
 
+        $todayStart = self::today() . ' 00:00:00';
+        $upcoming   = [];
+        $past       = [];
+        foreach ($meetings as $row) {
+            $completed = self::isGuidedType((string)$row['meeting_type'])
+                && (string)($row['meeting_status'] ?? '') === 'completed';
+            if ((string)$row['date_meeting'] >= $todayStart && !$completed) {
+                $upcoming[] = $row;
+            } else {
+                $past[] = $row;
+            }
+        }
+        $upcoming = array_reverse($upcoming); // soonest first
+
+        if (count($meetings) === 0) {
+            echo "<div class='card'><div class='card-body text-center text-muted py-4'>"
+                . "<i class='fas fa-calendar sprint-empty-icon' aria-hidden='true'></i><br>"
+                . "<span class='fw-bold'>" . __s('No meetings scheduled', 'sprint') . "</span>"
+                . "</div></div>";
+        } else {
+            self::renderMeetingCard(__('Upcoming', 'sprint'), 'fas fa-calendar-day', $upcoming, $canedit, true);
+            if (count($past) > 0) {
+                self::renderMeetingCard(__('Past', 'sprint'), 'fas fa-clock-rotate-left', $past, $canedit, false);
+            }
+        }
+
+        echo "</div>"; // .sprint-meetings-tab
+
+        self::renderMeetingsTabScript();
+    }
+
+    /** Review and retrospective run through the guided rail and carry a session status. */
+    private static function isGuidedType(string $meetingType): bool
+    {
+        return in_array($meetingType, [self::TYPE_REVIEW, self::TYPE_RETROSPECTIVE], true);
+    }
+
+    /**
+     * One card of the meetings tab ("Upcoming" or "Past"). In the upcoming
+     * card the first row is the next meeting and gets the primary button.
+     */
+    private static function renderMeetingCard(string $title, string $icon, array $rows, bool $canedit, bool $isUpcoming): void
+    {
         $types     = self::getAllTypes();
         $typeIcons = [
             self::TYPE_KICKOFF       => 'fas fa-rocket',
@@ -164,51 +337,138 @@ class SprintMeeting extends CommonDBTM
             self::TYPE_REVIEW        => 'fas fa-clipboard-check',
             self::TYPE_RETROSPECTIVE => 'fas fa-lightbulb',
         ];
+        $statusChips = [
+            'open'        => ['sprint-chip', __('Not started', 'sprint')],
+            'in_progress' => ['sprint-chip sprint-chip-info', __('In progress', 'sprint')],
+            'completed'   => ['sprint-chip sprint-chip-success', __('Completed', 'sprint')],
+        ];
+        $today = self::today();
 
-        echo "<div class='center'><table class='tab_cadre_fixe sprint-themed'>";
-        echo "<tr class='tab_bg_2'>";
-        echo "<th>" . __('Title') . "</th>";
-        echo "<th>" . __('Type', 'sprint') . "</th>";
-        echo "<th>" . __('Date') . "</th>";
-        echo "<th>" . __('Duration', 'sprint') . "</th>";
-        echo "<th>" . __('Facilitator', 'sprint') . "</th>";
-        echo "<th>" . __('Actions') . "</th>";
-        echo "</tr>";
+        echo "<div class='card mb-3 sprint-meeting-list'>";
+        echo "<div class='card-header'><h3 class='card-title'>"
+            . "<i class='" . $icon . " me-2' aria-hidden='true'></i>" . htmlescape($title)
+            . " <span class='sprint-chip ms-1'>" . count($rows) . "</span></h3></div>";
 
-        if (count($meetings) === 0) {
-            echo "<tr class='tab_bg_1'><td colspan='6' class='center'>" .
-                __('No meetings scheduled', 'sprint') . "</td></tr>";
+        if (count($rows) === 0) {
+            echo "<div class='card-body text-muted'>" . __s('No upcoming meetings', 'sprint') . "</div></div>";
+            return;
         }
 
-        foreach ($meetings as $row) {
-            $icon = $typeIcons[$row['meeting_type']] ?? 'fas fa-calendar';
+        echo "<div class='table-responsive'><table class='table table-vcenter card-table mb-0'>";
+        echo "<thead><tr>";
+        echo "<th>" . __s('Title') . "</th>";
+        echo "<th>" . __s('Type', 'sprint') . "</th>";
+        echo "<th>" . __s('Date') . "</th>";
+        echo "<th>" . __s('Duration', 'sprint') . "</th>";
+        echo "<th>" . __s('Facilitator', 'sprint') . "</th>";
+        echo "<th>" . __s('Status') . "</th>";
+        echo "<th class='text-end'><span class='visually-hidden'>" . __s('Actions') . "</span></th>";
+        echo "</tr></thead><tbody>";
 
-            echo "<tr class='tab_bg_1'>";
-            echo "<td><a href='" . static::getFormURLWithID($row['id']) . "'>" .
-                htmlescape($row['name']) . "</a></td>";
-            echo "<td><i class='{$icon}'></i> " .
-                ($types[$row['meeting_type']] ?? $row['meeting_type']) . "</td>";
-            echo "<td>" . Html::convDateTime($row['date_meeting']) . "</td>";
-            echo "<td class='center'>" . (int)$row['duration_minutes'] . " min</td>";
+        $first = true;
+        foreach ($rows as $row) {
+            $isNext   = $isUpcoming && $first;
+            $first    = false;
+            $rowIcon  = $typeIcons[$row['meeting_type']] ?? 'fas fa-calendar';
+            $name     = (string)$row['name'];
+            $nameHtml = htmlescape($name);
+            $url      = static::getFormURLWithID($row['id']);
+            $isToday  = substr((string)$row['date_meeting'], 0, 10) === $today;
+
+            echo "<tr" . ($isNext ? " class='sprint-meeting-next'" : '') . ">";
+            echo "<td><a href='" . $url . "'>" . $nameHtml . "</a>";
+            if ($isNext) {
+                echo " <span class='sprint-chip sprint-chip-info ms-1'>" . __s('Next meeting', 'sprint') . "</span>";
+            }
+            echo "</td>";
+            echo "<td><i class='" . $rowIcon . " me-1' aria-hidden='true'></i>"
+                . htmlescape((string)($types[$row['meeting_type']] ?? $row['meeting_type'])) . "</td>";
+            echo "<td>" . Html::convDateTime($row['date_meeting']);
+            if ($isToday) {
+                echo " <span class='sprint-chip sprint-chip-orange ms-1'>" . __s('Today', 'sprint') . "</span>";
+            }
+            echo "</td>";
+            echo "<td>" . (int)$row['duration_minutes'] . " " . __s('min', 'sprint') . "</td>";
             echo "<td>" . htmlescape(SprintCache::userName($row['users_id'])) . "</td>";
-            echo "<td class='center'>";
+            echo "<td>";
+            if (self::isGuidedType((string)$row['meeting_type'])) {
+                $chip = $statusChips[(string)($row['meeting_status'] ?? 'open')] ?? $statusChips['open'];
+                echo "<span class='" . $chip[0] . "'>" . htmlescape($chip[1]) . "</span>";
+            }
+            echo "</td>";
+
+            echo "<td class='text-end sprint-nowrap'>";
+            if ($isNext) {
+                echo "<a href='" . $url . "' class='btn btn-sm btn-primary'>"
+                    . "<i class='fas fa-arrow-right me-1' aria-hidden='true'></i>" . __s('Open meeting', 'sprint') . "</a>";
+            } elseif ($canedit) {
+                $editLabel = htmlescape(sprintf(__('Edit "%s"', 'sprint'), $name));
+                echo "<a href='" . $url . "' class='btn btn-sm btn-outline-secondary' "
+                    . "title='" . $editLabel . "' aria-label='" . $editLabel . "'>"
+                    . "<i class='fas fa-pen' aria-hidden='true'></i></a>";
+            }
             if ($canedit) {
-                echo "<a href='" . static::getFormURLWithID($row['id']) .
-                    "' class='btn btn-sm btn-outline-primary'><i class='fas fa-edit'></i></a> ";
-                echo "<form method='post' action='" . static::getFormURL() .
-                    "' style='display:inline;'>";
+                // Destructive action last, confirmed in-page (see renderMeetingsTabScript()).
+                $deleteLabel = htmlescape(sprintf(__('Delete "%s"', 'sprint'), $name));
+                echo "<form method='post' action='" . static::getFormURL() . "' class='d-inline-block ms-2'>";
                 echo Html::hidden('id', ['value' => $row['id']]);
-                echo Html::submit(__('Delete'), [
-                    'name'    => 'purge',
-                    'class'   => 'btn btn-sm btn-outline-danger',
-                    'confirm' => __('Confirm deletion?'),
-                ]);
+                echo Html::hidden('purge', ['value' => 1]);
+                echo "<button type='button' class='btn btn-sm btn-outline-danger sprint-meeting-delete-btn' "
+                    . "title='" . $deleteLabel . "' aria-label='" . $deleteLabel . "' "
+                    . "data-confirm='" . htmlescape(sprintf(__('Delete the meeting "%s"? Its notes are deleted too.', 'sprint'), $name)) . "'>"
+                    . "<i class='fas fa-trash' aria-hidden='true'></i></button>";
                 Html::closeForm();
             }
             echo "</td></tr>";
         }
 
-        echo "</table></div>";
+        echo "</tbody></table></div></div>";
+    }
+
+    /**
+     * Page-wide handlers of the meetings tab, bound once: the add form's title
+     * and duration follow the chosen type, and delete asks through the shared
+     * in-page confirm.
+     */
+    private static function renderMeetingsTabScript(): void
+    {
+        echo <<<HTML
+<script>
+(function() {
+    if (window.__sprintMeetingsTabBound) { return; }
+    window.__sprintMeetingsTabBound = true;
+
+    jQuery(document).on('change', '.sprint-meeting-add-form select[name=meeting_type]', function() {
+        var form = jQuery(this).closest('form');
+        var defaults = form.data('type-defaults') || {};
+        var d = defaults[String(jQuery(this).val())];
+        if (!d) { return; }
+        form.find('select[name=duration_minutes]').val(String(d.minutes)).trigger('change');
+        // The title follows the type until someone typed their own.
+        var title = form.find('input[name=name]');
+        var current = String(title.val() || '');
+        if (current === '' || current === String(title.attr('data-auto') || '')) {
+            title.val(d.title);
+        }
+        title.attr('data-auto', d.title);
+    });
+
+    jQuery(document).on('click', '.sprint-meeting-delete-btn', function(e) {
+        e.preventDefault();
+        var btn  = jQuery(this);
+        var form = btn.closest('form')[0];
+        var msg  = String(btn.attr('data-confirm') || '');
+        if (!form) { return; }
+        var go = function() { form.submit(); };
+        if (typeof window.sprintConfirm === 'function') {
+            window.sprintConfirm(msg, go, { danger: true });
+        } else if (window.confirm(msg)) {
+            go();
+        }
+    });
+})();
+</script>
+HTML;
     }
 
     /**
@@ -607,9 +867,9 @@ class SprintMeeting extends CommonDBTM
         // "Back to Sprint" button linking to the parent sprint's Meetings tab
         if ($sprintId > 0) {
             $sprintUrl = Sprint::getFormURLWithID($sprintId) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintMeeting$1');
-            echo "<div style='margin-bottom:10px;'>";
+            echo "<div class='mb-2'>";
             echo "<a href='$sprintUrl' class='btn btn-outline-secondary'>";
-            echo "<i class='fas fa-arrow-left me-1'></i> " . __('Back to Sprint', 'sprint');
+            echo "<i class='fas fa-arrow-left me-1' aria-hidden='true'></i> " . __('Back to Sprint', 'sprint');
             echo "</a></div>";
         }
         $memberOptions = SprintMember::getSprintMemberOptions($sprintId);
@@ -819,6 +1079,11 @@ class SprintMeeting extends CommonDBTM
         if ($isExisting && $sprintId > 0) {
             SprintItem::renderQuickEditUI($sprintId, (int)$ID);
             SprintItem::renderBackToBacklogUI();
+            // Definition of Done checklist and "linked item still open"
+            // dialogs behind window.sprintStatusChange() (row "Mark as done").
+            if (method_exists(SprintItem::class, 'renderStatusGateUI')) {
+                SprintItem::renderStatusGateUI();
+            }
         }
         SprintItem::renderLinkedQuickEditUI();
         SprintItem::renderCarrySplitModalUI();

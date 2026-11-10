@@ -19,6 +19,12 @@ class SprintCustomer extends CommonDBTM
     /** Per-sprint overrides of the retainer (no own class), like the category caps. */
     const SPRINT_CREDITS_TABLE = 'glpi_plugin_sprint_sprintcustomercredits';
 
+    /** Below this OKLab distance (times 100) two customer colours read as the same. */
+    const COLOR_MIN_DISTANCE = 10.0;
+
+    /** Below this contrast ratio a colour is hard to see on a dark surface. */
+    const COLOR_MIN_CONTRAST = 2.5;
+
     /** @var array<int,array<string,mixed>>|null visible customers, per request */
     private static ?array $allCache = null;
 
@@ -904,13 +910,58 @@ class SprintCustomer extends CommonDBTM
     public function post_addItem()
     {
         self::invalidateCaches();
+        $this->warnAboutColor();
         parent::post_addItem();
     }
 
     public function post_updateItem($history = true)
     {
         self::invalidateCaches();
+        if (in_array('color', (array)($this->updates ?? []), true)) {
+            $this->warnAboutColor();
+        }
         parent::post_updateItem($history);
+    }
+
+    /**
+     * The colour identifies the customer in every chart, so say so when it is
+     * hard to tell from another customer's or hard to see on a dark theme.
+     * A warning only: the colour is saved as chosen.
+     */
+    private function warnAboutColor(): void
+    {
+        $color = (string)($this->fields['color'] ?? '');
+        if (!preg_match('/^#[0-9a-fA-F]{6}$/', $color)) {
+            return;
+        }
+        $own   = (int)$this->getID();
+        $close = [];
+        foreach (self::getAll(false) as $id => $row) {
+            $other = (string)($row['color'] ?? '');
+            if ((int)$id === $own || !preg_match('/^#[0-9a-fA-F]{6}$/', $other)) {
+                continue;
+            }
+            if (SprintChart::colorDistance($color, $other) < self::COLOR_MIN_DISTANCE) {
+                $close[] = plugin_sprint_html((string)$row['name']);
+            }
+        }
+        if ($close) {
+            Session::addMessageAfterRedirect(
+                sprintf(
+                    htmlescape(__('The color of this customer is very close to that of %s. Their lines and bars will be hard to tell apart in the charts.', 'sprint')),
+                    implode(', ', array_slice($close, 0, 3))
+                ),
+                false,
+                WARNING
+            );
+        }
+        if (SprintChart::contrastRatio($color, SprintChart::DARK_SURFACE) < self::COLOR_MIN_CONTRAST) {
+            Session::addMessageAfterRedirect(
+                htmlescape(__('The color of this customer has little contrast against a dark theme. A lighter color reads better in the charts.', 'sprint')),
+                false,
+                WARNING
+            );
+        }
     }
 
     /** Purging a customer leaves its items in place, unattributed. */

@@ -35,6 +35,7 @@ function plugin_sprint_install(): bool
             `duration_weeks`  INT UNSIGNED NOT NULL DEFAULT 2,
             `scope_baseline_items` INT UNSIGNED NOT NULL DEFAULT 0,
             `scope_baseline_points` INT UNSIGNED NOT NULL DEFAULT 0,
+            `credit_kickoff_date` TIMESTAMP NULL DEFAULT NULL,
             `fastlane_capacity` DECIMAL(5,1) NOT NULL DEFAULT 0 COMMENT 'Fastlane capacity cap in %, 0 = no cap',
             `users_id`        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scrum Master',
             `projects_id`     INT UNSIGNED NOT NULL DEFAULT 0,
@@ -61,6 +62,8 @@ function plugin_sprint_install(): bool
     if ($DB->tableExists('glpi_plugin_sprint_sprints')) {
         $migration->addField('glpi_plugin_sprint_sprints', 'scope_baseline_items', 'integer', ['value' => 0, 'after' => 'duration_weeks']);
         $migration->addField('glpi_plugin_sprint_sprints', 'scope_baseline_points', 'integer', ['value' => 0, 'after' => 'scope_baseline_items']);
+        // Set when the sprint starts: from then on the Creditfall page tracks it.
+        $migration->addField('glpi_plugin_sprint_sprints', 'credit_kickoff_date', 'timestamp', ['after' => 'scope_baseline_points']);
         $migration->addField('glpi_plugin_sprint_sprints', 'plugin_sprint_sprinttemplates_id', 'integer', ['value' => 0, 'after' => 'projects_id']);
         $migration->addKey('glpi_plugin_sprint_sprints', 'plugin_sprint_sprinttemplates_id');
         $migration->addField(
@@ -356,6 +359,37 @@ function plugin_sprint_install(): bool
             KEY `plugin_sprint_sprintcustomers_id` (`plugin_sprint_sprintcustomers_id`),
             KEY `date` (`date`),
             KEY `date_expire` (`date_expire`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        // Creditfall: what every item held at the sprint's kick-off, and
+        // every time credits left a sprint afterwards.
+        'glpi_plugin_sprint_creditkickoffs' => "CREATE TABLE `glpi_plugin_sprint_creditkickoffs` (
+            `id`                               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id`         INT UNSIGNED NOT NULL DEFAULT 0,
+            `plugin_sprint_sprintitems_id`     INT UNSIGNED NOT NULL DEFAULT 0,
+            `name`                             VARCHAR(255) NOT NULL DEFAULT '',
+            `plugin_sprint_sprintcustomers_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id`                         INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owner at kick-off',
+            `credits`                          DECIMAL(12,2) NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`),
+            KEY `plugin_sprint_sprints_id` (`plugin_sprint_sprints_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
+        'glpi_plugin_sprint_creditfalls' => "CREATE TABLE `glpi_plugin_sprint_creditfalls` (
+            `id`                               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `plugin_sprint_sprints_id`         INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Sprint the credits left',
+            `plugin_sprint_sprintitems_id`     INT UNSIGNED NOT NULL DEFAULT 0,
+            `name`                             VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Item name at that moment',
+            `plugin_sprint_sprintcustomers_id` INT UNSIGNED NOT NULL DEFAULT 0,
+            `users_id`                         INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owner at that moment',
+            `type`                             VARCHAR(20) NOT NULL DEFAULT '' COMMENT 'carryover, backlog, lowered, removed',
+            `credits`                          DECIMAL(12,2) NOT NULL DEFAULT 0,
+            `target_sprints_id`                INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Sprint the work moved to, 0 = none',
+            `was_blocked`                      TINYINT NOT NULL DEFAULT 0,
+            `reason`                           TEXT,
+            `users_id_actor`                   INT UNSIGNED NOT NULL DEFAULT 0,
+            `date_creation`                    TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `plugin_sprint_sprints_id` (`plugin_sprint_sprints_id`),
+            KEY `plugin_sprint_sprintitems_id` (`plugin_sprint_sprintitems_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC",
     ];
     foreach ($creditTables as $table => $query) {
@@ -1074,6 +1108,16 @@ function plugin_sprint_install(): bool
             $DB->error()
         );
     }
+    // Migration: the Scrum Master's reason for a rejection (also applied
+    // lazily by SprintRequest::ensureTable() for running installations).
+    if ($DB->tableExists('glpi_plugin_sprint_sprintrequests')
+        && !$DB->fieldExists('glpi_plugin_sprint_sprintrequests', 'decision_reason')) {
+        $DB->doQueryOrDie(
+            "ALTER TABLE `glpi_plugin_sprint_sprintrequests` ADD COLUMN `decision_reason` TEXT NULL "
+            . "COMMENT 'Scrum Master reason for the decision, shown to the requester'",
+            $DB->error()
+        );
+    }
 
     // Migration: capacity columns INT -> DECIMAL(5,1) for 0.5% granularity.
     $capacityColumns = [
@@ -1212,6 +1256,8 @@ function plugin_sprint_uninstall(): bool
     global $DB;
 
     $tables = [
+        'glpi_plugin_sprint_creditfalls',
+        'glpi_plugin_sprint_creditkickoffs',
         'glpi_plugin_sprint_sprintcreditproducts',
         'glpi_plugin_sprint_sprintretainers',
         'glpi_plugin_sprint_sprintcustomercredits',

@@ -485,51 +485,53 @@ class SprintMember extends CommonDBRelation
         $roles   = self::getAllRoles();
 
         if ($canedit) {
-            echo "<div class='center'>";
-            echo "<form method='post' action='" . static::getFormURL() . "'>";
+            // A card with the labels above the fields. Field names, the hidden
+            // sprint id and the submit name are what front/sprintmember.form.php reads.
+            $rand = mt_rand();
+            echo "<div class='card mb-3 sprint-member-card'><div class='card-body'>";
+            echo SprintUi::cardHeader('fas fa-user-plus', __('Add a team member', 'sprint'));
+            echo "<form method='post' action='" . static::getFormURL() . "' class='sprint-member-form'>";
             echo Html::hidden('plugin_sprint_sprints_id', ['value' => $ID]);
+            echo "<div class='row g-2 align-items-end'>";
 
-            echo "<table class='tab_cadre_fixe sprint-themed'>";
-            echo "<tr class='tab_bg_2'><th colspan='6'>" .
-                __('Add a team member', 'sprint') . "</th></tr>";
-
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('User') . "</td>";
-            echo "<td>";
+            echo "<div class='col-12 col-md-6 col-xl-3' role='group' aria-labelledby='sprint-member-user-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-member-user-label-{$rand}'>" . __s('User') . "</div>";
             User::dropdown([
                 'name'  => 'users_id',
                 'right' => 'all',
+                'width' => '100%',
             ]);
-            echo "</td>";
-            echo "<td>" . __('Role', 'sprint') . "</td>";
-            echo "<td>";
+            echo "</div>";
+
+            echo "<div class='col-12 col-md-6 col-xl-2' role='group' aria-labelledby='sprint-member-role-label-{$rand}'>";
+            echo "<div class='form-label' id='sprint-member-role-label-{$rand}'>" . __s('Role', 'sprint') . "</div>";
             Dropdown::showFromArray('role', $roles, [
                 'value'      => self::ROLE_DEVELOPER,
                 'aria_label' => __('Role', 'sprint'),
+                'width'      => '100%',
             ]);
-            echo "</td>";
-            echo "<td><label for='sprint-member-add-capacity'>" . __('Set capacity (%)', 'sprint') . "</label></td>";
-            echo "<td>";
+            echo "</div>";
+
+            echo "<div class='col-6 col-md-3 col-xl-2'>";
+            echo "<label class='form-label' for='sprint-member-add-capacity'>" . __s('Set capacity (%)', 'sprint') . "</label>";
             echo self::capacityInput('capacity_percent', 100, [
                 'id'       => 'sprint-member-add-capacity',
                 'required' => true,
             ]);
-            echo "</td>";
-            echo "</tr>";
-
-            echo "<tr class='tab_bg_1'>";
-            echo "<td>" . __('Comment') . "</td>";
-            echo "<td colspan='3'>";
-            echo "<textarea name='comment' rows='2' cols='60' aria-label='" . __s('Comment') . "'></textarea>";
-            echo "</td>";
-            echo "<td colspan='2'>";
-            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
-            echo "</td>";
-            echo "</tr>";
-
-            echo "</table>";
-            Html::closeForm();
             echo "</div>";
+
+            echo "<div class='col-12 col-md-9 col-xl'>";
+            echo "<label class='form-label' for='sprint-member-add-comment-{$rand}'>" . __s('Comment') . "</label>";
+            echo "<textarea class='form-control' name='comment' rows='1' id='sprint-member-add-comment-{$rand}'></textarea>";
+            echo "</div>";
+
+            echo "<div class='col-12 col-xl-auto'>";
+            echo Html::submit(__('Add'), ['name' => 'add', 'class' => 'btn btn-primary']);
+            echo "</div>";
+
+            echo "</div>";
+            Html::closeForm();
+            echo "</div></div>";
         }
 
         $member  = new self();
@@ -544,7 +546,7 @@ class SprintMember extends CommonDBRelation
 
         // Leave / training per member sits next to the capacity settings; the
         // effective capacity in the cards above already accounts for it.
-        echo "<div style='margin:16px 0;text-align:left;'>";
+        echo "<div class='my-3 text-start'>";
         SprintAgility::renderAvailability($ID, $canedit && Config::isCurrentUserScrumMaster($ID));
         echo "</div>";
 
@@ -559,23 +561,22 @@ class SprintMember extends CommonDBRelation
             self::ROLE_OTHER         => 'fas fa-user',
         ];
 
-        echo "<div class='center' style='margin-top:16px;'><table class='tab_cadre_fixe sprint-themed'>";
-        echo "<tr class='tab_bg_2'><th colspan='" . ($canedit ? 4 : 3) . "'>" .
-            "<i class='fas fa-user-cog' style='margin-right:6px;'></i>" .
-            __('Member settings', 'sprint') . "</th></tr>";
-        echo "<tr class='tab_bg_2'>";
-        echo "<th>" . __('User') . "</th>";
-        echo "<th>" . __('Role', 'sprint') . "</th>";
-        echo "<th>" . __('Set capacity', 'sprint') . "</th>";
+        echo "<div class='card mb-3 sprint-member-card'><div class='card-body'>";
+        echo SprintUi::cardHeader('fas fa-user-cog', __('Member settings', 'sprint'));
+        echo "<div class='table-responsive'><table class='table table-vcenter mb-0 sprint-member-table'>";
+        echo "<thead><tr>";
+        echo "<th scope='col'>" . __s('User') . "</th>";
+        echo "<th scope='col'>" . __s('Role', 'sprint') . "</th>";
+        echo "<th scope='col'>" . __s('Set capacity', 'sprint') . "</th>";
         if ($canedit) {
-            echo "<th>" . __('Actions') . "</th>";
+            echo "<th scope='col' class='text-end'>" . __s('Actions') . "</th>";
         }
-        echo "</tr>";
+        echo "</tr></thead><tbody>";
 
         if (count($members) === 0) {
             $cols = $canedit ? 4 : 3;
-            echo "<tr class='tab_bg_1'><td colspan='{$cols}' class='center'>" .
-                __('No team members added', 'sprint') . "</td></tr>";
+            echo "<tr><td colspan='{$cols}' class='text-center text-muted py-3'>" .
+                __s('No team members added', 'sprint') . "</td></tr>";
         }
 
         foreach ($members as $row) {
@@ -583,10 +584,10 @@ class SprintMember extends CommonDBRelation
             $roleName   = $roles[$row['role']] ?? $row['role'];
             $userId     = (int)$row['users_id'];
 
-            echo "<tr class='tab_bg_1'>";
-            echo "<td><i class='fas fa-user'></i> " . htmlescape(SprintCache::userName($userId)) . "</td>";
-            echo "<td><i class='{$icon}'></i> {$roleName}</td>";
-            echo "<td class='center'>";
+            echo "<tr>";
+            echo "<td><i class='fas fa-user text-muted me-2' aria-hidden='true'></i>" . htmlescape(SprintCache::userName($userId)) . "</td>";
+            echo "<td><i class='" . htmlescape($icon) . " text-muted me-2' aria-hidden='true'></i>" . htmlescape((string)$roleName) . "</td>";
+            echo "<td>";
             // The configured share is a fact, not a verdict and not progress:
             // a neutral, outlined "Set capacity" bar whatever the value (a 20%
             // part-timer is not a problem). Planning and overload show on the
@@ -595,7 +596,7 @@ class SprintMember extends CommonDBRelation
             $pctLabel  = self::formatCapacity($pct);
             $available = SprintAgility::effectiveCapacity($ID, $userId, $pct);
             $setLabel  = sprintf(__('Set capacity %s', 'sprint'), $pctLabel . '%');
-            echo "<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;'>";
+            echo "<div class='sprint-member-setcap'>";
             echo "<div class='sprint-cap-setbar' role='img' aria-label='" . htmlescape($setLabel) . "' title='" . htmlescape($setLabel) . "'>";
             echo "<div style='width:{$pct}%;'></div>";
             echo "</div>";
@@ -610,27 +611,31 @@ class SprintMember extends CommonDBRelation
             echo "</td>";
 
             if ($canedit) {
-                echo "<td class='center'>";
+                echo "<td class='text-end sprint-row-actions'>";
                 $memberName = SprintCache::userName($userId);
                 echo "<a href='" . static::getFormURLWithID($row['id']) .
-                    "' class='btn btn-sm btn-outline-primary' title='" . __s('Edit') . "' "
+                    "' class='btn btn-sm btn-outline-secondary' title='" . __s('Edit') . "' "
                     . "aria-label='" . htmlescape(sprintf(__('Edit %s', 'sprint'), $memberName)) . "'>" .
-                    "<i class='fas fa-edit' aria-hidden='true'></i></a> ";
-                echo "<form method='post' action='" . static::getFormURL() .
-                    "' style='display:inline;'>";
+                    SprintIcon::html(SprintIcon::EDIT) . "</a>";
+                // Destructive action last, an icon button like its neighbour.
+                // js/sprint.js asks first (data-sprint-confirm) and then
+                // submits this same form: the server path stays the plain
+                // purge POST.
+                echo "<form method='post' action='" . static::getFormURL() . "' class='d-inline-block ms-2'>";
                 echo Html::hidden('id', ['value' => $row['id']]);
-                echo Html::submit(__('Delete'), [
-                    'name'    => 'purge',
-                    'class'   => 'btn btn-sm btn-outline-danger',
-                    'confirm' => __('Remove this member?', 'sprint'),
-                ]);
+                echo "<button type='submit' name='purge' value='1' class='btn btn-sm btn-outline-danger' "
+                    . "title='" . __s('Delete') . "' "
+                    . "aria-label='" . __s('Delete') . ': ' . htmlescape($memberName) . "' "
+                    . "data-sprint-confirm='" . htmlescape(sprintf(__('Remove %s from this sprint?', 'sprint'), $memberName))
+                    . "' data-sprint-danger='1' data-sprint-confirm-ok='" . __s('Delete') . "'>"
+                    . SprintIcon::html(SprintIcon::DELETE) . "</button>";
                 Html::closeForm();
                 echo "</td>";
             }
             echo "</tr>";
         }
 
-        echo "</table></div>";
+        echo "</tbody></table></div></div></div>";
     }
 
     /**
@@ -658,7 +663,7 @@ class SprintMember extends CommonDBRelation
         ];
 
         echo "<div style='margin-bottom:16px;'>";
-        echo "<h4 style='margin:10px 0 12px;'><i class='fas fa-tachometer-alt me-2'></i>" .
+        echo "<h4 style='margin:10px 0 12px;'><i class='fas fa-tachometer-alt me-2' aria-hidden='true'></i>" .
             __('Team dashboard', 'sprint') . "</h4>";
         echo "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;'>";
 
@@ -683,10 +688,10 @@ class SprintMember extends CommonDBRelation
             echo "<div style='border:1px solid var(--tblr-border-color,#e9ecef);border-radius:10px;padding:14px 16px;background:var(--tblr-bg-surface,#fff);box-shadow:0 1px 2px rgba(0,0,0,0.03);'>";
 
             echo "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>";
-            echo "<i class='fas fa-user-circle' style='font-size:1.6em;color:#6c757d;'></i>";
+            echo "<i class='fas fa-user-circle' style='font-size:1.6em;color:#6c757d;' aria-hidden='true'></i>";
             echo "<div style='flex:1;'>";
             echo "<div style='font-weight:700;'>" . htmlescape(SprintCache::userName($userId)) . "</div>";
-            echo "<div style='font-size:0.82em;color:#6c757d;'><i class='{$roleIcon}'></i> " . htmlescape($roleName) . "</div>";
+            echo "<div style='font-size:0.82em;color:#6c757d;'><i class='{$roleIcon}' aria-hidden='true'></i> " . htmlescape($roleName) . "</div>";
             echo "</div>";
             if ($fastlaneItemCount > 0) {
                 echo "<span class='sprint-cap-chip sprint-cap-chip-fastlane' title='" . __s('Fastlane items assigned', 'sprint') . "'>"
@@ -722,7 +727,7 @@ class SprintMember extends CommonDBRelation
             if (count($helperItems) > 0) {
                 echo "<div style='margin-top:10px;padding-top:8px;border-top:1px dashed #e9ecef;'>";
                 echo "<div style='font-size:0.78em;color:#6c757d;margin-bottom:4px;'>"
-                    . "<i class='fas fa-link' style='color:#20c997;margin-right:4px;'></i>"
+                    . "<i class='fas fa-link' style='color:#20c997;margin-right:4px;' aria-hidden='true'></i>"
                     . __('Helping on', 'sprint') . "</div>";
                 $shown = 0;
                 foreach ($helperItems as $h) {
@@ -888,7 +893,7 @@ class SprintMember extends CommonDBRelation
             $out .= "<span title='" . htmlescape($label) . "' "
                 . "style='display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;"
                 . "background:{$color}1a;color:{$color};font-size:0.78em;font-weight:600;'>"
-                . "<i class='{$icon}'></i>{$n}</span>";
+                . "<i class='{$icon}' aria-hidden='true'></i>{$n}</span>";
         }
         $out .= "</div>";
 
@@ -920,7 +925,7 @@ class SprintMember extends CommonDBRelation
             $sprintUrl = Sprint::getFormURLWithID($sprintId) . '&forcetab=' . urlencode('GlpiPlugin\\Sprint\\SprintMember$1');
             echo "<div style='margin-bottom:10px;'>";
             echo "<a href='$sprintUrl' class='btn btn-outline-secondary'>";
-            echo "<i class='fas fa-arrow-left me-1'></i> " . __('Back to Sprint', 'sprint');
+            echo "<i class='fas fa-arrow-left me-1' aria-hidden='true'></i> " . __('Back to Sprint', 'sprint');
             echo "</a></div>";
         }
 

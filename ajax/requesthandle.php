@@ -23,9 +23,20 @@ if ($id <= 0 || !in_array($action, ['accept', 'reject', 'cancel'], true)) {
     return;
 }
 
+// What the client needs to keep its counters right, read before the request
+// is closed (the methods below do every permission check).
+$sprintId = 0;
+$itemId   = 0;
+$request  = new GlpiPlugin\Sprint\SprintRequest();
+if (GlpiPlugin\Sprint\SprintRequest::ensureTable() && $request->getFromDB($id)) {
+    $sprintId = (int)$request->fields['plugin_sprint_sprints_id'];
+    $itemId   = (int)$request->fields['plugin_sprint_sprintitems_id'];
+}
+
 $result = match ($action) {
     'accept' => GlpiPlugin\Sprint\SprintRequest::accept($id),
-    'reject' => GlpiPlugin\Sprint\SprintRequest::reject($id),
+    // Optional reason from the Scrum Master, shown to the requester.
+    'reject' => GlpiPlugin\Sprint\SprintRequest::reject($id, (string)($_POST['decision_reason'] ?? '')),
     'cancel' => GlpiPlugin\Sprint\SprintRequest::cancel($id),
 };
 
@@ -48,7 +59,16 @@ if (!empty($extra)) {
     $message .= "\n" . implode("\n", $extra);
 }
 
-echo json_encode([
+$response = [
     'success' => $result['ok'],
     'message' => $message,
-]);
+];
+// Only for a handled request, so nothing about a request leaks to a session
+// that was refused.
+if ($result['ok']) {
+    $response['sprint_id']     = $sprintId;
+    $response['item_id']       = $itemId;
+    $response['pending_count'] = GlpiPlugin\Sprint\SprintRequest::pendingCountForSprint($sprintId);
+    $response['item_pending']  = count(GlpiPlugin\Sprint\SprintRequest::describePendingForItem($itemId)['requests']);
+}
+echo json_encode($response);

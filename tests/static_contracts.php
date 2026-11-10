@@ -155,8 +155,8 @@ foreach ([
     }
 }
 
-if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.3.2")) {
-    fwrite(STDERR, "Version was not advanced to 1.3.2\n");
+if (!str_contains($setup, "PLUGIN_SPRINT_VERSION', '1.3.3")) {
+    fwrite(STDERR, "Version was not advanced to 1.3.3\n");
     exit(1);
 }
 $endpoint = file_get_contents($root . '/front/sprintagility.form.php');
@@ -190,7 +190,7 @@ if (!str_contains($board, 'dataset.boardOrder')) {
 }
 $dashboard = file_get_contents($root . '/src/SprintDashboard.php');
 if (str_contains($dashboard, 'max-width:{$width}px')
-    || substr_count($dashboard, "class='sprint-responsive-chart'") < 3) {
+    || substr_count($dashboard, 'SprintChart::svgOpen(') < 3) {
     fwrite(STDERR, "Dashboard SVG charts must remain responsive\n");
     exit(1);
 }

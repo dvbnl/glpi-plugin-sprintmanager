@@ -45,6 +45,10 @@ class Config extends CommonDBTM
      *  (red at twice this value). 0 disables. */
     const CFG_BACKLOG_AGING_DAYS = 'backlog_aging_days';
 
+    /** Quick reasons offered in the "Back to backlog" dialog, one per line.
+     *  Empty = the built-in (translated) defaults. */
+    const CFG_BACKLOG_REASONS = 'backlog_reasons';
+
     /** Default min/max capacity %% per category, JSON {"<catId>":{"min":x,"max":y}}.
      *  Applied to sprints that have no explicit limits for that category. */
     const CFG_CATEGORY_DEFAULT_LIMITS = 'category_default_limits';
@@ -95,6 +99,7 @@ class Config extends CommonDBTM
             self::CFG_CAPACITY_TO_POINTS    => 0,
             self::CFG_BACKLOG_AUTO_CLEANUP  => 1,
             self::CFG_BACKLOG_AGING_DAYS    => 21,
+            self::CFG_BACKLOG_REASONS       => '',
             self::CFG_CATEGORY_DEFAULT_LIMITS => '{}',
             self::CFG_CREDIT_MANAGERS       => '{}',
             self::CFG_DEFINITION_READY      => '',
@@ -146,6 +151,29 @@ class Config extends CommonDBTM
     {
         $cfg = self::getConfig();
         return (int)($cfg[self::CFG_TAG_REQUIRED] ?? 0) === 1 && count(self::getDefinedTags()) > 0;
+    }
+
+    /**
+     * Quick reasons for the "Back to backlog" dialog: the configured list, or
+     * the built-in defaults while the setting is empty.
+     *
+     * @return string[]
+     */
+    public static function getBacklogReasons(): array
+    {
+        $stored = SprintAgility::checklist((string)(self::getConfig()[self::CFG_BACKLOG_REASONS] ?? ''));
+        return $stored ?: self::defaultBacklogReasons();
+    }
+
+    /** @return string[] */
+    public static function defaultBacklogReasons(): array
+    {
+        return [
+            __('Waiting for the customer', 'sprint'),
+            __('Too big for this sprint', 'sprint'),
+            __('Priority changed', 'sprint'),
+            __('Blocked', 'sprint'),
+        ];
     }
 
     /** @return string[] Global Definition of Ready checks. */
@@ -343,6 +371,10 @@ class Config extends CommonDBTM
             self::CFG_CAPACITY_TO_POINTS    => static fn($v) => (int)(bool)$v,
             self::CFG_BACKLOG_AUTO_CLEANUP  => static fn($v) => (int)(bool)$v,
             self::CFG_BACKLOG_AGING_DAYS    => static fn($v) => max(0, min(365, (int)$v)),
+            self::CFG_BACKLOG_REASONS       => static fn($v) => implode("\n", array_slice(array_map(
+                static fn(string $line): string => mb_substr($line, 0, 80),
+                SprintAgility::checklist((string)$v)
+            ), 0, 8)),
             self::CFG_DEFINITION_READY      => static fn($v) => implode("\n", SprintAgility::checklist((string)$v)),
             self::CFG_DEFINITION_DONE       => static fn($v) => implode("\n", SprintAgility::checklist((string)$v)),
             self::CFG_ITEM_CAP_LIMIT        => static fn($v) => (int)(bool)$v,
@@ -543,6 +575,11 @@ class Config extends CommonDBTM
             "<input type='number' min='0' max='365' class='form-control' style='max-width:120px;' id='{$id}' aria-describedby='{$id}-help' "
             . "name='" . self::CFG_BACKLOG_AGING_DAYS . "' value='" . (int)$cfg[self::CFG_BACKLOG_AGING_DAYS] . "'"
             . ($canedit ? '' : ' readonly') . ">");
+        $storedReasons = SprintAgility::checklist((string)$cfg[self::CFG_BACKLOG_REASONS]);
+        self::textareaRow(self::CFG_BACKLOG_REASONS, implode("\n", $storedReasons), $canedit, 4,
+            __('Quick reasons for "Back to backlog"', 'sprint'),
+            __('One reason per line, at most eight. They show as buttons above the reason field when an item goes back to the backlog. Leave empty to use the default reasons.', 'sprint'),
+            implode('&#10;', array_map('htmlescape', self::defaultBacklogReasons())));
         self::closeForm($canedit, 'backlog');
         self::closeSection();
 

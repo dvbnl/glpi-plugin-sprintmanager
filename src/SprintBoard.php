@@ -105,8 +105,8 @@ class SprintBoard extends CommonGLPI
         );
         $wipLimits = SprintAgility::getWipLimits($sprint->fields);
 
-        echo "<div class='sprint-kanban-intro text-muted' style='padding:10px 4px;'>"
-            . "<i class='" . self::getIcon() . "' style='margin-right:6px;'></i>"
+        echo "<div class='sprint-kanban-intro text-muted'>"
+            . "<i class='" . self::getIcon() . " me-1' aria-hidden='true'></i>"
             . ($canedit
                 ? __('Drag a card to another column to change its status.', 'sprint')
                 : __('Sprint items grouped by status.', 'sprint'))
@@ -158,6 +158,9 @@ class SprintBoard extends CommonGLPI
         }
         echo "</div>"; // kanban
 
+        // DoD checklist / linked-item question behind every move (shared
+        // with the meeting rows): window.sprintStatusChange().
+        SprintItem::renderStatusGateUI();
         self::renderBoardScript();
         // Quick-edit modals opened by the card and linked-item pencil buttons.
         if ($canedit) {
@@ -247,9 +250,17 @@ class SprintBoard extends CommonGLPI
             . ($draggable ? " draggable='true'" : " data-locked='1'")
             . ">";
 
+        // Priority as a coloured left edge (css keys on data-item-priority,
+        // so a quick edit recolours it); the label is there for hover and
+        // for screen readers.
+        $priority = max(1, min(5, (int)($row['priority'] ?? 3)));
+        $priorityLabel = sprintf(__('Priority: %s', 'sprint'), self::priorityLabels()[$priority]);
+        echo "<span class='sk-card-prio' title='" . htmlescape($priorityLabel) . "'>"
+            . "<span class='visually-hidden'>" . htmlescape($priorityLabel) . "</span></span>";
+
         echo "<div class='sk-card-title'>";
         if ($isFastlane) {
-            echo "<i class='fas fa-bolt' style='color:#fd7e14;margin-right:4px;' title='" . __s('Fastlane', 'sprint') . "' aria-hidden='true'></i>"
+            echo "<i class='fas fa-bolt sk-card-fastlane' title='" . __s('Fastlane', 'sprint') . "' aria-hidden='true'></i>"
                 . "<span class='visually-hidden'>" . __s('Fastlane', 'sprint') . "</span>";
         }
         echo "<a href='" . SprintItem::getFormURLWithID($itemId) . "'>" . htmlescape($row['name']) . "</a>";
@@ -261,7 +272,7 @@ class SprintBoard extends CommonGLPI
             echo "<button type='button' class='btn btn-sm btn-link p-0 sk-card-edit sprint-quick-edit-btn' "
                 . "title='" . __s('Quick edit', 'sprint') . "' "
                 . "aria-label='" . htmlescape(sprintf(__('Quick edit: %s', 'sprint'), (string)$row['name'])) . "'>"
-                . "<i class='fas fa-pen' aria-hidden='true'></i></button>";
+                . SprintIcon::html(SprintIcon::EDIT) . "</button>";
         }
         echo "</div>";
 
@@ -273,9 +284,16 @@ class SprintBoard extends CommonGLPI
 
         echo "<div class='sk-card-meta'>";
         if ($ownerName !== '') {
-            echo "<span class='sk-card-owner'><i class='fas fa-user'></i> " . htmlescape($ownerName) . "</span>";
+            echo "<span class='sk-card-owner'><i class='fas fa-user' aria-hidden='true'></i> " . htmlescape($ownerName) . "</span>";
         } else {
             echo "<span class='sk-card-owner text-muted fst-italic'>" . __('Unassigned', 'sprint') . "</span>";
+        }
+        // Who it is for, for those who may see credits.
+        if (SprintCustomer::canUseCredits()) {
+            $customerPill = SprintCustomer::renderPill((int)($row['plugin_sprint_sprintcustomers_id'] ?? 0));
+            if ($customerPill !== '') {
+                echo "<span class='sk-card-customer'>" . trim($customerPill) . "</span>";
+            }
         }
         echo "<span class='sk-card-stats'>";
         echo "<span title='" . __s('Story Points', 'sprint') . "'><i class='fas fa-bullseye' aria-hidden='true'></i>"
@@ -311,6 +329,15 @@ class SprintBoard extends CommonGLPI
         echo "</div>"; // card
     }
 
+    /** @return array<int,string> priority value => label */
+    private static function priorityLabels(): array
+    {
+        return [
+            1 => __('Very low'), 2 => __('Low'), 3 => __('Medium'),
+            4 => __('High'), 5 => __('Very high'),
+        ];
+    }
+
     private static function renderViewTools(array $items, array $tagsById, array $columns, array $statuses): void
     {
         $owners = []; $tags = [];
@@ -340,64 +367,9 @@ class SprintBoard extends CommonGLPI
 
     private static function renderBoardScript(): void
     {
-        $endpoint = Plugin::getWebDir('sprint') . '/ajax/updatestatus.php';
-        $tokenUrl = Plugin::getWebDir('sprint') . '/ajax/csrftoken.php';
         $errMove  = addslashes(__('Could not change the status — you can only move your own items.', 'sprint'));
 
-        // Confirmation dialog shown when a card moves to Review/Done while its
-        // underlying GLPI item is still open (see ajax/updatestatus.php).
-        $ttlLinkedOpen = htmlescape(__('Linked item open', 'sprint'));
-        $msgLinkedOpen = htmlescape(__('The linked ticket/change is not closed/solved yet', 'sprint'));
-        $btnOpenLinked = htmlescape(__('Open linked item', 'sprint'));
-        $btnContinue   = htmlescape(__('Continue anyway', 'sprint'));
-        $btnCancel     = htmlescape(__('Cancel'));
-        $btnClose      = htmlescape(__('Close'));
         $unassignedJs  = addslashes(__('Unassigned', 'sprint'));
-        echo "<div class='modal fade' id='sprint-linkedopen-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-linkedopen-modal-title'>"
-            . "<div class='modal-dialog modal-dialog-centered'>"
-            . "<div class='modal-content'>"
-            . "<div class='modal-header'>"
-            . "<h5 class='modal-title' id='sprint-linkedopen-modal-title'><i class='fas fa-exclamation-triangle text-warning me-2' aria-hidden='true'></i>{$ttlLinkedOpen}</h5>"
-            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='{$btnClose}'></button>"
-            . "</div>"
-            . "<div class='modal-body'>"
-            . "<p class='mb-1'>{$msgLinkedOpen}</p>"
-            . "<p class='sprint-lo-name fw-bold mb-0'></p>"
-            . "</div>"
-            . "<div class='modal-footer'>"
-            . "<a href='#' target='_blank' rel='noopener' class='btn btn-outline-primary sprint-lo-open'>"
-            . "<i class='fas fa-external-link-alt me-1'></i>{$btnOpenLinked}</a>"
-            . "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$btnCancel}</button>"
-            . "<button type='button' class='btn btn-warning sprint-lo-continue'>{$btnContinue}</button>"
-            . "</div>"
-            . "</div></div></div>";
-
-        // DoD dialog for moves to Review/Done (needs_dod response).
-        $ttlDod = htmlescape(__('Definition of Done', 'sprint'));
-        $msgDod = htmlescape(__('Confirm every check before moving this item on.', 'sprint'));
-        $btnDod = htmlescape(__('Confirm', 'sprint'));
-        $btnDodOverride = htmlescape(__('Overrule as Scrum Master', 'sprint'));
-        $msgDodOverride = htmlescape(__('As Scrum Master you can move this item on without completing every check. The skipped checks are recorded in the history.', 'sprint'));
-        echo "<div class='modal fade' id='sprint-dod-modal' tabindex='-1' aria-hidden='true' aria-labelledby='sprint-dod-modal-title'>"
-            . "<div class='modal-dialog modal-dialog-centered'>"
-            . "<div class='modal-content'>"
-            . "<div class='modal-header'>"
-            . "<h5 class='modal-title' id='sprint-dod-modal-title'><i class='fas fa-list-check me-2' aria-hidden='true'></i>{$ttlDod}</h5>"
-            . "<button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='{$btnClose}'></button>"
-            . "</div>"
-            . "<div class='modal-body'>"
-            . "<p class='text-muted sprint-small mb-2'>{$msgDod}</p>"
-            . "<div class='sprint-dod-list'></div>"
-            . "<p class='text-muted sprint-small mt-2 mb-0 sprint-dod-override-hint' style='display:none'>"
-            . "<i class='fas fa-hat-wizard me-1'></i>{$msgDodOverride}</p>"
-            . "</div>"
-            . "<div class='modal-footer'>"
-            . "<button type='button' class='btn btn-secondary' data-bs-dismiss='modal'>{$btnCancel}</button>"
-            . "<button type='button' class='btn btn-warning sprint-dod-override' style='display:none'>"
-            . "<i class='fas fa-hat-wizard me-1'></i>{$btnDodOverride}</button>"
-            . "<button type='button' class='btn btn-success sprint-dod-go' disabled>{$btnDod}</button>"
-            . "</div>"
-            . "</div></div></div>";
 
         // Strings for the board script. Placeholders become {a}/{b}/{c}/{n}/{v}
         // so the JS never has to deal with printf syntax.
@@ -426,8 +398,10 @@ class SprintBoard extends CommonGLPI
     if (typeof jQuery === 'undefined') { return; }
 
     var T = {$i18n};
-    var endpoint = "{$endpoint}";
-    var tokenUrl = "{$tokenUrl}";
+    // Every message goes through the shared toast (own fallback included).
+    function notify(msg, level) {
+        if (typeof window.sprintNotify === 'function') { window.sprintNotify(msg, level); }
+    }
     // Set by the view-settings block below; re-applies filters + swimlanes.
     var applyView = null;
 
@@ -627,7 +601,7 @@ class SprintBoard extends CommonGLPI
         syncMoveMenu(card);
         setSaving(card, true);
         afterLayoutChange();
-        persistStatus(card.getAttribute('data-item-id'), newStatus, card, fromBody, false);
+        persistStatus(card.getAttribute('data-item-id'), newStatus, card, fromBody);
     }
 
     document.addEventListener('dragstart', function(e){
@@ -659,10 +633,6 @@ class SprintBoard extends CommonGLPI
         if (body && !body.contains(e.relatedTarget)) { body.classList.remove('sk-drag-over'); }
     });
 
-    // Context of a move waiting on the "linked item still open" confirmation.
-    var pendingMove = null;
-    var pendingMoveConfirmed = false;
-
     // Rejected or cancelled: back to the original column and position, and
     // the counters/WIP warning follow.
     function revertMove(card, fromBody) {
@@ -689,106 +659,27 @@ class SprintBoard extends CommonGLPI
         }
     }
 
-    function persistStatus(id, newStatus, card, fromBody, confirmOpen, doneList, dodOverride) {
+    // Save the move through the shared status change (SprintItem::
+    // renderStatusGateUI): it asks the DoD checklist and / or "linked item
+    // still open" when the server wants them. Cancelled or refused: the
+    // card goes back.
+    function persistStatus(id, newStatus, card, fromBody) {
         setSaving(card, true);
-        jQuery.ajax({ url: tokenUrl, type: 'GET', dataType: 'json', cache: false })
-        .then(function(tok){
-            var data = {
-                id: id, status: newStatus,
-                confirm_linked_open: confirmOpen ? 1 : 0,
-                dod_override: dodOverride ? 1 : 0,
-                _glpi_csrf_token: tok && tok.token ? tok.token : ''
-            };
-            if (doneList && doneList.length) { data.done = doneList; }
-            return jQuery.ajax({
-                url: endpoint, type: 'POST', dataType: 'json',
-                data: data
-            });
-        }).done(function(resp){
-            if (resp && resp.needs_dod) {
-                var dodEl = document.getElementById('sprint-dod-modal');
-                if (!dodEl) {
-                    revertMove(card, fromBody);
-                    if (window.glpi_toast_error) { window.glpi_toast_error(resp.message || "{$errMove}"); }
-                    return;
-                }
-                pendingMove = { id: id, newStatus: newStatus, card: card, fromBody: fromBody, doneList: doneList || null, dodOverride: false };
-                pendingMoveConfirmed = false;
-                var list = dodEl.querySelector('.sprint-dod-list');
-                // Scrum Master only: the overrule button and its hint.
-                var overrideBtn = dodEl.querySelector('.sprint-dod-override');
-                var overrideHint = dodEl.querySelector('.sprint-dod-override-hint');
-                if (overrideBtn) { overrideBtn.style.display = resp.can_override ? '' : 'none'; }
-                if (overrideHint) { overrideHint.style.display = resp.can_override ? '' : 'none'; }
-                list.innerHTML = '';
-                (resp.dod || []).forEach(function(check){
-                    var label = document.createElement('label');
-                    label.className = 'form-check d-block';
-                    var input = document.createElement('input');
-                    input.type = 'checkbox';
-                    input.className = 'form-check-input sprint-dod-check';
-                    input.value = check;
-                    input.checked = (resp.checked || []).indexOf(check) !== -1;
-                    var span = document.createElement('span');
-                    span.className = 'form-check-label';
-                    span.textContent = check;
-                    label.appendChild(input);
-                    label.appendChild(span);
-                    list.appendChild(label);
-                });
-                var goBtn = dodEl.querySelector('.sprint-dod-go');
-                var refreshGo = function(){
-                    goBtn.disabled = !!list.querySelector('.sprint-dod-check:not(:checked)');
-                };
-                list.querySelectorAll('.sprint-dod-check').forEach(function(cb){
-                    cb.addEventListener('change', refreshGo);
-                });
-                refreshGo();
-                bootstrap.Modal.getOrCreateInstance(dodEl).show();
-                return;
-            }
-            if (resp && resp.needs_confirm) {
-                var modalEl = document.getElementById('sprint-linkedopen-modal');
-                if (!modalEl) {
-                    // Modal missing (shouldn't happen): behave like before.
-                    revertMove(card, fromBody);
-                    if (window.glpi_toast_error) { window.glpi_toast_error(resp.message || "{$errMove}"); }
-                    return;
-                }
-                pendingMove = { id: id, newStatus: newStatus, card: card, fromBody: fromBody, doneList: doneList || null, dodOverride: !!dodOverride };
-                pendingMoveConfirmed = false;
-                var nameEl = modalEl.querySelector('.sprint-lo-name');
-                if (nameEl) { nameEl.textContent = resp.linked_name || ''; }
-                var openBtn = modalEl.querySelector('.sprint-lo-open');
-                if (openBtn) {
-                    if (resp.linked_url) {
-                        openBtn.style.display = '';
-                        openBtn.setAttribute('href', resp.linked_url);
-                    } else {
-                        openBtn.style.display = 'none';
-                    }
-                }
-                bootstrap.Modal.getOrCreateInstance(modalEl).show();
-                return;
-            }
-            if (resp && resp.success) {
-                card.__skFromNext = null;
-                markSaved(card, newStatus);
-                syncLinkedOpenBadge(card, resp.linked_open_badge_html || '');
-                if (resp.dod_overridden && window.glpi_toast_warning) {
-                    window.glpi_toast_warning(resp.message || T.updated);
-                } else if (window.glpi_toast_info) {
-                    window.glpi_toast_info(resp.message || T.updated);
-                }
-            } else {
-                revertMove(card, fromBody);
-                var msg = (resp && resp.message && resp.message !== 'Update failed')
-                    ? resp.message : "{$errMove}";
-                if (window.glpi_toast_error) { window.glpi_toast_error(msg); }
-            }
-        }).fail(function(){
+        if (typeof window.sprintStatusChange !== 'function') {
             revertMove(card, fromBody);
-            if (window.glpi_toast_error) { window.glpi_toast_error(T.network); }
+            notify("{$errMove}", 'error');
+            return;
+        }
+        window.sprintStatusChange(id, newStatus, { silent: true }).done(function(resp){
+            card.__skFromNext = null;
+            markSaved(card, newStatus);
+            syncLinkedOpenBadge(card, resp.linked_open_badge_html || '');
+            notify(resp.message || T.updated, resp.dod_overridden ? 'warning' : 'success');
+        }).fail(function(resp){
+            revertMove(card, fromBody);
+            // Dialog dismissed: nothing was saved, nothing to report.
+            if (resp && resp.cancelled) { return; }
+            notify(resp && resp.network ? T.network : ((resp && resp.message) || "{$errMove}"), 'error');
         });
     }
 
@@ -849,56 +740,6 @@ class SprintBoard extends CommonGLPI
             if (dirty) { afterLayoutChange(); }
         }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-item-status', 'data-users-id', 'data-is-fastlane'] });
     }
-
-    // "Continue anyway": retry the move with the confirmation flag set.
-    jQuery(document).on('click', '#sprint-linkedopen-modal .sprint-lo-continue', function(){
-        var modalEl = document.getElementById('sprint-linkedopen-modal');
-        pendingMoveConfirmed = true;
-        var inst = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
-        if (inst) { inst.hide(); }
-        if (pendingMove) {
-            var mv = pendingMove;
-            pendingMove = null;
-            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, true, mv.doneList, mv.dodOverride);
-        }
-    });
-
-    // DoD confirmed: retry the move carrying the checked DoD values.
-    jQuery(document).on('click', '#sprint-dod-modal .sprint-dod-go', function(){
-        var dodEl = document.getElementById('sprint-dod-modal');
-        pendingMoveConfirmed = true;
-        var done = [];
-        dodEl.querySelectorAll('.sprint-dod-check:checked').forEach(function(cb){ done.push(cb.value); });
-        bootstrap.Modal.getOrCreateInstance(dodEl).hide();
-        if (pendingMove) {
-            var mv = pendingMove;
-            pendingMove = null;
-            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, false, done, false);
-        }
-    });
-
-    // Scrum Master overrule: retry with whatever was ticked plus the override flag.
-    jQuery(document).on('click', '#sprint-dod-modal .sprint-dod-override', function(){
-        var dodEl = document.getElementById('sprint-dod-modal');
-        pendingMoveConfirmed = true;
-        var done = [];
-        dodEl.querySelectorAll('.sprint-dod-check:checked').forEach(function(cb){ done.push(cb.value); });
-        bootstrap.Modal.getOrCreateInstance(dodEl).hide();
-        if (pendingMove) {
-            var mv = pendingMove;
-            pendingMove = null;
-            persistStatus(mv.id, mv.newStatus, mv.card, mv.fromBody, false, done, true);
-        }
-    });
-
-    // Dismissed without confirming (Cancel, X, backdrop): undo the move.
-    jQuery(document).on('hidden.bs.modal', '#sprint-linkedopen-modal, #sprint-dod-modal', function(){
-        if (pendingMoveConfirmed) { pendingMoveConfirmed = false; return; }
-        if (pendingMove) {
-            revertMove(pendingMove.card, pendingMove.fromBody);
-            pendingMove = null;
-        }
-    });
 })();
 </script>
 JS;

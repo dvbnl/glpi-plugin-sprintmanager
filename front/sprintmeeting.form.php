@@ -13,6 +13,25 @@ if (isset($_POST['add'])) {
     $meeting->add($_POST);
     Html::back();
 
+} elseif (isset($_POST['start_standup'])) {
+    // One-click stand-up: open today's stand-up of the sprint, or create it
+    // (today, 15 minutes, the current user facilitates) and open that.
+    $sprintId = (int)($_POST['plugin_sprint_sprints_id'] ?? 0);
+    $sprint   = new GlpiPlugin\Sprint\Sprint();
+    if ($sprintId <= 0 || !$sprint->getFromDB($sprintId)) {
+        Html::back();
+    }
+    $standupId = GlpiPlugin\Sprint\SprintMeeting::getTodayStandupId($sprintId);
+    if ($standupId <= 0) {
+        $input = GlpiPlugin\Sprint\SprintMeeting::getStandupInput($sprintId);
+        $meeting->check(-1, CREATE, $input);
+        $standupId = (int)$meeting->add($input);
+    }
+    if ($standupId > 0) {
+        Html::redirect(GlpiPlugin\Sprint\SprintMeeting::getFormURLWithID($standupId));
+    }
+    Html::back();
+
 } elseif (isset($_POST['update'])) {
     $meeting->check($_POST['id'], UPDATE);
     $meeting->update($_POST);

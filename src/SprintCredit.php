@@ -99,7 +99,7 @@ class SprintCredit extends CommonDBTM
         if ($balance !== null) {
             echo "<div class='sprint-credit-tiles'>";
             foreach (self::balanceTiles($balance) as $tile) {
-                echo self::renderTile($tile[0], $tile[1], $tile[2], $tile[3]);
+                echo self::renderTile($tile[0], $tile[1], $tile[2], $tile[3], !empty($tile[4]));
             }
             echo "</div>";
         }
@@ -247,7 +247,7 @@ HTML;
      * The figures describing one customer's position: the retainer half
      * (granted, used, lapsed) and the wallet half (bought, drawn, left).
      *
-     * @return array<int,array{0:string,1:string,2:string,3:string}> label, value, icon, colour
+     * @return array<int,array{0:string,1:string,2:string,3:string,4?:bool}> label, value, icon, accent colour, alarm (negative balance)
      */
     public static function balanceTiles(array $balance): array
     {
@@ -268,14 +268,20 @@ HTML;
             [__('Bought', 'sprint'), SprintCustomer::formatCredits($balance['purchased'] ?? 0), 'fas fa-cart-shopping', '#6f42c1'],
             [__('From wallet', 'sprint'), SprintCustomer::formatCredits($balance['overflow'] ?? 0), 'fas fa-arrow-down', '#fd7e14'],
             [__('Reserved', 'sprint'), SprintCustomer::formatCredits($reserved), 'fas fa-bookmark', $reserved > 0 ? '#fd7e14' : '#6c757d'],
-            [__('Left', 'sprint'), SprintCustomer::formatCredits($left), 'fas fa-wallet', $leftColor],
+            [__('Left', 'sprint'), SprintCustomer::formatCredits($left), 'fas fa-wallet', $leftColor, $left < 0],
         ];
     }
 
-    public static function renderTile(string $label, string $value, string $icon, string $color): string
+    /**
+     * One figure tile. The accent colour only paints the edge and the icon:
+     * the value stays in the theme's text colour so it reads on a dark
+     * surface. Pass $alarm for a figure that signals trouble (a negative
+     * balance): the value then takes the danger text token.
+     */
+    public static function renderTile(string $label, string $value, string $icon, string $color, bool $alarm = false): string
     {
-        return "<div class='sprint-credit-tile' style='--sprint-tile-color:" . htmlescape($color) . ";'>"
-            . "<div class='sprint-credit-tile-icon'><i class='" . htmlescape($icon) . "'></i></div>"
+        return "<div class='sprint-credit-tile" . ($alarm ? ' is-alarm' : '') . "' style='--sprint-tile-color:" . htmlescape($color) . ";'>"
+            . "<div class='sprint-credit-tile-icon'><i class='" . htmlescape($icon) . "' aria-hidden='true'></i></div>"
             . "<div class='sprint-credit-tile-value'>" . htmlescape($value) . "</div>"
             . "<div class='sprint-credit-tile-label'>" . htmlescape($label) . "</div>"
             . "</div>";

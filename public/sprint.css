@@ -57,6 +57,26 @@
     --sprint-fg-credit: #7a5600;
     --sprint-fg-adhoc: #a3285f;
     --sprint-focus: #0a58ca;
+
+    /* Chart chrome (SprintChart): gridlines, axis line, axis label ink and
+       the surface used for label halos and gaps between stacked fills. */
+    --sprint-chart-grid: #e6e8ec;
+    --sprint-chart-axis: #b4bac2;
+    --sprint-chart-ink: #5f6873;
+    --sprint-chart-surface: var(--tblr-bg-surface, #fff);
+    --sprint-chart-neutral: #6c757d;   /* "none" series: no customer, no tag, manual */
+    --sprint-chart-other: #aab1ba;     /* the folded "Other" series */
+    /* Categorical series, fixed order (never cycled past 8: fold to "Other").
+       Adjacent pairs are colour-blind safe on #fff. Slots 3 to 5 are below
+       3:1 on white, so charts using them carry labels or a table. */
+    --sprint-series-1: #2a78d6;
+    --sprint-series-2: #eb6834;
+    --sprint-series-3: #1baf7a;
+    --sprint-series-4: #eda100;
+    --sprint-series-5: #e87ba4;
+    --sprint-series-6: #008300;
+    --sprint-series-7: #6250d6;
+    --sprint-series-8: #e34948;
 }
 /* GLPI marks dark palettes on <html data-glpi-theme-dark="1">; Tabler's
    own switch is data-bs-theme="dark". */
@@ -72,6 +92,24 @@
     --sprint-fg-credit: #ffd65c;
     --sprint-fg-adhoc: #f28dbb;
     --sprint-focus: #8ab8ff;
+    /* Chart chrome on a dark surface: grid and axis as translucent white so
+       they stay recessive on any dark palette (purple, blue or grey). */
+    --sprint-chart-grid: rgba(255,255,255,0.10);
+    --sprint-chart-axis: rgba(255,255,255,0.28);
+    --sprint-chart-ink: #b3bcc7;
+    /* Re-resolved here: the dark palette can be set below :root. */
+    --sprint-chart-surface: var(--tblr-bg-surface, #1f2937);
+    --sprint-chart-neutral: #8b93a1;
+    --sprint-chart-other: #6b7280;
+    /* Same eight hues stepped for a dark surface (all >= 3:1 on #2a1d3d). */
+    --sprint-series-1: #3987e5;
+    --sprint-series-2: #d95926;
+    --sprint-series-3: #199e70;
+    --sprint-series-4: #c98500;
+    --sprint-series-5: #d55181;
+    --sprint-series-6: #008300;
+    --sprint-series-7: #9085e9;
+    --sprint-series-8: #e66767;
     --sprint-shadow: 0 1px 3px rgba(0,0,0,0.35);
     --sprint-shadow-hover: 0 4px 12px rgba(0,0,0,0.45);
 }
@@ -563,6 +601,10 @@ table.tab_cadre_fixe.sprint-themed {
 .sprint-table-scroll > table.tab_cadre_fixe tr    { display: table-row       !important; }
 .sprint-table-scroll > table.tab_cadre_fixe th,
 .sprint-table-scroll > table.tab_cadre_fixe td    { display: table-cell      !important; white-space: normal; }
+/* A row that script or the server hid stays hidden: the reset above would force it back. */
+.sprint-table-scroll > table.tab_cadre_fixe tr[style*="display:none"],
+.sprint-table-scroll > table.tab_cadre_fixe tr[style*="display: none"],
+.sprint-table-scroll > table.tab_cadre_fixe tr[hidden] { display: none !important; }
 
 @media (max-width: 768px) {
     .sprint-stat-cards {
@@ -1266,8 +1308,12 @@ table.tab_cadre_fixe.sprint-themed {
     font-size: 1.5rem;
     font-weight: 700;
     line-height: 1.2;
-    color: var(--sprint-tile-color, #0d6efd);
+    /* The figure wears the theme's text colour: the accent only paints the
+       edge and the icon (a hex accent as text fails contrast on dark). */
+    color: var(--tblr-body-color, inherit);
+    font-variant-numeric: tabular-nums;
 }
+.sprint-credit-tile.is-alarm .sprint-credit-tile-value { color: var(--sprint-fg-danger); }
 .sprint-credit-tile-label {
     font-size: 0.82rem;
     font-weight: 600;
@@ -1537,7 +1583,7 @@ button.sprint-credit-legend-item.is-active { font-weight: 700; }
     vertical-align: baseline;
 }
 .sprint-live-burndown { display: flex; flex-direction: column; min-width: 0; }
-.sprint-live-spark { display: block; width: 100%; height: auto; max-height: 92px; font-family: sans-serif; }
+.sprint-live-spark { display: block; width: 100%; height: auto; max-height: 92px; font-family: inherit; }
 .sprint-live-placeholder {
     flex: 1;
     display: flex;
@@ -2249,28 +2295,6 @@ td.sprint-cell-actions { white-space: nowrap; text-align: right; }
     text-decoration: none;
 }
 .sprint-credit-section-title h3 { font-size: 1.05rem; }
-.sprint-credit-questions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 12px;
-}
-.sprint-credit-question { margin: 0; }
-.sprint-credit-question-title {
-    font-size: 0.82rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--tblr-secondary, #6c757d);
-    margin-bottom: 4px;
-}
-.sprint-credit-question-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; margin-bottom: 4px; }
-.sprint-credit-question-list { margin: 6px 0 0; padding-left: 18px; }
-.sprint-credit-attention { list-style: none; margin: 0; padding: 0; }
-.sprint-credit-attention > li { padding: 6px 0; border-top: 1px solid var(--tblr-border-color, #e9ecef); }
-.sprint-credit-attention > li:first-child { border-top: 0; padding-top: 0; }
-.sprint-credit-attention-links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; }
-.sprint-credit-explain > summary { cursor: pointer; font-weight: 600; list-style-position: inside; }
-.sprint-credit-explain-table td { padding: 2px 6px; }
 .sprint-credit-colgroups th {
     font-size: 0.72rem;
     font-weight: 600;
@@ -2297,7 +2321,6 @@ tr.sprint-credit-booking-target > td { background: color-mix(in srgb, var(--tblr
 }
 .sprint-csv-preset.active { color: #fff; }
 .sprint-catalogue-toggle:focus-visible,
-.sprint-credit-explain > summary:focus-visible,
 .sprint-audit-full > summary:focus-visible,
 .sprint-credit-filter .sprint-filter-chip:focus-visible {
     outline: 2px solid var(--tblr-primary, #0d6efd);
@@ -2637,3 +2660,1086 @@ tr.sprint-credit-booking-target > td { background: color-mix(in srgb, var(--tblr
     }
 }
 /* === end capacity-unify === */
+
+/* Creditfall: stacked outcome bars */
+.sprint-fall-bar {
+    display: flex;
+    gap: 2px;
+    height: 24px;
+    border-radius: 4px;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.sprint-fall-bar-md { height: 14px; }
+.sprint-fall-bar-sm { height: 8px; max-width: 320px; }
+.sprint-fall-seg { display: block; min-width: 2px; border-radius: 3px; }
+/* Open work is undecided: hatched, so it never reads as a result. */
+.sprint-fall-seg-open {
+    background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(255, 255, 255, 0.35) 4px 7px);
+}
+.sprint-fall-hero { position: relative; padding: 26px 0; }
+.sprint-fall-marker {
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    width: 0;
+    border-left: 2px dashed var(--tblr-body-color, #212529);
+    opacity: 0.85;
+    z-index: 1;
+}
+.sprint-fall-marker > span {
+    position: absolute;
+    left: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+.sprint-fall-marker-top > span { top: 0; }
+.sprint-fall-marker-bottom > span { bottom: 0; }
+.sprint-fall-marker-left > span { left: auto; right: 6px; }
+.sprint-fall-type { display: inline-flex; align-items: center; white-space: nowrap; }
+.sprint-fall-trend .sprint-credit-chart-row { grid-template-columns: minmax(110px, 200px) 1fr 90px; }
+.sprint-fall-trend .sprint-fall-bar { background: color-mix(in srgb, currentColor 8%, transparent); }
+
+/* === part: items === */
+/* ==========================================================================
+   items: shared item dialogs, board, approval requests (UI-IMPROVEMENTS
+   W3, W7, W9, W10, W15, W16, U4, U7, U9, U11)
+   ========================================================================== */
+
+/* --- Row feedback (U11): theme-aware flash instead of fixed light tints.
+   sprintUi.flash(rows, 'success' | 'warning') adds the class for ~1.3s. --- */
+@keyframes sprint-row-flash-success {
+    0%, 35% { background-color: color-mix(in srgb, var(--sprint-done, #198754) 22%, transparent); }
+    100%    { background-color: transparent; }
+}
+@keyframes sprint-row-flash-warning {
+    0%, 35% { background-color: color-mix(in srgb, #f59f00 24%, transparent); }
+    100%    { background-color: transparent; }
+}
+.sprint-row-flash-success,
+tr.sprint-row-flash-success > td { animation: sprint-row-flash-success 1.2s ease-out; }
+.sprint-row-flash-warning,
+tr.sprint-row-flash-warning > td { animation: sprint-row-flash-warning 1.2s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+    /* No animation: a steady tint for as long as the class is there. */
+    .sprint-row-flash-success,
+    tr.sprint-row-flash-success > td {
+        animation: none;
+        background-color: color-mix(in srgb, var(--sprint-done, #198754) 16%, transparent);
+    }
+    .sprint-row-flash-warning,
+    tr.sprint-row-flash-warning > td {
+        animation: none;
+        background-color: color-mix(in srgb, #f59f00 18%, transparent);
+    }
+}
+
+/* A row whose action is being saved, and one that is on its way out. */
+.sprint-row-busy { opacity: 0.6; pointer-events: none; }
+.sprint-row-leaving { opacity: 0.35; transition: opacity 0.2s ease; }
+@media (prefers-reduced-motion: reduce) {
+    .sprint-row-leaving { transition: none; }
+}
+
+/* --- Small shared helpers that replace repeated inline styles (U7) --- */
+.sprint-pre-line { white-space: pre-line; }
+.sprint-legend-inline { font-size: inherit; float: none; width: auto; }
+.sprint-dep-link-icon { color: var(--sprint-fg-dependency, #20c997); }
+.sprint-row-actions form { vertical-align: middle; }
+.sprint-carry-card { max-width: 980px; margin: 12px auto; }
+
+/* --- Back to backlog: quick reasons (W15) --- */
+.sprint-reason-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.sprint-reason-chip {
+    border-radius: var(--sprint-radius-pill, 20px);
+    padding: 2px 10px;
+    font-size: 0.85em;
+}
+.sprint-reason-chip.active {
+    background: color-mix(in srgb, var(--tblr-primary, #0d6efd) 18%, transparent);
+    border-color: var(--tblr-primary, #0d6efd);
+    color: var(--tblr-body-color, inherit);
+}
+
+/* --- Status gate (W7): linked-item note inside the DoD dialog --- */
+.sprint-dod-list .form-check { margin-bottom: 4px; }
+.sprint-dod-linked .sprint-lo-open { display: inline-block; margin-top: 2px; }
+
+/* --- Board card (W16): priority as the left edge, customer in the meta row --- */
+.sprint-kanban-intro { padding: 10px 4px; }
+.sprint-kanban-card .sk-card-prio {
+    position: absolute;
+    top: -1px;
+    bottom: -1px;
+    left: -1px;
+    width: 5px;
+    border-radius: 6px 0 0 6px;
+    background: var(--sk-prio, transparent);
+}
+.sprint-kanban-card { padding-left: 13px; }
+.sprint-kanban-card[data-item-priority="1"] { --sk-prio: color-mix(in srgb, var(--sprint-todo, #6c757d) 45%, transparent); }
+.sprint-kanban-card[data-item-priority="2"] { --sk-prio: var(--sprint-todo, #6c757d); }
+.sprint-kanban-card[data-item-priority="3"] { --sk-prio: var(--sprint-progress, #0d6efd); }
+.sprint-kanban-card[data-item-priority="4"] { --sk-prio: #fd7e14; }
+.sprint-kanban-card[data-item-priority="5"] { --sk-prio: var(--sprint-blocked, #dc3545); }
+.sprint-kanban-card .sk-card-fastlane { color: var(--sprint-fg-orange, #fd7e14); margin-right: 4px; }
+.sprint-kanban-card .sk-card-customer .sprint-customer-pill { margin-left: 0; }
+
+/* --- Approval requests (W9, W10, U4) --- */
+.sprint-request-panel {
+    margin: 18px 0;
+    border: 1px solid color-mix(in srgb, #f59f00 55%, var(--tblr-border-color, #dee2e6));
+    border-radius: 8px;
+    overflow: hidden;
+}
+.sprint-request-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: color-mix(in srgb, #f59f00 14%, var(--tblr-bg-surface, #fff));
+    font-weight: 700;
+}
+.sprint-request-table { margin: 0; }
+.sprint-request-waiting,
+.sprint-request-pending-badge { gap: 4px; }
+a.sprint-request-chip { text-decoration: none; }
+a.sprint-request-chip:hover,
+a.sprint-request-chip:focus-visible { border-color: currentColor; }
+.sprint-request-outcomes-title { font-size: 1em; margin-bottom: 6px; }
+.sprint-request-outcome { padding: 6px 0; border-top: 1px solid var(--tblr-border-color, #dee2e6); }
+
+/* === part: meetings === */
+/* === Meeting views and meetings tab ====================================
+   templates/meeting/items_tables.html.twig, templates/meeting/rail.html.twig,
+   templates/sprintmeeting.form.html.twig and SprintMeeting::showForSprint().
+   Replaces the inline styles those files used to carry. */
+
+/* Small layout helpers. */
+.sprint-nowrap { white-space: nowrap; }
+.sprint-mw-180 { max-width: 180px; }
+.sprint-mw-220 { max-width: 220px; }
+.sprint-empty-icon { font-size: 1.5em; }
+
+/* Fastlane section and bolt. */
+.sprint-fastlane-section { border-bottom: 2px solid #fd7e14; }
+.sprint-fastlane-icon { color: #fd7e14; }
+
+/* Type icons: theme-aware text tones instead of fixed light-theme hexes. */
+.sprint-type-icon { color: var(--sprint-fg-muted, #6c757d); }
+.sprint-type-ticket  { color: var(--sprint-fg-info, #0d6efd); }
+.sprint-type-change  { color: #6f42c1; }
+.sprint-type-problem { color: var(--sprint-fg-danger, #dc3545); }
+.sprint-type-task    { color: var(--sprint-fg-orange, #fd7e14); }
+.sprint-type-manual  { color: var(--sprint-fg-muted, #6c757d); }
+:root[data-glpi-theme-dark="1"] .sprint-type-change,
+[data-bs-theme="dark"] .sprint-type-change { color: #b9a2f2; }
+
+/* --- Review tables (fastlane and regular) --- */
+/* Own scroll container, so the sticky action column has something to stick
+   to. The row menus use Popper's fixed strategy and are not clipped by it. */
+.sprint-review-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.sprint-review-table .sprint-sortable { cursor: pointer; }
+.sprint-review-table th.sprint-review-col-type { width: 40px; }
+.sprint-review-table th.sprint-review-col-deps { min-width: 120px; }
+.sprint-review-table th.sprint-review-col-note { min-width: 160px; }
+.sprint-review-table td.sprint-review-note { max-width: 360px; }
+.sprint-review-deps { font-size: 0.85em; line-height: 1.3; }
+.sprint-dep-icon { color: var(--sprint-fg-dependency, #20c997); font-size: 0.75em; }
+
+/* Fastlane owner cell: one line per allocation plus the total. */
+.sprint-fl-allocs { display: flex; flex-direction: column; gap: 2px; }
+.sprint-fl-alloc { font-size: 0.88em; line-height: 1.3; }
+.sprint-fl-alloc > .fa-bolt { font-size: 0.78em; }
+.sprint-fl-total { font-size: 0.78em; margin-top: 2px; }
+.sprint-fl-total > strong { color: var(--sprint-fg-orange, #fd7e14); }
+
+/* Action column: stays in view while the table scrolls sideways. The cell
+   gets the surface colour so text does not show through. Striping and hover
+   are box-shadow overlays in Bootstrap and keep working on top of it, and
+   the row washes (newly blocked, adhoc, linked item open) win with their
+   own !important background. */
+.sprint-review-table > thead > tr > th.sprint-review-actions,
+.sprint-review-table > tbody > tr > td.sprint-review-actions {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    width: 1%;
+    white-space: nowrap;
+    background-color: var(--tblr-bg-surface, #fff);
+    /* Hairline on the left edge. A real border does not travel with a
+       sticky cell in a collapsed table. */
+    background-image: linear-gradient(var(--sprint-border, #e2e8f0), var(--sprint-border, #e2e8f0));
+    background-size: 1px 100%;
+    background-position: left top;
+    background-repeat: no-repeat;
+}
+.sprint-review-table > thead > tr > th.sprint-review-actions {
+    background-color: var(--tblr-bg-surface-tertiary, var(--tblr-bg-surface-secondary, var(--tblr-bg-surface, #fff)));
+}
+/* An open row menu must paint over the sticky cells of the rows below. */
+.sprint-review-table > tbody > tr > td.sprint-review-actions:focus-within { z-index: 6; }
+.sprint-review-table > tbody > tr > td.sprint-review-actions:has(.dropdown-menu.show) { z-index: 6; }
+.sprint-review-actions .dropdown-item.disabled { opacity: 0.55; }
+
+/* "→ Sprint 16" after a carry-over. */
+.sprint-carried-chip { cursor: default; }
+
+/* Below 992px "Linked item" and "Waiting on" fold under the name. The fold
+   repeats the two cells inside the name cell and is hidden on wide screens. */
+.sprint-review-fold { display: none; }
+@media (max-width: 991.98px) {
+    .sprint-review-table .sprint-review-col-fold { display: none; }
+    .sprint-review-fold {
+        display: block;
+        margin-top: 4px;
+        font-size: 0.85em;
+        line-height: 1.35;
+    }
+    .sprint-review-fold-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+    .sprint-review-fold-label {
+        color: var(--sprint-fg-muted, #6c757d);
+        font-weight: 600;
+    }
+    .sprint-review-fold-label::after { content: ":"; }
+    .sprint-review-fold .sprint-review-deps { font-size: 1em; }
+    /* Nothing linked, nothing to wait on: no line. */
+    .sprint-review-fold-line:has(> .sprint-review-linked:empty) { display: none; }
+    .sprint-review-fold-line:has(> .sprint-review-deps > .fst-italic:only-child) { display: none; }
+}
+
+/* --- Meetings tab on the sprint --- */
+.sprint-meeting-add-form .form-label { margin-bottom: 4px; font-weight: 600; }
+.sprint-meeting-list .sprint-meeting-next > td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--tblr-primary, #0d6efd);
+}
+.sprint-meeting-list .sprint-meeting-next > td:first-child > a { font-weight: 600; }
+
+/* === part: lifecycle === */
+
+/* === Sprint lifecycle: header action + close-out screen (W1, W2) === */
+.sprint-header-right .sprint-lifecycle-btn { white-space: nowrap; }
+.sprint-closeout { max-width: 1400px; padding-top: 12px; padding-bottom: 24px; }
+.sprint-closeout-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 8px; }
+.sprint-closeout-title { margin: 0; font-size: 1.25rem; font-weight: 700; }
+.sprint-closeout-intro { color: var(--sprint-fg-muted); margin-bottom: 12px; }
+.sprint-closeout-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 12px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    background: var(--tblr-bg-surface-secondary, #f1f3f5);
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-radius: 8px;
+}
+.sprint-closeout-field { display: flex; flex-direction: column; gap: 2px; margin: 0; min-width: 220px; }
+.sprint-closeout-field > span,
+.sprint-closeout-amount > span { font-size: 0.78em; font-weight: 600; color: var(--sprint-fg-muted); }
+.sprint-closeout-field-grow { flex: 1 1 260px; }
+.sprint-closeout-table th { white-space: nowrap; }
+.sprint-closeout-name { font-weight: 600; }
+.sprint-closeout-meta { font-size: 0.8em; color: var(--sprint-fg-muted); }
+.sprint-closeout-choice { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.sprint-closeout-option { margin: 0; cursor: pointer; }
+.sprint-closeout-option > input { position: absolute; opacity: 0; pointer-events: none; }
+.sprint-closeout-option > span {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    border-radius: var(--sprint-radius-pill, 20px);
+    font-size: 0.85em;
+    white-space: nowrap;
+}
+.sprint-closeout-option > input:checked + span {
+    background: var(--tblr-primary, #0d6efd);
+    border-color: var(--tblr-primary, #0d6efd);
+    color: var(--tblr-primary-fg, #fff);
+    font-weight: 600;
+}
+.sprint-closeout-option > input:focus-visible + span { outline: 2px solid var(--tblr-primary, #0d6efd); outline-offset: 2px; }
+.sprint-closeout-option > input:disabled + span { opacity: 0.5; cursor: not-allowed; }
+.sprint-closeout-carry { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 8px; }
+.sprint-closeout-carry[hidden] { display: none; }
+.sprint-closeout-carry .sprint-closeout-target { min-width: 180px; max-width: 320px; flex: 1 1 180px; }
+.sprint-closeout-amount { display: flex; flex-direction: column; gap: 2px; margin: 0; width: 96px; }
+.sprint-closeout-reason { min-width: 160px; }
+.sprint-closeout-outcome { margin-top: 4px; font-size: 0.82em; font-weight: 600; }
+.sprint-closeout-outcome-done { color: var(--sprint-fg-success); }
+.sprint-closeout-outcome-requested { color: var(--sprint-fg-warning); }
+.sprint-closeout-outcome-failed { color: var(--sprint-fg-danger); }
+.sprint-closeout-row[data-processed="1"] { opacity: 0.75; }
+.sprint-closeout-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; margin-top: 14px; }
+.sprint-closeout-tally { margin-right: auto; font-size: 0.9em; color: var(--sprint-fg-muted); }
+
+/* === part: charts === */
+/* === charts: shared chart layer (SprintChart) and card head (SprintUi) ===
+   Chrome is styled by class only, from the --sprint-chart-* tokens at the top
+   of this file, so every chart follows the light and the dark theme. */
+.sprint-chart-box {
+    width: 100%;
+    overflow-x: auto;
+}
+.sprint-chart-svg {
+    display: block;
+    width: 100%;
+    min-width: 520px;
+    height: auto;
+    /* A wide card must not blow the chart (and its text) up to half a page. */
+    max-height: 340px;
+    font-family: inherit;
+}
+.sprint-chart-grid {
+    stroke: var(--sprint-chart-grid);
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+}
+.sprint-chart-axis {
+    stroke: var(--sprint-chart-axis);
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+}
+.sprint-chart-label {
+    fill: var(--sprint-chart-ink);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+.sprint-chart-label-sub { font-size: 9px; opacity: 0.85; }
+.sprint-chart-label.is-dim { opacity: 0.5; }
+/* A figure drawn on the plot: body ink with a surface halo, never the series colour. */
+.sprint-chart-value {
+    fill: var(--tblr-body-color, #1f2937);
+    font-size: 10.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    paint-order: stroke;
+    stroke: var(--sprint-chart-surface);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+}
+.sprint-chart-line {
+    fill: none;
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+.sprint-chart-point:not(.sprint-chart-point-zero) {
+    stroke: var(--sprint-chart-surface);
+    stroke-width: 1.5;
+}
+/* A zero is a hollow marker: present, but not a filled value. */
+.sprint-chart-point-zero {
+    fill: var(--sprint-chart-surface);
+    stroke-width: 1.5;
+}
+.sprint-chart-series { transition: opacity 0.15s ease; }
+.sprint-chart-series.is-muted { opacity: 0.14; }
+/* Reference line and per-point values only show for the isolated series. */
+.sprint-chart-reference {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    opacity: 0;
+}
+.sprint-chart-series.is-isolated .sprint-chart-reference { opacity: 0.75; }
+.sprint-chart-pointlabel { display: none; }
+.sprint-chart-series.is-isolated .sprint-chart-pointlabel { display: inline; }
+/* Hover and focus target over a full slot, with its vertical guide. */
+.sprint-chart-hit {
+    fill: transparent;
+    outline: none;
+}
+.sprint-chart-hit:focus-visible {
+    stroke: var(--sprint-focus);
+    stroke-width: 2;
+}
+.sprint-chart-guide {
+    stroke: var(--sprint-chart-axis);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    opacity: 0;
+    pointer-events: none;
+}
+.sprint-chart-slot:hover .sprint-chart-guide,
+.sprint-chart-slot:focus-within .sprint-chart-guide { opacity: 1; }
+/* A sprint that is still running: dashed frame, never a filled verdict. */
+.sprint-chart-running {
+    fill: none;
+    stroke: var(--sprint-chart-axis);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+    pointer-events: none;
+}
+/* Hatch: the second encoding next to colour (tags, lapsed). */
+.sprint-chart-hatch-line {
+    stroke: var(--sprint-chart-surface);
+    stroke-width: 2;
+    opacity: 0.4;
+}
+.sprint-chart-hatch-overlay { pointer-events: none; }
+.sprint-chart-hatch {
+    background-image: repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--sprint-chart-surface) 45%, transparent) 0 2px,
+        transparent 2px 5px
+    );
+}
+
+/* Legend: one look for every chart, one swatch shape per mark type. */
+.sprint-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 10px;
+    font-size: 0.82em;
+}
+.sprint-chart-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 5px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    line-height: 1.4;
+    text-decoration: none;
+    white-space: nowrap;
+}
+button.sprint-chart-legend-item,
+a.sprint-chart-legend-item { cursor: pointer; }
+button.sprint-chart-legend-item:hover,
+a.sprint-chart-legend-item:hover {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    color: inherit;
+    text-decoration: none;
+}
+.sprint-chart-legend-item:focus-visible {
+    outline: 2px solid var(--sprint-focus);
+    outline-offset: 1px;
+}
+.sprint-chart-legend-item.is-active {
+    font-weight: 700;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.sprint-chart-legend-item.is-zero { opacity: 0.55; }
+.sprint-chart-legend-item.is-static { color: var(--sprint-fg-muted); }
+.sprint-chart-legend-value {
+    color: var(--sprint-fg-muted);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+}
+.sprint-chart-swatch { flex: none; }
+.sprint-chart-swatch-bar {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+/* The one shared tooltip (sprintChartTooltip in js/sprint.js). */
+.sprint-chart-tip {
+    position: fixed;
+    z-index: 10850;
+    max-width: 320px;
+    padding: 8px 10px;
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    border-radius: 8px;
+    background: var(--tblr-bg-surface, #fff);
+    color: var(--tblr-body-color, #1f2937);
+    box-shadow: var(--sprint-shadow-hover);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    pointer-events: none;
+}
+.sprint-chart-tip[hidden] { display: none; }
+.sprint-chart-tip-title { font-weight: 600; }
+.sprint-chart-tip-title + .sprint-chart-tip-row { margin-top: 4px; }
+.sprint-chart-tip-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.sprint-chart-tip-swatch {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+}
+.sprint-chart-tip-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sprint-chart-tip-value {
+    margin-left: auto;
+    padding-left: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Empty state and the table behind a chart. */
+.sprint-chart-empty-icon {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 1.5em;
+}
+.sprint-chart-table { margin-top: 8px; font-size: 0.85em; }
+.sprint-chart-table > summary {
+    cursor: pointer;
+    color: var(--sprint-fg-muted);
+}
+.sprint-chart-table[open] > summary { margin-bottom: 6px; }
+
+/* Card head (SprintUi::cardHeader): title left, actions right, hint below. */
+.sprint-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-bottom: 4px;
+}
+.sprint-card-head .sprint-card-title { margin: 0; }
+.sprint-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px 12px;
+    margin-left: auto;
+    min-width: 0;
+}
+.sprint-card-hint {
+    margin-bottom: 12px;
+    color: var(--sprint-fg-muted);
+    font-size: 0.875em;
+}
+
+/* Credits page */
+.sprint-scope-chip { margin-left: 6px; }
+.sprint-credit-rowfilter { opacity: 0.45; }
+tr:hover > td > .sprint-credit-rowfilter,
+.sprint-credit-rowfilter:focus-visible,
+.sprint-credit-rowfilter.is-active { opacity: 1; }
+.sprint-credit-rowfilter.is-active { color: var(--tblr-primary, #0d6efd); }
+.sprint-credits-mix .sprint-credit-chart-row {
+    grid-template-columns: minmax(90px, 190px) 1fr minmax(64px, auto);
+}
+.sprint-credits-mix .sprint-credit-chart-track {
+    height: 18px;
+    gap: 2px;
+}
+.sprint-mix-seg {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.sprint-mix-lapsed {
+    color: var(--sprint-fg-danger);
+    font-size: 0.85em;
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+/* Credit flow */
+.sprint-creditflow-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 16px;
+    margin-bottom: 4px;
+}
+.sprint-creditflow-head .sprint-creditflow-title { margin-bottom: 0; }
+.sprint-creditflow-head .sprint-chart-legend { margin-left: auto; justify-content: flex-end; }
+.sprint-creditflow-pick { max-width: 260px; }
+.sprint-cf-mix-pick { max-width: 240px; }
+.sprint-cf-mix .sprint-chart-legend { margin-top: 10px; }
+.sprint-cf-mix-tag .sprint-chart-swatch { margin-right: 6px; }
+.sprint-cf-col { outline: none; }
+.sprint-cf-col:hover .sprint-cf-hit { fill: color-mix(in srgb, currentColor 5%, transparent); }
+.sprint-cf-col:focus-visible .sprint-cf-hit {
+    stroke: var(--sprint-focus);
+    stroke-width: 2;
+}
+.sprint-cf-mark {
+    stroke: var(--tblr-primary, #0d6efd);
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+.sprint-cf-zero { stroke-width: 2; }
+
+@media (prefers-reduced-motion: reduce) {
+    .sprint-chart-series { transition: none; }
+}
+@media print {
+    .sprint-chart-tip { display: none !important; }
+    .sprint-chart-table > summary { display: none; }
+}
+/* === end charts === */
+
+.sprint-menu-hint { max-width: 280px; white-space: normal; padding-top: 0; }
+
+/* === part: dashboard === */
+
+/* === Sprint dashboard (agent "dashboard") ================================== */
+
+/* --- Chart marks the dashboard adds on top of the shared .sprint-chart-* --- */
+/* An always-visible reference line (average, ideal): dashed, never solid. */
+.sprint-chart-refline {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    opacity: 0.85;
+}
+/* Wash under a line (burndown) and the stronger band of the blocked share. */
+.sprint-chart-area { stroke: none; opacity: 0.12; pointer-events: none; }
+.sprint-chart-area.sprint-chart-area-strong { opacity: 0.3; }
+.sprint-chart-line.sprint-chart-line-main { stroke-width: 2.5; }
+/* Saturday and Sunday on a day axis. */
+.sprint-chart-weekend {
+    fill: var(--sprint-chart-ink);
+    opacity: 0.09;
+    pointer-events: none;
+}
+.sprint-chart-today {
+    stroke: var(--tblr-body-color, #1f2937);
+    stroke-width: 1.2;
+    stroke-dasharray: 4 3;
+    opacity: 0.8;
+    pointer-events: none;
+}
+.sprint-chart-label.is-current {
+    fill: var(--tblr-body-color, #1f2937);
+    font-weight: 700;
+}
+/* Legend plus a short fact line next to it. */
+.sprint-chart-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 16px;
+}
+.sprint-chart-scope > .sprint-chart-legend,
+.sprint-member-activity > .sprint-chart-legend,
+.sprint-chart-foot { margin-top: 6px; }
+.sprint-chart-scope > .sprint-card-hint,
+.sprint-activity-chart-wrap > .sprint-card-hint { margin-bottom: 6px; }
+/* A closed "Show as table" has no place on paper. */
+@media print {
+    details.sprint-chart-table:not([open]) { display: none; }
+}
+
+/* --- Toolbar: view toggle in the middle, the stand-up action on the right --- */
+.sprint-dash-toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0 2px;
+}
+.sprint-dash-toolbar > .btn-group { grid-column: 2; }
+.sprint-dash-toolbar-end { grid-column: 3; justify-self: end; }
+.sprint-dash-toolbar .sprint-standup-btn,
+.sprint-next-steps-list .btn {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+@media (max-width: 575.98px) {
+    .sprint-dash-toolbar { grid-template-columns: 1fr; justify-items: center; }
+    .sprint-dash-toolbar > .btn-group,
+    .sprint-dash-toolbar-end { grid-column: 1; justify-self: center; }
+}
+.sprint-next-steps-list { align-items: center; }
+
+/* --- Progress weighted by capacity: one colour source per status --- */
+.sprint-progress { margin: 0 0 24px; }
+.sprint-progress-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 18px;
+    margin-bottom: 8px;
+    font-size: 0.82em;
+    color: var(--sprint-fg-muted);
+}
+.sprint-progress-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 4px;
+    border-radius: 50%;
+    vertical-align: middle;
+    background: var(--seg, var(--sprint-todo));
+}
+.sprint-progress-track {
+    display: flex;
+    width: 100%;
+    height: 20px;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--tblr-border-color, #e9ecef);
+}
+.sprint-progress-seg {
+    height: 100%;
+    min-width: 6px;
+    background: var(--seg, var(--sprint-todo));
+    transition: width 0.4s;
+}
+.sprint-seg-done       { --seg: var(--sprint-done); }
+.sprint-seg-progress   { --seg: var(--sprint-progress); }
+.sprint-seg-review     { --seg: var(--sprint-review); }
+.sprint-seg-dependency { --seg: var(--sprint-dependency); }
+.sprint-seg-blocked    { --seg: var(--sprint-blocked); }
+.sprint-seg-scheduled  { --seg: var(--sprint-scheduled); }
+.sprint-seg-todo       { --seg: var(--sprint-chart-other, #aab1ba); }
+
+/* --- Small repeated pieces that used to be inline styles --- */
+.sprint-head-icon { margin-left: 2px; }
+.sprint-tone-fastlane   { color: var(--sprint-fg-orange); }
+.sprint-tone-dependency { color: var(--sprint-fg-dependency); }
+.sprint-tone-danger     { color: var(--sprint-fg-danger); }
+.sprint-tone-success    { color: var(--sprint-fg-success); }
+.sprint-unassigned { color: var(--sprint-fg-muted); font-style: italic; }
+.sprint-type-icon { opacity: 0.85; }
+.sprint-dash-section { margin-top: 20px; }
+.sprint-dashboard-table .sprint-sortable { cursor: pointer; }
+.sprint-dash-empty {
+    padding: 32px !important;
+    text-align: center;
+    color: var(--sprint-fg-muted);
+}
+.sprint-dash-empty > i {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 2.2em;
+    opacity: 0.5;
+}
+.sprint-atrisk-clear { padding: 12px; }
+
+/* === part: backlog === */
+/* === part: backlog === */
+/* === Backlog page and the planning line on a linked item (src/Backlog.php) ===
+   Replaces the inline styles that file used to carry. Colours come from the
+   theme tokens at the top of this file, so both themes follow. */
+
+/* Small helpers */
+.sprint-flex-fill { flex: 1 1 auto; }
+.sprint-mw-120 { max-width: 120px; }
+.sprint-mw-140 { max-width: 140px; }
+.sprint-mw-200 { max-width: 200px; }
+.sprint-mw-240 { max-width: 240px; }
+.sprint-icon-sm { font-size: 0.8em; }
+.sprint-inline-check { display: inline-flex; align-items: center; gap: 6px; }
+.sprint-legend-plain { font-size: inherit; }
+.sprint-chip-wrap { white-space: normal; }
+.sprint-is-loading { opacity: 0.5; transition: opacity 0.15s ease; }
+
+/* Text tones: the theme-aware foreground of a state. */
+.sprint-tone-danger  { color: var(--sprint-fg-danger); }
+.sprint-tone-warning { color: var(--sprint-fg-warning); }
+.sprint-tone-orange  { color: var(--sprint-fg-orange); }
+.sprint-tone-success { color: var(--sprint-fg-success); }
+.sprint-tone-adhoc   { color: var(--sprint-fg-adhoc); }
+.sprint-tone-muted   { color: var(--sprint-fg-muted); }
+/* The same states as a fill (bars). */
+.sprint-fill-danger  { background: var(--sprint-blocked, #dc3545); }
+.sprint-fill-orange  { background: #fd7e14; }
+.sprint-fill-success { background: var(--sprint-done, #198754); }
+
+/* Colour key squares (category, customer). The colour itself is data. */
+.sprint-swatch-sq {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+.sprint-swatch-sq.is-small { width: 8px; height: 8px; margin-right: 4px; border-radius: 2px; }
+.sprint-swatch-sq.is-neutral { background: var(--sprint-chart-neutral, #6c757d); }
+.sprint-swatch-sq.is-proposed {
+    background: repeating-linear-gradient(135deg, var(--sprint-chart-neutral, #6c757d) 0 2px, transparent 2px 4px);
+    box-shadow: inset 0 0 0 1px var(--sprint-chart-neutral, #6c757d);
+}
+.sprint-swatch-sq.is-over {
+    background: repeating-linear-gradient(45deg, var(--sprint-blocked, #dc3545) 0 2px, transparent 2px 5px);
+}
+
+/* Planning line on a linked item (Sprint tab) */
+.sprint-plan-add { margin: 8px 0; }
+.sprint-plan-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 18px;
+    max-width: 980px;
+    margin: 8px auto 14px;
+    padding: 8px 14px;
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-radius: 8px;
+    text-align: left;
+}
+.sprint-plan-note { max-width: 980px; margin: 0 auto 12px; }
+
+/* Cards of the planning zone (capacity dashboard, inflow and outflow) */
+.sprint-backlog-card { margin: 14px 0; text-align: left; }
+.sprint-backlog-pad { padding: 14px; }
+.sprint-backlog-itemsbar-title { flex: 1; margin: 0; text-align: left; }
+
+/* Inflow and outflow chart: the net line stays lighter than the bars. */
+.sprint-flow-chart .sprint-chart-legend { margin-bottom: 6px; }
+.sprint-flow-net .sprint-chart-line { stroke-width: 1.5; }
+.sprint-flow-chart .sprint-chart-slot { outline: none; }
+.sprint-flow-chart .sprint-chart-slot:hover .sprint-chart-hit { fill: color-mix(in srgb, currentColor 5%, transparent); }
+.sprint-flow-chart .sprint-chart-slot:focus-visible .sprint-chart-hit {
+    stroke: var(--sprint-focus);
+    stroke-width: 2;
+}
+
+/* Collapsible sections: category, parked, blocked */
+.sprint-backlog-section {
+    margin: 18px 0;
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.sprint-backlog-cat-section {
+    --sprint-cat-color: var(--sprint-chart-neutral, #6c757d);
+    margin: 14px 0;
+    border-left: 4px solid var(--sprint-cat-color);
+}
+.sprint-backlog-cat-section.is-sub { margin: 8px 0 8px 28px; }
+.sprint-backlog-section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+}
+.sprint-backlog-cat-header {
+    padding: 9px 14px;
+    background: color-mix(in srgb, var(--sprint-cat-color) 8%, var(--tblr-bg-surface, #fff));
+}
+.sprint-backlog-cat-icon { color: var(--sprint-cat-color); }
+.sprint-backlog-parked-header {
+    background: var(--tblr-bg-surface-secondary, #f8fafc);
+    color: var(--sprint-fg-muted);
+}
+.sprint-backlog-blocked { border-color: color-mix(in srgb, var(--sprint-blocked, #dc3545) 40%, transparent); }
+.sprint-backlog-blocked-header {
+    background: color-mix(in srgb, var(--sprint-blocked, #dc3545) 14%, var(--tblr-bg-surface, #fff));
+    color: var(--sprint-fg-danger);
+}
+.sprint-backlog-chevron { transition: transform 0.15s; }
+
+/* Empty category: the default hint, or "everything is planned" once the
+   last row was assigned. */
+.sprint-backlog-all-planned { display: none; color: var(--sprint-fg-success); font-weight: 600; }
+td.sprint-backlog-all-planned { display: table-cell; }
+.sprint-backlog-cat-section.is-all-planned .sprint-backlog-empty-default { display: none; }
+.sprint-backlog-cat-section.is-all-planned .sprint-backlog-all-planned { display: inline; }
+.sprint-backlog-cat-section.is-all-planned td.sprint-backlog-all-planned { display: table-cell; }
+
+/* Backlog table */
+.sprint-backlog-col-grip { width: 26px; }
+.sprint-backlog-col-rank { width: 40px; }
+.sprint-backlog-col-rank.is-editable { width: 64px; }
+.sprint-backlog-col-actions { width: 120px; }
+.sprint-backlog-grip { cursor: grab; text-align: center; color: var(--sprint-fg-muted); }
+.sprint-backlog-type-icon { margin-right: 6px; opacity: 0.85; }
+
+/* Filter bar */
+.sprint-backlog-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-radius: 8px;
+    background: var(--tblr-bg-surface-secondary, #f8fafc);
+}
+.sprint-backlog-filter-sep { height: 22px; opacity: 0.25; }
+
+/* Capacity dashboard matrices */
+.sprint-matrix-wrap { padding: 6px 0; }
+.sprint-backlog-matrix { min-width: 640px; }
+.sprint-matrix-rowhead { min-width: 150px; }
+.sprint-matrix-headaction { margin-top: 2px; }
+.sprint-matrix-subcell { padding-left: 26px !important; }
+.sprint-matrix-cell.is-over { background: color-mix(in srgb, var(--sprint-blocked, #dc3545) 12%, transparent); }
+.sprint-matrix-seg-proposed { opacity: 0.45; }
+.sprint-matrix-min-tick.is-over { background: var(--sprint-blocked, #dc3545); }
+.sprint-matrix-total > td { border-top: 2px solid var(--tblr-border-color, #e2e8f0); }
+.sprint-matrix-note { padding: 0 4px 2px; }
+.sprint-matrix-note.is-last { padding-bottom: 6px; }
+.sprint-matrix-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.sprint-member-bar { display: flex; }
+.sprint-member-seg-proposed {
+    --sprint-seg-color: var(--sprint-chart-neutral, #6c757d);
+    background: repeating-linear-gradient(135deg, var(--sprint-seg-color) 0 2px, transparent 2px 4px);
+    box-shadow: inset 0 0 0 1px var(--sprint-seg-color);
+}
+.sprint-member-seg-over {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--sprint-blocked, #dc3545) 85%, transparent) 0 2px, transparent 2px 5px);
+}
+/* === end part: backlog === */
+
+/* === part: overview === */
+
+/* === overview: key figures, chart extras of the overview page, member cards ===
+   Colours come from the tokens at the top of this file, so both themes work. */
+
+/* Key figures: four main tiles, then a compact neutral row (U6). */
+.sprint-overview-tile-value {
+    font-size: 1.6rem;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--tblr-body-color, inherit);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.sprint-overview-tile-spark {
+    flex: 0 0 auto;
+    align-self: center;
+    margin-left: 12px;
+}
+.sprint-overview-figures {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px 18px;
+    padding: 10px 14px;
+    border: 1px solid var(--tblr-border-color, #dee2e6);
+    border-radius: 6px;
+    background: var(--tblr-bg-surface, transparent);
+}
+.sprint-overview-figure { min-width: 0; }
+.sprint-overview-figure-value {
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--tblr-body-color, inherit);
+    font-variant-numeric: tabular-nums;
+}
+.sprint-overview-figure-label {
+    font-size: 0.8rem;
+    line-height: 1.25;
+    color: var(--sprint-fg-muted);
+}
+
+/* The direction of a change is the only place a figure spends colour. */
+.sprint-delta.is-good { color: var(--sprint-fg-success); }
+.sprint-delta.is-bad { color: var(--sprint-fg-danger); }
+.sprint-delta.is-flat { color: var(--sprint-fg-muted); }
+.sprint-drift-glyph { font-size: 1.75rem; font-weight: 600; }
+.sprint-drift-value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Sparkline next to a figure. */
+.sprint-spark {
+    display: block;
+    width: 96px;
+    height: 26px;
+    overflow: visible;
+}
+.sprint-spark .sprint-spark-line { stroke-width: 1.5; }
+.sprint-spark .sprint-chart-limit { stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.55; }
+
+/* Chart extras: a limit (100% capacity), a reference on the bar scale, the
+   ideal burndown, the area under a line, a dashed subcategory line. */
+.sprint-chart-limit {
+    fill: none;
+    stroke: var(--sprint-fg-danger);
+    stroke-width: 1.2;
+    stroke-dasharray: 5 4;
+    opacity: 0.75;
+}
+.sprint-chart-refline {
+    fill: none;
+    stroke-width: 1.2;
+    stroke-dasharray: 5 4;
+    opacity: 0.7;
+}
+.sprint-chart-ideal {
+    fill: none;
+    stroke: var(--sprint-chart-ink);
+    stroke-width: 1.2;
+    stroke-dasharray: 4 3;
+    opacity: 0.7;
+}
+.sprint-chart-area { stroke: none; opacity: 0.12; }
+.sprint-chart-line.sprint-chart-line-sub { stroke-dasharray: 6 4; }
+.sprint-chart-striptitle { font-weight: 600; }
+.sprint-chart-slot a { outline: none; }
+.sprint-chart-slot a:focus-visible .sprint-chart-hit {
+    stroke: var(--sprint-focus);
+    stroke-width: 2;
+}
+.sprint-overview-page .sprint-chart-legend { margin-top: 8px; }
+
+/* Overview charts carry a strip or axis titles, so they may run a little taller. */
+.sprint-chart-svg.sprint-overview-chart { max-height: 400px; }
+
+/* The live burndown is a sparkline inside a grid cell, not a full chart. */
+.sprint-chart-svg.sprint-live-spark { min-width: 0; max-height: 92px; }
+
+/* Capacity versus delivery: ring = no blocked work, filled = blocked work. */
+.sprint-bubble-halo {
+    fill: none;
+    stroke: var(--sprint-chart-surface);
+    stroke-width: 2;
+}
+.sprint-bubble:focus-visible { outline: 2px solid var(--sprint-focus); outline-offset: 2px; }
+.sprint-bubble-swatch {
+    display: inline-block;
+    flex: none;
+    width: 11px;
+    height: 11px;
+    border: 2px solid var(--sprint-bubble, currentColor);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--sprint-bubble, currentColor) 16%, transparent);
+}
+.sprint-bubble-swatch.is-filled {
+    background: color-mix(in srgb, var(--sprint-bubble, currentColor) 60%, transparent);
+}
+
+/* Category trend pickers and panes. */
+.sprint-category-trend .form-select { max-width: 240px; }
+.sprint-category-trend-pane[hidden] { display: none; }
+
+/* Member tabs (sprint and template): add form and list as cards (U10). */
+.sprint-member-card { text-align: left; }
+.sprint-member-card .sprint-card-head { margin-bottom: 12px; }
+.sprint-member-form .form-label { margin-bottom: 4px; font-weight: 600; }
+.sprint-member-form textarea.form-control { min-height: 38px; }
+.sprint-member-setcap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.sprint-member-table .sprint-row-actions { white-space: nowrap; width: 1%; }
+/* === end overview === */

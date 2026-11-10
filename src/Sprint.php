@@ -417,15 +417,15 @@ class Sprint extends CommonDBTM
             . htmlescape($statusLabel) . "</span>";
         echo "<span class='sprint-header-name'>" . htmlescape((string)$sprint->fields['name']) . "</span>";
         if ($dateRange !== '') {
-            echo "<span class='sprint-header-dates'><i class='fas fa-calendar-alt'></i> " . htmlescape($dateRange) . "</span>";
+            echo "<span class='sprint-header-dates'><i class='fas fa-calendar-alt' aria-hidden='true'></i> " . htmlescape($dateRange) . "</span>";
         }
         if ($daysHtml !== '') {
-            echo "<span class='sprint-header-days'><i class='fas fa-hourglass-half'></i> " . htmlescape($daysHtml) . "</span>";
+            echo "<span class='sprint-header-days'><i class='fas fa-hourglass-half' aria-hidden='true'></i> " . htmlescape($daysHtml) . "</span>";
         }
         echo "</div>";
 
         if ($goal !== '') {
-            echo "<div class='sprint-header-goal'><i class='fas fa-bullseye'></i> " . htmlescape($goal) . "</div>";
+            echo "<div class='sprint-header-goal'><i class='fas fa-bullseye' aria-hidden='true'></i> " . htmlescape($goal) . "</div>";
         }
 
         echo "<div class='sprint-header-right'>";
@@ -437,6 +437,14 @@ class Sprint extends CommonDBTM
             . "aria-label='" . htmlescape($progressText) . "'><span style='width:{$pct}%;'></span></div>";
         echo "<span class='sprint-header-progress-label'>" . htmlescape($progressText) . "</span>";
         echo "</div>";
+
+        // Pending requests chip (jumps to the Requests tab), on every tab.
+        if (method_exists(SprintRequest::class, 'headerChip')) {
+            echo SprintRequest::headerChip($id);
+        }
+
+        // One primary action that follows the status: start or complete.
+        echo self::lifecycleButton($id, $sprint);
 
         // Sprint switcher — planned/active sprints of the session's entities
         // plus the current one.
@@ -479,6 +487,204 @@ class Sprint extends CommonDBTM
             . "window.location.href = url;"
             . "});"
             . "})();</script>";
+    }
+
+    /**
+     * Starting and completing are for the sprint's Scrum Master who also holds
+     * the update right the sprint form checks.
+     */
+    public static function canManageLifecycle(int $sprintId): bool
+    {
+        if ($sprintId <= 0) {
+            return false;
+        }
+        $sprint = new self();
+        return $sprint->can($sprintId, UPDATE)
+            && SprintItem::currentUserIsScrumMasterOf($sprintId);
+    }
+
+    /** The close-out screen: decide per open item, then complete the sprint. */
+    public static function getCloseoutUrl(int $sprintId): string
+    {
+        return self::getFormURL() . '?id=' . $sprintId . '&closeout=1';
+    }
+
+    /**
+     * "Start sprint" button with its confirmation dialog, for the header bar
+     * and the "Next steps" checklist. '' unless the sprint is planned and the
+     * current user may start it.
+     */
+    public static function startButton(int $sprintId): string
+    {
+        $sprint = new self();
+        if ($sprintId <= 0 || !$sprint->getFromDB($sprintId)
+            || ($sprint->fields['status'] ?? '') !== self::STATUS_PLANNED) {
+            return '';
+        }
+        return self::lifecycleButton($sprintId, $sprint);
+    }
+
+    /**
+     * The primary header action: "Start sprint" when planned, "Complete
+     * sprint" when active, '' otherwise or without the right. The status
+     * change itself is a normal form POST, so post_updateItem() runs.
+     */
+    public static function lifecycleButton(int $sprintId, ?Sprint $sprint = null): string
+    {
+        if ($sprint === null) {
+            $sprint = new self();
+            if ($sprintId <= 0 || !$sprint->getFromDB($sprintId)) {
+                return '';
+            }
+        }
+        $status = (string)($sprint->fields['status'] ?? '');
+        if (!in_array($status, [self::STATUS_PLANNED, self::STATUS_ACTIVE], true)
+            || !self::canManageLifecycle($sprintId)) {
+            return '';
+        }
+
+        $href = '';
+        if ($status === self::STATUS_PLANNED) {
+            $items  = (new SprintItem())->find(['plugin_sprint_sprints_id' => $sprintId]);
+            $points = array_sum(array_map(static fn($item) => max(0, (int)($item['story_points'] ?? 0)), $items));
+            $label  = __('Start sprint', 'sprint');
+            $icon   = 'fas fa-play';
+            $target = self::STATUS_ACTIVE;
+            $ok     = $label;
+            $lines  = [
+                sprintf(
+                    __('Starting the sprint records the scope baseline: %1$d items and %2$d story points.', 'sprint'),
+                    count($items),
+                    $points
+                ),
+                __('The credit kick-off snapshot is taken as well. The Creditfall page counts from this moment.', 'sprint'),
+            ];
+        } else {
+            $open = countElementsInTable(SprintItem::getTable(), [
+                'plugin_sprint_sprints_id' => $sprintId,
+                ['NOT' => ['status' => SprintItem::STATUS_DONE]],
+            ]);
+            $label  = __('Complete sprint', 'sprint');
+            $icon   = 'fas fa-flag-checkered';
+            $target = self::STATUS_COMPLETED;
+            $lines  = [__('Completing the sprint freezes its credit agreements.', 'sprint')];
+            if ($open > 0) {
+                $lines[] = sprintf(
+                    _n(
+                        '%d item is not done. On the next screen you decide per item: carry over, back to backlog or leave in the sprint.',
+                        '%d items are not done. On the next screen you decide per item: carry over, back to backlog or leave in the sprint.',
+                        $open,
+                        'sprint'
+                    ),
+                    $open
+                );
+                $ok   = __('Review open items', 'sprint');
+                $href = self::getCloseoutUrl($sprintId);
+            } else {
+                $lines[] = __('All items are done.', 'sprint');
+                $ok      = $label;
+            }
+        }
+
+        $webDir = \Plugin::getWebDir('sprint');
+        $attrs  = [
+            'data-sprint-id' => $sprintId,
+            'data-status'    => $target,
+            'data-title'     => $label,
+            'data-message'   => implode("\n\n", $lines),
+            'data-ok'        => $ok,
+            'data-href'      => $href,
+            'data-form-url'  => self::getFormURL(),
+            'data-token-url' => $webDir . '/ajax/csrftoken.php',
+            'data-error'     => __('Could not reach the server. Try again.', 'sprint'),
+        ];
+        $html = "<button type='button' class='btn btn-primary btn-sm sprint-lifecycle-btn'";
+        foreach ($attrs as $name => $value) {
+            $html .= ' ' . $name . "='" . htmlescape((string)$value) . "'";
+        }
+        $html .= "><i class='" . $icon . " me-1' aria-hidden='true'></i>" . htmlescape($label) . '</button>';
+
+        return $html . self::lifecycleScript();
+    }
+
+    /**
+     * Confirmation + submit for .sprint-lifecycle-btn. Bound once per page:
+     * ajax tabs re-emit the header bar, so the handler is delegated.
+     */
+    private static function lifecycleScript(): string
+    {
+        return <<<HTML
+<script>
+(function(){
+    if (window.__sprintLifecycleBound) { return; }
+    window.__sprintLifecycleBound = true;
+
+    function notify(msg) {
+        if (window.sprintUi && typeof window.sprintUi.toast === 'function') { window.sprintUi.toast(msg, 'error'); return; }
+        if (typeof window.sprintNotify === 'function') { window.sprintNotify(msg, 'error'); return; }
+        if (typeof window.glpi_toast_error === 'function') { window.glpi_toast_error(msg); return; }
+        window.alert(msg);
+    }
+
+    function fetchToken(url, done) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now(), true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== 4) { return; }
+            var token = '';
+            try { token = (JSON.parse(xhr.responseText) || {}).token || ''; } catch (e) { token = ''; }
+            done(xhr.status === 200 ? token : '');
+        };
+        xhr.send();
+    }
+
+    function submit(btn) {
+        var href = btn.getAttribute('data-href');
+        if (href) { window.location.href = href; return; }
+        btn.disabled = true;
+        fetchToken(btn.getAttribute('data-token-url'), function(token) {
+            if (!token) {
+                btn.disabled = false;
+                notify(btn.getAttribute('data-error') || '');
+                return;
+            }
+            var form = document.createElement('form');
+            form.method = 'post';
+            form.action = btn.getAttribute('data-form-url');
+            var fields = {
+                id: btn.getAttribute('data-sprint-id'),
+                status: btn.getAttribute('data-status'),
+                update: '1',
+                _glpi_csrf_token: token
+            };
+            Object.keys(fields).forEach(function(name) {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = fields[name];
+                form.appendChild(input);
+            });
+            document.body.appendChild(form);
+            form.submit();
+        });
+    }
+
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest ? e.target.closest('.sprint-lifecycle-btn') : null;
+        if (!btn || btn.disabled) { return; }
+        e.preventDefault();
+        var title = btn.getAttribute('data-title') || '';
+        var msg   = btn.getAttribute('data-message') || '';
+        if (typeof window.sprintConfirm === 'function') {
+            window.sprintConfirm(msg, function() { submit(btn); }, { title: title, okLabel: btn.getAttribute('data-ok') || title });
+            return;
+        }
+        if (window.confirm(title + "\\n\\n" + msg)) { submit(btn); }
+    });
+})();
+</script>
+HTML;
     }
 
     /**
@@ -544,6 +750,7 @@ class Sprint extends CommonDBTM
             $DB->update(self::getTable(), ['scope_baseline_items' => $baselineItems, 'scope_baseline_points' => $baselinePoints], ['id' => (int)$this->getID()]);
             $this->fields['scope_baseline_items'] = $baselineItems;
             $this->fields['scope_baseline_points'] = $baselinePoints;
+            SprintCreditFall::snapshotKickoff((int)$this->getID());
         }
         if (
             in_array('status', $this->updates ?? [], true)
@@ -810,7 +1017,7 @@ class Sprint extends CommonDBTM
 
         echo "<div class='card mt-3' style='max-width:1200px;margin:18px auto 0;border-color:#dc3545;'>";
         echo "<div class='card-header' style='background:color-mix(in srgb,#dc3545 14%,var(--tblr-bg-surface,#fff));color:var(--tblr-danger,#b02a37);'>"
-            . "<i class='fas fa-exclamation-triangle me-1'></i>"
+            . "<i class='fas fa-exclamation-triangle me-1' aria-hidden='true'></i>"
             . htmlescape(__('Danger zone', 'sprint'))
             . "</div>";
         echo "<div class='card-body'>";
@@ -857,7 +1064,7 @@ class Sprint extends CommonDBTM
         echo "<div class='center' style='margin-top:20px;'>";
         echo "<table class='tab_cadre_fixe sprint-themed'>";
         echo "<tr class='tab_bg_2'><th colspan='3'>" .
-            '<i class="fas fa-clone me-2"></i>' .
+            '<i class="fas fa-clone me-2" aria-hidden="true"></i>' .
             __('Save as template', 'sprint') . "</th></tr>";
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Template name', 'sprint') . "</td>";
@@ -868,7 +1075,7 @@ class Sprint extends CommonDBTM
         ]) . "</td>";
         echo "<td>";
         echo "<button type='button' class='btn btn-outline-primary' id='sprint_save_as_template'>";
-        echo "<i class='fas fa-clone me-1'></i>" . __('Save as template', 'sprint');
+        echo "<i class='fas fa-clone me-1' aria-hidden='true'></i>" . __('Save as template', 'sprint');
         echo "</button>";
         echo "</td></tr>";
         echo "<tr class='tab_bg_1'><td colspan='3'>";
@@ -881,7 +1088,7 @@ class Sprint extends CommonDBTM
             $('#sprint_save_as_template').on('click', function() {
                 var btn = $(this);
                 var name = $('#sprint_template_name').val();
-                btn.prop('disabled', true).html('<i class=\"fas fa-spinner fa-spin me-1\"></i>" . __('Saving...', 'sprint') . "');
+                btn.prop('disabled', true).html('<i class=\"fas fa-spinner fa-spin me-1\" aria-hidden=\"true\"></i>" . __('Saving...', 'sprint') . "');
 
                 $.ajax({
                     url: CFG_GLPI.root_doc + '/plugins/sprint/ajax/savetemplate.php',
@@ -896,7 +1103,7 @@ class Sprint extends CommonDBTM
                         if (resp.success) {
                             $('#sprint_template_result').html(
                                 '<div class=\"alert alert-success mt-2\">' +
-                                '<i class=\"fas fa-check-circle me-1\"></i>' +
+                                '<i class=\"fas fa-check-circle me-1\" aria-hidden=\"true\"></i>' +
                                 '" . __('Template created successfully!', 'sprint') . " ' +
                                 '<a href=\"' + resp.template_url + '\" class=\"alert-link\">" . __('Open template', 'sprint') . "</a>' +
                                 '</div>'
@@ -906,13 +1113,13 @@ class Sprint extends CommonDBTM
                                 '<div class=\"alert alert-danger mt-2\">' + resp.message + '</div>'
                             );
                         }
-                        btn.prop('disabled', false).html('<i class=\"fas fa-clone me-1\"></i>" . __('Save as template', 'sprint') . "');
+                        btn.prop('disabled', false).html('<i class=\"fas fa-clone me-1\" aria-hidden=\"true\"></i>" . __('Save as template', 'sprint') . "');
                     },
                     error: function() {
                         $('#sprint_template_result').html(
                             '<div class=\"alert alert-danger mt-2\">" . __('An error occurred', 'sprint') . "</div>'
                         );
-                        btn.prop('disabled', false).html('<i class=\"fas fa-clone me-1\"></i>" . __('Save as template', 'sprint') . "');
+                        btn.prop('disabled', false).html('<i class=\"fas fa-clone me-1\" aria-hidden=\"true\"></i>" . __('Save as template', 'sprint') . "');
                     }
                 });
             });

@@ -236,10 +236,10 @@ class SprintItemDependency extends CommonDBRelation
                 // The helper's own billable share (a check, a review), charged
                 // to the parent item's customer on top of the item's credits.
                 echo "<tr class='tab_bg_1'>";
-                echo "<td><i class='fas fa-tags me-1'></i>" . SprintCreditProduct::getTypeName(1) . "</td><td>";
+                echo "<td><i class='fas fa-tags me-1' aria-hidden='true'></i>" . SprintCreditProduct::getTypeName(1) . "</td><td>";
                 echo SprintItem::productSelect('plugin_sprint_sprintcreditproducts_id', 0, 'credits');
                 echo "</td>";
-                echo "<td><i class='fas fa-coins me-1'></i>" . __('Credits', 'sprint') . "</td><td>";
+                echo "<td><i class='fas fa-coins me-1' aria-hidden='true'></i>" . __('Credits', 'sprint') . "</td><td>";
                 echo SprintItem::creditsInput('credits', 0);
                 echo "</td></tr>";
                 SprintItem::creditProductScript();
@@ -294,14 +294,14 @@ class SprintItemDependency extends CommonDBRelation
 
             $rowStyle = $isResolved ? "opacity:0.55;" : "";
             echo "<tr class='tab_bg_1' style='{$rowStyle}'>";
-            echo "<td><i class='fas fa-user' style='margin-right:6px;opacity:0.6;'></i>" . htmlescape(SprintCache::userName($uid)) . "</td>";
+            echo "<td><i class='fas fa-user me-1 text-muted' aria-hidden='true'></i>" . htmlescape(SprintCache::userName($uid)) . "</td>";
             echo "<td class='center'>{$capLabel}%</td>";
             if ($showCredits) {
                 echo "<td class='center'>";
                 if ($credits > 0) {
                     $product = $productId > 0 ? SprintCreditProduct::getFullNameFor($productId) : '';
                     echo "<span class='sprint-credit-chip' title='" . htmlescape($product !== '' ? $product : __('Credits', 'sprint')) . "'>"
-                        . "<i class='fas fa-coins'></i> " . htmlescape(SprintCustomer::formatCredits($credits)) . "</span>";
+                        . "<i class='fas fa-coins' aria-hidden='true'></i> " . htmlescape(SprintCustomer::formatCredits($credits)) . "</span>";
                 } else {
                     echo "<span class='text-muted'>-</span>";
                 }
@@ -310,11 +310,11 @@ class SprintItemDependency extends CommonDBRelation
             echo "<td class='center'>";
             if ($isResolved) {
                 // Resolved help was spent: it still counts as planned capacity.
-                echo "<span class='sprint-badge' style='background:#198754;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.78em;' "
+                echo "<span class='sprint-badge sprint-badge-sm sprint-status-done' "
                     . "title='" . __s('Resolved: the capacity was spent and still counts as planned', 'sprint') . "'>"
                     . "<i class='fas fa-check' aria-hidden='true'></i> " . __('Resolved', 'sprint') . "</span>";
             } else {
-                echo "<span class='sprint-badge' style='background:#6f42c1;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.78em;'>"
+                echo "<span class='sprint-badge sprint-badge-sm sprint-status-review'>"
                     . "<i class='fas fa-link' aria-hidden='true'></i> " . __('Open', 'sprint') . "</span>";
             }
             echo "</td>";

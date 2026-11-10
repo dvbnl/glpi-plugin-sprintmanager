@@ -140,18 +140,18 @@ class SprintFastlane extends CommonGLPI
             echo "<td class='sprint-cell-status'><span class='sprint-badge {$statusClass}'>" . $statusLabel . "</span></td>";
             echo "<td class='sprint-cell-priority'>" . ($priorities[$row['priority']] ?? $row['priority']) . "</td>";
             echo "<td>" . (count($memberNames) > 0 ? implode('<br>', $memberNames) :
-                "<span style='color:#999;'>" . __('None', 'sprint') . "</span>") . "</td>";
+                "<span class='text-muted'>" . __('None', 'sprint') . "</span>") . "</td>";
             echo "<td class='center'><strong>" . SprintMember::formatCapacity($totalCap) . "%</strong></td>";
             if ($canedit) {
                 echo "<td class='center' style='white-space:nowrap;'>";
                 echo "<button type='button' class='btn btn-sm btn-outline-secondary sprint-quick-edit-btn me-1' "
                     . "title='" . __s('Quick edit', 'sprint') . "' data-item-id='{$itemId}' "
                     . "aria-label='" . htmlescape(sprintf(__('Quick edit: %s', 'sprint'), (string)$row['name'])) . "'>"
-                    . "<i class='fas fa-pen' aria-hidden='true'></i></button>";
+                    . SprintIcon::html(SprintIcon::EDIT) . "</button>";
                 echo "<a href='" . SprintItem::getFormURLWithID($itemId) .
                     "' class='btn btn-sm btn-outline-primary' title='" . __s('Open') . "' "
                     . "aria-label='" . htmlescape(sprintf(__('Open %s', 'sprint'), (string)$row['name'])) . "'>" .
-                    "<i class='fas fa-edit' aria-hidden='true'></i></a>";
+                    "<i class='fas fa-arrow-up-right-from-square' aria-hidden='true'></i></a>";
                 echo "</td>";
             }
             echo "</tr>";
